@@ -1,0 +1,296 @@
+import t5.models.mesh_transformer
+import t5.data.sentencepiece_vocabulary
+import mesh_tensorflow.optimize
+import mesh_tensorflow.transformer.dataset
+import mesh_tensorflow.transformer.learning_rate_schedules
+import mesh_tensorflow.transformer.t2t_vocabulary
+import mesh_tensorflow.transformer.transformer_layers
+import mesh_tensorflow.transformer.utils
+
+# Macros:
+# ==============================================================================
+d_ff = 2048
+d_kv = 64
+d_model = 512
+dropout_rate = 0.1
+inputs_length = 512
+mean_noise_span_length = 3.0
+MIXTURE_NAME = 'all_mix'
+noise_density = 0.15
+num_heads = 8
+num_layers = 6
+targets_length = 512
+init_checkpoint = "gs://t5-data/pretrained_models/small/model.ckpt-1000000"
+tokens_per_batch = 1048576
+
+# Parameters for AdafactorOptimizer:
+# ==============================================================================
+AdafactorOptimizer.beta1 = 0.0
+AdafactorOptimizer.clipping_threshold = 1.0
+AdafactorOptimizer.decay_rate = None
+AdafactorOptimizer.epsilon1 = 1e-30
+AdafactorOptimizer.epsilon2 = 0.001
+AdafactorOptimizer.factored = True
+AdafactorOptimizer.min_dim_size_to_factor = 128
+AdafactorOptimizer.multiply_by_parameter_scale = True
+
+# Parameters for Bitransformer:
+# ==============================================================================
+Bitransformer.shared_embedding = True
+
+# Parameters for denoise:
+# ==============================================================================
+denoise.inputs_fn = @preprocessors.noise_span_to_unique_sentinel
+denoise.noise_density = %noise_density
+denoise.noise_mask_fn = @preprocessors.random_spans_noise_mask
+denoise.targets_fn = @preprocessors.nonnoise_span_to_unique_sentinel
+
+# Parameters for decoder/DenseReluDense:
+# ==============================================================================
+decoder/DenseReluDense.dropout_rate = %dropout_rate
+decoder/DenseReluDense.hidden_size = %d_ff
+
+# Parameters for encoder/DenseReluDense:
+# ==============================================================================
+encoder/DenseReluDense.dropout_rate = %dropout_rate
+encoder/DenseReluDense.hidden_size = %d_ff
+
+# Parameters for decoder/EncDecAttention:
+# ==============================================================================
+# None.
+
+# Parameters for get_sentencepiece_model_path:
+# ==============================================================================
+get_sentencepiece_model_path.mixture_or_task_name = %MIXTURE_NAME
+
+# Parameters for get_variable_dtype:
+# ==============================================================================
+get_variable_dtype.activation_dtype = 'bfloat16'
+
+# Parameters for decoder/LayerStack:
+# ==============================================================================
+decoder/LayerStack.dropout_rate = %dropout_rate
+decoder/LayerStack.norm_epsilon = 1e-06
+
+# Parameters for encoder/LayerStack:
+# ==============================================================================
+encoder/LayerStack.dropout_rate = %dropout_rate
+encoder/LayerStack.norm_epsilon = 1e-06
+
+# Parameters for learning_rate_schedule_noam:
+# ==============================================================================
+learning_rate_schedule_noam.linear_decay_fraction = 0.1
+learning_rate_schedule_noam.multiplier = 1.0
+learning_rate_schedule_noam.offset = 0
+learning_rate_schedule_noam.warmup_steps = 10000
+
+# Parameters for make_bitransformer:
+# ==============================================================================
+make_bitransformer.decoder_name = 'decoder'
+make_bitransformer.encoder_name = 'encoder'
+
+# Parameters for decoder/make_layer_stack:
+# ==============================================================================
+decoder/make_layer_stack.block_scope = True
+decoder/make_layer_stack.layers = \
+    [@mesh_tensorflow.transformer.transformer_layers.SelfAttention,
+     @mesh_tensorflow.transformer.transformer_layers.EncDecAttention,
+     @mesh_tensorflow.transformer.transformer_layers.DenseReluDense]
+decoder/make_layer_stack.num_layers = %num_layers
+
+# Parameters for encoder/make_layer_stack:
+# ==============================================================================
+encoder/make_layer_stack.block_scope = True
+encoder/make_layer_stack.layers = \
+    [@mesh_tensorflow.transformer.transformer_layers.SelfAttention,
+     @mesh_tensorflow.transformer.transformer_layers.DenseReluDense]
+encoder/make_layer_stack.num_layers = %num_layers
+
+# Parameters for mesh_train_dataset_fn:
+# ==============================================================================
+mesh_train_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
+
+
+# Parameters for noise_span_to_unique_sentinel:
+# ==============================================================================
+# None.
+
+# Parameters for nonnoise_span_to_unique_sentinel:
+# ==============================================================================
+# None.
+
+# Parameters for pack_dataset:
+# ==============================================================================
+
+
+# Parameters for pack_or_pad:
+# ==============================================================================
+# None.
+
+# Parameters for random_spans_helper:
+# ==============================================================================
+random_spans_helper.extra_tokens_per_span_inputs = 1
+random_spans_helper.extra_tokens_per_span_targets = 1
+random_spans_helper.inputs_length = %inputs_length
+random_spans_helper.mean_noise_span_length = %mean_noise_span_length
+random_spans_helper.noise_density = %noise_density
+
+# Parameters for targets_length/random_spans_helper:
+# ==============================================================================
+targets_length/random_spans_helper.extra_tokens_per_span_inputs = 1
+targets_length/random_spans_helper.extra_tokens_per_span_targets = 1
+targets_length/random_spans_helper.inputs_length = %inputs_length
+targets_length/random_spans_helper.mean_noise_span_length = %mean_noise_span_length
+targets_length/random_spans_helper.noise_density = %noise_density
+
+# Parameters for random_spans_noise_mask:
+# ==============================================================================
+random_spans_noise_mask.mean_noise_span_length = %mean_noise_span_length
+
+# Parameters for targets_length/random_spans_targets_length:
+# ==============================================================================
+# None.
+
+# Parameters for random_spans_tokens_length:
+# ==============================================================================
+# None.
+
+# Parameters for rate_num_examples:
+# ==============================================================================
+rate_num_examples.maximum = 1000000.0
+rate_num_examples.scale = 1.0
+rate_num_examples.temperature = 1.0
+
+# Parameters for rate_unsupervised:
+# ==============================================================================
+rate_unsupervised.value = 710000.0
+
+# Parameters for reduce_concat_tokens:
+# ==============================================================================
+reduce_concat_tokens.batch_size = 128
+reduce_concat_tokens.feature_key = 'targets'
+
+# Parameters for run:
+# ==============================================================================
+run.autostack = True
+run.batch_size = ('tokens_per_batch', %tokens_per_batch)
+run.dataset_split = 'train'
+run.ensemble_inputs = None
+run.eval_checkpoint_step = None
+run.eval_dataset_fn = None
+run.eval_summary_dir = None
+run.export_path = ''
+run.iterations_per_loop = 100
+run.keep_checkpoint_max = None
+run.layout_rules = \
+    'ensemble:ensemble,batch:batch,d_ff:model,heads:model,vocab:model,experts:batch'
+run.learning_rate_schedule = @learning_rate_schedules.learning_rate_schedule_noam
+run.mesh_shape = @mesh_tensorflow.transformer.utils.tpu_mesh_shape()
+run.mode = 'train' 
+run.init_checkpoint = %init_checkpoint
+run.model_type = 'bitransformer'
+run.optimizer = @optimize.AdafactorOptimizer
+run.perplexity_eval_steps = 10
+run.predict_fn = None
+run.save_checkpoints_steps = 2400
+run.sequence_length = {'inputs': %inputs_length, 'targets': %targets_length}
+run.train_dataset_fn = \
+    @t5.models.mesh_transformer.mesh_train_dataset_fn
+run.train_steps = 1000000000
+run.variable_filter = None
+run.vocabulary = \
+    @t5.data.sentencepiece_vocabulary.SentencePieceVocabulary()
+
+# Parameters for select_random_chunk:
+# ==============================================================================
+select_random_chunk.feature_key = 'targets'
+select_random_chunk.max_length = 65536
+
+# Parameters for decoder/SelfAttention:
+# ==============================================================================
+decoder/SelfAttention.attention_kwargs = None
+decoder/SelfAttention.dropout_rate = %dropout_rate
+decoder/SelfAttention.key_value_size = %d_kv
+decoder/SelfAttention.num_heads = %num_heads
+decoder/SelfAttention.num_memory_heads = 0
+decoder/SelfAttention.relative_attention_num_buckets = 32
+decoder/SelfAttention.relative_attention_type = 'bias_shared'
+decoder/SelfAttention.shared_kv = False
+
+# Parameters for encoder/SelfAttention:
+# ==============================================================================
+encoder/SelfAttention.attention_kwargs = None
+encoder/SelfAttention.dropout_rate = %dropout_rate
+encoder/SelfAttention.key_value_size = %d_kv
+encoder/SelfAttention.num_heads = %num_heads
+encoder/SelfAttention.num_memory_heads = 0
+encoder/SelfAttention.relative_attention_num_buckets = 32
+encoder/SelfAttention.relative_attention_type = 'bias_shared'
+encoder/SelfAttention.shared_kv = False
+
+# Parameters for SentencePieceVocabulary:
+# ==============================================================================
+SentencePieceVocabulary.extra_ids = 100
+SentencePieceVocabulary.sentencepiece_model_file = \
+    @t5.models.mesh_transformer.get_sentencepiece_model_path()
+
+# Parameters for serialize_num_microbatches:
+# ==============================================================================
+serialize_num_microbatches.tokens_per_microbatch_per_replica = 8192
+
+# Parameters for split_tokens:
+# ==============================================================================
+split_tokens.feature_key = 'targets'
+split_tokens.max_tokens_per_segment = @preprocessors.random_spans_tokens_length()
+split_tokens.min_tokens_per_segment = None
+
+# Parameters for tpu_estimator_model_fn:
+# ==============================================================================
+tpu_estimator_model_fn.init_checkpoint = %init_checkpoint
+tpu_estimator_model_fn.outer_batch_size = 1
+tpu_estimator_model_fn.tpu_summaries = False
+
+# Parameters for tpu_mesh_shape:
+# ==============================================================================
+tpu_mesh_shape.ensemble_parallelism = None
+tpu_mesh_shape.model_parallelism = 1
+tpu_mesh_shape.tpu_topology = '8x8'
+
+# Parameters for decoder/Unitransformer:
+# ==============================================================================
+decoder/Unitransformer.d_model = %d_model
+decoder/Unitransformer.ensemble = None
+decoder/Unitransformer.input_full_attention = False
+decoder/Unitransformer.label_smoothing = 0.0
+decoder/Unitransformer.loss_denominator = None
+decoder/Unitransformer.loss_fn = None
+decoder/Unitransformer.loss_on_targets_only = False
+decoder/Unitransformer.max_length = 512
+decoder/Unitransformer.positional_embedding = False
+decoder/Unitransformer.shared_embedding_and_softmax_weights = True
+decoder/Unitransformer.vocab_divisor = 128
+decoder/Unitransformer.z_loss = 0.0001
+decoder/Unitransformer.loss_denominator = 233472
+
+# Parameters for encoder/Unitransformer:
+# ==============================================================================
+encoder/Unitransformer.d_model = %d_model
+encoder/Unitransformer.ensemble = None
+encoder/Unitransformer.input_full_attention = False
+encoder/Unitransformer.label_smoothing = 0.0
+encoder/Unitransformer.loss_denominator = None
+encoder/Unitransformer.loss_fn = None
+encoder/Unitransformer.loss_on_targets_only = False
+encoder/Unitransformer.max_length = 512
+encoder/Unitransformer.positional_embedding = False
+encoder/Unitransformer.shared_embedding_and_softmax_weights = True
+encoder/Unitransformer.vocab_divisor = 128
+encoder/Unitransformer.z_loss = 0.0001
+
+# Parameters for unsupervised:
+# ==============================================================================
+unsupervised.preprocessors = \
+    [@preprocessors.select_random_chunk,
+     @preprocessors.reduce_concat_tokens,
+     @preprocessors.split_tokens,
+     @preprocessors.denoise]

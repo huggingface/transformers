@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Use this script as follows ./download_from_gcp.sh /path/to/folder/to/store/downloads
+folder_to_store_downloads=${1}
+
+# Replace by gcp_path to T5 cloud bucket folder here
+gcp_path="gs://t5-data/pretrained_models/small"
+
+# Number of files the checkpoint is split into
+num_of_checks=16
+
+# Create dir if not exist
+mkdir -p ${folder_to_store_downloads}
+
+# Copy all meta information files
+gsutil cp "${gcp_path}/operative_config.gin" .
+gsutil cp "${gcp_path}/checkpoint" .
+gsutil cp "${gcp_path}/model.ckpt-1000000.index" .
+gsutil cp "${gcp_path}/model.ckpt-1000000.meta" .
+
+# Copy all model weights
+# single digit num checkpoitns
+for ((i = 0 ; i < ${num_of_checks} ; i++)); do
+	gsutil cp "${gcp_path}/model.ckpt-1000000.data-0000${i}-of-000${num_of_checks}" .
+done
+
+# double digit num checkpoitns
+for ((i = 0 ; i < ${num_of_checks} ; i++)); do
+	gsutil cp "${gcp_path}/model.ckpt-1000000.data-000${i}-of-000${num_of_checks}" .
+done
+
+
+# Having run this script, you should create a suitable config.json, *e.g.* by 
+# looking at `https://huggingface.co/t5-small`.
+# Then you can run `python convert_t5_original_tf_checkpoint_to_pytorch.py --tf_checkpoint_path "${folder_to_store_downloads}" --config_file "config.json" --pytorch_dump_path "/path/to/store/pytorch/weights"
