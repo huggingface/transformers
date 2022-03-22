@@ -24,7 +24,7 @@ from fairseq.models.text_to_speech.hub_interface import TTSHubInterface
 from transformers import FastSpeech2Config, FastSpeech2Model
 
 
-def convert_wav2vec2_checkpoint(args):
+def convert_fastspeech2_checkpoint(args):
     if "fastspeech2" not in args.fairseq_model_id:
         raise ValueError("`fairseq_model_id` must be a FastSpeech2 checkpoint")
     models, cfg, task = load_model_ensemble_and_task_from_hf_hub(args.fairseq_model_id)
@@ -57,4 +57,4 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model")
     parser.add_argument("--fairseq_model_id", required=True, type=str, help="fairseq model id")
     args = parser.parse_args()
-    convert_wav2vec2_checkpoint(args)
+    convert_fastspeech2_checkpoint(args)
