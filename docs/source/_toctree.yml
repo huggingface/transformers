@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing

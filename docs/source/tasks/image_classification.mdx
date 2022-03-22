@@ -109,8 +109,10 @@ Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data col
 >>> data_collator = DefaultDataCollator()
 ```
 
-## Fine-tune with Trainer
+## Train
 
+<frameworkcontent>
+<pt>
 Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels, and pass the model the mapping between label number and label class:
 
 ```py
@@ -162,6 +164,8 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
+</pt>
+</frameworkcontent>
 
 <Tip>
 
