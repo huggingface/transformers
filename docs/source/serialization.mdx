@@ -169,7 +169,7 @@ checkpoint as follows:
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 >>> # Load tokenizer and PyTorch weights form the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-pt-checkpoint")
@@ -188,7 +188,7 @@ python -m transformers.onnx --model=local-pt-checkpoint onnx/
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-tf-checkpoint")
