@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "VanConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "van-base"
+_CHECKPOINT_FOR_DOC = "Visual-Attention-Network/van-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 
 # Image classification docstring
