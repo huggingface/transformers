@@ -75,28 +75,28 @@ To ensure your model can be used by someone working with a different framework, 
 
 Converting a checkpoint for another framework is easy. Make sure you have PyTorch and TensorFlow installed (see [here](installation) for installation instructions), and then find the specific model for your task in the other framework. 
 
-For example, suppose you trained DistilBert for sequence classification in PyTorch and want to convert it to it's TensorFlow equivalent. Load the TensorFlow equivalent of your model for your task, and specify `from_pt=True` so 🤗 Transformers will convert the PyTorch checkpoint to a TensorFlow checkpoint:
-
 <frameworkcontent>
-<tf>
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-Then save your new TensorFlow model with it's new checkpoint:
-
-```py
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
 <pt>
-Similarly, specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
+Specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </pt>
+<tf>
+Specify `from_pt=True` to convert a checkpoint from PyTorch to TensorFlow:
+
+```py
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
+```
+
+Then you can save your new TensorFlow model with it's new checkpoint:
+
+```py
+>>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
+```
+</tf>
 <jax>
 If a model is available in Flax, you can also convert a checkpoint from PyTorch to Flax:
 
