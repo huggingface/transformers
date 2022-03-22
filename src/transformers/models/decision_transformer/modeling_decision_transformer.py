@@ -50,7 +50,7 @@ _CHECKPOINT_FOR_DOC = "edbeeching/decision-transformer-gym-hopper-medium"
 _CONFIG_FOR_DOC = "DecisionTransformerConfig"
 
 DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "decision_transformer",
+    "edbeeching/decision-transformer-gym-hopper-medium",
     # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
 ]
 
