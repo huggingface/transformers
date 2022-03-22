@@ -1121,6 +1121,7 @@ PT_BASE_MODEL_SAMPLE = r"""
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
+    {expected_output}
     ```
 """
 
