@@ -172,7 +172,7 @@ def convert_file_size_to_int(size: Union[int, str]):
         return int(size[:-2]) * (2**20)
     if size.upper().endswith("KB"):
         return int(size[:-2]) * (2**10)
-    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, line '5GB'.")
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
 def dtype_size(dtype):
@@ -267,7 +267,7 @@ def save_and_shard_checkpoint(
             </Tip>
 
         save_function (`Callable`):
-            The function to use to save the state dictionary. Useful on distributed training like TPUs when one need to
+            The function to use to save the state dictionary. Useful on distributed training like TPUs when one needs to
             replace `torch.save` by another method.
     """
     shards, total_size = shard_checkpoint(state_dict, max_size=max_size)
