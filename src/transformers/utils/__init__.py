@@ -69,8 +69,8 @@ from .hub import (
     hf_bucket_url,
     http_get,
     http_user_agent,
-    is_offline_mode,
     is_local_clone,
+    is_offline_mode,
     is_remote_url,
     url_to_filename,
 )
