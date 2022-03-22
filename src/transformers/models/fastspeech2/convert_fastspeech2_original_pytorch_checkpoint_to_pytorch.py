@@ -24,14 +24,14 @@ from fairseq.models.text_to_speech.hub_interface import TTSHubInterface
 from transformers import FastSpeech2Config, FastSpeech2Model
 
 
-def convert_fastspeech2_checkpoint(args):
-    if "fastspeech2" not in args.fairseq_model_id:
+@torch.no_grad()
+def convert_fastspeech2_checkpoint(fairseq_model_id, pytorch_dump_folder_path):
+    if "fastspeech2" not in fairseq_model_id:
         raise ValueError("`fairseq_model_id` must be a FastSpeech2 checkpoint")
-    models, cfg, task = load_model_ensemble_and_task_from_hf_hub(args.fairseq_model_id)
+    models, cfg, task = load_model_ensemble_and_task_from_hf_hub(fairseq_model_id)
     fairseq_model = models[0]
     TTSHubInterface.update_cfg_with_data_cfg(cfg, task.data_cfg)
     generator = task.build_generator(models, cfg)
-
     model_cfg = cfg["model"]
     config = FastSpeech2Config(
         pitch_min=model_cfg.pitch_min,
@@ -39,7 +39,7 @@ def convert_fastspeech2_checkpoint(args):
         energy_min=model_cfg.energy_min,
         energy_max=model_cfg.energy_max,
         add_postnet=model_cfg.add_postnet,
-        vocab_size=len(vars(task.src_dict)["indices"]),
+        vocab_size=len(task.src_dict.symbols),
         num_speakers=1 if model_cfg.speaker_to_id is None else len(model_cfg.speaker_to_id),
     )
     hf_model = FastSpeech2Model(config)
@@ -49,7 +49,7 @@ def convert_fastspeech2_checkpoint(args):
     state_dict["encoder.mean"] = torch.from_numpy(generator.gcmvn_stats["mean"])
     state_dict["encoder.std"] = torch.from_numpy(generator.gcmvn_stats["std"])
     hf_model.load_state_dict(state_dict)
-    hf_model.save_pretrained(args.pytorch_dump_folder_path)
+    hf_model.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -57,4 +57,4 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model")
     parser.add_argument("--fairseq_model_id", required=True, type=str, help="fairseq model id")
     args = parser.parse_args()
-    convert_fastspeech2_checkpoint(args)
+    convert_fastspeech2_checkpoint(args.fairseq_model_id, args.pytorch_dump_folder_path)
