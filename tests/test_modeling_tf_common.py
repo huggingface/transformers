@@ -1563,14 +1563,21 @@ class UtilsFunctionsTest(unittest.TestCase):
                 self.config = PretrainedConfig(**config_kwargs)
 
             @unpack_inputs
-            def call(self, input_ids, past, output_attentions=None, output_hidden_states=None, return_dict=None):
-                return input_ids, past, output_attentions, output_hidden_states, return_dict
+            def call(self, input_ids, past=None, inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
+                if input_ids is not None and inputs_embeds is not None:
+                    raise ValueError("there should be exacly one input")
+                elif input_ids is not None:
+                    output_data = input_ids
+                else:
+                    output_data = inputs_embeds
+                return output_data, past, output_attentions, output_hidden_states, return_dict
 
         dummy_model = DummyModel()
         input_ids = tf.constant([0, 1, 2, 3])
-        past = tf.constant([4, 5, 6, 7])
+        inputs_embeds = tf.constant([4, 5, 6, 7])
+        past = tf.constant([0, 0, 0, 0])
 
-        # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config
+        # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
         output = dummy_model.call(input_ids=input_ids, past=past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
@@ -1578,7 +1585,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
-        # test case 2: Same as above, but with positional arguments
+        # test case 2: Same as above, but with positional arguments.
         output = dummy_model.call(input_ids, past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
@@ -1586,7 +1593,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
-        # test case 3: We can also pack everything in the first input
+        # test case 3: We can also pack everything in the first input.
         output = dummy_model.call(input_ids={"input_ids": input_ids, "past": past})
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
@@ -1594,7 +1601,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
-        # test case 4: Explicit boolean arguments should override the config
+        # test case 4: Explicit boolean arguments should override the config.
         output = dummy_model.call(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
@@ -1602,18 +1609,37 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[3])
         self.assertTrue(output[4])
 
-        # test case 5: Unexpected arguments should raise an exception
+        # test case 5: Unexpected arguments should raise an exception.
         with self.assertRaises(ValueError):
             output = dummy_model.call(input_ids=input_ids, past=past, foo="bar")
 
         # test case 6: Despite the above, `past_key_values` should be interchangeable with `past`
-        # (the decorator moves it to `past`, or vice-versa, depending on the signature)
+        # (the decorator moves it to `past`, or vice-versa, depending on the signature).
         output = dummy_model.call(input_ids=input_ids, past_key_values=past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
+
+        # (tests relying in model internal logic, common patterns)
+        # test case 7: Models that can accept multiple data inputs gracefully populate the first data input with
+        # `None`, despite being a positional argument (Keras doesn't accept keyword arguments as the first input to a
+        # layer, so we have to define it as positional argument).
+        output = dummy_model.call(past=past, inputs_embeds=inputs_embeds)
+        tf.debugging.assert_equal(output[0], inputs_embeds)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 8: Passing two data inputs should expose the model internal error.
+        with self.assertRaises(ValueError):
+            output = dummy_model.call(input_ids=input_ids, inputs_embeds=inputs_embeds)
+
+        # test case 9: In this dummy model, there are no safegards for when there are no data inputs, so it should work
+        # fine without them. In the wild, they will fail when the Keras block is called.
+        output = dummy_model.call()
 
 
 @require_tf
