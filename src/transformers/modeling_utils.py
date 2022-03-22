@@ -201,7 +201,9 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, s
     given size.
 
     The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so there is no
-    optimization made to make each sub-checkpoint as close as possible to the maximum size passed.
+    optimization made to make each sub-checkpoint as close as possible to the maximum size passed. For example, if the
+    limit is 10GB and we have weights of sizes [6GB, 6GB, 2GB, 6GB, 2GB, 2GB] they will get sharded as [6GB], [6+2GB],
+    [6+2+2GB] and not [6+2+2GB], [6+2GB], [6GB].
 
     <Tip warning={true}>
 
@@ -267,8 +269,8 @@ def save_and_shard_checkpoint(
             </Tip>
 
         save_function (`Callable`):
-            The function to use to save the state dictionary. Useful on distributed training like TPUs when one needs to
-            replace `torch.save` by another method.
+            The function to use to save the state dictionary. Useful on distributed training like TPUs when one needs
+            to replace `torch.save` by another method.
     """
     shards, total_size = shard_checkpoint(state_dict, max_size=max_size)
     # One shard only means the whole model doesn't exceed the maximum size.
