@@ -87,14 +87,7 @@ class TFViTMAEModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.num_channels,
-                self.image_size,
-                self.image_size,
-            ]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -129,10 +122,7 @@ class TFViTMAEModelTester:
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, expected_seq_len, self.hidden_size),
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
         model = TFViTMAEForPreTraining(config)
@@ -143,10 +133,7 @@ class TFViTMAEModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = num_patches
         expected_num_channels = self.patch_size**2 * self.num_channels
-        self.parent.assertEqual(
-            result.logits.shape,
-            (self.batch_size, expected_seq_len, expected_num_channels),
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -170,12 +157,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFViTMAEModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=ViTMAEConfig,
-            has_text_modality=False,
-            hidden_size=37,
-        )
+        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -220,10 +202,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         # make the mask reproducible
         np.random.seed(2)
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -247,10 +226,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         # make the mask reproducible
         np.random.seed(2)
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -276,10 +252,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
     def test_attention_outputs(self):
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         # in ViTMAE, the seq_len equals (number of patches + 1) * (1 - mask_ratio), rounded above
@@ -298,10 +271,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
-            outputs = model(
-                **self._prepare_for_class(inputs_dict, model_class),
-                training=False,
-            )
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -309,31 +279,19 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
-            outputs = model(
-                **self._prepare_for_class(inputs_dict, model_class),
-                training=False,
-            )
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        chunk_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
             out_len = len(outputs)
 
@@ -341,10 +299,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
             model = model_class(config)
-            outputs = model(
-                **self._prepare_for_class(inputs_dict, model_class),
-                training=False,
-            )
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
@@ -360,21 +315,12 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        chunk_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
     def test_hidden_states_output(self):
@@ -386,9 +332,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester,
-                "expected_num_hidden_layers",
-                self.model_tester.num_hidden_layers + 1,
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -403,10 +347,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 [seq_length, self.model_tester.hidden_size],
             )
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -424,10 +365,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         # make mask reproducible
         np.random.seed(2)
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -452,10 +390,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         # make mask reproducible
         np.random.seed(2)
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -549,11 +484,7 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = tf.convert_to_tensor(
-            [
-                [-0.0548, -1.7023, -0.9325],
-                [0.3721, -0.5670, -0.2233],
-                [0.8235, -1.3878, -0.3524],
-            ]
+            [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
 
         tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
