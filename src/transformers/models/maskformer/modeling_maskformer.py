@@ -1644,11 +1644,12 @@ class MaskFormerHungarianMatcher(nn.Module):
         indices: List[Tuple[np.array]] = []
 
         preds_masks = masks_queries_logits
-        preds_probs = class_queries_logits.softmax(dim=-1)
+        preds_probs = class_queries_logits
         # downsample all masks in one go -> save memory
         mask_labels = nn.functional.interpolate(mask_labels, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
+            pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
@@ -1752,8 +1753,8 @@ class MaskFormerLoss(nn.Module):
         )
         target_classes[idx] = target_classes_o
         # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
-        pred_logits_permuted = pred_logits.permute(0, 2, 1)
-        loss_ce = criterion(pred_logits_permuted, target_classes)
+        pred_logits_transposed = pred_logits.transpose(1, 2)
+        loss_ce = criterion(pred_logits_transposed, target_classes)
         losses = {"loss_cross_entropy": loss_ce}
         return losses
 
@@ -1810,12 +1811,6 @@ class MaskFormerLoss(nn.Module):
         target_indices = torch.cat([tgt for (_, tgt) in indices])
         return batch_indices, target_indices
 
-    def get_loss(self, loss, outputs, labels, indices, num_masks):
-        loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
-        if loss not in loss_map:
-            raise KeyError(f"{loss} not in loss_map")
-        return loss_map[loss](outputs, labels, indices, num_masks)
-
     def forward(
         self,
         masks_queries_logits: torch.Tensor,
@@ -1862,8 +1857,6 @@ class MaskFormerLoss(nn.Module):
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
 
-        print(losses)
-
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if auxiliary_predictions is not None:
             for idx, aux_outputs in enumerate(auxiliary_predictions):
@@ -1876,8 +1869,9 @@ class MaskFormerLoss(nn.Module):
         return losses
 
     def get_num_masks(self, class_labels: torch.Tensor, device: torch.device) -> torch.Tensor:
-        # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks = class_labels.shape[0]
+        # Compute the average number of target masks accross the batch, for normalization purposes
+        batch_size, num_classes = class_labels.shape
+        num_masks = batch_size * num_classes
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         return num_masks_pt
 
@@ -2382,12 +2376,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
         )
-        # weight each loss by `self.weight_dict[<LOSS_NAME>]`
-        weighted_loss_dict: Dict[str, Tensor] = {
-            k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
-        }
-        print(weighted_loss_dict)
-        return weighted_loss_dict
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
+        for key, weight in self.weight_dict.items():
+            for loss_key, loss in loss_dict.items():
+                if key in loss_key:
+                    loss *= weight
+
+        return loss_dict
 
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())

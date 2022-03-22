@@ -54,6 +54,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
         size_divisibility (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
@@ -82,6 +86,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_resize=True,
         size=800,
         max_size=1333,
+        resample=Image.BILINEAR,
         size_divisibility=32,
         do_normalize=True,
         image_mean=None,
@@ -99,6 +104,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
+        self.resample = resample
         self.size_divisibility = size_divisibility
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
@@ -424,9 +430,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if annotations:
                 annotation = annotations[idx]
                 masks = annotation["masks"]
-                padded_masks = np.zeros((masks.shape[0], height, width), dtype=masks.dtype)
-                padded_masks[:, : masks.shape[1], : masks.shape[2]] = np.copy(masks)
-                masks = padded_masks
+                # pad mask with `ignore_index`
+                masks = np.pad(
+                    masks,
+                    ((0, 0), (0, height - masks.shape[1]), (0, width - masks.shape[2])),
+                    constant_values=self.ignore_index,
+                )
                 mask_labels.append(masks)
                 class_labels.append(annotation["labels"])
             # create pixel mask
