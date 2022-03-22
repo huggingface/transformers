@@ -615,9 +615,9 @@ deployment on Inf1. The Neuron SDK provides:
 
 #### Implications
 
-Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/master/model_doc/bert)
-architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/master/model_doc/distilbert)
- and [roBERTa](https://huggingface.co/docs/transformers/master/model_doc/roberta)
+Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
+architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert)
+ and [roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)
  will run best on Inf1 for non-generative tasks such as Extractive Question Answering,
  Sequence Classification, Token Classification. Alternatively, text generation
 tasks can be adapted to run on Inf1, according to this [AWS Neuron MarianMT tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
@@ -633,7 +633,7 @@ Using AWS Neuron to convert models requires the following dependencies and envir
 
 #### Converting a Model for AWS Neuron
 
-Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/master/en/serialization#using-torchscript-in-python)
+Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/main/en/serialization#using-torchscript-in-python)
 to trace a "BertModel", you import `torch.neuron` framework extension to access
 the components of the Neuron SDK through a Python API.
 
