@@ -29,7 +29,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("decision_transformer", "DecisionTransformerModel"),
-        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("glpn", "GLPNModel"),
         ("maskformer", "MaskFormerModel"),
         ("poolformer", "PoolFormerModel"),
