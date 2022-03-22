@@ -16,8 +16,9 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -39,6 +40,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -1093,7 +1095,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelBaseModel(TFFunnelPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.funnel = TFFunnelBaseLayer(config, name="funnel")
 
@@ -1107,16 +1109,16 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1141,7 +1143,7 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelModel(TFFunnelPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.funnel = TFFunnelMainLayer(config, name="funnel")
 
@@ -1155,16 +1157,16 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
 
         return self.funnel(
             input_ids=input_ids,
@@ -1192,7 +1194,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: FunnelConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
@@ -1203,16 +1205,16 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFFunnelForPreTrainingOutput]:
         r"""
         Returns:
 
@@ -1259,16 +1261,16 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
 class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
         self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings, name="lm_head")
 
-    def get_lm_head(self):
+    def get_lm_head(self) -> TFFunnelMaskedLMHead:
         return self.lm_head
 
-    def get_prefix_bias_name(self):
+    def get_prefix_bias_name(self) -> str:
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_head.name
 
@@ -1282,17 +1284,17 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1341,7 +1343,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
@@ -1358,17 +1360,17 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1418,7 +1420,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
 
         self.funnel = TFFunnelBaseLayer(config, name="funnel")
@@ -1444,17 +1446,17 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1514,7 +1516,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             }
         ]
     )
-    def serving(self, inputs: Dict[str, tf.Tensor]):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
         output = self.call(input_ids=inputs)
 
         return self.serving_output(output=output)
@@ -1535,7 +1537,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificationLoss):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
@@ -1555,17 +1557,17 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1614,7 +1616,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
     FUNNEL_START_DOCSTRING,
 )
 class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringLoss):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
@@ -1633,18 +1635,18 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        start_positions=None,
-        end_positions=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
