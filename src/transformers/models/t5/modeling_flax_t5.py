@@ -26,6 +26,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
 from ...modeling_flax_outputs import (
@@ -925,7 +926,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params=None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
@@ -936,13 +937,23 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
             decoder_input_ids,
             decoder_attention_mask,
         )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(params)
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return unflatten_dict(params)
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     def __call__(

@@ -89,6 +89,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _missing_keys = set()
 
     def __init__(
         self,
@@ -140,7 +141,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if _do_init:
             self.params = random_params
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params=None) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     @classmethod
@@ -639,10 +640,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         unexpected_keys = set(state.keys()) - model.required_params
 
         if missing_keys and not _do_init:
-            raise ValueError(
+            logger.info(
                 f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
-                f"Please ensure that the model is complete and you are not missing any keys when `_do_init`=False."
+                f"Make sure to call model.init_weights to initialize the missing weights."
             )
+            cls._missing_keys = missing_keys
 
         # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
