@@ -351,8 +351,9 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         return x
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention
 class TFViTMAESelfAttention(tf.keras.layers.Layer):
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         if config.hidden_size % config.num_attention_heads != 0:
@@ -440,13 +441,14 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->ViTMAE
 class TFViTMAESelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFViTMAELayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -468,8 +470,9 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->ViTMAE
 class TFViTMAEAttention(tf.keras.layers.Layer):
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.self_attention = TFViTMAESelfAttention(config, name="attention")
@@ -501,8 +504,9 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate
 class TFViTMAEIntermediate(tf.keras.layers.Layer):
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -523,8 +527,9 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput
 class TFViTMAEOutput(tf.keras.layers.Layer):
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -550,10 +555,11 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->ViTMAE
 class TFViTMAELayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.attention = TFViTMAEAttention(config, name="attention")
@@ -602,8 +608,9 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->ViTMAE
 class TFViTMAEEncoder(tf.keras.layers.Layer):
-    def __init__(self, config: ViTMAEConfig, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.layer = [TFViTMAELayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
