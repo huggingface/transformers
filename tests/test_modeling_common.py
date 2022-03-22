@@ -110,6 +110,7 @@ def _config_zero_init(config):
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
+BERT_BASE_UNCASED = "bert-base-uncased"
 
 
 @require_torch
@@ -2190,6 +2191,27 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+    def test_keys_prefix(self):
+        class TestClass(PreTrainedModel):
+            base_model_prefix = "aabbcc"
+            _keys_to_ignore_on_load_missing = [r"position_ids", r"aabbcc_encoder"]
+
+            def __init__(self, config):
+                super(TestClass, self).__init__(config)
+                self.aabbcc_encoder = AutoModel.from_config(config)
+
+            def _init_weights(self, module):
+                return
+
+        model_name = BERT_BASE_UNCASED
+        config = BertConfig.from_pretrained(model_name)
+        model, loading_info = TestClass.from_pretrained(
+            pretrained_model_name_or_path=model_name,
+            config=config,
+            output_loading_info=True,
+        )
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
 
     @require_torch
     def test_model_from_config_torch_dtype(self):

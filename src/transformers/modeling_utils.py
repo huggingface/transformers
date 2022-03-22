@@ -1580,10 +1580,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         loaded_keys = list(state_dict.keys())
         prefix = model.base_model_prefix
+        prefix_dot = prefix + "."
 
         if len(prefix) > 0:
-            has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
-            expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+            has_prefix_module = any(s.startswith(prefix_dot) for s in loaded_keys)
+            expects_prefix_module = any(s.startswith(prefix_dot) for s in expected_keys)
         else:
             has_prefix_module = False
             expects_prefix_module = False
@@ -1594,8 +1595,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
         if remove_prefix_from_model:
-            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
-            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix_dot)]
+            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix_dot) else s for s in expected_keys]
         elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
@@ -1739,7 +1740,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # retrieve all modules that has at least one missing weight name
         for name, module in self.named_modules():
             if remove_prefix:
-                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix + ".") else name
             elif add_prefix:
                 name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
 
