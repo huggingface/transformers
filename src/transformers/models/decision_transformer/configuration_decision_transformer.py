@@ -75,17 +75,6 @@ class DecisionTransformerConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
-
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
