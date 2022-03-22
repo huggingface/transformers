@@ -251,6 +251,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
         if noise is None:
+            print(f"From TF ViT MAE random_masking: {batch_size, seq_length, dim}")
             noise = tf.random.uniform(shape=(batch_size, seq_length), minval=0.0, maxval=1.0)  # noise in [0, 1)
 
         # sort noise for each sample
@@ -853,6 +854,9 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
 
         self.vit = TFViTMAEMainLayer(config, name="vit")
 
+    def get_input_embeddings(self):
+        return self.vit.get_input_embeddings()
+
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1035,7 +1039,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.vit.embeddings.patch_embeddings
+        return self.vit.get_input_embeddings()
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
