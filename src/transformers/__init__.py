@@ -224,6 +224,7 @@ _import_structure = {
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -525,6 +526,7 @@ if is_vision_available():
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
@@ -991,6 +993,14 @@ if is_torch_available():
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.glpn"].extend(
+        [
+            "GLPN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GLPNForDepthEstimation",
+            "GLPNModel",
+            "GLPNPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -2550,6 +2560,7 @@ if TYPE_CHECKING:
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
@@ -2803,6 +2814,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
@@ -2841,6 +2853,7 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3194,6 +3207,12 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.glpn import (
+            GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GLPNForDepthEstimation,
+            GLPNModel,
+            GLPNPreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
