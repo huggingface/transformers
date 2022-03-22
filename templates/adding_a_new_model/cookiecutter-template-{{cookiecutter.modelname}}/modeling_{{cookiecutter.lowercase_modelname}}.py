@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from typing import Optional, Tuple, Union
 
 from ...activations import ACT2FN
 from ...file_utils import (
