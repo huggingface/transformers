@@ -290,8 +290,7 @@ def save_and_shard_checkpoint(
         f"at {save_index_file}."
     )
     metadata = {"total_size": total_size}
-    model_dtype = str(next(iter(state_dict.values())).dtype).split(".")[1]
-    index = {"metadata": metadata, "weight_map": weight_map, "dtype": model_dtype}
+    index = {"metadata": metadata, "weight_map": weight_map}
     with open(save_index_file, "w", encoding="utf-8") as f:
         content = json.dumps(index, indent=2, sort_keys=True) + "\n"
         f.write(content)
@@ -1873,7 +1872,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif from_pt:
 
             if low_cpu_mem_usage:
-                cls._load_state_dict_into_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
+                cls._load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
             else:
                 model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
                     model,
@@ -2099,7 +2098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @classmethod
-    def _load_state_dict_into_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
+    def _load_pretrained_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
