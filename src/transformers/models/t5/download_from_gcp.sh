@@ -12,20 +12,20 @@ num_of_checks=16
 mkdir -p ${folder_to_store_downloads}
 
 # Copy all meta information files
-gsutil cp "${gcp_path}/operative_config.gin" .
-gsutil cp "${gcp_path}/checkpoint" .
-gsutil cp "${gcp_path}/model.ckpt-1000000.index" .
-gsutil cp "${gcp_path}/model.ckpt-1000000.meta" .
+gsutil cp "${gcp_path}/operative_config.gin" ${folder_to_store_downloads}
+gsutil cp "${gcp_path}/checkpoint" ${folder_to_store_downloads}
+gsutil cp "${gcp_path}/model.ckpt-1000000.index" ${folder_to_store_downloads}
+gsutil cp "${gcp_path}/model.ckpt-1000000.meta" ${folder_to_store_downloads}
 
 # Copy all model weights
 # single digit num checkpoitns
 for ((i = 0 ; i < ${num_of_checks} ; i++)); do
-	gsutil cp "${gcp_path}/model.ckpt-1000000.data-0000${i}-of-000${num_of_checks}" .
+	gsutil cp "${gcp_path}/model.ckpt-1000000.data-0000${i}-of-000${num_of_checks}" ${folder_to_store_downloads}
 done
 
-# double digit num checkpoitns
+# double digit num checkpoints
 for ((i = 0 ; i < ${num_of_checks} ; i++)); do
-	gsutil cp "${gcp_path}/model.ckpt-1000000.data-000${i}-of-000${num_of_checks}" .
+	gsutil cp "${gcp_path}/model.ckpt-1000000.data-000${i}-of-000${num_of_checks}" ${folder_to_store_downloads}
 done
 
 
