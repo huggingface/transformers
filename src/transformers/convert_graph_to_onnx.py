@@ -502,7 +502,7 @@ if __name__ == "__main__":
                     "\t Using TensorFlow might not provide the same optimization level compared to PyTorch.\n"
                     "\t For TensorFlow users you can try optimizing the model directly through onnxruntime_tools.\n"
                     "\t For more information, please refer to the onnxruntime documentation:\n"
-                    "\t\thttps://github.com/microsoft/onnxruntime/tree/main/onnxruntime/python/tools/transformers\n"
+                    "\t\thttps://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers\n"
                 )
 
             print("\n====== Optimizing ONNX model ======")
