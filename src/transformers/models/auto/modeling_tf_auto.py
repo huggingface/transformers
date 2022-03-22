@@ -69,6 +69,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("vit", "TFViTModel"),
+        ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("hubert", "TFHubertModel"),
     ]
@@ -99,6 +100,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("tapas", "TFTapasForMaskedLM"),
         ("funnel", "TFFunnelForPreTraining"),
         ("mpnet", "TFMPNetForMaskedLM"),
+        ("vit_mae", "TFViTMAEForPreTraining"),
     ]
 )
 
