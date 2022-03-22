@@ -15,7 +15,6 @@
 """ PyTorch SegFormer model."""
 
 
-import collections
 import math
 from typing import Optional, Tuple, Union
 
@@ -58,18 +57,8 @@ SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep=True):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
     DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
@@ -87,7 +76,8 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Segformer
+class SegformerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
@@ -99,34 +89,35 @@ class DropPath(nn.Module):
 
 
 class SegformerOverlapPatchEmbeddings(nn.Module):
-    """Construct the patch embeddings from an image."""
+    """Construct the overlapping patch embeddings."""
 
-    def __init__(self, image_size, patch_size, stride, num_channels, hidden_size):
+    def __init__(self, patch_size, stride, num_channels, hidden_size):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
-        self.height, self.width = image_size[0] // patch_size[0], image_size[1] // patch_size[1]
-        self.num_patches = self.height * self.width
         self.proj = nn.Conv2d(
             num_channels,
             hidden_size,
             kernel_size=patch_size,
             stride=stride,
-            padding=(patch_size[0] // 2, patch_size[1] // 2),
+            padding=patch_size // 2,
         )
 
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, pixel_values):
-        x = self.proj(pixel_values)
-        _, _, height, width = x.shape
-        x = x.flatten(2).transpose(1, 2)
-        x = self.layer_norm(x)
-        return x, height, width
+        embeddings = self.proj(pixel_values)
+        _, _, height, width = embeddings.shape
+        # (batch_size, num_channels, height, width) -> (batch_size, num_channels, height*width) -> (batch_size, height*width, num_channels)
+        # this can be fed to a Transformer layer
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+        embeddings = self.layer_norm(embeddings)
+        return embeddings, height, width
 
 
 class SegformerEfficientSelfAttention(nn.Module):
-    def __init__(self, config, hidden_size, num_attention_heads, sr_ratio):
+    """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
+    paper](https://arxiv.org/abs/2102.12122)."""
+
+    def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -146,15 +137,17 @@ class SegformerEfficientSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-        self.sr_ratio = sr_ratio
-        if sr_ratio > 1:
-            self.sr = nn.Conv2d(hidden_size, hidden_size, kernel_size=sr_ratio, stride=sr_ratio)
+        self.sr_ratio = sequence_reduction_ratio
+        if sequence_reduction_ratio > 1:
+            self.sr = nn.Conv2d(
+                hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
+            )
             self.layer_norm = nn.LayerNorm(hidden_size)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    def transpose_for_scores(self, hidden_states):
+        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        hidden_states = hidden_states.view(*new_shape)
+        return hidden_states.permute(0, 2, 1, 3)
 
     def forward(
         self,
@@ -167,8 +160,11 @@ class SegformerEfficientSelfAttention(nn.Module):
 
         if self.sr_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
+            # Reshape to (batch_size, num_channels, height, width)
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+            # Apply sequence reduction
             hidden_states = self.sr(hidden_states)
+            # Reshape back to (batch_size, seq_len, num_channels)
             hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
@@ -211,10 +207,13 @@ class SegformerSelfOutput(nn.Module):
 
 
 class SegformerAttention(nn.Module):
-    def __init__(self, config, hidden_size, num_attention_heads, sr_ratio):
+    def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
         self.self = SegformerEfficientSelfAttention(
-            config=config, hidden_size=hidden_size, num_attention_heads=num_attention_heads, sr_ratio=sr_ratio
+            config=config,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            sequence_reduction_ratio=sequence_reduction_ratio,
         )
         self.output = SegformerSelfOutput(config, hidden_size=hidden_size)
         self.pruned_heads = set()
@@ -285,13 +284,16 @@ class SegformerMixFFN(nn.Module):
 class SegformerLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config, hidden_size, num_attention_heads, drop_path, sr_ratio, mlp_ratio):
+    def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):
         super().__init__()
         self.layer_norm_1 = nn.LayerNorm(hidden_size)
         self.attention = SegformerAttention(
-            config, hidden_size=hidden_size, num_attention_heads=num_attention_heads, sr_ratio=sr_ratio
+            config,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            sequence_reduction_ratio=sequence_reduction_ratio,
         )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SegformerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
@@ -328,14 +330,13 @@ class SegformerEncoder(nn.Module):
         self.config = config
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_decays = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
         # patch embeddings
         embeddings = []
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 SegformerOverlapPatchEmbeddings(
-                    image_size=config.image_size // config.downsampling_rates[i],
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
@@ -358,8 +359,8 @@ class SegformerEncoder(nn.Module):
                         config,
                         hidden_size=config.hidden_sizes[i],
                         num_attention_heads=config.num_attention_heads[i],
-                        drop_path=dpr[cur + j],
-                        sr_ratio=config.sr_ratios[i],
+                        drop_path=drop_path_decays[cur + j],
+                        sequence_reduction_ratio=config.sr_ratios[i],
                         mlp_ratio=config.mlp_ratios[i],
                     )
                 )

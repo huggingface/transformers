@@ -122,7 +122,7 @@ def create_sinusoidal_positions(num_pos, dim):
 
 
 def rotate_every_two(tensor):
-    rotate_half_tensor = jnp.stack((tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
+    rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
     rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
     return rotate_half_tensor
 
