@@ -54,7 +54,7 @@ class BigScience176BConfig(PretrainedConfig):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*, defaults to None):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
@@ -106,44 +106,30 @@ class BigScience176BConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=250880,
-        seq_length=2048,
-        n_embd=14336,
-        n_layer=70,
-        num_attention_heads=122,
+        vocab_size=8, # 250880,
+        seq_length=16, # 2048,
+        n_embd=32, # 14336,
+        n_layer=4, # 70,
+        n_head=4, # 122,
         n_inner=None,
         masked_softmax_fusion=True,
-        activation_function="gelu_new",  # TODO
-        resid_pdrop=0.1,  # TODO
-        embd_pdrop=0.1,  # TODO
-        attn_pdrop=0.1,  # TODO
         layer_norm_epsilon=1e-5,  # TODO
         initializer_range=0.02,  # TODO
-        scale_attn_weights=True,  # TODO
         use_cache=True,  # TODO
-        bos_token_id=50256,  # TODO
-        eos_token_id=50256,  # TODO
-        scale_attn_by_inverse_layer_idx=False,  # TODO
-        reorder_and_upcast_attn=False,  # TODO
+        bos_token_id=0, # 50256,  # TODO
+        eos_token_id=0, # =50256,  # TODO
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.seq_length = seq_length
         self.n_embd = n_embd
         self.n_layer = n_layer
-        self.num_attention_heads = num_attention_heads
+        self.n_head = n_head
         self.n_inner = n_inner
         self.masked_softmax_fusion = masked_softmax_fusion
-        self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -206,9 +192,9 @@ class BigScience176BOnnxConfig(OnnxConfigWithPast):
                 past_key_values_length = seqlen + 2
                 past_shape = (
                     batch,
-                    self.num_attention_heads,
+                    self.n_head,
                     past_key_values_length,
-                    self._config.hidden_size // self.num_attention_heads,
+                    self._config.hidden_size // self.n_head,
                 )
                 ordered_inputs["past_key_values"] = [
                     (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
