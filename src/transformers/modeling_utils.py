@@ -182,7 +182,10 @@ def dtype_size(dtype):
     Example:
 
     ```py
-     >>> dtype_size(torch.float32) 4"""
+    >>> dtype_size(torch.float32)
+    4
+    ```
+    """
     if dtype == torch.bool:
         return 1 / 8
     bit_search = re.search("[^\d](\d+)$", str(dtype))
