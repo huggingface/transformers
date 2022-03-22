@@ -115,7 +115,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.input_shape = input_shape
 
         # To check if the model was intialized automatically.
-        self._is_intialized = _do_init
+        self._is_initialized = _do_init
 
         if _do_init:
             # randomly initialized parameters
@@ -167,7 +167,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     @property
     def params(self) -> Union[Dict, FrozenDict]:
-        if not self._is_intialized:
+        if not self._is_initialized:
             raise ValueError(
                 "`params` cannot be accessed from model when the model is created with `_do_init=False`. "
                 "You must call `init_weights` manually and store the params outside of the model and "
@@ -186,7 +186,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     @params.setter
     def params(self, params: Union[Dict, FrozenDict]):
         # don't set params if the model is not initialized
-        if not self._is_intialized:
+        if not self._is_initialized:
             raise ValueError(
                 "`params` cannot be set from model when the model is created with `_do_init=False`. "
                 "You store the params outside of the model."
