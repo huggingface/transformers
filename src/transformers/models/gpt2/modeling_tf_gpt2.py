@@ -878,7 +878,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             "input_ids": inputs,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "past_key_values": past,
+            "past": past,
             "use_cache": use_cache,
         }
 
