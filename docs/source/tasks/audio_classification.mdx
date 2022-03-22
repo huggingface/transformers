@@ -91,8 +91,10 @@ Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference
 >>> encoded_ks = ks.map(preprocess_function, remove_columns=["audio", "file"], batched=True)
 ```
 
-## Fine-tune with Trainer
+## Train
 
+<frameworkcontent>
+<pt>
 Load Wav2Vec2 with [`AutoModelForAudioClassification`]. Specify the number of labels, and pass the model the mapping between label number and label class:
 
 ```py
@@ -135,6 +137,8 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
+</pt>
+</frameworkcontent>
 
 <Tip>
 

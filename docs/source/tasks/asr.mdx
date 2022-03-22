@@ -155,8 +155,10 @@ Create a batch of examples and dynamically pad them with `DataCollatorForCTCWith
 >>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 ```
 
-## Fine-tune with Trainer
+## Train
 
+<frameworkcontent>
+<pt>
 Load Wav2Vec2 with [`AutoModelForCTC`]. For `ctc_loss_reduction`, it is often better to use the average instead of the default summation:
 
 ```py
@@ -206,6 +208,8 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
+</pt>
+</frameworkcontent>
 
 <Tip>
 
