@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import inspect
+import json
 import os
 import re
 from contextlib import contextmanager
@@ -37,6 +38,7 @@ from .file_utils import (
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
     ModelOutput,
@@ -146,6 +148,255 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         gen = parameter._named_members(get_members_fn=find_tensor_attributes)
         first_tuple = next(gen)
         return first_tuple[1].dtype
+
+
+def convert_file_size_to_int(size: Union[int, str]):
+    """
+    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
+        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
+    Example:
+
+    ```py
+    >>> convert_file_size_to_int("1MB")
+    1048576
+    ```
+    """
+    if isinstance(size, int):
+        return size
+    if size.upper().endswith("GB"):
+        return int(size[:-2]) * (2**30)
+    if size.upper().endswith("MB"):
+        return int(size[:-2]) * (2**20)
+    if size.upper().endswith("KB"):
+        return int(size[:-2]) * (2**10)
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, line '5GB'.")
+
+
+def dtype_size(dtype):
+    """
+    Returns the size (in bytes) occupied by one parameter of type `dtype`.
+
+    Example:
+
+    ```py
+     >>> dtype_size(torch.float32) 4"""
+    if dtype == torch.bool:
+        return 1 / 8
+    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    if bit_search is None:
+        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
+    bit_size = int(bit_search.groups()[0])
+    return bit_size // 8
+
+
+def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, str] = "10GB"):
+    """
+    Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
+    given size.
+
+    The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so there is no
+    optimization made to make each sub-checkpoint as close as possible to the maximum size passed.
+
+    <Tip warning={true}>
+
+    If one of the model's weight is bigger that `max_size`, it will end up in its own sub-checkpoint which will have a
+    size greater than `max_size`.
+
+    </Tip>
+
+    Args:
+        state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
+        max_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
+            (like `"5MB"`).
+    """
+    max_size = convert_file_size_to_int(max_size)
+
+    sharded_state_dicts = []
+    current_block = {}
+    current_block_size = 0
+    total_size = 0
+
+    for key, weight in state_dict.items():
+        weight_size = weight.numel() * dtype_size(weight.dtype)
+
+        # If this weight is going to tip up over the maximal size, we split.
+        if current_block_size + weight_size > max_size:
+            sharded_state_dicts.append(current_block)
+            current_block = {}
+            current_block_size = 0
+
+        current_block[key] = weight
+        current_block_size += weight_size
+        total_size += weight_size
+
+    # Add the last block
+    sharded_state_dicts.append(current_block)
+    return sharded_state_dicts, total_size
+
+
+def save_and_shard_checkpoint(
+    save_directory: Union[str, os.PathLike],
+    state_dict: Dict[str, torch.Tensor],
+    max_size: Union[int, str] = "5GB",
+    save_function: Callable = torch.save,
+):
+    """
+    Shards a model state dictionary and saves it in a given directory.
+
+    Arguments:
+        save_directory (`str` or `os.PathLike`):
+            Directory to which to save. Will be created if it doesn't exist.
+        state_dict (dictionary of `torch.Tensor`):
+            The state dictionary of the model to save.
+        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size lower
+            than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+
+            <Tip warning={true}>
+
+            If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+            which will be bigger than `max_shard_size`.
+
+            </Tip>
+
+        save_function (`Callable`):
+            The function to use to save the state dictionary. Useful on distributed training like TPUs when one need to
+            replace `torch.save` by another method.
+    """
+    shards, total_size = shard_checkpoint(state_dict, max_size=max_size)
+    # One shard only means the whole model doesn't exceed the maximum size.
+    if len(shards) == 1:
+        save_file = os.path.join(save_directory, WEIGHTS_NAME)
+        logger.info(f"Model weights saved in {save_file}")
+        save_function(shards[0], save_file)
+        return
+
+    # Otherwise we build the index.
+    save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
+    weight_map = {}
+    for idx, shard in enumerate(shards):
+        shard_file = WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(shards):05d}.bin")
+        save_function(shard, os.path.join(save_directory, shard_file))
+        for key in shard.keys():
+            weight_map[key] = shard_file
+
+    logger.info(
+        f"The model is bigger than the maximum size per checkpoint ({max_size}) and is going to be split in "
+        f"{len(shards)} checkpoint shards. You can find where each parameters has been saved in the index located "
+        f"at {save_index_file}."
+    )
+    # TODO add dtype in metadata
+    metadata = {"total_size": total_size}
+    index = {"metadata": metadata, "weight_map": weight_map}
+    with open(save_index_file, "w", encoding="utf-8") as f:
+        content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+        f.write(content)
+
+
+def get_checkpoint_shard_files(
+    pretrained_model_name_or_path,
+    index_filename,
+    cache_dir=None,
+    force_download=False,
+    proxies=None,
+    resume_download=False,
+    local_files_only=False,
+    use_auth_token=None,
+    user_agent=None,
+    revision=None,
+    mirror=None,
+):
+    # TODO: Write doc
+    with open(index_filename, "r") as f:
+        index = json.loads(f.read())
+    
+    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    sharded_metadata = index["metadata"]
+    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+    if os.path.isdir(pretrained_model_name_or_path):
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        return shard_filenames, sharded_metadata
+    
+    # TODO: Deal with remote files
+
+
+def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
+    """
+    Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
+    """
+    try:
+        return torch.load(checkpoint_file, map_location="cpu")
+    except Exception as e:
+        try:
+            with open(checkpoint_file) as f:
+                if f.read().startswith("version"):
+                    raise OSError(
+                        "You seem to have cloned a repository without having git-lfs installed. Please install "
+                        "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                        "you cloned."
+                    )
+                else:
+                    raise ValueError from e
+        except (UnicodeDecodeError, ValueError):
+            raise OSError(
+                f"Unable to load weights from pytorch checkpoint file for '{checkpoint_file}' "
+                f"at '{checkpoint_file}'. "
+                "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
+            )
+
+
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+    # Convert old format to new format if needed from a PyTorch state_dict
+    old_keys = []
+    new_keys = []
+    for key in state_dict.keys():
+        new_key = None
+        if "gamma" in key:
+            new_key = key.replace("gamma", "weight")
+        if "beta" in key:
+            new_key = key.replace("beta", "bias")
+        if new_key:
+            old_keys.append(key)
+            new_keys.append(new_key)
+    for old_key, new_key in zip(old_keys, new_keys):
+        state_dict[new_key] = state_dict.pop(old_key)
+
+    # copy state_dict so _load_from_state_dict can modify it
+    metadata = getattr(state_dict, "_metadata", None)
+    state_dict = state_dict.copy()
+    if metadata is not None:
+        state_dict._metadata = metadata
+
+    error_msgs = []
+
+    # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+    # so we need to apply the function recursively.
+    def load(module: nn.Module, prefix=""):
+        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+        args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            # because zero3 puts placeholders in model params, this context
+            # manager gathers (unpartitions) the params of the current layer, then loads from
+            # the state dict and then re-partitions them again
+            with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    module._load_from_state_dict(*args)
+        else:
+            module._load_from_state_dict(*args)
+
+        for name, child in module._modules.items():
+            if child is not None:
+                load(child, prefix + name + ".")
+
+    load(model_to_load, prefix=start_prefix)
+
+    return error_msgs
 
 
 class ModuleUtilsMixin:
@@ -1004,6 +1255,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
+        max_shard_size: Union[int, str] = "10GB",
         **kwargs,
     ):
         """
@@ -1032,6 +1284,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
                 which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
                 folder. Pass along `temp_dir=True` to use a temporary directory instead.
+
+                </Tip>
+
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+
+                <Tip warning={true}>
+
+                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                which will be bigger than `max_shard_size`.
 
                 </Tip>
 
@@ -1078,11 +1341,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
 
-        # If we save using the predefined names, we can load using `from_pretrained`
-        output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
-        save_function(state_dict, output_model_file)
-
-        logger.info(f"Model weights saved in {output_model_file}")
+        # Actually save the `state_dict`, with sharding if the model is too big.
+        save_and_shard_checkpoint(save_directory, state_dict, max_size=max_shard_size, save_function=save_function)
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
@@ -1293,6 +1553,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
+        # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
+        # index of the files. 
+        is_sharded = False
+        sharded_metadata=None
         # Load model
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
@@ -1309,6 +1573,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded PyTorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
                 elif os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
@@ -1433,29 +1701,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             resolved_archive_file = None
 
+        # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
+        if is_sharded:
+            # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
+                pretrained_model_name_or_path,
+                resolved_archive_file,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+                revision=revision,
+                mirror=mirror,
+            )
+
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
-            if state_dict is None:
-                try:
-                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception as e:
-                    try:
-                        with open(resolved_archive_file) as f:
-                            if f.read().startswith("version"):
-                                raise OSError(
-                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
-                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
-                                    "you cloned."
-                                )
-                            else:
-                                raise ValueError from e
-                    except (UnicodeDecodeError, ValueError):
-                        raise OSError(
-                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                            f"at '{resolved_archive_file}'. "
-                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
-                        )
-
+            if not is_sharded:
+                # Time to load the checkpoint
+                state_dict = load_state_dict(resolved_archive_file)
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -1465,7 +1732,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
-                        torch_dtype = next(iter(state_dict.values())).dtype
+                        if is_sharded and "dtype" in sharded_metadata:
+                            torch_dtype = sharded_metadata["dtype"]
+                        elif not is_sharded:
+                            torch_dtype = next(iter(state_dict.values())).dtype
+                        else:
+                            one_state_dict = load_state_dict(resolved_archive_file)
+                            torch_dtype = next(iter(one_state_dict.values())).dtype
+                            del one_state_dict # free CPU memory
                     else:
                         raise ValueError(
                             f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
@@ -1474,8 +1748,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if low_cpu_mem_usage:
                 # save the keys
-                loaded_state_dict_keys = [k for k in state_dict.keys()]
-                del state_dict  # free CPU memory - will reload again later
+                if is_sharded:
+                    loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
+                else:
+                    state_dict = load_state_dict(resolved_archive_file)
+                    loaded_state_dict_keys = [k for k in state_dict.keys()]
+                    del state_dict  # free CPU memory - will reload again later
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1530,11 +1808,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage:
                 cls._load_state_dict_into_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
             else:
-                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
+                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
                     model,
                     state_dict,
+                    resolved_archive_file,
                     pretrained_model_name_or_path,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    sharded_metadata=sharded_metadata,
                     _fast_init=_fast_init,
                 )
 
@@ -1554,32 +1834,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model, loading_info
 
         return model
-
+    
     @classmethod
-    def _load_state_dict_into_model(
-        cls, model, state_dict, pretrained_model_name_or_path, ignore_mismatched_sizes=False, _fast_init=True
+    def _load_pretrained_model(
+        cls,
+        model,
+        state_dict,
+        resolved_archive_file,
+        pretrained_model_name_or_path,
+        ignore_mismatched_sizes=False,
+        sharded_metadata=None,
+        _fast_init=True,
     ):
-
-        # Convert old format to new format if needed from a PyTorch state_dict
-        old_keys = []
-        new_keys = []
-        for key in state_dict.keys():
-            new_key = None
-            if "gamma" in key:
-                new_key = key.replace("gamma", "weight")
-            if "beta" in key:
-                new_key = key.replace("beta", "bias")
-            if new_key:
-                old_keys.append(key)
-                new_keys.append(new_key)
-        for old_key, new_key in zip(old_keys, new_keys):
-            state_dict[new_key] = state_dict.pop(old_key)
-
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-        loaded_keys = list(state_dict.keys())
+        loaded_keys = list(state_dict.keys()) if state_dict is not None else sharded_metadata["all_checkpoint_keys"]
         prefix = model.base_model_prefix
+
+        def _fix_key(key):
+            if "beta" in key:
+                return key.replace("beta", "bias")
+            if "gamma" in key:
+                return key.replace("gamma", "weight")
+            return key
+        
+        loaded_keys =[_fix_key(key) for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
@@ -1602,27 +1882,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
-        # matching the weights in the model.
-        mismatched_keys = []
-        if ignore_mismatched_sizes:
-            for checkpoint_key in loaded_keys:
-                model_key = checkpoint_key
-                if remove_prefix_from_model:
-                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                    model_key = f"{prefix}.{checkpoint_key}"
-                elif add_prefix_to_model:
-                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                    model_key = ".".join(checkpoint_key.split(".")[1:])
-
-                if (
-                    model_key in model_state_dict
-                    and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-                ):
-                    mismatched_keys.append(
-                        (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                    )
-                    del state_dict[checkpoint_key]
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
@@ -1642,35 +1901,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for module in uninitialized_modules:
                 model._init_weights(module)
 
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, "_metadata", None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
-
-        error_msgs = []
-
-        # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-        # so we need to apply the function recursively.
-        def load(module: nn.Module, prefix=""):
-            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                # because zero3 puts placeholders in model params, this context
-                # manager gathers (unpartitions) the params of the current layer, then loads from
-                # the state dict and then re-partitions them again
-                with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                    if torch.distributed.get_rank() == 0:
-                        module._load_from_state_dict(*args)
-            else:
-                module._load_from_state_dict(*args)
-
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + ".")
-
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
         model_to_load = model
@@ -1683,8 +1913,62 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
                     "properly saved?"
                 )
+        
+        if state_dict is not None:
+            # Whole checkpoint
+            mismatched_keys = []
+            if ignore_mismatched_sizes:
+                for checkpoint_key in loaded_keys:
+                    model_key = checkpoint_key
+                    if remove_prefix_from_model:
+                        # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
+                        model_key = f"{prefix}.{checkpoint_key}"
+                    elif add_prefix_to_model:
+                        # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                        model_key = ".".join(checkpoint_key.split(".")[1:])
 
-        load(model_to_load, prefix=start_prefix)
+                    if (
+                        model_key in model_state_dict
+                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                    ):
+                        mismatched_keys.append(
+                            (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                        )
+                        del state_dict[checkpoint_key]
+        
+            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+        else:
+            # Sharded checkpoint
+            # This should always be a list but, just to be sure.
+            if not isinstance(resolved_archive_file, list):
+                resolved_archive_file = [resolved_archive_file]
+
+            error_msgs = []
+            for shard_file in resolved_archive_file:
+                state_dict = load_state_dict(shard_file)
+                # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+                # matching the weights in the model.
+                mismatched_keys = []
+                if ignore_mismatched_sizes:
+                    for checkpoint_key in loaded_keys:
+                        model_key = checkpoint_key
+                        if remove_prefix_from_model:
+                            # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
+                            model_key = f"{prefix}.{checkpoint_key}"
+                        elif add_prefix_to_model:
+                            # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                            model_key = ".".join(checkpoint_key.split(".")[1:])
+
+                        if (
+                            model_key in model_state_dict
+                            and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                        ):
+                            mismatched_keys.append(
+                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                            )
+                            del state_dict[checkpoint_key]
+            
+                error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -1766,7 +2050,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
         """
-
+        # TODO: handle sharded checkpoints
         require_version_core("torch>=1.9")
         if is_deepspeed_zero3_enabled():
             raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
