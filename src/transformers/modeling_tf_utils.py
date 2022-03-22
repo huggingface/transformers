@@ -498,15 +498,10 @@ def input_processing(func, config, input_ids, **kwargs):
                 f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names_list[0]}."
             )
 
-    # Populates any unspecified argument with their default value. For the first argument, populates it with None when
-    # not passed -- some models, like T5, accept `input_ids` or `inputs_embeds` as input. In those cases, we rely on
-    # ad hoc exceptions to handle missing inputs.
+    # Populates any unspecified argument with their default value, according to the signature.
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
-            if name == parameter_names_list[0]:
-                output[name] = None
-            else:
-                output[name] = kwargs.pop(name, signature[name].default)
+            output[name] = kwargs.pop(name, signature[name].default)
 
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
