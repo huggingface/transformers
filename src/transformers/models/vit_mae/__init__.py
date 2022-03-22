@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -36,7 +36,6 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_vit_mae"] = [
         "TFViTMAEForPreTraining",
-        "TFViTMAELayer",
         "TFViTMAEModel",
         "TFViTMAEPreTrainedModel",
     ]
@@ -54,7 +53,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_vit_mae import TFViTMAEForPreTraining, TFViTMAELayer, TFViTMAEModel, TFViTMAEPreTrainedModel
+        from .modeling_tf_vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
 
 
 else:

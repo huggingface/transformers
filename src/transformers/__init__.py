@@ -2097,7 +2097,6 @@ if is_tf_available():
     _import_structure["models.vit_mae"].extend(
         [
             "TFViTMAEForPreTraining",
-            "TFViTMAELayer",
             "TFViTMAEModel",
             "TFViTMAEPreTrainedModel",
         ]
@@ -4102,7 +4101,7 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
-        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAELayer, TFViTMAEModel, TFViTMAEPreTrainedModel
+        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
