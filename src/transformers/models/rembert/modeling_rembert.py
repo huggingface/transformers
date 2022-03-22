@@ -171,7 +171,7 @@ class RemBertEmbeddings(nn.Module):
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: Optional[int] = 0,
+        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -248,7 +248,7 @@ class RemBertSelfAttention(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Tuple[Tuple[torch.FloatTensor]] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
 
@@ -521,9 +521,9 @@ class RemBertEncoder(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
