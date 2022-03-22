@@ -2115,7 +2115,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
         """
-        # TODO: handle sharded checkpoints
         require_version_core("torch>=1.9")
         if is_deepspeed_zero3_enabled():
             raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
