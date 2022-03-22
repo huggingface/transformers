@@ -218,6 +218,8 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/glpn
+      title: GLPN
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/ibert
