@@ -65,7 +65,7 @@ class DPTConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        out_indices (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        backbone_out_indices (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             Indices of the intermediate hidden states to use from backbone.
         readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
@@ -82,7 +82,7 @@ class DPTConfig(PretrainedConfig):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
-        in_index (`int`, *optional*, defaults to -1):
+        head_in_index (`int`, *optional*, defaults to -1):
             The index of the features to use in the heads.
         use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
@@ -127,12 +127,12 @@ class DPTConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        out_indices=[2, 5, 8, 11],
+        backbone_out_indices=[2, 5, 8, 11],
         readout_type="project",
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
         fusion_hidden_size=256,
-        in_index=-1,
+        head_in_index=-1,
         use_batch_norm_in_fusion_residual=False,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
@@ -155,14 +155,14 @@ class DPTConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.out_indices = out_indices
+        self.backbone_out_indices = backbone_out_indices
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
         self.fusion_hidden_size = fusion_hidden_size
-        self.in_index = in_index
+        self.head_in_index = head_in_index
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head

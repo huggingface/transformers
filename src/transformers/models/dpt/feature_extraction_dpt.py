@@ -100,7 +100,10 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return y
 
-    def update_size(self, width, height):
+    def update_size(self, image):
+        image = self.to_pil_image(image)
+        width, height = image.size
+
         size = self.size
 
         if isinstance(size, list):
@@ -187,7 +190,7 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
             for idx, image in enumerate(images):
-                size = self.update_size(image.width, image.height)
+                size = self.update_size(image)
                 images[idx] = self.resize(image, size=size, resample=self.resample)
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]

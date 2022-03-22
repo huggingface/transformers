@@ -848,7 +848,7 @@ class DPTDepthEstimationHead(nn.Module):
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
-        hidden_states = hidden_states[self.config.in_index]
+        hidden_states = hidden_states[self.config.head_in_index]
 
         logits = self.head(hidden_states)
 
@@ -925,9 +925,11 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
-        # only keep certain features based on config.out_indices
+        # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
-        hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
+        hidden_states = [
+            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+        ]
 
         hidden_states = self.neck(hidden_states)
 
@@ -971,7 +973,7 @@ class DPTSemanticSegmentationHead(nn.Module):
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
-        hidden_states = hidden_states[self.config.in_index]
+        hidden_states = hidden_states[self.config.head_in_index]
 
         logits = self.head(hidden_states)
 
@@ -1086,9 +1088,11 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
-        # only keep certain features based on config.out_indices
+        # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
-        hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
+        hidden_states = [
+            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+        ]
 
         hidden_states = self.neck(hidden_states)
 

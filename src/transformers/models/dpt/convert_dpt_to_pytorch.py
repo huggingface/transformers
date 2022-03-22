@@ -224,8 +224,9 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     if "ade" in checkpoint_url:
         expected_slice = torch.tensor([[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]])
     assert logits.shape == torch.Size(expected_shape)
+    print("Values of logits:", logits[0, :3, :3])
     assert (
-        torch.allclose(logits[0, 0, :3, :3], expected_slice, atol=1e-4)
+        torch.allclose(logits[0, 0,:3, :3], expected_slice, atol=1e-4)
         if "ade" in checkpoint_url
         else torch.allclose(logits[0, :3, :3], expected_slice)
     )

@@ -53,7 +53,7 @@ class DPTModelTester:
         use_labels=True,
         hidden_size=32,
         num_hidden_layers=4,
-        out_indices=[0, 1, 2, 3],
+        backbone_out_indices=[0, 1, 2, 3],
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -72,7 +72,7 @@ class DPTModelTester:
         self.use_labels = use_labels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.out_indices = out_indices
+        self.backbone_out_indices = backbone_out_indices
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -100,7 +100,7 @@ class DPTModelTester:
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
-            out_indices=self.out_indices,
+            backbone_out_indices=self.backbone_out_indices,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
