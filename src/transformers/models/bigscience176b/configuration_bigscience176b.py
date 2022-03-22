@@ -117,6 +117,8 @@ class BigScience176BConfig(PretrainedConfig):
         use_cache=True,  # TODO
         bos_token_id=0, # 50256,  # TODO
         eos_token_id=0, # =50256,  # TODO
+        pretraining_tp=2,  # TODO
+        pretraining_pp=2,  # TODO
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -129,6 +131,8 @@ class BigScience176BConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.pretraining_tp = pretraining_tp
+        self.pretraining_pp = pretraining_pp
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
