@@ -126,18 +126,9 @@ state_mean = torch.from_numpy(state_mean).to(device=device)
 state_std = torch.from_numpy(state_std).to(device=device)
 
 # Create the decision transformer model
-# config = DecisionTransformerConfig(state_dim=state_dim, act_dim=act_dim, max_ep_len=1000, max_length=20)
-# model = DecisionTransformerModel(config)
 model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-medium")
 model = model.to(device)
 model.eval()
-# Load the pretrained weights from a checkpoint
-# save a checkpoint of this model to compare keys
-# torch.save(model.state_dict(), "dt_hopper.pth")
-# state_dict = torch.load("checkpoints/hopper_medium.pth")
-# model.load_state_dict(state_dict)
-# Interact with the environment
-
 
 for ep in range(10):
     episode_return, episode_length = 0, 0
