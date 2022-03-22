@@ -192,7 +192,6 @@ class TokenClassificationPipeline(Pipeline):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         model_inputs = self.tokenizer(
             sentence,
-            return_attention_mask=False,
             return_tensors=self.framework,
             truncation=truncation,
             return_special_tokens_mask=True,

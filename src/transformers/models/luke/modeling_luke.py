@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -880,7 +880,7 @@ class LukeModel(LukePreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: LukeConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
@@ -912,20 +912,20 @@ class LukeModel(LukePreTrainedModel):
     @replace_return_docstrings(output_type=BaseLukeModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        entity_ids=None,
-        entity_attention_mask=None,
-        entity_token_type_ids=None,
-        entity_position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        entity_ids: Optional[torch.LongTensor] = None,
+        entity_attention_mask: Optional[torch.FloatTensor] = None,
+        entity_token_type_ids: Optional[torch.LongTensor] = None,
+        entity_position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseLukeModelOutputWithPooling]:
         r"""
 
         Returns:
@@ -1169,22 +1169,22 @@ class LukeForMaskedLM(LukePreTrainedModel):
     @replace_return_docstrings(output_type=LukeMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        entity_ids=None,
-        entity_attention_mask=None,
-        entity_token_type_ids=None,
-        entity_position_ids=None,
-        labels=None,
-        entity_labels=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        entity_ids: Optional[torch.LongTensor] = None,
+        entity_attention_mask: Optional[torch.LongTensor] = None,
+        entity_token_type_ids: Optional[torch.LongTensor] = None,
+        entity_position_ids: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        entity_labels: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LukeMaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1282,21 +1282,21 @@ class LukeForEntityClassification(LukePreTrainedModel):
     @replace_return_docstrings(output_type=EntityClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        entity_ids=None,
-        entity_attention_mask=None,
-        entity_token_type_ids=None,
-        entity_position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        entity_ids: Optional[torch.LongTensor] = None,
+        entity_attention_mask: Optional[torch.FloatTensor] = None,
+        entity_token_type_ids: Optional[torch.LongTensor] = None,
+        entity_position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, EntityClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)` or `(batch_size, num_labels)`, *optional*):
             Labels for computing the classification loss. If the shape is `(batch_size,)`, the cross entropy loss is
@@ -1397,21 +1397,21 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     @replace_return_docstrings(output_type=EntityPairClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        entity_ids=None,
-        entity_attention_mask=None,
-        entity_token_type_ids=None,
-        entity_position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        entity_ids: Optional[torch.LongTensor] = None,
+        entity_attention_mask: Optional[torch.FloatTensor] = None,
+        entity_token_type_ids: Optional[torch.LongTensor] = None,
+        entity_position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, EntityPairClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)` or `(batch_size, num_labels)`, *optional*):
             Labels for computing the classification loss. If the shape is `(batch_size,)`, the cross entropy loss is
@@ -1517,23 +1517,23 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     @replace_return_docstrings(output_type=EntitySpanClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        entity_ids=None,
-        entity_attention_mask=None,
-        entity_token_type_ids=None,
-        entity_position_ids=None,
-        entity_start_positions=None,
-        entity_end_positions=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        entity_ids: Optional[torch.LongTensor] = None,
+        entity_attention_mask: Optional[torch.LongTensor] = None,
+        entity_token_type_ids: Optional[torch.LongTensor] = None,
+        entity_position_ids: Optional[torch.LongTensor] = None,
+        entity_start_positions: Optional[torch.LongTensor] = None,
+        entity_end_positions: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, EntitySpanClassificationOutput]:
         r"""
         entity_start_positions (`torch.LongTensor`):
             The start positions of entities in the word token sequence.

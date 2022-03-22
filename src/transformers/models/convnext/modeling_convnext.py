@@ -46,7 +46,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",

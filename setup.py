@@ -98,7 +98,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.9",
+    "deepspeed>=0.6.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -112,7 +112,7 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8",
+    "jax>=0.2.8,!=0.3.2",
     "jaxlib>=0.1.65",
     "jieba",
     "nltk",
@@ -309,6 +309,36 @@ extras["docs_specific"] = []
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
+extras["dev-torch"] = (
+    extras['testing']
+    + extras['torch']
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["torch-speech"]
+    + extras["vision"]
+    + extras["integrations"]
+    + extras["timm"]
+    + extras["codecarbon"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
+    + extras["onnxruntime"]
+)
+extras["dev-tensorflow"] = (
+        extras['testing']
+        + extras['tf']
+        + extras["sentencepiece"]
+        + extras["tokenizers"]
+        + extras["vision"]
+        + extras["quality"]
+        + extras["docs_specific"]
+        + extras["sklearn"]
+        + extras["modelcreation"]
+        + extras["onnx"]
+        + extras["tf-speech"]
+)
 extras["dev"] = (
     extras["all"]
     + extras["testing"]
@@ -353,7 +383,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.17.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

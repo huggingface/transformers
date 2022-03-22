@@ -52,6 +52,13 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class GLPNFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ImageGPTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -74,6 +81,13 @@ class LayoutLMv2Processor(metaclass=DummyObject):
 
 
 class LayoutXLMProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MaskFormerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

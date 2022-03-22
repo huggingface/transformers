@@ -187,6 +187,7 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -275,6 +276,7 @@ class FlaxT5Attention(nn.Module):
             relative_position,
             bidirectional=(not self.causal),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
 
         values = self.relative_attention_bias(relative_position_bucket)
@@ -709,18 +711,11 @@ class FlaxT5BlockCollection(nn.Module):
 
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: Optional[nn.Embed] = None
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.causal = self.config.causal
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxT5LayerNorm(

@@ -327,8 +327,8 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     try:
         import tensorflow as tf
 
+        import tf2onnx
         from tf2onnx import __version__ as t2ov
-        from tf2onnx import convert_keras, save_model
 
         print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
 
@@ -337,11 +337,15 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
         # Forward
         nlp.model.predict(tokens.data)
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output.as_posix())
+        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in tokens.items()]
+        model_proto, _ = tf2onnx.convert.from_keras(
+            nlp.model, input_signature, opset=opset, output_path=output.as_posix()
+        )
 
     except ImportError as e:
-        raise Exception(f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.")
+        raise Exception(
+            f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first. {e}"
+        )
 
 
 def convert(

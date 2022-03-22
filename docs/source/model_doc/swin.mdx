@@ -34,6 +34,8 @@ The hierarchical design and the shifted window approach also prove beneficial fo
 
 Tips:
 - One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
+- Swin pads the inputs supporting any input height and width (if divisible by `32`).
+- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
 alt="drawing" width="600"/> 

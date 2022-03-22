@@ -261,10 +261,7 @@ class FlaxFFN(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
-        assert self.config.activation in [
-            "relu",
-            "gelu",
-        ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
+
         self.activation = ACT2FN[self.config.activation]
 
     def __call__(self, hidden_states, deterministic: bool = True):
@@ -576,7 +573,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
         hidden_states = dlbrt_output[0]
         prediction_logits = self.vocab_transform(hidden_states)
-        prediction_logits = ACT2FN["gelu"](prediction_logits)
+        prediction_logits = ACT2FN[self.config.activation](prediction_logits)
         prediction_logits = self.vocab_layer_norm(prediction_logits)
 
         if self.config.tie_word_embeddings:

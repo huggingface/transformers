@@ -12,7 +12,8 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  run_tests_templates:
+  run_tests_templates_like:
+    name: "Add new model like template tests"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -42,7 +43,7 @@ jobs:
 
       - name: Run all PyTorch modeling test
         run: |
-          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_new_models tests/test_modeling_bert_new.py
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_new_models tests/bert_new/test_modeling_bert_new.py
 
       - name: Run style changes
         run: |
@@ -50,11 +51,11 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_new_models_failures_short.txt
+        run: cat reports/tests_new_models/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_new_models_test_reports
-          path: reports
+          path: reports/tests_new_models

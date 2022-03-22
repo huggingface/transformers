@@ -465,22 +465,28 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
+        >>> from transformers import SpeechEncoderDecoderModel, Wav2Vec2Processor
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
-        >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
+        >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
-        >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-        >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
-
-        >>> # inference (generation)
+        >>> # Inference: Translate English speech to German
         >>> generated = model.generate(input_values)
-        >>> translation = processor.batch_decode(generated)
+        >>> decoded = processor.batch_decode(generated, skip_special_tokens=True)[0]
+        >>> decoded
+        'Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.'
+
+        >>> # Training: Train model on English transcription
+        >>> with processor.as_target_processor():
+        ...     labels = processor(ds[0]["text"], return_tensors="pt").input_ids
+
+        >>> loss = model(input_values, labels=labels).loss
+        >>> loss.backward()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
