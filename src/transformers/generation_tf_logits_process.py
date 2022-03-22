@@ -365,12 +365,13 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def calc_banned_ngram_tokens(self, prev_input_ids, num_hypos, cur_len):
+    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
         # Copied from fairseq for no_repeat_ngram in beam_search
         if cur_len + 1 < self.ngram_size:
             # return no banned tokens if we haven't generated ngram_size tokens yet
             return [[] for _ in range(num_hypos)]
         generated_ngrams = [{} for _ in range(num_hypos)]
+        prev_input_ids = input_ids[:, :cur_len]
         for idx in range(num_hypos):
             gen_tokens = prev_input_ids[idx].numpy().tolist()
             generated_ngram = generated_ngrams[idx]
@@ -388,10 +389,9 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
 
         batch_size, vocab_size = scores.shape
-        cur_len = input_ids.shape[-1]
         banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
 
         # create banned_tokens boolean mask

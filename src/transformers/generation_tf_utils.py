@@ -917,6 +917,7 @@ class TFGenerationMixin:
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
+            breakpoint()
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 next_token_logits_penalties = _create_next_token_logits_penalties(
@@ -1986,7 +1987,7 @@ class TFGenerationMixin:
             if not use_xla:
                 input_ids = tf.reshape(generated.concat(), (-1, batch_size))
                 input_ids = tf.transpose(input_ids[: current_pos[0]])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=current_pos[0])
 
             # argmax
             next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
@@ -2221,7 +2222,7 @@ class TFGenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_processor(input_ids, next_token_logits, cur_len=cur_len)
             next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required
@@ -2416,6 +2417,16 @@ class TFGenerationMixin:
             return tf.nest.map_structure(gather_fn, nested)
 
         # 1. init beam_search values
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
+        # TODO (Joao): after the removal of the old beam_search, do not make an exception of the repetition penalty
+        repetition_processor = TFLogitsProcessorList(
+            [p for p in logits_processor if isinstance(p, TFRepetitionPenaltyLogitsProcessor)]
+        )
+        logits_processor = TFLogitsProcessorList(
+            [p for p in logits_processor if not isinstance(p, TFRepetitionPenaltyLogitsProcessor)]
+        )
+
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -2472,9 +2483,9 @@ class TFGenerationMixin:
 
         # per batch, beam-item score, logprobs
         running_scores = tf.tile(
-            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e7] * (num_beams - 1)), axis=0), [batch_size, 1]
+            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e9] * (num_beams - 1)), axis=0), [batch_size, 1]
         )
-        scores = tf.ones((batch_size, num_beams)) * -1.0e7
+        scores = tf.ones((batch_size, num_beams)) * -1.0e9
 
         # flatten beam dim
         if "encoder_outputs" in model_kwargs:
@@ -2547,8 +2558,16 @@ class TFGenerationMixin:
             # get log probabilities from logits,
             # process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
+
+            # TODO (Joao): after the removal of the old beam_search, do not make an exception of the repetition penalty
+            # (all logits processors should be computed after the softmax)
+            logits = repetition_processor(flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(logits))
+            logits = unflatten_beam_dim(logits, batch_size, num_beams)
+
             log_probs = tf.nn.log_softmax(logits)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs))
+            log_probs = logits_processor(
+                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len=cur_len
+            )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             vocab_size = log_probs.shape[2]
@@ -2584,13 +2603,16 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
+
             did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
-            running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e7
+            # TODO (Joao): Add this in a future PR, to match FLAX implementation
+            # running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
+            running_topk_log_probs = topk_log_probs  # replacement alias
 
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=[1])
+            next_topk_indices = tf.math.top_k(running_topk_log_probs, k=num_beams)[1]
             next_running_sequences_seq_last, next_running_scores = gather_beams(
                 [topk_sequences_seq_last, running_topk_log_probs], next_topk_indices
             )
@@ -2600,15 +2622,17 @@ class TFGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (cur_len**length_penalty)
-            beams_in_batch_are_full = (
-                tf.broadcast_to(
-                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
-                )
-                & early_stopping
-            )
-            add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
-            topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e7
+
+            # TODO (Joao): Add this in a future PR, to match FLAX implementation
+            # topk_log_probs = topk_log_probs / (cur_len**length_penalty)
+            # beams_in_batch_are_full = (
+            #     tf.broadcast_to(
+            #         tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
+            #     )
+            #     & early_stopping
+            # )
+            # add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
+            # topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e9
 
             # 7. Get scores, sequences, is sentence finished for next.
             # Combine sequences, scores, and flags along the beam dimension and compare
@@ -2618,7 +2642,7 @@ class TFGenerationMixin:
             merged_sequences = tf.concat([sequences_seq_last, topk_sequences_seq_last], axis=1)
             merged_scores = tf.concat([scores, topk_log_probs], axis=1)
             merged_is_sent_finished = tf.concat([is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = tf.reverse(tf.math.top_k(merged_scores, k=num_beams)[1], axis=[1])
+            topk_merged_indices = tf.math.top_k(merged_scores, k=num_beams)[1]
             next_sequences_seq_last, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices
             )
