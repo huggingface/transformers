@@ -54,12 +54,8 @@ _CONFIG_FOR_DOC = "DPTConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "DPTFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Intel/dpt-lare"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Intel/dpt-large"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
+_CHECKPOINT_FOR_DOC = "Intel/dpt-large"
+_EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 
 DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -897,20 +893,20 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, DPTForDepthEstimation
+        >>> from transformers import DPTFeatureExtractor, DPTForDepthEstimation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
-        >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large-ade")
+        >>> feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
+        >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+        >>> predicted_depth = outputs.predicted_depth  # shape (batch_size, height, width)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -1059,14 +1055,14 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, DPTForSemanticSegmentation
+        >>> from transformers import DPTFeatureExtractor, DPTForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        >>> feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
