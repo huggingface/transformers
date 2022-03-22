@@ -26,7 +26,6 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.utils._pytree import tree_map
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -1380,12 +1379,12 @@ class BigBirdAttention(nn.Module):
         to_blocked_mask=None,
     ):
         # fp16 compatibility
-        def convert_dtype(mask):
-            return tree_map(lambda x: x.to(hidden_states.dtype) if isinstance(x, torch.Tensor) else x, mask)
-
-        band_mask = convert_dtype(band_mask)
-        from_mask = convert_dtype(from_mask)
-        to_mask = convert_dtype(to_mask)
+        if band_mask is not None:
+            band_mask = band_mask.to(hidden_states.dtype)
+        if from_mask is not None:
+            from_mask = from_mask.to(hidden_states.dtype)
+        if to_mask is not None:
+            to_mask = to_mask.to(hidden_states.dtype)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(
