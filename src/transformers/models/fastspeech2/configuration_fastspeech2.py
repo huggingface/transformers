@@ -154,9 +154,4 @@ class FastSpeech2Config(PretrainedConfig):
         self.initializer_range = self.encoder_embed_dim**-0.5
         self.mean = mean
         self.std = std
-        super().__init__(
-            pad_token_id=pad_token_id,
-            # bos_token_id=bos_token_id,
-            # eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(pad_token_id=pad_token_id, **kwargs)

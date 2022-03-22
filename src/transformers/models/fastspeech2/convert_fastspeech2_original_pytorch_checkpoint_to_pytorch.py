@@ -20,6 +20,7 @@ import argparse
 import torch
 from fairseq.checkpoint_utils import load_model_ensemble_and_task_from_hf_hub
 from fairseq.models.text_to_speech.hub_interface import TTSHubInterface
+
 from transformers import FastSpeech2Config, FastSpeech2Model
 
 
@@ -33,13 +34,13 @@ def convert_wav2vec2_checkpoint(args):
 
     model_cfg = cfg["model"]
     config = FastSpeech2Config(
-        add_postnet=model_cfg.add_postnet, 
         pitch_min=model_cfg.pitch_min,
         pitch_max=model_cfg.pitch_min,
         energy_min=model_cfg.energy_min,
         energy_max=model_cfg.energy_max,
+        add_postnet=model_cfg.add_postnet,
         vocab_size=len(vars(task.src_dict)["indices"]),
-        num_speakers=1 if model_cfg.speaker_to_id is None else len(model_cfg.speaker_to_id), 
+        num_speakers=1 if model_cfg.speaker_to_id is None else len(model_cfg.speaker_to_id),
     )
     hf_model = FastSpeech2Model(config)
     state_dict = fairseq_model.state_dict()
