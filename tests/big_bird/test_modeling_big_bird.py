@@ -581,7 +581,7 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(
                 torch.allclose(
                     hidden_states[0, 0, :5],
-                    torch.tensor([1.4943, 0.0928, 0.8254, -0.2816, -0.9788], device=torch_device),
+                    torch.tensor([1.4825, 0.0774, 0.8226, -0.2962, -0.9593], device=torch_device),
                     atol=1e-3,
                 )
             )
