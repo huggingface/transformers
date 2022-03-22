@@ -529,7 +529,7 @@ if is_vision_available():
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
-     _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
