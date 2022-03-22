@@ -221,7 +221,8 @@ class ViTMAEEmbeddings(nn.Module):
         self.num_patches = self.patch_embeddings.num_patches
         # fixed sin-cos embedding
         self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
+            torch.zeros(1, self.num_patches + 1, config.hidden_size),
+            requires_grad=False,
         )
         self.config = config
         self.initialize_weights()
@@ -229,7 +230,9 @@ class ViTMAEEmbeddings(nn.Module):
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
+            self.position_embeddings.shape[-1],
+            int(self.patch_embeddings.num_patches**0.5),
+            add_cls_token=True,
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
@@ -247,7 +250,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         Args:
             sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`) which is
+            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
@@ -340,12 +343,18 @@ class ViTMAESelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -412,7 +421,10 @@ class ViTMAEAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+            heads,
+            self.attention.num_attention_heads,
+            self.attention.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -743,7 +755,8 @@ class ViTMAEDecoder(nn.Module):
         self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
         self.decoder_pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches + 1, config.decoder_hidden_size), requires_grad=False
+            torch.zeros(1, num_patches + 1, config.decoder_hidden_size),
+            requires_grad=False,
         )  # fixed sin-cos embedding
 
         decoder_config = deepcopy(config)
@@ -757,7 +770,9 @@ class ViTMAEDecoder(nn.Module):
 
         self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size)
         self.decoder_pred = nn.Linear(
-            config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
+            config.decoder_hidden_size,
+            config.patch_size**2 * config.num_channels,
+            bias=True,
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
@@ -766,7 +781,9 @@ class ViTMAEDecoder(nn.Module):
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
+            self.decoder_pos_embed.shape[-1],
+            int(num_patches**0.5),
+            add_cls_token=True,
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
@@ -814,7 +831,11 @@ class ViTMAEDecoder(nn.Module):
                     None,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states,
+                    head_mask=None,
+                    output_attentions=output_attentions,
+                )
 
             hidden_states = layer_outputs[0]
 

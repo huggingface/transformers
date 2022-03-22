@@ -37,6 +37,7 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
 from ...utils import logging
@@ -237,14 +238,14 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def random_masking(self, sequence: tf.Tensor, noise: tf.Tensor = None):
+    def random_masking(self, sequence: tf.Tensor, noise: Optional[tf.Tensor] = None):
         """
         Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
         noise.
 
         Args:
             sequence (`tf.Tensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`tf.Tensor` of shape `(batch_size, sequence_length)`) which is
+            noise (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
@@ -672,6 +673,7 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -683,27 +685,9 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
-            raise ValueError("You have to specify pixel_values")
-
         embedding_output, mask, ids_restore = self.embeddings(
-            pixel_values=inputs["pixel_values"],
-            training=inputs["training"],
+            pixel_values=pixel_values,
+            training=training,
             noise=noise,
         )
 
@@ -712,24 +696,24 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if inputs["head_mask"] is not None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.config.num_hidden_layers
+            head_mask = [None] * self.config.num_hidden_layers
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(inputs=sequence_output)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             return (sequence_output, mask, ids_restore) + encoder_outputs[1:]
 
         return TFViTMAEModelOutput(
@@ -857,6 +841,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
     def get_input_embeddings(self):
         return self.vit.get_input_embeddings()
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -890,29 +875,14 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
+        outputs = self.vit(
+            pixel_values=pixel_values,
+            noise=noise,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        outputs = self.vit(
-            pixel_values=inputs["pixel_values"],
-            noise=noise,
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         return outputs
@@ -1086,6 +1056,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         loss = tf.reduce_sum(loss * mask) / tf.reduce_sum(mask)  # mean loss on removed patches
         return loss
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFViTMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1123,29 +1094,14 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
+        outputs = self.vit(
+            pixel_values=pixel_values,
+            noise=noise,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        outputs = self.vit(
-            pixel_values=inputs["pixel_values"],
-            noise=noise,
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         latent = outputs.last_hidden_state
@@ -1155,7 +1111,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         decoder_outputs = self.decoder(latent, ids_restore)  # [N, L, p*p*3]
         logits = decoder_outputs.logits
 
-        loss = self.forward_loss(inputs["pixel_values"], logits, mask)
+        loss = self.forward_loss(pixel_values, logits, mask)
 
         if not return_dict:
             output = (logits, mask, ids_restore) + outputs[2:]
