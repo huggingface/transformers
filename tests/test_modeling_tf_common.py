@@ -1557,14 +1557,21 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
-        # sets up a dummy config (accessed through `self`)
-        config_kwargs = {"output_attentions": False, "output_hidden_states": False, "return_dict": False}
-        self.config = PretrainedConfig(**config_kwargs)
+        class DummyModel:
+            def __init__(self):
+                config_kwargs = {"output_attentions": False, "output_hidden_states": False, "return_dict": False}
+                self.config = PretrainedConfig(**config_kwargs)
+
+            @unpack_inputs
+            def call(self, input_ids, past, output_attentions=None, output_hidden_states=None, return_dict=None):
+                return input_ids, past, output_attentions, output_hidden_states, return_dict
+
+        dummy_model = DummyModel()
         input_ids = tf.constant([0, 1, 2, 3])
         past = tf.constant([4, 5, 6, 7])
 
         # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config
-        output = self.dummy_call_fn(input_ids=input_ids, past=past)
+        output = dummy_model.call(input_ids=input_ids, past=past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
@@ -1572,7 +1579,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[4])
 
         # test case 2: Same as above, but with positional arguments
-        output = self.dummy_call_fn(input_ids, past)
+        output = dummy_model.call(input_ids, past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
@@ -1580,7 +1587,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[4])
 
         # test case 3: We can also pack everything in the first input
-        output = self.dummy_call_fn(input_ids={"input_ids": input_ids, "past": past})
+        output = dummy_model.call(input_ids={"input_ids": input_ids, "past": past})
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
@@ -1588,7 +1595,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[4])
 
         # test case 4: Explicit boolean arguments should override the config
-        output = self.dummy_call_fn(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
+        output = dummy_model.call(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
@@ -1597,20 +1604,16 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         # test case 5: Unexpected arguments should raise an exception
         with self.assertRaises(ValueError):
-            output = self.dummy_call_fn(input_ids=input_ids, past=past, foo="bar")
+            output = dummy_model.call(input_ids=input_ids, past=past, foo="bar")
 
         # test case 6: Despite the above, `past_key_values` should be interchangeable with `past`
         # (the decorator moves it to `past`, or vice-versa, depending on the signature)
-        output = self.dummy_call_fn(input_ids=input_ids, past_key_values=past)
+        output = dummy_model.call(input_ids=input_ids, past_key_values=past)
         tf.debugging.assert_equal(output[0], input_ids)
         tf.debugging.assert_equal(output[1], past)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
-
-    @unpack_inputs
-    def dummy_call_fn(self, input_ids, past, output_attentions=None, output_hidden_states=None, return_dict=None):
-        return input_ids, past, output_attentions, output_hidden_states, return_dict
 
 
 @require_tf
