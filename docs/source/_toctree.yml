@@ -194,6 +194,8 @@
       title: DeBERTa
     - local: model_doc/deberta-v2
       title: DeBERTa-v2
+    - local: model_doc/decision_transformer
+      title: Decision Transformer
     - local: model_doc/deit
       title: DeiT
     - local: model_doc/detr
