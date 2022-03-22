@@ -50,14 +50,14 @@ class BigScience176BConfig(PretrainedConfig):
         seq_length (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
+            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times hidden_size
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -99,18 +99,17 @@ class BigScience176BConfig(PretrainedConfig):
     model_type = "bigscience176b"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "hidden_size": "n_embd",
         "max_position_embeddings": "seq_length",
         "num_hidden_layers": "n_layer",
     }
 
     def __init__(
         self,
-        vocab_size=8, # 250880,
-        seq_length=16, # 2048,
-        n_embd=32, # 14336,
-        n_layer=4, # 70,
-        n_head=4, # 122,
+        vocab_size=250880,
+        seq_length=20, # 2048,
+        hidden_size=64, # 14336,
+        n_layer=2, # 70,
+        n_head=8, # 122,
         n_inner=None,
         masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,  # TODO
@@ -122,7 +121,7 @@ class BigScience176BConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.seq_length = seq_length
-        self.n_embd = n_embd
+        self.hidden_size = hidden_size
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner

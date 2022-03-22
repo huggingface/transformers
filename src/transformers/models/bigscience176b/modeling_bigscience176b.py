@@ -815,7 +815,7 @@ class BigScience176BLMHeadModel(BigScience176BPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = BigScience176BModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Model parallel
         self.model_parallel = False
