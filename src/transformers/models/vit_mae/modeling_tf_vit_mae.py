@@ -35,7 +35,6 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
-    input_processing,
     keras_serializable,
     unpack_inputs,
 )
