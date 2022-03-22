@@ -28,7 +28,6 @@ from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_tf_utils import unpack_inputs
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
@@ -82,6 +81,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
+    from transformers.modeling_tf_utils import unpack_inputs
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
