@@ -349,6 +349,13 @@ You will first need to run the following command (from the root of the repositor
 python utils/prepare_for_doc_test.py src docs
 ```
 
+If you work on a specific python script, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
+
+```bash
+python utils/prepare_for_doc_test.py src/transformers/file_utils.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
+```
+(`file_utils.py` should be always included)
+
 Then you can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
 
 ```bash
