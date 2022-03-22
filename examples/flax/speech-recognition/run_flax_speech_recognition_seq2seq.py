@@ -281,6 +281,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
+        input_length = [feature["input_length"] for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         # reformat list to dict and set to pytorch format
@@ -314,6 +315,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         labels = labels.filled(fill_value=-100)
 
         batch["inputs"] = batch.pop("input_values")
+        batch["input_length"] = np.array(input_length)
         batch["labels"] = labels
         batch["decoder_input_ids"] = decoder_input_ids
         # decoder_attention_mask known to give issues with nan's
@@ -650,14 +652,14 @@ def main():
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
     # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
-    # Note that this mask is specifically adapted for FlaxBart.
+    # Note that this mask is specifically adapted for FlaxWav2Vec2 and FlaxBart.
     # For FlaxT5, one should correct the layer norm parameter naming
     # accordingly - see `run_t5_mlm_flax.py` e.g.
-    # TODO: check param dictionary of encoder and decoder match the layer_norm_params list
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
         layer_norm_params = [
-            (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
+            (name, "scale")
+            for name in ["layer_norm", "self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
         ]
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
@@ -696,7 +698,7 @@ def main():
         loss = loss - normalizing_constant
 
         # ignore padded tokens from loss, i.e. where labels are not set to -100
-        padding = labels > 0
+        padding = labels >= 0
         loss = loss * padding
         loss = loss.sum() / padding.sum()
         return loss
@@ -707,56 +709,31 @@ def main():
 
         def compute_loss(params):
             labels = batch.pop("labels")
-            outputs = state.apply_fn(
+            sample_size = batch.pop("input_length").sum()
+            logits = state.apply_fn(
                 **batch,
                 params=params,
                 dropout_rng=dropout_rng,
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
-                return_dict=True,
-                output_attentions=True,
-                output_hidden_states=True,
                 train=True,
-            )
-            encoder_hidden_states = jnp.asarray(outputs.encoder_hidden_states)
-            encoder_outputs = outputs.encoder_last_hidden_state
-            decoder_hidden_states = jnp.asarray(outputs.decoder_hidden_states)
-            logits = outputs.logits
-
-            # check for nan in inputs by taking l2-norm over inputs
-            # a single nan in the inputs will return a nan when normed
-            logs = {"inputs": jnp.linalg.norm(batch["inputs"])}
-
-            # check for nan in encoder_hidden_states, encoder_outputs
-            logs["encoder_hidden_states"] = jnp.linalg.norm(
-                encoder_hidden_states.reshape(-1, encoder_hidden_states.shape[0]), axis=0
-            )
-            logs["encoder_outputs"] = jnp.linalg.norm(encoder_outputs)
-
-            # check for nan in decoder_hidden_states, decoder_outputs (logits)
-            logs["decoder_hidden_states"] = jnp.linalg.norm(
-                decoder_hidden_states.reshape(-1, decoder_hidden_states.shape[0]), axis=0
-            )
-            logs["logits"] = jnp.linalg.norm(logits)
-
+            )[0]
             loss = loss_fn(logits, labels, label_smoothing_factor)
             # normalize loss over gradient accumulation steps (ignore for now)
             # loss = loss / gradient_accumulation_steps
-            return loss, logs
+            return loss, sample_size
 
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
-        (loss, logs), grad = grad_fn(state.params)
-        # TODO: compute loss correctly over pmapped axis
-        grad = jax.lax.pmean(grad, "batch")
+        (loss, sample_size), grad = grad_fn(state.params)
+        # true-average of gradients - weighted by input sample-size
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_map(lambda g: g / sample_size, grad)
 
         # compute gradient norm for monitoring
-        # (re-introduce when no nan's on forward pass, currently meaningless)
-        # grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
+        grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
-        # don't log learning-rate and grad-norm until forward pass returns real-valued numbers
-        metrics = {"loss": loss}
-        metrics.update(logs)
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step), "grad_norm": grad_norm}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state, metrics
@@ -764,6 +741,7 @@ def main():
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
+        sample_size = batch.pop("input_length")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels, label_smoothing_factor)
 
@@ -824,10 +802,10 @@ def main():
 
             if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
-                train_metric = jax_utils.unreplicate(train_metric)
+                train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                # if has_tensorboard and jax.process_index() == 0:
-                #    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+                if has_tensorboard and jax.process_index() == 0:
+                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 # Log everything
                 metric_desc = " ".join([f"{key}: {value} |" for key, value in train_metric.items()])
@@ -835,11 +813,6 @@ def main():
 
                 train_metrics = []
 
-        # epochs.write(
-        #    f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
-        # )
-
-        continue
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
