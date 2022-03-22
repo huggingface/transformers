@@ -8,6 +8,7 @@ from ..models.bert import BertOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
+from ..models.flaubert import FlaubertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
@@ -179,6 +180,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
         ),
+        "flaubert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=FlaubertOnnxConfig,
+        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
@@ -325,7 +335,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     def get_model_from_feature(
-        feature: str, model: str, framework: str = "pt"
+        feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -344,12 +354,12 @@ class FeaturesManager:
         """
         model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
         try:
-            model = model_class.from_pretrained(model)
+            model = model_class.from_pretrained(model, cache_dir=cache_dir)
         except OSError:
             if framework == "pt":
-                model = model_class.from_pretrained(model, from_tf=True)
+                model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
             else:
-                model = model_class.from_pretrained(model, from_pt=True)
+                model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir)
         return model
 
     @staticmethod
