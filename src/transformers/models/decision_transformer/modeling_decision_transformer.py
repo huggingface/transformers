@@ -46,7 +46,7 @@ from .configuration_decision_transformer import DecisionTransformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "decision_transformer"
+_CHECKPOINT_FOR_DOC = "edbeeching/decision-transformer-gym-hopper-medium"
 _CONFIG_FOR_DOC = "DecisionTransformerConfig"
 
 DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
