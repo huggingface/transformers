@@ -706,6 +706,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -713,7 +714,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         output_type=TFBaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -895,6 +895,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         return model_kwargs
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -902,7 +903,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1020,9 +1020,9 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1172,6 +1172,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         )
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1179,7 +1180,6 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         output_type=TFSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
