@@ -1615,8 +1615,17 @@ class Trainer:
 
             self.log(logs)
 
+        if self.args.num_eval_delay_steps > 0:
+            delay_eval = self.state.global_step > self.args.num_eval_delay_steps
+            logger.info(f"Skipping evaluation. Evaluation delayed until step {self.args.num_eval_delay_steps} due to args.num_eval_delay_steps")
+        elif self.args.num_eval_delay_epochs > 0:
+            delay_eval = epoch > self.args.num_eval_delay_epochs
+            logger.info(f"Skipping evaluation. Evaluation delayed until epoch {self.args.num_eval_delay_epochs} due to args.num_eval_delay_epochs")
+        else:
+            delay_eval = False
+
         metrics = None
-        if self.control.should_evaluate:
+        if self.control.should_evaluate and not delay_eval:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, epoch, metrics)
 
