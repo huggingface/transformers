@@ -23,21 +23,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-<<<<<<< HEAD
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-=======
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithNoAttentionAndWithPooling,
     ImageClassifierOutputWithNoAttention,
->>>>>>> 85b3af48a (first proposal)
 )
 from .configuration_van import VanConfig
 
@@ -60,6 +50,7 @@ VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Visual-Attention-Network/van-base",
     # See all VAN models at https://huggingface.co/models?filter=van
 ]
+
 
 # Stochastic depth implementation
 # Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
