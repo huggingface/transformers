@@ -694,6 +694,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     ):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        past_key_values = decoder_inputs.get("past_key_values")
+        if past_key_values is None:
+            past_key_values = decoder_inputs.get("past")  # e.g. on TF GPT2
         input_dict = {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "attention_mask": attention_mask,
@@ -701,7 +704,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             "decoder_input_ids": decoder_inputs["input_ids"],
             # TODO (joao): the `TFBaseModelOutput` wrapper should not be needed after the generate refactor is complete
             "encoder_outputs": TFBaseModelOutput(last_hidden_state=encoder_outputs[0]),
-            "past_key_values": decoder_inputs["past_key_values"],
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
         return input_dict

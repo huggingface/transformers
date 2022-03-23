@@ -427,10 +427,14 @@ class FeatureExtractionMixin(PushToHubMixin):
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
             )
-        except HTTPError:
+        except HTTPError as err:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
+                f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n{err}"
+            )
+        except ValueError:
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
                 f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )

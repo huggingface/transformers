@@ -43,6 +43,7 @@ from . import (
     data2vec,
     deberta,
     deberta_v2,
+    decision_transformer,
     deit,
     detr,
     dialogpt,
