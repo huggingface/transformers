@@ -29,7 +29,7 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import (
+from .utils import (
     ExplicitEnum,
     is_psutil_available,
     is_sagemaker_dp_enabled,

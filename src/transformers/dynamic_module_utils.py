@@ -24,8 +24,14 @@ from typing import Dict, Optional, Union
 
 from huggingface_hub import HfFolder, model_info
 
-from .file_utils import HF_MODULES_CACHE, TRANSFORMERS_DYNAMIC_MODULE_NAME, cached_path, hf_bucket_url, is_offline_mode
-from .utils import logging
+from .utils import (
+    HF_MODULES_CACHE,
+    TRANSFORMERS_DYNAMIC_MODULE_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_offline_mode,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

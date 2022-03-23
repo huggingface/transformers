@@ -30,7 +30,8 @@ from unittest import mock
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
-from .file_utils import (
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
+from .utils import (
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -60,7 +61,6 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"

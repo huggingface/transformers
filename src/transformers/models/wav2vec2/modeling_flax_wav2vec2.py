@@ -27,7 +27,6 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -35,7 +34,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 

@@ -21,13 +21,12 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...generation_beam_search import BeamSearchScorer
 from ...generation_logits_process import LogitsProcessorList
 from ...generation_stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 

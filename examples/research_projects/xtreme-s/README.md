@@ -28,7 +28,7 @@ Dataset: [https://huggingface.co/datasets/google/xtreme_s](https://huggingface.c
 
 ## Fine-tuning for the XTREME-S tasks
 
-Based on the [`run_xtreme_s.py`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/xtreme-s/run_xtreme_s.py) script.
+Based on the [`run_xtreme_s.py`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/xtreme-s/run_xtreme_s.py) script.
 
 This script can fine-tune any of the pretrained speech models on the [hub](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition) on the [XTREME-S dataset](https://huggingface.co/datasets/google/xtreme_s) tasks.
 
@@ -67,13 +67,13 @@ The corresponding training commands for each dataset are given in the sections b
 | Speech Recognition    | VoxPopuli | -                     | -                                                                  | -             | -      |
 | Speech Recognition    | FLEURS    | -                     | -                                                                  | -             | -      |
 | Speech Translation    | CoVoST-2  | -                     | -                                                                  | -             | -      |
-| Speech Classification | Minds-14  | 94.74 F1 / 94.70 Acc. | [here](https://huggingface.co/anton-l/xtreme_s_xlsr_300m_minds14/) | 04:46:40      | 2xA100 |
+| Speech Classification | Minds-14  | 90.15 F1 / 90.33 Acc. | [here](https://huggingface.co/anton-l/xtreme_s_xlsr_300m_minds14/) | 2:54:21       | 2xA100 |
 | Speech Classification | FLEURS    | -                     | -                                                                  | -             | -      |
 | Speech Retrieval      | FLEURS    | -                     | -                                                                  | -             | -      |
 
 ### Speech Recognition with MLS
 
-The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/master/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#multilingual-librispeech-mls) using 8 GPUs in half-precision.
+The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/main/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#multilingual-librispeech-mls) using 8 GPUs in half-precision.
 
 ```bash
 python -m torch.distributed.launch \
@@ -82,7 +82,6 @@ python -m torch.distributed.launch \
     --task="mls" \
     --language="all" \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
-    --eval_split_name="test" \
     --output_dir="xtreme_s_xlsr_300m_mls" \
     --overwrite_output_dir \
     --num_train_epochs=100 \
@@ -118,7 +117,7 @@ On 8 V100 GPUs, this script should run in ~19 hours and yield a cross-entropy lo
 
 ### Speech Classification with Minds-14
 
-The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/master/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#intent-classification---minds-14) using 2 GPUs in half-precision.
+The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/main/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#intent-classification---minds-14) using 2 GPUs in half-precision.
 
 ```bash
 python -m torch.distributed.launch \
@@ -158,4 +157,4 @@ python -m torch.distributed.launch \
     --push_to_hub
 ```
 
-On 2 A100 GPUs, this script should run in ~5 hours and yield a cross-entropy loss of **0.2890** and F1 score of **94.74**
+On 2 A100 GPUs, this script should run in ~5 hours and yield a cross-entropy loss of **0.4119** and F1 score of **90.15**

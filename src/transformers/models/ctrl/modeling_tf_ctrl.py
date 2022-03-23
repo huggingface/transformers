@@ -21,7 +21,6 @@ from typing import Tuple
 import numpy as np
 import tensorflow as tf
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
@@ -33,7 +32,7 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_ctrl import CTRLConfig
 
 
