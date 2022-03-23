@@ -71,7 +71,7 @@ You are not required to read the following guidelines before opening an issue. H
      File "/transformers/src/transformers/__init__.py", line 34, in <module>
        from . import dependency_versions_check
      File "/transformers/src/transformers/dependency_versions_check.py", line 34, in <module>
-       from .file_utils import is_tokenizers_available
+       from .utils import is_tokenizers_available
      File "/transformers/src/transformers/file_utils.py", line 40, in <module>
        from tqdm.auto import tqdm
     ModuleNotFoundError: No module named 'tqdm.auto'
@@ -124,7 +124,7 @@ You are not required to read the following guidelines before opening an issue. H
      File "/transformers/src/transformers/__init__.py", line 34, in <module>
        from . import dependency_versions_check
      File "/transformers/src/transformers/dependency_versions_check.py", line 34, in <module>
-       from .file_utils import is_tokenizers_available
+       from .utils import is_tokenizers_available
      File "/transformers/src/transformers/file_utils.py", line 40, in <module>
        from tqdm.auto import tqdm
    ModuleNotFoundError: No module named 'tqdm.auto'
