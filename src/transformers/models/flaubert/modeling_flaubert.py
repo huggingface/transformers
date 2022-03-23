@@ -193,13 +193,12 @@ class FlaubertModel(XLMModel):
         #               'flaubert/flaubert_base_cased' , 'flaubert/flaubert_large_cased']
 
         >>> tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_uncased")
-        >>> model = BertForPreTraining.from_pretrained("flaubert/flaubert_base_uncased")
+        >>> model = FlaubertModel.from_pretrained("flaubert/flaubert_base_uncased")
 
         >>> inputs = tokenizer("Le chat mange une pomme.", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> last_hidden_states = outputs.last_hidden_state
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
