@@ -23,15 +23,15 @@ from typing import Dict, Optional, Tuple
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
-from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
 

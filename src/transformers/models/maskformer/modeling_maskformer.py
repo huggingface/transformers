@@ -28,7 +28,9 @@ from torch import Tensor, nn
 from transformers.utils import logging
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions
+from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,8 +39,6 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions
-from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 from .configuration_maskformer import MaskFormerConfig

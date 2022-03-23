@@ -21,9 +21,9 @@ import unittest
 import numpy as np
 
 from transformers import BertTokenizerFast
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
 from transformers.testing_utils import require_tokenizers, require_vision
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 
 
 if is_vision_available():

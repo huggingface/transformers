@@ -22,9 +22,8 @@ import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, shape_list, unpack_inputs
-from ...utils import logging
+from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
