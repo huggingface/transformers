@@ -595,22 +595,19 @@ class DPTFeatureFusionLayer(nn.Module):
         self.residual_layer1 = DPTPreActResidualLayer(config)
         self.residual_layer2 = DPTPreActResidualLayer(config)
 
-    def forward(self, *inputs):
-        x = inputs[0]
-        if len(inputs) == 2:
-            if x.shape != inputs[1].shape:
-                res = nn.functional.interpolate(
-                    inputs[1], size=(x.shape[2], x.shape[3]), mode="bilinear", align_corners=False
+    def forward(self, hidden_state, residual=None):
+        if residual is not None:
+            if hidden_state.shape != residual.shape:
+                residual = nn.functional.interpolate(
+                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
                 )
-            else:
-                res = inputs[1]
-            x = x + self.residual_layer1(res)
+            hidden_state = hidden_state + self.residual_layer1(residual)
 
-        x = self.residual_layer2(x)
-        x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
-        x = self.projection(x)
+        hidden_state = self.residual_layer2(hidden_state)
+        hidden_state = nn.functional.interpolate(hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
+        hidden_state = self.projection(hidden_state)
 
-        return x
+        return hidden_state
 
 
 class DPTPreTrainedModel(PreTrainedModel):
