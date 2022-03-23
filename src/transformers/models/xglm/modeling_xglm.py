@@ -399,7 +399,7 @@ class XGLMDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         if config.add_cross_attention:
-            self.crossattention = XGLMAttention(
+            self.encoder_attn = XGLMAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.attention_heads,
                 dropout=config.attention_dropout,

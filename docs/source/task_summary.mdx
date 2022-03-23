@@ -213,7 +213,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
    with the weights stored in the checkpoint.
 2. Define a text and a few questions.
 3. Iterate over the questions and build a sequence from the text and the current question, with the correct
-   model-specific separators token type ids and attention masks.
+   model-specific separators, token type ids and attention masks.
 4. Pass this sequence through the model. This outputs a range of scores across the entire sequence tokens (question and
    text), for both the start and end positions.
 5. Compute the softmax of the result to get probabilities over the tokens.
