@@ -17,6 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
+from typing import Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,9 +27,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
 )
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
@@ -829,11 +830,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DECISION_TRANSFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=DecisionTransformerOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=DecisionTransformerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         states=None,
@@ -845,7 +842,46 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         output_hidden_states=None,
         output_attentions=None,
         return_dict=None,
-    ):
+    ) -> Union[Tuple, DecisionTransformerOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import DecisionTransformerModel
+        >>> import torch
+
+        >>> model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-medium")
+        >>> # evaluation
+        >>> model = model.to(device)
+        >>> model.eval()
+
+        >>> env = gym.make("Hopper-v3")
+        >>> state_dim = env.observation_space.shape[0]
+        >>> act_dim = env.action_space.shape[0]
+
+        >>> state = env.reset()
+        >>> states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
+        >>> actions = torch.zeros((1, 1, act_dim), device=device, dtype=torch.float32)
+        >>> rewards = torch.zeros(1, 1, device=device, dtype=torch.float32)
+        >>> target_return = torch.tensor(TARGET_RETURN, dtype=torch.float32).reshape(1, 1)
+        >>> timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
+        >>> attention_mask = torch.zeros(1, 1, device=device, dtype=torch.float32)
+
+        >>> # forward pass
+        >>> with torch.no_grad():
+        ...     state_preds, action_preds, return_preds = model(
+        ...         states=states,
+        ...         actions=actions,
+        ...         rewards=rewards,
+        ...         returns_to_go=target_return,
+        ...         timesteps=timesteps,
+        ...         attention_mask=attention_mask,
+        ...         return_dict=False,
+        ...     )
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
