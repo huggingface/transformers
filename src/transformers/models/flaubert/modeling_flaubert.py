@@ -167,6 +167,41 @@ class FlaubertModel(XLMModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+                config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
+                the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
+                pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
+
+                - 0 indicates sequence B is a continuation of sequence A,
+                - 1 indicates sequence B is a random sequence.
+            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+                Used to hide legacy arguments that have been deprecated.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import FlaubertTokenizer, FlaubertModel
+        >>> import torch
+
+        # Choose among ['flaubert/flaubert_small_cased', 'flaubert/flaubert_base_uncased', 
+        #               'flaubert/flaubert_base_cased' , 'flaubert/flaubert_large_cased']
+
+        >>> tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_uncased")
+        >>> model = BertForPreTraining.from_pretrained("flaubert/flaubert_base_uncased")
+
+        >>> inputs = tokenizer("Le chat mange une pomme.", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
