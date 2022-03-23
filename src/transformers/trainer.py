@@ -1616,11 +1616,11 @@ class Trainer:
             self.log(logs)
 
         if self.args.num_eval_delay_steps > 0:
-            delay_eval = self.state.global_step > self.args.num_eval_delay_steps
-            logger.info(f"Skipping evaluation. Evaluation delayed until step {self.args.num_eval_delay_steps} due to args.num_eval_delay_steps")
+            delay_eval = self.state.global_step <= self.args.num_eval_delay_steps
+            logger.info(f"Skipping evaluation. Evaluation available after step {self.args.num_eval_delay_steps} due to args.num_eval_delay_steps")
         elif self.args.num_eval_delay_epochs > 0:
-            delay_eval = epoch > self.args.num_eval_delay_epochs
-            logger.info(f"Skipping evaluation. Evaluation delayed until epoch {self.args.num_eval_delay_epochs} due to args.num_eval_delay_epochs")
+            delay_eval = epoch <= self.args.num_eval_delay_epochs
+            logger.info(f"Skipping evaluation. Evaluation available after epoch {self.args.num_eval_delay_epochs} due to args.num_eval_delay_epochs")
         else:
             delay_eval = False
 
