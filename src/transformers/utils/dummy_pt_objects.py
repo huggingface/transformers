@@ -1425,6 +1425,37 @@ class DebertaV2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DecisionTransformerGPT2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DecisionTransformerGPT2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DecisionTransformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DecisionTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
