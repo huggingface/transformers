@@ -21,8 +21,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, 
 import numpy as np
 from packaging import version
 
-from ..file_utils import TensorType, is_torch_available, is_vision_available
-from ..utils import logging
+from ..utils import TensorType, is_torch_available, is_vision_available, logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
 
@@ -204,7 +203,7 @@ class OnnxConfig(ABC):
             `bool`: Whether the installed version of PyTorch is compatible with the model.
         """
         if is_torch_available():
-            from transformers.file_utils import torch_version
+            from transformers.utils import torch_version
 
             return torch_version >= self.torch_onnx_minimum_version
         else:

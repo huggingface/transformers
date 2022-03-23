@@ -200,8 +200,10 @@ For masked language modeling, use the same [`DataCollatorForLanguageModeling`] e
 
 Causal language modeling is frequently used for text generation. This section shows you how to fine-tune [DistilGPT2](https://huggingface.co/distilgpt2) to generate new text.
 
-### Fine-tune with Trainer
+### Train
 
+<frameworkcontent>
+<pt>
 Load DistilGPT2 with [`AutoModelForCausalLM`]:
 
 ```py
@@ -240,18 +242,9 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
-
-### Fine-tune with TensorFlow
-
-To fine-tune a model in TensorFlow is just as easy, with only a few differences.
-
-<Tip>
-
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
-
-</Tip>
-
-Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+</pt>
+<tf>
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 
 ```py
 >>> tf_train_set = lm_dataset["train"].to_tf_dataset(
@@ -270,6 +263,12 @@ Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](htt
 ...     collate_fn=data_collator,
 ... )
 ```
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+
+</Tip>
 
 Set up an optimizer function, learning rate, and some training hyperparameters:
 
@@ -300,13 +299,17 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
 ```
+</tf>
+</frameworkcontent>
 
 ## Masked language modeling
 
 Masked language modeling is also known as a fill-mask task because it predicts a masked token in a sequence. Models for masked language modeling require a good contextual understanding of an entire sequence instead of only the left context. This section shows you how to fine-tune [DistilRoBERTa](https://huggingface.co/distilroberta-base) to predict a masked word.
 
-### Fine-tune with Trainer
+### Train
 
+<frameworkcontent>
+<pt>
 Load DistilRoBERTa with [`AutoModelForMaskedlM`]:
 
 ```py
@@ -346,18 +349,9 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
-
-### Fine-tune with TensorFlow
-
-To fine-tune a model in TensorFlow is just as easy, with only a few differences.
-
-<Tip>
-
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
-
-</Tip>
-
-Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+</pt>
+<tf>
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 
 ```py
 >>> tf_train_set = lm_dataset["train"].to_tf_dataset(
@@ -376,6 +370,12 @@ Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](htt
 ...     collate_fn=data_collator,
 ... )
 ```
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+
+</Tip>
 
 Set up an optimizer function, learning rate, and some training hyperparameters:
 
@@ -406,6 +406,8 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
 ```
+</tf>
+</frameworkcontent>
 
 <Tip>
 

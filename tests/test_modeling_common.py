@@ -23,6 +23,7 @@ import random
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -40,7 +41,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     PASS,
@@ -55,6 +55,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -2272,7 +2273,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    @require_torch
     def test_checkpoint_sharding_local(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -2314,13 +2314,29 @@ class ModelUtilsTest(TestCasePlus):
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     self.assertTrue(torch.allclose(p1, p2))
 
-    @require_torch
     def test_checkpoint_sharding_from_hub(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
         ref_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
 
 
 @require_torch
