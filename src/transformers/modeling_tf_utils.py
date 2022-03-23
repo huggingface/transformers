@@ -1678,11 +1678,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError:
+            except HTTPError as err:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
-                    f"{TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
+                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
+                    f"{err}"
+                )
+            except ValueError:
+                raise EnvironmentError(
+                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
+                    f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
