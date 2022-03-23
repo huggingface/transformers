@@ -21,7 +21,7 @@ from . import BaseTransformersCLICommand
 
 
 try:
-    from fastapi import Body, FastAPI, HTTPException
+    from fastapi import Body, FastAPI, HTTPException, Request
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
     from starlette.responses import JSONResponse
@@ -212,18 +212,24 @@ class ServeCommand(BaseTransformersCLICommand):
         except Exception as e:
             raise HTTPException(status_code=500, detail={"model": "", "error": str(e)})
 
-    async def forward(self, inputs=Body(None, embed=True)):
+    async def forward(self, request: Request):
         """
-        **inputs**: **attention_mask**: **tokens_type_ids**:
+        Forward the provided inputs through the model: - **input**: List of inputs to forward through the model.
+        Any other argument will be passed on to the model.
         """
+        try:
+            kwargs = await request.json()
+            inputs = kwargs.pop("inputs")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="inputs field is required")
 
         # Check we don't have empty string
         if len(inputs) == 0:
-            return ServeForwardResult(output=[], attention=[])
+            return ServeForwardResult(output=[])
 
         try:
             # Forward through the model
-            output = self._pipeline(inputs)
+            output = self._pipeline(inputs, **kwargs)
             return ServeForwardResult(output=output)
         except Exception as e:
             raise HTTPException(500, {"error": str(e)})
