@@ -173,6 +173,7 @@ _import_structure = {
     "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -899,6 +900,15 @@ if is_torch_available():
             "DebertaV2ForTokenClassification",
             "DebertaV2Model",
             "DebertaV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.decision_transformer"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerGPT2Model",
+            "DecisionTransformerGPT2PreTrainedModel",
+            "DecisionTransformerModel",
+            "DecisionTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -2509,6 +2519,10 @@ if TYPE_CHECKING:
     from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DecisionTransformerConfig,
+    )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -3127,6 +3141,13 @@ if TYPE_CHECKING:
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+        )
+        from .models.decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
+            DecisionTransformerModel,
+            DecisionTransformerPreTrainedModel,
         )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
