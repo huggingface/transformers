@@ -236,6 +236,22 @@ class OnnxConfig(ABC):
             images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
         return images
 
+    def _generate_dummy_bbox(self, batch_size: int = 2, image_height: int = 40, image_width: int = 40) -> List[int]:
+        """Generate a list of dummy bounding boxes for a given image size"""
+        bboxes = []
+        for _ in range(batch_size):
+            bboxes.append(
+                sorted(
+                    [
+                        np.random.randint(0, image_height - 1),
+                        np.random.randint(0, image_width - 1),
+                        np.random.randint(0, image_height - 1),
+                        np.random.randint(0, image_width - 1),
+                    ]
+                )
+            )
+        return bboxes
+
     def generate_dummy_inputs(
         self,
         preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
@@ -246,6 +262,7 @@ class OnnxConfig(ABC):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
+        return_bbox: bool = False,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
@@ -268,6 +285,8 @@ class OnnxConfig(ABC):
                 The width of the generated images.
             image_height (`int`, *optional*, defaults to 40):
                 The height of the generated images.
+            return_bbox (`bool`, *optional*, defaults to `False`):
+                Indicate if the preprocessor associated with this model configuration needs bounding boxes as input.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
@@ -296,6 +315,10 @@ class OnnxConfig(ABC):
             )
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            # Generate dummy bounding boxes if needed by the preprocessor e.g. for LayoutLMv2
+            if return_bbox is True:
+                dummy_bbox = self._generate_dummy_bbox(batch_size, image_width, image_height)
+                return dict(preprocessor(dummy_input, boxes=dummy_bbox, return_tensors=framework))
             return dict(preprocessor(dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX

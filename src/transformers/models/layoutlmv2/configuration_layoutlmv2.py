@@ -246,6 +246,7 @@ class LayoutLMv2OnnxConfig(OnnxConfig):
             [
                 ("input_ids", {0: "batch", 1: "sequence"}),
                 ("bbox", {0: "batch", 1: "sequence"}),
+                ("image", {0: "batch"}),
                 ("attention_mask", {0: "batch", 1: "sequence"}),
                 ("token_type_ids", {0: "batch", 1: "sequence"}),
             ]
@@ -253,11 +254,12 @@ class LayoutLMv2OnnxConfig(OnnxConfig):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        preprocessor: PreTrainedTokenizer,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
+        return_bbox: bool = True,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -268,15 +270,14 @@ class LayoutLMv2OnnxConfig(OnnxConfig):
             seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
             is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
             framework: The framework (optional) the tokenizer will generate tensor for
+            return_bbox: Whether to return the bbox or not
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
-
-        input_dict = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
-
-        # Generate a dummy bbox
-        box = [48, 84, 73, 128]
+        input_dict = super().generate_dummy_inputs(
+            preprocessor, batch_size, seq_length, is_pair, framework, return_bbox=return_bbox
+        )
 
         if not framework == TensorType.PYTORCH:
             raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
@@ -286,5 +287,5 @@ class LayoutLMv2OnnxConfig(OnnxConfig):
         import torch
 
         batch_size, seq_length = input_dict["input_ids"].shape
-        input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
+        input_dict["image"] = torch.zeros((batch_size, 3, 224, 224), dtype=torch.int64)
         return input_dict
