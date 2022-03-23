@@ -29,8 +29,10 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("decision_transformer", "DecisionTransformerConfig"),
         ("glpn", "GLPNConfig"),
         ("maskformer", "MaskFormerConfig"),
+        ("decision_transformer", "DecisionTransformerConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("convnext", "ConvNextConfig"),
         ("van", "VanConfig"),
@@ -222,6 +224,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("decision_transformer", "Decision Transformer"),
         ("glpn", "GLPN"),
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
