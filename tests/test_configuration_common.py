@@ -22,11 +22,11 @@ import tempfile
 import unittest
 import unittest.mock
 from pathlib import Path
+from unittest.mock import Mock
 
 import requests
 import transformers
 from huggingface_hub import Repository, delete_repo, login
-from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig

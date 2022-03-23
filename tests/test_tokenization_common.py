@@ -28,11 +28,11 @@ from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from unittest.mock import Mock
 
 import requests
 import transformers
 from huggingface_hub import Repository, delete_repo, login
-from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,

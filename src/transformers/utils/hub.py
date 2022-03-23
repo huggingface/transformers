@@ -508,7 +508,7 @@ def get_from_cache(
             # Actually raise for those subclasses of ConnectionError
             # Also raise the custom errors coming from a non existing repo/branch/file as they are caught later on.
             raise
-        except HTTPError:
+        except (HTTPError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             # Otherwise, our Internet connection is down.
             # etag is None
             pass

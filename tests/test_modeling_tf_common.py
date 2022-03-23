@@ -23,11 +23,11 @@ import tempfile
 import unittest
 from importlib import import_module
 from typing import List, Tuple
+from unittest.mock import Mock
 
 import requests
 import transformers
 from huggingface_hub import delete_repo, login
-from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values

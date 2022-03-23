@@ -20,11 +20,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import requests
 import transformers
 from huggingface_hub import Repository, delete_repo, login
-from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import PASS, USER, is_staging_test
