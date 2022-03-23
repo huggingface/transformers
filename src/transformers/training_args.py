@@ -483,7 +483,9 @@ class TrainingArguments:
 
     num_eval_delay_steps: Optional[int] = field(
         default=0,
-        metadata={"help": "Number of steps to wait for before the first evaluation can be performed. Overrides num_eval_delay_epochs."},
+        metadata={
+            "help": "Number of steps to wait for before the first evaluation can be performed. Overrides num_eval_delay_epochs."
+        },
     )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})

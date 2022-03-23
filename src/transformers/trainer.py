@@ -1616,16 +1616,22 @@ class Trainer:
             self.log(logs)
 
         # Check if we need to wait until the specified steps/epochs have passed before evaluating
-        delay_eval_steps = self.state.global_step <= self.args.num_eval_delay_steps if self.args.num_eval_delay_steps > 0 else False
+        delay_eval_steps = (
+            self.state.global_step <= self.args.num_eval_delay_steps if self.args.num_eval_delay_steps > 0 else False
+        )
         delay_eval_epochs = epoch <= self.args.num_eval_delay_epochs if self.args.num_eval_delay_epochs > 0 else False
 
         if self.control.should_evaluate:
             if delay_eval_steps:
-                logger.info(f"Skipping evaluation. Evaluation available after step {self.args.num_eval_delay_steps} due to args.num_eval_delay_steps")
+                logger.info(
+                    f"Skipping evaluation. Evaluation available after step {self.args.num_eval_delay_steps} due to args.num_eval_delay_steps"
+                )
             elif delay_eval_epochs:
-                logger.info(f"Skipping evaluation. Evaluation available after epoch {self.args.num_eval_delay_epochs} due to args.num_eval_delay_epochs")        
+                logger.info(
+                    f"Skipping evaluation. Evaluation available after epoch {self.args.num_eval_delay_epochs} due to args.num_eval_delay_epochs"
+                )
 
-        delay_eval = any([delay_eval_steps, delay_eval_epochs])        
+        delay_eval = any([delay_eval_steps, delay_eval_epochs])
 
         metrics = None
         if self.control.should_evaluate and not delay_eval:
