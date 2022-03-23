@@ -330,12 +330,12 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
 
         vocab_size = scores.shape[-1]
 
         # calculate a list of banned tokens according to bad words
-        banned_tokens = self.calc_banned_bad_words_ids(input_ids)
+        banned_tokens = self.calc_banned_bad_words_ids(input_ids[:, :cur_len])
 
         banned_tokens_indices_mask = []
         for banned_tokens_slice in banned_tokens:

@@ -939,6 +939,7 @@ class TFGenerationMixin:
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
+            breakpoint()
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
                 # create eos_token_id boolean mask
@@ -2604,9 +2605,7 @@ class TFGenerationMixin:
             # negative value.
 
             did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
-            # TODO (Joao): Add this in a future PR, to match FLAX implementation
-            # running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
-            running_topk_log_probs = topk_log_probs  # replacement alias
+            running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
 
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
@@ -2624,14 +2623,14 @@ class TFGenerationMixin:
 
             # TODO (Joao): Add this in a future PR, to match FLAX implementation
             # topk_log_probs = topk_log_probs / (cur_len**length_penalty)
-            # beams_in_batch_are_full = (
-            #     tf.broadcast_to(
-            #         tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
-            #     )
-            #     & early_stopping
-            # )
-            # add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
-            # topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e9
+            beams_in_batch_are_full = (
+                tf.broadcast_to(
+                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
+                )
+                & early_stopping
+            )
+            add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
+            topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e9
 
             # 7. Get scores, sequences, is sentence finished for next.
             # Combine sequences, scores, and flags along the beam dimension and compare
