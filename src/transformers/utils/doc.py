@@ -156,7 +156,9 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = tokenizer("HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt")
+    >>> inputs = tokenizer(
+    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt"
+    ... )
 
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
@@ -198,7 +200,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_start_index = outputs.start_logits.argmax()
     >>> answer_end_index = outputs.end_logits.argmax()
 
-    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index: answer_end_index + 1]
+    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
     >>> tokenizer.decode(predict_answer_tokens)
     {expected_output}
     ```
@@ -260,7 +262,9 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     {expected_output}
 
     >>> num_labels = len(model.config.id2label)
-    >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(torch.float)
+    >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+    ...     torch.float
+    ... )
     >>> loss = model(**inputs, labels=labels).loss
     >>> loss.backward()  # doctest: +IGNORE_RESULT
     ```
