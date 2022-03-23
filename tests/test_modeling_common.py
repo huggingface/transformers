@@ -2338,7 +2338,6 @@ class ModelUtilsTest(TestCasePlus):
             mock_head.assert_called()
 
 
-
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
