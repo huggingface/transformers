@@ -63,7 +63,7 @@ will see a bot add a comment to a link where the documentation with your changes
 Accepted files are Markdown (.md or .mdx).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
-the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/master/docs/source/_toctree.yml) file.
+the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
 
@@ -88,7 +88,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
+For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/main_classes/trainer.mdx).
 
 
 ## Writing Documentation - Specification

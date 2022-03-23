@@ -101,16 +101,16 @@ class TrainingArguments:
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -385,7 +385,7 @@ class TrainingArguments:
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         hub_model_id (`str`, *optional*):
             The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,

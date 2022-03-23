@@ -26,9 +26,9 @@ The following table lists all of our examples on how to use 🤗 Transformers wi
 
 | Task | Example model | Example dataset | 🤗 Datasets | Colab
 |---|---|---|:---:|:---:|
-| [**`causal-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | GPT2 | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb)
-| [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | RoBERTa | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb)
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
+| [**`causal-language-modeling`**](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling) | GPT2 | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb)
+| [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling) | RoBERTa | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
 
 ## Intro: JAX and Flax
 
@@ -66,7 +66,7 @@ Porting models from PyTorch to JAX/Flax is an ongoing effort.
 Feel free to reach out if you are interested in contributing a model in JAX/Flax -- we'll 
 be adding a guide for porting models from PyTorch in the upcoming few weeks.
 
-For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/master/index.html#supported-frameworks) table.
+For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/main/index.html#supported-frameworks) table.
 
 Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
 Click [here](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub.

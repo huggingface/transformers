@@ -28,7 +28,7 @@ Dataset: [https://huggingface.co/datasets/google/xtreme_s](https://huggingface.c
 
 ## Fine-tuning for the XTREME-S tasks
 
-Based on the [`run_xtreme_s.py`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/xtreme-s/run_xtreme_s.py) script.
+Based on the [`run_xtreme_s.py`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/xtreme-s/run_xtreme_s.py) script.
 
 This script can fine-tune any of the pretrained speech models on the [hub](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition) on the [XTREME-S dataset](https://huggingface.co/datasets/google/xtreme_s) tasks.
 
@@ -73,7 +73,7 @@ The corresponding training commands for each dataset are given in the sections b
 
 ### Speech Recognition with MLS
 
-The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/master/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#multilingual-librispeech-mls) using 8 GPUs in half-precision.
+The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/main/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#multilingual-librispeech-mls) using 8 GPUs in half-precision.
 
 ```bash
 python -m torch.distributed.launch \
@@ -117,7 +117,7 @@ On 8 V100 GPUs, this script should run in ~19 hours and yield a cross-entropy lo
 
 ### Speech Classification with Minds-14
 
-The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/master/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#intent-classification---minds-14) using 2 GPUs in half-precision.
+The following command shows how to fine-tune the [XLS-R](https://huggingface.co/docs/transformers/main/model_doc/xls_r) model on [XTREME-S MLS](https://huggingface.co/datasets/google/xtreme_s#intent-classification---minds-14) using 2 GPUs in half-precision.
 
 ```bash
 python -m torch.distributed.launch \
