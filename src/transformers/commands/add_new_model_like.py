@@ -25,8 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
 
-from ..file_utils import is_flax_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
 

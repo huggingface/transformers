@@ -28,7 +28,6 @@ from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -37,7 +36,7 @@ from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
-from ...utils import logging
+from ...utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available, logging
 
 
 if is_pandas_available():

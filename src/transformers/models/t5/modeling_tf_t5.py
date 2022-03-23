@@ -26,13 +26,6 @@ import tensorflow as tf
 from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -48,7 +41,14 @@ from ...modeling_tf_utils import (
     keras_serializable,
 )
 from ...tf_utils import shape_list
-from ...utils import logging
+from ...utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_t5 import T5Config
 
 

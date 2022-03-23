@@ -50,7 +50,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import PaddingStrategy, get_full_repo_name
+from transformers.utils import PaddingStrategy, get_full_repo_name
 
 
 logger = logging.getLogger(__name__)

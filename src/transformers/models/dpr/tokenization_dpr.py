@@ -18,9 +18,8 @@
 import collections
 from typing import List, Optional, Union
 
-from ...file_utils import TensorType, add_end_docstrings, add_start_docstrings
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
 from ..bert.tokenization_bert import BertTokenizer
 
 

@@ -40,7 +40,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     PASS,
@@ -55,6 +54,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
