@@ -1129,9 +1129,9 @@ class TFT5Model(TFT5PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1305,9 +1305,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def get_decoder(self):
         return self.decoder
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1545,9 +1545,9 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids: TFModelInputType,
