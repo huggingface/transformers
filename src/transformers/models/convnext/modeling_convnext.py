@@ -21,12 +21,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithNoAttentionAndWithPooling,
     ImageClassifierOutputWithNoAttention,
 )
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_convnext import ConvNextConfig
 
 
