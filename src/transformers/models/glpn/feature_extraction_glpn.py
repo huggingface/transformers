@@ -20,9 +20,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)

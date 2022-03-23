@@ -26,8 +26,8 @@ from datasets import load_dataset
 
 from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.file_utils import is_librosa_available, is_pyctcdecode_available
 from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
+from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor

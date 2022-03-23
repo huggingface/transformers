@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ... import RobertaTokenizer
-from ...file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     AddedToken,
@@ -37,7 +36,7 @@ from ...tokenization_utils_base import (
     _is_torch,
     to_py_obj,
 )
-from ...utils import logging
+from ...utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)

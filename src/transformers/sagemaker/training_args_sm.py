@@ -20,9 +20,8 @@ from dataclasses import dataclass, field
 
 import torch
 
-from transformers.file_utils import cached_property, is_sagemaker_dp_enabled
 from transformers.training_args import TrainingArguments
-from transformers.utils import logging
+from transformers.utils import cached_property, is_sagemaker_dp_enabled, logging
 
 
 logger = logging.get_logger(__name__)

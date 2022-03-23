@@ -23,7 +23,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
+from ...utils import (
     DUMMY_INPUTS,
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
@@ -1782,7 +1782,7 @@ from typing import Optional, Tuple, Union
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
+from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
