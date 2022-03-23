@@ -352,7 +352,7 @@ python utils/prepare_for_doc_test.py src docs
 If you work on a specific python module, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
 
 ```bash
-python utils/prepare_for_doc_test.py src/transformers/file_utils.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
+python utils/prepare_for_doc_test.py src/transformers/utils/doc.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
 ```
 (`file_utils.py` should be always included)
 
