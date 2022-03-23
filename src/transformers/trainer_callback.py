@@ -419,7 +419,7 @@ class DefaultFlowCallback(TrainerCallback):
         if (
             args.evaluation_strategy == IntervalStrategy.STEPS
             and state.global_step % args.eval_steps == 0
-            and args.eval_delay < state.global_step
+            and args.eval_delay <= state.global_step
         ):
             control.should_evaluate = True
 
