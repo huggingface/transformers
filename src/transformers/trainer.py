@@ -170,11 +170,12 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
-else:
-    import torch.distributed as dist
+    import smdistributed.dataparallel.torch.torch_smddp
+
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1078,7 +1079,7 @@ class Trainer:
                 ).to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+            model = DDP(model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))])
         elif self.args.local_rank != -1:
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:

@@ -41,12 +41,13 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as sm_dist
+    import smdistributed.dataparallel.torch.torch_smddp
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1041,8 +1042,8 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
-            sm_dist.init_process_group()
-            self.local_rank = sm_dist.get_local_rank()
+            dist.init_process_group(backend="smddp")
+            self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
@@ -1143,7 +1144,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_world_size()
+            return dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
         return 1
@@ -1159,7 +1160,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
         return 0
@@ -1175,7 +1176,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return self.local_rank
         return 0
@@ -1275,7 +1276,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1286,7 +1287,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
         else:

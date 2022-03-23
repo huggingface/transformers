@@ -33,6 +33,7 @@ from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
 
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
@@ -45,9 +46,7 @@ from .utils import (
 
 
 if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-else:
-    import torch.distributed as dist
+    import smdistributed.dataparallel.torch.torch_smddp
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
