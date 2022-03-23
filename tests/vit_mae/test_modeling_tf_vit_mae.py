@@ -22,6 +22,8 @@ import math
 import os
 import tempfile
 import unittest
+from functools import partial
+from importlib import import_module
 
 import numpy as np
 
@@ -361,6 +363,48 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # Since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
+    def test_keras_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        tf_main_layer_classes = set(
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            # This condition is required, since `modeling_tf_clip.py` has 3 classes whose names end with `MainLayer`.
+            and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        )
+        for main_layer_class in tf_main_layer_classes:
+            main_layer = main_layer_class(config)
+
+            symbolic_inputs = {
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+            }
+            tf.random.set_seed(2)
+            tf.keras.utils.set_random_seed(2)
+
+            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                model = tf.keras.models.load_model(
+                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                )
+                assert isinstance(model, tf.keras.Model)
+                tf.random.set_seed(2)
+                tf.keras.utils.set_random_seed(2)
+                after_outputs = model(inputs_dict)
+                self.assert_outputs_same(after_outputs, outputs)
+
+    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # to generate masks during test
     def test_save_load(self):
         # make mask reproducible
         np.random.seed(2)
@@ -375,14 +419,28 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             model_input = self._prepare_for_class(inputs_dict, model_class)
             outputs = model(model_input, noise=noise)
 
+            if model_class.__name__ == "TFViTMAEModel":
+                out_2 = outputs.last_hidden_state.numpy()
+                out_2[np.isnan(out_2)] = 0
+            else:
+                out_2 = outputs.logits.numpy()
+                out_2[np.isnan(out_2)] = 0
+
             with tempfile.TemporaryDirectory() as tmpdirname:
-                print(f"From TF ViT test: {model_class.__name__}")
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
                 model = tf.keras.models.load_model(saved_model_dir)
                 after_outputs = model(model_input, noise=noise)
 
-                self.assert_outputs_same(after_outputs, outputs)
+                if model_class.__name__ == "TFViTMAEModel":
+                    out_1 = after_outputs["last_hidden_state"].numpy()
+                    out_1[np.isnan(out_1)] = 0
+                else:
+                    out_1 = after_outputs["logits"].numpy()
+                    out_1[np.isnan(out_1)] = 0
+
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
 
     # Since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test

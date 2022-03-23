@@ -247,11 +247,10 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
             noise (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
-        batch_size, seq_length, dim = sequence.shape
+        batch_size, seq_length, dim = shape_list(sequence)
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
         if noise is None:
-            print(f"From TF ViT MAE random_masking: {batch_size, seq_length, dim}")
             noise = tf.random.uniform(shape=(batch_size, seq_length), minval=0.0, maxval=1.0)  # noise in [0, 1)
 
         # sort noise for each sample
@@ -280,7 +279,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         return sequence_masked, mask, ids_restore
 
     def call(self, pixel_values: tf.Tensor, noise: tf.Tensor = None) -> tf.Tensor:
-        batch_size, height, width, num_channels = pixel_values.shape
+        batch_size, num_channels, height, width = shape_list(pixel_values)
         embeddings = self.patch_embeddings(pixel_values)
 
         # add position embeddings w/o cls token
@@ -291,7 +290,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
-        cls_tokens = tf.tile(cls_token, (embeddings.shape.as_list()[0], 1, 1))
+        cls_tokens = tf.tile(cls_token, (shape_list(embeddings)[0], 1, 1))
         embeddings = tf.concat([cls_tokens, embeddings], axis=1)
 
         return embeddings, mask, ids_restore
@@ -944,7 +943,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
         # append mask tokens to sequence
         mask_tokens = tf.tile(
             self.mask_token,
-            (x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1),
+            (shape_list(x)[0], shape_list(ids_restore)[1] + 1 - shape_list(x)[1], 1),
         )
         x_ = tf.concat([x[:, 1:, :], mask_tokens], axis=1)  # no cls token
         x_ = tf.gather(x_, axis=1, batch_dims=1, indices=ids_restore)  # unshuffle
@@ -1017,13 +1016,21 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         """
         imgs: (N, H, W, 3) x: (N, L, patch_size**2 *3)
         """
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        assert imgs.shape[2] == imgs.shape[2] and imgs.shape[2] % p == 0
+        # if tf.math.equal(shape_list(imgs)[1], 3):
+        #     imgs = tf.transpose(imgs, perm=(0, 2, 3, 1))
 
-        h = w = imgs.shape[2] // p
-        x = tf.reshape(imgs, (imgs.shape[0], h, p, w, p, 3))
+        imgs = tf.cond(
+            tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
+        )
+
+        p = self.vit.embeddings.patch_embeddings.patch_size[0]
+        tf.debugging.assert_equal(shape_list(imgs)[1], shape_list(imgs)[2])
+        tf.debugging.assert_equal(shape_list(imgs)[1] % p, 0)
+
+        h = w = shape_list(imgs)[2] // p
+        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, 3))
         x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (imgs.shape[0], h * w, p**2 * 3))
+        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * 3))
         return x
 
     def unpatchify(self, x):
@@ -1031,12 +1038,12 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         x: (N, L, patch_size**2 *3) imgs: (N, H, W, 3)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        h = w = int(x.shape[1] ** 0.5)
-        assert h * w == x.shape[1]
+        h = w = int(shape_list(x)[1] ** 0.5)
+        tf.debugging.assert_equal(h * w, shape_list(x)[1])
 
-        x = tf.reshape(x, (x.shape[0], h, w, p, p, 3))
+        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, 3))
         x = tf.einsum("nhwpqc->nhpwqc", x)
-        imgs = tf.reshape(x, (x.shape[0], h * p, h * p, 3))
+        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, 3))
         return imgs
 
     def forward_loss(self, imgs, pred, mask):
