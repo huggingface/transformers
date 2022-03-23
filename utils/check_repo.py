@@ -114,6 +114,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "GLPNForDepthEstimation",
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
