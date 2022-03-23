@@ -372,7 +372,7 @@ def unpack_inputs(func):
 
         # process the inputs and call the wrapped function
         main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
-        main_input = fn_args_and_kwargs.pop(main_input_name)
+        main_input = fn_args_and_kwargs.pop(main_input_name, None)
         unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
@@ -423,13 +423,13 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
             "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
-    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
@@ -497,6 +497,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
             )
 
+    # Populates any unspecified argument with their default value, according to the signature.
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
             output[name] = kwargs.pop(name, signature[name].default)
