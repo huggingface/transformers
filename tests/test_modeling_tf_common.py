@@ -21,6 +21,7 @@ import os
 import random
 import tempfile
 import unittest
+import unittest.mock as mock
 from importlib import import_module
 from typing import List, Tuple
 
@@ -1554,6 +1555,22 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
