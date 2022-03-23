@@ -21,7 +21,7 @@ from ...utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJOnnxConfig"],
 }
 
 if is_torch_available():
@@ -43,7 +43,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig, GPTJOnnxConfig
 
     if is_torch_available():
         from .modeling_gptj import (
