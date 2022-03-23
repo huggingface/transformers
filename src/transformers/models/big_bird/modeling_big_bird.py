@@ -55,6 +55,14 @@ _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
 _TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 1000014.12
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 16]
+
+
 BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/bigbird-roberta-base",
     "google/bigbird-roberta-large",
@@ -2316,6 +2324,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> list(prediction_logits.shape)
+        [1, 8, 50358]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2541,6 +2551,8 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
+        >>> list(prediction_logits.shape)
+        [1, 8, 50358]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2654,6 +2666,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -2947,6 +2960,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         checkpoint="google/bigbird-base-trivia-itc",
         output_type=BigBirdForQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,

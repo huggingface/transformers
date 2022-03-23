@@ -63,6 +63,14 @@ _CHECKPOINT_FOR_DOC = "albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 _TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 2.69
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 14]
+
+
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "albert-base-v1",
     "albert-large-v1",
@@ -868,13 +876,13 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
         >>> model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
 
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[
-        ...     None, :
-        >>> ]  # Batch size 1
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
         >>> sop_logits = outputs.sop_logits
+        >>> list(sop_logits.shape)
+        [1, 2]
         ```"""
 
         outputs = self.albert(
@@ -957,12 +965,6 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -983,7 +985,25 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AlbertTokenizer, TFAlbertForMaskedLM
+        >>> import torch
+
+        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> model = TFAlbertForMaskedLM.from_pretrained("albert-base-v2")
+
+        >>> inputs = tokenizer("The capital of France is [MASK]", return_tensors="tf")
+        >>> labels = tokenizer("The capital of France is Paris", return_tensors="tf")["input_ids"]
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> round(loss.numpy().mean(), 2)
+        5.34
+        ```"""
         outputs = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,

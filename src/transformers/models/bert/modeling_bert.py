@@ -63,6 +63,13 @@ _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 2.79
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 14]
+
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
@@ -1090,8 +1097,9 @@ class BertForPreTraining(BertPreTrainedModel):
 
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
-        ```
-        """
+        >>> list(seq_relationship_logits.shape)
+        [1, 2]
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
@@ -1211,12 +1219,14 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
         >>> config = BertConfig.from_pretrained("bert-base-cased")
         >>> config.is_decoder = True
+
         >>> model = BertLMHeadModel.from_pretrained("bert-base-cased", config=config)
-
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
 
+        >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.logits
+        >>> list(prediction_logits.shape)
+        [1, 8, 28996]
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1445,7 +1455,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
+        >>> list(logits.shape)  # next sentence was random
+        [1, 2]
         ```
         """
 
@@ -1520,6 +1531,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1800,6 +1812,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,

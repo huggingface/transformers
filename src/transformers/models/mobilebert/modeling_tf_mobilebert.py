@@ -63,6 +63,14 @@ _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 2.79
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 14]
+
+
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/mobilebert-uncased",
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
@@ -1006,9 +1014,14 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
         >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
+
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> list(seq_relationship_logits.shape)
+        [1, 2]
         ```"""
         outputs = self.mobilebert(
             input_ids,
@@ -1195,6 +1208,8 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
 
         >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
+        >>> list(logits.shape)  # the next sentence was random
+        [1, 2]
         ```"""
         outputs = self.mobilebert(
             input_ids,
@@ -1273,6 +1288,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_EXPECTED_OUTPUT_SHAPE,
     )
     def call(
         self,
@@ -1366,6 +1382,8 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def call(
         self,

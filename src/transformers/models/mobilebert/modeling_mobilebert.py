@@ -59,6 +59,13 @@ _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 10211551.0
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 14]
+
 MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
 
 
@@ -962,13 +969,13 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
-        ...     0
-        >>> )  # Batch size 1
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> list(seq_relationship_logits.shape)
+        [1, 2]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1159,6 +1166,8 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> loss = outputs.loss
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2]
         ```"""
 
         if "next_sentence_label" in kwargs:
@@ -1232,6 +1241,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1333,6 +1343,8 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,

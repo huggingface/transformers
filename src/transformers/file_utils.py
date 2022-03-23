@@ -1413,9 +1413,7 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
     >>> input_ids = inputs["input_ids"]
-    >>> inputs["labels"] = tf.reshape(
-    ...     tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))
-    >>> )  # Batch size 1
+    >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids)))
 
     >>> outputs = model(inputs)
     >>> loss = outputs.loss

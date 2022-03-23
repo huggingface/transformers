@@ -69,6 +69,13 @@ _CHECKPOINT_FOR_DOC = "bert-base-cased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
+# SequenceClassification docstring
+_SEQ_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 2.79
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 14]
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
@@ -1200,11 +1207,14 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[
-        ...     None, :
-        >>> ]  # Batch size 1
+
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
         >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> list(seq_relationship_logits.shape)
+        [1, 2]
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1539,7 +1549,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
 
         >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
-        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
+        >>> list(logits.shape)  # the next sentence was random
+        [1, 2]
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1614,6 +1625,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_EXPECTED_OUTPUT_SHAPE,
     )
     def call(
         self,
@@ -1934,6 +1946,8 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def call(
         self,
