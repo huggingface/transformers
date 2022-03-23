@@ -29,8 +29,10 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
+import requests
 import transformers
 from huggingface_hub import Repository, delete_repo, login
+from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
@@ -2271,6 +2273,23 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        try:
+            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
+            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
+
+            _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        finally:
+            transformers.utils.hub.requests.head = requests.head
 
 
 @require_torch

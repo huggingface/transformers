@@ -24,7 +24,10 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
+import requests
+import transformers
 from huggingface_hub import delete_repo, login
+from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
@@ -1552,6 +1555,23 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        try:
+            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
+            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
+
+            _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        finally:
+            transformers.utils.hub.requests.head = requests.head
 
 
 @require_tf

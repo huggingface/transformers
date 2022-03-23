@@ -23,7 +23,10 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
+import requests
+import transformers
 from huggingface_hub import Repository, delete_repo, login
+from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
@@ -303,6 +306,23 @@ class ConfigTestUtils(unittest.TestCase):
                 "The following keys are set with the default values in `test_configuration_common.config_common_kwargs` "
                 f"pick another value for them: {', '.join(keys_with_defaults)}."
             )
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        try:
+            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
+            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
+
+            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        finally:
+            transformers.utils.hub.requests.head = requests.head
 
 
 class ConfigurationVersioningTest(unittest.TestCase):

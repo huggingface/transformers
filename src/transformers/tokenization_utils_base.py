@@ -31,8 +31,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-from requests import HTTPError
-
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -1751,12 +1749,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
                     resolved_vocab_files[file_id] = None
 
-                except HTTPError as err:
-                    if "404 Client Error" in str(err):
-                        logger.debug(f"Connection problem to access {file_path}.")
-                        resolved_vocab_files[file_id] = None
-                    else:
-                        raise err
+                except ValueError:
+                    logger.debug(f"Connection problem to access {file_path} and it wasn't found in the cache.")
+                    resolved_vocab_files[file_id] = None
 
         if len(unresolved_files) > 0:
             logger.info(

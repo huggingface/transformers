@@ -29,7 +29,10 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
+import requests
+import transformers
 from huggingface_hub import Repository, delete_repo, login
+from mock import Mock
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
@@ -3740,6 +3743,25 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
+
+
+class TokenizerUtilTester(unittest.TestCase):
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        try:
+            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
+            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
+
+            _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        finally:
+            transformers.utils.hub.requests.head = requests.head
 
 
 @is_staging_test
