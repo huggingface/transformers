@@ -3,6 +3,7 @@
 folder_to_store_downloads=${1}
 
 # Replace by gcp_path to T5 cloud bucket folder here
+# To download the official `t5-small` model of https://github.com/google-research/text-to-text-transfer-transformer#released-model-checkpoints:
 gcp_path="gs://t5-data/pretrained_models/small"
 
 # Number of files the checkpoint is split into
