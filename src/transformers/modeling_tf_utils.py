@@ -404,8 +404,7 @@ def input_processing(func, config, input_ids, **kwargs):
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
     signature.pop("self", None)
-    parameter_names_list = list(signature.keys())
-    parameter_names = set(parameter_names_list)
+    parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
@@ -457,12 +456,12 @@ def input_processing(func, config, input_ids, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    output[parameter_names_list[i]] = input
+                    output[parameter_names[i]] = input
             elif isinstance(input, allowed_types) or input is None:
-                output[parameter_names_list[i]] = input
+                output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names_list[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
                 )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
@@ -492,10 +491,10 @@ def input_processing(func, config, input_ids, **kwargs):
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
         if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
-            output[parameter_names_list[0]] = input_ids
+            output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names_list[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
             )
 
     # Populates any unspecified argument with their default value, according to the signature.
