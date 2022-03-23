@@ -37,11 +37,11 @@ _CONFIG_FOR_DOC = "RegNetConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "zuppif/regnety-040"
 _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = ""
+_IMAGE_CLASS_CHECKPOINT = "zuppif/regnety-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
