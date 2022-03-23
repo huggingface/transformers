@@ -150,10 +150,12 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import RobertaTokenizer, RobertaForTokenClassification
+    >>> from transformers import {processor_class}, {model_class}
     >>> import torch
-    >>> tokenizer = RobertaTokenizer.from_pretrained("Jean-Baptiste/roberta-large-ner-english")
-    >>> model = RobertaForTokenClassification.from_pretrained("Jean-Baptiste/roberta-large-ner-english")
+
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
     >>> inputs = tokenizer("HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt")
 
     >>> with torch.no_grad():

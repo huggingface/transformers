@@ -1485,6 +1485,7 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="' puppet'",
+        expected_loss=0.86,
     )
     def forward(
         self,
