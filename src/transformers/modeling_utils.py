@@ -252,7 +252,7 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
 def save_and_shard_checkpoint(
     save_directory: Union[str, os.PathLike],
     state_dict: Dict[str, torch.Tensor],
-    max_shard_size: Union[int, str] = "5GB",
+    max_shard_size: Union[int, str] = "10GB",
     save_function: Callable = torch.save,
 ):
     """
@@ -395,7 +395,10 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
                         "you cloned."
                     )
                 else:
-                    raise ValueError from e
+                    raise ValueError(
+                        f"Unable to locate the file {checkpoint_file} which is necessary to load this pretrained "
+                        "model. Make sure you have saved the model properly."
+                    ) from e
         except (UnicodeDecodeError, ValueError):
             raise OSError(
                 f"Unable to load weights from pytorch checkpoint file for '{checkpoint_file}' "
