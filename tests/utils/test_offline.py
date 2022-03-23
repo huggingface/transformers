@@ -59,7 +59,7 @@ socket.socket = offline_socket
         # next emulate no network
         cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
 
-        # Doesn't fail anymore, so commenting this.
+        # Doesn't fail anymore since the model is in the cache due to other tests, so commenting this.
         # env["TRANSFORMERS_OFFLINE"] = "0"
         # result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         # self.assertEqual(result.returncode, 1, result.stderr)
