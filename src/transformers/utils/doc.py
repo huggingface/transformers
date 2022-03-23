@@ -619,17 +619,17 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}", from_pt=True)
 
     >>> inputs = tokenizer("HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf")
-    
+
     >>> logits = model(**inputs).logits
     >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
-    
+
     >>> # Note that tokens are classified rather then input words which means that
     >>> # there might be more predicted token classes than words.
-    >>> # Multiple token classes might account for the same word    
+    >>> # Multiple token classes might account for the same word
     >>> predicted_tokens_classes = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
     >>> predicted_tokens_classes
     {expected_output}
-    ```    
+    ```
 
     ```python
     >>> labels = predicted_token_class_ids
@@ -650,10 +650,10 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}", from_pt=True)
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-    
+
     >>> inputs = tokenizer(question, text, return_tensors="tf")
     >>> outputs = model(**inputs)
-    
+
     >>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
     >>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
 
@@ -661,7 +661,7 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> tokenizer.decode(predict_answer_tokens)
     {expected_output}
     ```
-    
+
     ```python
     >>> # target is "nice puppet"
     >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
@@ -684,7 +684,7 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-    
+
     >>> logits = model(**inputs).logits
 
     >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
@@ -720,7 +720,7 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
     ```
-    
+
     ```python
     >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
     >>> # mask labels of non-{mask} tokens
