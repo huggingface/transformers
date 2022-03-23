@@ -63,3 +63,4 @@ docs/source/task_summary.mdx
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/canine/modeling_canine.py
+src/transformers/models/tapas/modeling_tapas.py

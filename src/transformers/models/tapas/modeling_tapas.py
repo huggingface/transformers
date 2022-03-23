@@ -1056,9 +1056,10 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         ```python
         >>> from transformers import TapasTokenizer, TapasForMaskedLM
         >>> import pandas as pd
+        >>> import torch
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
-        >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base")
+        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-masklm")
+        >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base-masklm")
 
         >>> data = {
         ...     "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
@@ -1066,16 +1067,20 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         ...     "Number of movies": ["87", "53", "69"],
         ... }
         >>> table = pd.DataFrame.from_dict(data)
+        >>> query = "How many movies has Leonardo [MASK] Caprio played in?"
 
-        >>> inputs = tokenizer(
-        ...     table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt"
-        ... )
-        >>> labels = tokenizer(
-        ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="pt"
-        >>> )["input_ids"]
+        >>> # prepare inputs
+        >>> inputs = tokenizer(table=table, queries=query, padding="max_length", return_tensors="pt")
 
-        >>> outputs = model(**inputs, labels=labels)
-        >>> logits = outputs.logits
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> # return top predicted value
+        >>> masked_index = torch.nonzero(inputs.input_ids.squeeze() == tokenizer.mask_token_id, as_tuple=False)
+        >>> logits = outputs.logits[0, masked_index.item(), :]
+        >>> probs = logits.softmax(dim=0)
+        >>> print(tokenizer.decode([probs.argmax(0).item()]))
+        di
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
