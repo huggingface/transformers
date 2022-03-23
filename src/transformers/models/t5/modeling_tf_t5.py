@@ -1550,7 +1550,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: TFModelInputType,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
