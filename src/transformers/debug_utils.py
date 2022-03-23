@@ -14,8 +14,7 @@
 
 import collections
 
-from .file_utils import ExplicitEnum, is_torch_available
-from .utils import logging
+from .utils import ExplicitEnum, is_torch_available, logging
 
 
 if is_torch_available():

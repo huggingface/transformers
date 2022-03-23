@@ -30,7 +30,8 @@ Models:
 - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: @LysandreJik
 - T5, Pegasus, EncoderDecoder: @patrickvonplaten
 - Blenderbot, MBART, BART, Marian, Pegasus: @patil-suraj
-- Longformer, Reformer, TransfoXL, XLNet, FNet, BigBird: @patrickvonplaten
+- Reformer, TransfoXL, XLNet, FNet: @patrickvonplaten
+- Longformer, BigBird: @ydshieh
 - FSMT: @stas00
 - Funnel: @sgugger
 - GPT-2, GPT: @patil-suraj, @patrickvonplaten, @LysandreJik

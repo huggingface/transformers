@@ -23,8 +23,8 @@ from difflib import get_close_matches
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
-from transformers.file_utils import ENV_VARS_TRUE_VALUES
 from transformers.models.auto import get_values
+from transformers.utils import ENV_VARS_TRUE_VALUES
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -114,6 +114,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "GLPNForDepthEstimation",
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",

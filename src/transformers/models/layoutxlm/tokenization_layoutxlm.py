@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sentencepiece as spm
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
 
-from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -33,7 +32,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from ...utils import logging
+from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 from ..xlm_roberta.tokenization_xlm_roberta import (
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
     PRETRAINED_VOCAB_FILES_MAP,

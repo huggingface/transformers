@@ -242,7 +242,7 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
-            from transformers.file_utils import torch_version
+            from transformers.utils import torch_version
 
             if torch_version < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(

@@ -16,12 +16,13 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
+from transformers import PreTrainedTokenizer, TensorType
 
 from ... import is_torch_available
+from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_detectron2_available
 from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import logging
+from ...utils import is_detectron2_available, logging
 
 
 logger = logging.get_logger(__name__)

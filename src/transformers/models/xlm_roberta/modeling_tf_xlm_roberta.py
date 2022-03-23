@@ -15,8 +15,7 @@
 # limitations under the License.
 """ TF 2.0 XLM-RoBERTa model."""
 
-from ...file_utils import add_start_docstrings
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForCausalLM,
     TFRobertaForMaskedLM,

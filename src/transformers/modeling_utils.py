@@ -32,7 +32,8 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_utils import GenerationMixin
+from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -49,10 +50,9 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
     replace_return_docstrings,
 )
-from .generation_utils import GenerationMixin
-from .utils import logging
 from .utils.versions import require_version_core
 
 
