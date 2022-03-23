@@ -230,6 +230,7 @@ def infer_framework_load_model(
 
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
+            kwargs["config"] = config
             if framework == "pt" and model.endswith(".h5"):
                 kwargs["from_tf"] = True
                 logger.warning(
