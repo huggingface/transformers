@@ -598,7 +598,7 @@ class TFRagModel(TFRagPreTrainedModel):
                 question_enc_outputs = self.question_encoder(
                     input_ids, attention_mask=attention_mask, return_dict=True, training=training
                 )
-                # see https://github.com/huggingface/transformers/blob/master/src/transformers/models/dpr/modeling_tf_dpr.py#L91
+                # see https://github.com/huggingface/transformers/blob/main/src/transformers/models/dpr/modeling_tf_dpr.py#L91
                 question_encoder_last_hidden_state = question_enc_outputs[
                     0
                 ]  # hidden states of question encoder => pooler_output
@@ -748,7 +748,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    # Adapted from https://github.com/huggingface/transformers/blob/master/src/transformers/modeling_tf_bart.py
+    # Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_bart.py
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,

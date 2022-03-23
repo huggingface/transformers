@@ -27,9 +27,9 @@ checkpoints are usually pre-trained on a large corpus of data and fine-tuned on 
 following:
 
 - Not all models were fine-tuned on all tasks. If you want to fine-tune a model on a specific task, you can leverage
-  one of the *run_$TASK.py* scripts in the [examples](https://github.com/huggingface/transformers/tree/master/examples) directory.
+  one of the *run_$TASK.py* scripts in the [examples](https://github.com/huggingface/transformers/tree/main/examples) directory.
 - Fine-tuned models were fine-tuned on a specific dataset. This dataset may or may not overlap with your use-case and
-  domain. As mentioned previously, you may leverage the [examples](https://github.com/huggingface/transformers/tree/master/examples) scripts to fine-tune your model, or you may
+  domain. As mentioned previously, you may leverage the [examples](https://github.com/huggingface/transformers/tree/main/examples) scripts to fine-tune your model, or you may
   create your own training script.
 
 In order to do an inference on a task, several mechanisms are made available by the library:
@@ -54,7 +54,7 @@ This would produce random output.
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example of
 sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune a
-model on a GLUE sequence classification task, you may leverage the [run_glue.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-classification/run_glue.py), [run_tf_glue.py](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/text-classification/run_tf_glue.py), [run_tf_text_classification.py](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/text-classification/run_tf_text_classification.py) or [run_xnli.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-classification/run_xnli.py) scripts.
+model on a GLUE sequence classification task, you may leverage the [run_glue.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_glue.py), [run_tf_glue.py](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification/run_tf_glue.py), [run_tf_text_classification.py](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification/run_tf_text_classification.py) or [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) scripts.
 
 Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative. It
 leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -170,8 +170,8 @@ is paraphrase: 6%
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
-model on a SQuAD task, you may leverage the [run_qa.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/question-answering/run_qa.py) and
-[run_tf_squad.py](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering/run_tf_squad.py)
+model on a SQuAD task, you may leverage the [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering/run_qa.py) and
+[run_tf_squad.py](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering/run_tf_squad.py)
 scripts.
 
 
@@ -335,7 +335,7 @@ Masked language modeling is the task of masking tokens in a sequence with a mask
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
 right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis for
 downstream tasks requiring bi-directional context, such as SQuAD (question answering, see [Lewis, Lui, Goyal et al.](https://arxiv.org/abs/1910.13461), part 4.2). If you would like to fine-tune a model on a masked language modeling
-task, you may leverage the [run_mlm.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling/run_mlm.py) script.
+task, you may leverage the [run_mlm.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling/run_mlm.py) script.
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
@@ -465,7 +465,7 @@ This prints five sequences, with the top 5 tokens predicted by the model.
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks. If you would like to fine-tune a model on a causal language modeling task, you may leverage the
-[run_clm.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling/run_clm.py) script.
+[run_clm.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling/run_clm.py) script.
 
 Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
 input sequence.
@@ -647,7 +647,7 @@ generation blog post [here](https://huggingface.co/blog/how-to-generate).
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a token
 as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
 which is entirely based on that task. If you would like to fine-tune a model on an NER task, you may leverage the
-[run_ner.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/token-classification/run_ner.py) script.
+[run_ner.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification/run_ner.py) script.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as
 belonging to one of 9 classes:
@@ -800,12 +800,12 @@ illustrated below:
 ## Summarization
 
 Summarization is the task of summarizing a document or an article into a shorter text. If you would like to fine-tune a
-model on a summarization task, you may leverage the [run_summarization.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization/run_summarization.py)
+model on a summarization task, you may leverage the [run_summarization.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/run_summarization.py)
 script.
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
-approaches are described in this [document](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization/README.md).
+approaches are described in this [document](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN
 / Daily Mail data set.
@@ -901,11 +901,11 @@ between 1999 and 2002.
 ## Translation
 
 Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
-translation task, you may leverage the [run_translation.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation/run_translation.py) script.
+translation task, you may leverage the [run_translation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation/run_translation.py) script.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
-translation task, various approaches are described in this [document](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation/README.md).
+translation task, various approaches are described in this [document](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation/README.md).
 
 Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
 multi-task mixture dataset (including WMT), yet, yielding impressive translation results.
