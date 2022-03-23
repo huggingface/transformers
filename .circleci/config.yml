@@ -955,7 +955,7 @@ workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - master
+                - main
 workflows:
     version: 2
     build_and_test:
@@ -982,7 +982,7 @@ workflows:
                 filters:
                     branches:
                         only:
-                            - master
+                            - main
         jobs:
             - run_examples_torch_all
             - run_examples_flax_all
@@ -1004,7 +1004,7 @@ workflows:
 #                filters:
 #                    branches:
 #                        only:
-#                            - master
+#                            - main
 #        jobs:
 #            - cleanup-gke-jobs
 #            - run_examples_tpu

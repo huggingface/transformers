@@ -86,21 +86,21 @@ def get_modified_python_files(diff_with_last_commit=False):
     """
     Return a list of python files that have been modified between:
 
-    - the current head and the master branch if `diff_with_last_commit=False` (default)
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
     - the current head and its parent commit otherwise.
     """
     repo = Repo(PATH_TO_TRANFORMERS)
 
     if not diff_with_last_commit:
-        print(f"Master is at {repo.refs.master.commit}")
+        print(f"main is at {repo.refs.main.commit}")
         print(f"Current head is at {repo.head.commit}")
 
-        branching_commits = repo.merge_base(repo.refs.master, repo.head)
+        branching_commits = repo.merge_base(repo.refs.main, repo.head)
         for commit in branching_commits:
             print(f"Branching commit: {commit}")
         return get_diff(repo, repo.head.commit, branching_commits)
     else:
-        print(f"Master is at {repo.head.commit}")
+        print(f"main is at {repo.head.commit}")
         parent_commits = repo.head.commit.parents
         for commit in parent_commits:
             print(f"Parent commit: {commit}")
@@ -517,8 +517,8 @@ if __name__ == "__main__":
         repo = Repo(PATH_TO_TRANFORMERS)
 
         diff_with_last_commit = args.diff_with_last_commit
-        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.master:
-            print("Master branch detected, fetching tests against last commit.")
+        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
+            print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
         try:

@@ -35,7 +35,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-all-latest-gpu
 
@@ -62,7 +62,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu
 
@@ -113,7 +113,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
@@ -140,6 +140,6 @@ jobs:
         with:
           context: ./docker/transformers-tensorflow-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-tensorflow-gpu

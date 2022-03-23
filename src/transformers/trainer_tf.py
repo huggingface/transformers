@@ -109,7 +109,7 @@ class TFTrainer:
             "The class `TFTrainer` is deprecated and will be removed in version 5 of Transformers. "
             "We recommend using native Keras instead, by calling methods like `fit()` and `predict()` "
             "directly on the model object. Detailed examples of the Keras style can be found in our "
-            "examples at https://github.com/huggingface/transformers/tree/master/examples/tensorflow",
+            "examples at https://github.com/huggingface/transformers/tree/main/examples/tensorflow",
             FutureWarning,
         )
 
