@@ -363,6 +363,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     # Since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keras_save_load(self):
+        # make mask reproducible
+        np.random.seed(2)
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         tf_main_layer_classes = set(
@@ -378,14 +381,18 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         )
+
+        num_patches = int((config.image_size // config.patch_size) ** 2)
+        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
+        noise = tf.convert_to_tensor(noise)
+        inputs_dict.update({"noise": noise})
+
         for main_layer_class in tf_main_layer_classes:
             main_layer = main_layer_class(config)
 
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
-            tf.random.set_seed(2)
-            tf.keras.utils.set_random_seed(2)
 
             model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
@@ -397,8 +404,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                     filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                 )
                 assert isinstance(model, tf.keras.Model)
-                tf.random.set_seed(2)
-                tf.keras.utils.set_random_seed(2)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
