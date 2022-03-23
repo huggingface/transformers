@@ -3,7 +3,7 @@ import types
 
 import numpy as np
 
-from ..file_utils import (
+from ..utils import (
     add_end_docstrings,
     is_tensorflow_probability_available,
     is_tf_available,

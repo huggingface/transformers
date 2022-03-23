@@ -30,7 +30,9 @@ from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_flax_utils import FlaxGenerationMixin
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
+from .utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
@@ -45,11 +47,9 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
     replace_return_docstrings,
 )
-from .generation_flax_utils import FlaxGenerationMixin
-from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)

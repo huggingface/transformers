@@ -35,7 +35,7 @@ from requests import HTTPError
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
@@ -54,10 +54,10 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    logging,
     to_py_obj,
     torch_required,
 )
-from .utils import logging
 from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 

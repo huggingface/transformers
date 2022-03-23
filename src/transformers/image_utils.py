@@ -22,7 +22,7 @@ import PIL.ImageOps
 
 import requests
 
-from .file_utils import is_torch_available
+from .utils import is_torch_available
 from .utils.generic import _is_torch
 
 

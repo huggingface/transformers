@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 

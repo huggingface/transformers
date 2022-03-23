@@ -16,7 +16,7 @@
 
 import warnings
 
-from ...file_utils import is_sklearn_available, requires_backends
+from ...utils import is_sklearn_available, requires_backends
 
 
 if is_sklearn_available():

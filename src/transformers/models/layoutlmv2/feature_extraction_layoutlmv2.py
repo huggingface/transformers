@@ -22,9 +22,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_pytesseract_available, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
 
 
 # soft dependency
