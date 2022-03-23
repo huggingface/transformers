@@ -16,8 +16,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 
-from ..file_utils import is_torch_available
-from ..utils import logging
+from ..utils import is_torch_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 

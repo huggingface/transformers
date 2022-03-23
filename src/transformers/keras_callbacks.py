@@ -12,8 +12,8 @@ from tensorflow.keras.callbacks import Callback
 from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
-from .file_utils import get_full_repo_name
 from .modelcard import TrainingSummary
+from .utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)

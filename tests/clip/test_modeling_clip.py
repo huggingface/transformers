@@ -25,7 +25,6 @@ import numpy as np
 import requests
 import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import (

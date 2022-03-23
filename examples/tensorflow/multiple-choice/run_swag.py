@@ -43,9 +43,8 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.utils import check_min_version
+from transformers.utils import PaddingStrategy, check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

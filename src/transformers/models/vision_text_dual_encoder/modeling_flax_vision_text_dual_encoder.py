@@ -22,9 +22,8 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 
-from ...file_utils import add_start_docstrings
 from ...modeling_flax_utils import FlaxPreTrainedModel, append_replace_return_docstrings, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FLAX_MODEL_MAPPING, FlaxAutoModel
 from ..clip.modeling_flax_clip import FlaxCLIPOutput, FlaxCLIPVisionModel

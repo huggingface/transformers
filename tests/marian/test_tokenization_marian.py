@@ -21,8 +21,8 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
-from transformers.file_utils import is_sentencepiece_available, is_tf_available, is_torch_available
 from transformers.testing_utils import require_sentencepiece, slow
+from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
 
 
 if is_sentencepiece_available():
