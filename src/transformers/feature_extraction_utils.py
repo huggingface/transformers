@@ -27,16 +27,13 @@ import numpy as np
 from requests import HTTPError
 
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     FEATURE_EXTRACTOR_NAME,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_torch_device,
     cached_path,
     copy_func,
     hf_bucket_url,
@@ -45,9 +42,10 @@ from .file_utils import (
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    logging,
     torch_required,
 )
-from .utils import logging
+from .utils.generic import _is_jax, _is_numpy, _is_torch_device
 
 
 if TYPE_CHECKING:

@@ -16,9 +16,8 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
-from .utils import logging
+from .utils import cached_property, is_tf_available, logging, tf_required
 
 
 logger = logging.get_logger(__name__)

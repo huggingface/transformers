@@ -24,7 +24,6 @@ from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import ModelOutput, add_start_docstrings
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -32,7 +31,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import ModelOutput, add_start_docstrings, logging
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 

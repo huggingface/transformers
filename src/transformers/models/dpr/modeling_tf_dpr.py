@@ -20,15 +20,15 @@ from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...file_utils import (
+from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
-from ...utils import logging
 from ..bert.modeling_tf_bert import TFBertMainLayer
 from .configuration_dpr import DPRConfig
 
