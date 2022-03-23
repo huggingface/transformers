@@ -939,7 +939,6 @@ class TFGenerationMixin:
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
-            breakpoint()
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
                 # create eos_token_id boolean mask
@@ -1576,6 +1575,12 @@ class TFGenerationMixin:
             )
 
         elif is_beam_gen_mode:
+            if num_beams >= num_return_sequences:
+                raise ValueError(
+                    "Greedy beam search decoding cannot return more sequences than it has beams. "
+                    "Please set num_beams >= num_return_sequences"
+                )
+
             # 8. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=num_beams)
 
@@ -1598,6 +1603,8 @@ class TFGenerationMixin:
                 length_penalty=length_penalty,
                 early_stopping=early_stopping,
                 logits_processor=logits_processor,
+                return_dict_in_generate=return_dict_in_generate,
+                num_return_sequences=num_return_sequences,
                 **model_kwargs,
             )
 
@@ -2306,6 +2313,7 @@ class TFGenerationMixin:
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
+        num_return_sequences: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2332,12 +2340,16 @@ class TFGenerationMixin:
             logits_processor (`TFLogitsProcessorList`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
+            num_return_sequences(`int`, *optional*, defaults to 1):
+                The number of independently computed returned sequences for each element in the batch.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
             output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model. If model is an
                 encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2430,6 +2442,8 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        num_return_sequences = num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2508,7 +2522,7 @@ class TFGenerationMixin:
             # 2. can the new beams still improve?
             best_running_score = running_scores[:, -1:] / (max_length**length_penalty)
             worst_finished_score = tf.where(
-                is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e7
+                is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
             improvement_still_possible = tf.math.reduce_all(worst_finished_score < best_running_score)
 
@@ -2603,14 +2617,13 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
-
             did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
             running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
 
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = tf.math.top_k(running_topk_log_probs, k=num_beams)[1]
+            next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=[1])
             next_running_sequences_seq_last, next_running_scores = gather_beams(
                 [topk_sequences_seq_last, running_topk_log_probs], next_topk_indices
             )
@@ -2620,9 +2633,7 @@ class TFGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-
-            # TODO (Joao): Add this in a future PR, to match FLAX implementation
-            # topk_log_probs = topk_log_probs / (cur_len**length_penalty)
+            topk_log_probs = topk_log_probs / (cur_len**length_penalty)
             beams_in_batch_are_full = (
                 tf.broadcast_to(
                     tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
@@ -2640,7 +2651,7 @@ class TFGenerationMixin:
             merged_sequences = tf.concat([sequences_seq_last, topk_sequences_seq_last], axis=1)
             merged_scores = tf.concat([scores, topk_log_probs], axis=1)
             merged_is_sent_finished = tf.concat([is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = tf.math.top_k(merged_scores, k=num_beams)[1]
+            topk_merged_indices = tf.reverse(tf.math.top_k(merged_scores, k=num_beams)[1], axis=[1])
             next_sequences_seq_last, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices
             )
@@ -2704,7 +2715,7 @@ class TFGenerationMixin:
         sequences_seq_last = tf.where(none_finished[:, None, None], sequences_seq_last, running_sequences_seq_last)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
-        # take best beam for each batch
+        # take best beam for each batch (the score is sorted in ascending order)
         sequences_seq_last = sequences_seq_last[:, -1]
         scores = scores[:, -1]
 
