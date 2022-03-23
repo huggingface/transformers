@@ -618,7 +618,9 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}", from_pt=True)
 
-    >>> inputs = tokenizer("HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf")
+    >>> inputs = tokenizer(
+    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf"
+    ... )
 
     >>> logits = model(**inputs).logits
     >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
@@ -657,7 +659,7 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
     >>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
 
-    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index: answer_end_index + 1]
+    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
     >>> tokenizer.decode(predict_answer_tokens)
     {expected_output}
     ```
