@@ -51,6 +51,16 @@ _CHECKPOINT_FOR_DOC = "google/canine-s"
 _CONFIG_FOR_DOC = "CanineConfig"
 _TOKENIZER_FOR_DOC = "CanineTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAnswering docstring
+_QA_EXPECTED_LOSS = 3.95
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 50]
+
 CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/canine-s",
     "google/canine-r"
@@ -1097,6 +1107,7 @@ class CanineModel(CaninePreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CanineModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1279,6 +1290,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1547,6 +1559,8 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
