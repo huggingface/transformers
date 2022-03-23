@@ -300,7 +300,13 @@ class TFMBartEncoderLayer(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: Optional[bool] = False):
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        layer_head_mask: tf.Tensor,
+        training: Optional[bool] = False,
+    ):
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -368,7 +374,7 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states,
+        hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
@@ -671,15 +677,15 @@ class TFMBartEncoder(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> TFBaseModelOutput:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -830,20 +836,22 @@ class TFMBartDecoder(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: TFModelInputType = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
+        encoder_attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, tuple(tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor)]:
+    ) -> Union[
+        TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+    ]:
         r"""
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -1059,8 +1067,8 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1158,7 +1166,7 @@ class TFMBartModel(TFMBartPreTrainedModel):
     )
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: TFModelInputType = None,
         attention_mask: Optional[tf.Tensor] = None,
         decoder_input_ids: Optional[tf.Tensor] = None,
         decoder_attention_mask: Optional[tf.Tensor] = None,
@@ -1167,15 +1175,15 @@ class TFMBartModel(TFMBartPreTrainedModel):
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds:  Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds:  Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.tensor]] :
+    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1263,16 +1271,16 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
     def call(
         self,
         input_ids: TFModelInputType = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: Optional[tf.Tensor] = None,
         decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask=None,
+        decoder_attention_mask: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
         past_key_values: [Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds:  Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds:  Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1280,7 +1288,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]] :
+    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         """
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
