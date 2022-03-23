@@ -166,23 +166,29 @@ def convert_file_size_to_int(size: Union[int, str]):
     """
     if isinstance(size, int):
         return size
+    if size.upper().endswith("GIB"):
+        return int(size[:-3]) * (2**30)
+    if size.upper().endswith("MIB"):
+        return int(size[:-3]) * (2**20)
+    if size.upper().endswith("KIB"):
+        return int(size[:-3]) * (2**10)
     if size.upper().endswith("GB"):
-        return int(size[:-2]) * (2**30)
+        return int(size[:-2]) * (10**9)
     if size.upper().endswith("MB"):
-        return int(size[:-2]) * (2**20)
+        return int(size[:-2]) * (10**6)
     if size.upper().endswith("KB"):
-        return int(size[:-2]) * (2**10)
+        return int(size[:-2]) * (10**3)
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
-def dtype_size(dtype):
+def dtype_byte_size(dtype):
     """
     Returns the size (in bytes) occupied by one parameter of type `dtype`.
 
     Example:
 
     ```py
-    >>> dtype_size(torch.float32)
+    >>> dtype_byte_size(torch.float32)
     4
     ```
     """
@@ -195,7 +201,7 @@ def dtype_size(dtype):
     return bit_size // 8
 
 
-def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, str] = "10GB"):
+def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[int, str] = "10GB"):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
     given size.
@@ -207,18 +213,18 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, s
 
     <Tip warning={true}>
 
-    If one of the model's weight is bigger that `max_size`, it will end up in its own sub-checkpoint which will have a
-    size greater than `max_size`.
+    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    have a size greater than `max_shard_size`.
 
     </Tip>
 
     Args:
         state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
-        max_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
             The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
             (like `"5MB"`).
     """
-    max_size = convert_file_size_to_int(max_size)
+    max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = []
     current_block = {}
@@ -226,10 +232,10 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, s
     total_size = 0
 
     for key, weight in state_dict.items():
-        weight_size = weight.numel() * dtype_size(weight.dtype)
+        weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
-        if current_block_size + weight_size > max_size:
+        if current_block_size + weight_size > max_shard_size:
             sharded_state_dicts.append(current_block)
             current_block = {}
             current_block_size = 0
@@ -246,7 +252,7 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_size: Union[int, s
 def save_and_shard_checkpoint(
     save_directory: Union[str, os.PathLike],
     state_dict: Dict[str, torch.Tensor],
-    max_size: Union[int, str] = "5GB",
+    max_shard_size: Union[int, str] = "5GB",
     save_function: Callable = torch.save,
 ):
     """
@@ -272,7 +278,7 @@ def save_and_shard_checkpoint(
             The function to use to save the state dictionary. Useful on distributed training like TPUs when one needs
             to replace `torch.save` by another method.
     """
-    shards, total_size = shard_checkpoint(state_dict, max_size=max_size)
+    shards, total_size = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
     # One shard only means the whole model doesn't exceed the maximum size.
     if len(shards) == 1:
         save_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -290,7 +296,7 @@ def save_and_shard_checkpoint(
             weight_map[key] = shard_file
 
     logger.info(
-        f"The model is bigger than the maximum size per checkpoint ({max_size}) and is going to be split in "
+        f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be split in "
         f"{len(shards)} checkpoint shards. You can find where each parameters has been saved in the index located "
         f"at {save_index_file}."
     )
@@ -1391,7 +1397,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[ignore_key]
 
         # Actually save the `state_dict`, with sharding if the model is too big.
-        save_and_shard_checkpoint(save_directory, state_dict, max_size=max_shard_size, save_function=save_function)
+        save_and_shard_checkpoint(
+            save_directory, state_dict, max_shard_size=max_shard_size, save_function=save_function
+        )
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
