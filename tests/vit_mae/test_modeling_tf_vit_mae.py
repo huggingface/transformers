@@ -22,7 +22,6 @@ import math
 import os
 import tempfile
 import unittest
-from functools import partial
 from importlib import import_module
 
 import numpy as np
