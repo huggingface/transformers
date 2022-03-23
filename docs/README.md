@@ -349,7 +349,7 @@ You will first need to run the following command (from the root of the repositor
 python utils/prepare_for_doc_test.py src docs
 ```
 
-If you work on a specific python script, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
+If you work on a specific python module, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
 
 ```bash
 python utils/prepare_for_doc_test.py src/transformers/file_utils.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
