@@ -1556,7 +1556,6 @@ class UtilsFunctionsTest(unittest.TestCase):
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
 
-
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -1572,7 +1571,6 @@ class UtilsFunctionsTest(unittest.TestCase):
             _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
-
 
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
