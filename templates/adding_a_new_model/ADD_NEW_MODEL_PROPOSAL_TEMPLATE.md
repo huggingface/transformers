@@ -562,12 +562,12 @@ Cookiecutter!
 **Use the Cookiecutter to automatically generate the model's code**
 
 To begin with head over to the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 to make use of our `cookiecutter` implementation to automatically
 generate all the relevant files for your model. Again, we recommend only
 adding the PyTorch version of the model at first. Make sure you follow
 the instructions of the `README.md` on the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 carefully.
 
 **Open a Pull Request on the main huggingface/transformers repo**
@@ -580,7 +580,7 @@ Transformers.
 
 You should do the following:
 
-1.  Create a branch with a descriptive name from your master branch
+1.  Create a branch with a descriptive name from your main branch
 
 ```
     git checkout -b add_[lowercase name of model]
@@ -593,11 +593,11 @@ You should do the following:
     git commit
 ```
 
-3.  Fetch and rebase to current master
+3.  Fetch and rebase to current main
 
 ```
     git fetch upstream
-    git rebase upstream/master
+    git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
@@ -617,10 +617,10 @@ You should do the following:
 In the following, whenever you have done some progress, don't forget to
 commit your work and push it to your account so that it shows in the
 pull request. Additionally, you should make sure to update your work
-with the current master from time to time by doing:
+with the current main from time to time by doing:
 
     git fetch upstream
-    git merge upstream/master
+    git merge upstream/main
 
 In general, all questions you might have regarding the model or your
 implementation should be asked in your PR and discussed/solved in the
@@ -703,7 +703,7 @@ similar already existing conversion script for your model.
     [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
 -   If you are porting a model from PyTorch to PyTorch, a good starting
     point might be BART's conversion script
-    [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+    [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 In the following, we'll quickly explain how PyTorch models store layer
 weights and define layer names. In PyTorch, the name of a layer is
@@ -1122,7 +1122,7 @@ for the community.
 **14. Submit your finished PR**
 
 You're done programming now and can move to the last step, which is
-getting your PR merged into master. Usually, [name of mentor]
+getting your PR merged into main. Usually, [name of mentor]
 should have helped you already at this point, but it is worth taking
 some time to give your finished PR a nice description and eventually add
 comments to your code, if you want to point out certain design choices

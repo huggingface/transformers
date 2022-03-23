@@ -67,7 +67,7 @@ def global_version_update(version, patch=False):
 
 
 def clean_master_ref_in_model_list():
-    """Replace the links from master doc tp stable doc in the model list of the README."""
+    """Replace the links from main doc tp stable doc in the model list of the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
@@ -85,7 +85,7 @@ def clean_master_ref_in_model_list():
     while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
             lines[index] = lines[index].replace(
-                "https://huggingface.co/docs/transformers/master/model_doc",
+                "https://huggingface.co/docs/transformers/main/model_doc",
                 "https://huggingface.co/docs/transformers/model_doc",
             )
         index += 1

@@ -34,7 +34,7 @@ There are 2 test suites in the repository:
      integration works.
 
    - [self-hosted (push)](https://github.com/huggingface/transformers-doc2mdx/tree/master/.github/workflows/self-push.yml): runs fast tests on GPU only on commits on
-     `master`. It only runs if a commit on `master` has updated the code in one of the following folders: `src`,
+     `main`. It only runs if a commit on `main` has updated the code in one of the following folders: `src`,
      `tests`, `.github` (to prevent running on added model cards, notebooks, etc.)
 
    - [self-hosted runner](https://github.com/huggingface/transformers-doc2mdx/tree/master/.github/workflows/self-scheduled.yml): runs normal and slow tests on GPU in
@@ -1161,9 +1161,9 @@ pytest tests/test_logging.py -W error::UserWarning --pdb
 To trigger a self-push workflow CI job, you must:
 
 1. Create a new branch on `transformers` origin (not a fork!).
-2. The branch name has to start with either `ci_` or `ci-` (`master` triggers it too, but we can't do PRs on
-   `master`). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
-   changed since this document has been written [here](https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml) under *push:*
+2. The branch name has to start with either `ci_` or `ci-` (`main` triggers it too, but we can't do PRs on
+   `main`). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
+   changed since this document has been written [here](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) under *push:*
 3. Create a PR from this branch.
 4. Then you can see the job appear [here](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). It may not run right away if there
    is a backlog.
