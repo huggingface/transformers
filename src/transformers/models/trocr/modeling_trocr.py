@@ -25,10 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_trocr import TrOCRConfig
 
 

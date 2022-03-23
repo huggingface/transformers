@@ -21,8 +21,7 @@ from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import CONFIG_NAME
-from ...utils import logging
+from ...utils import CONFIG_NAME, logging
 
 
 logger = logging.get_logger(__name__)

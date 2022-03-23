@@ -23,7 +23,6 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from .file_utils import ModelOutput
 from .generation_beam_constraints import Constraint, DisjunctiveConstraint, PhrasalConstraint
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
@@ -52,7 +51,7 @@ from .generation_stopping_criteria import (
     validate_stopping_criteria,
 )
 from .pytorch_utils import torch_int_div
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)

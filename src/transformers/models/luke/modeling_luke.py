@@ -23,15 +23,15 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN, gelu
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...utils import logging
 from .configuration_luke import LukeConfig
 
 

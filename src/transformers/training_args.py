@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
-from .file_utils import (
+from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
@@ -33,10 +34,9 @@ from .file_utils import (
     is_torch_bf16_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    logging,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
-from .utils import logging
 
 
 if is_torch_available():

@@ -16,7 +16,7 @@ from typing import Dict, Optional, Tuple
 import flax
 import jax.numpy as jnp
 
-from .file_utils import ModelOutput
+from .utils import ModelOutput
 
 
 @flax.struct.dataclass

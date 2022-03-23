@@ -37,7 +37,11 @@ from requests import HTTPError
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_tf_utils import TFGenerationMixin
+from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
+from .tokenization_utils_base import BatchEncoding
+from .utils import (
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -52,12 +56,8 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
 )
-from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
-from .tf_utils import shape_list
-from .tokenization_utils_base import BatchEncoding
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)

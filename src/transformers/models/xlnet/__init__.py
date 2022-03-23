@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
     _LazyModule,
     is_sentencepiece_available,
     is_tf_available,

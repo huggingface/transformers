@@ -29,7 +29,7 @@ from requests import HTTPError
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     CONFIG_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -41,8 +41,8 @@ from .file_utils import (
     is_offline_mode,
     is_remote_url,
     is_torch_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
