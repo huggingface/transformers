@@ -138,6 +138,8 @@ class TrainingArguments:
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
+        eval_delay (`float`, *optional*):
+            Number of epochs or steps to wait for before the first evaluation can be performed, depending on the evaluation_strategy.
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -471,6 +473,11 @@ class TrainingArguments:
         default=None,
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
+
+    eval_delay: Optional[float] = field(
+        default=0,
+        metadata={"help": "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the evaluation_strategy."},
+    )            
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
