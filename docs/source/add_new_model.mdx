@@ -19,7 +19,7 @@ independently. Thus, for some new models that the community wants to be added to
 model to 🤗 Transformers.
 
 If this sounds like something you would be interested in, feel free to check out the currently open
-“calls-for-model-addition” [here](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model/open_model_proposals/README.md)
+“calls-for-model-addition” [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model/open_model_proposals/README.md)
 and to contact us.
 
 If selected, you will then work closely with one member of the Hugging Face team to integrate the model into 🤗
@@ -403,7 +403,7 @@ Otherwise, let's start generating a new model. You have two choices here:
 - `transformers-cli add-new-model-like` to add a new model like an existing one
 - `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
 
-In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model).
+In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
@@ -413,7 +413,7 @@ side-by-side on integrating the model into 🤗 Transformers.
 
 You should do the following:
 
-1. Create a branch with a descriptive name from your master branch
+1. Create a branch with a descriptive name from your main branch
 
 ```bash
 git checkout -b add_brand_new_bert
@@ -426,11 +426,11 @@ git add .
 git commit
 ```
 
-3. Fetch and rebase to current master
+3. Fetch and rebase to current main
 
 ```bash
 git fetch upstream
-git rebase upstream/master
+git rebase upstream/main
 ```
 
 4. Push the changes to your account using:
@@ -446,12 +446,12 @@ git push -u origin a-descriptive-name-for-my-changes
 6. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
 
 In the following, whenever you have done some progress, don't forget to commit your work and push it to your account so
-that it shows in the pull request. Additionally, you should make sure to update your work with the current master from
+that it shows in the pull request. Additionally, you should make sure to update your work with the current main from
 time to time by doing:
 
 ```bash
 git fetch upstream
-git merge upstream/master
+git merge upstream/main
 ```
 
 In general, all questions you might have regarding the model or your implementation should be asked in your PR and
@@ -509,7 +509,7 @@ slightly adapt it for your use case. Don't hesitate to ask the Hugging Face team
 existing conversion script for your model.
 
 - If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT's conversion script [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
-- If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+- If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 In the following, we'll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
 name of a layer is defined by the name of the class attribute you give the layer. Let's define a dummy model in
@@ -834,7 +834,7 @@ fine-tuned on a downstream task. This is not mandatory to merge your PR, but ver
 
 **14. Submit your finished PR**
 
-You're done programming now and can move to the last step, which is getting your PR merged into master. Usually, the
+You're done programming now and can move to the last step, which is getting your PR merged into main. Usually, the
 Hugging Face team should have helped you already at this point, but it is worth taking some time to give your finished
 PR a nice description and eventually add comments to your code, if you want to point out certain design choices to your
 reviewer.

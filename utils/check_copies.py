@@ -332,7 +332,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
 
 def convert_readme_to_index(model_list):
-    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
     return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
 
