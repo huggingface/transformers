@@ -19,11 +19,9 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
-from unittest.mock import Mock
 
-import requests
-import transformers
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
@@ -122,20 +120,18 @@ class FeatureExtractionSavingTestMixin:
 class FeatureExtractorUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
-        response_mock = Mock()
+        response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = []
         response_mock.raise_for_status.side_effect = HTTPError
 
         # Download this model to make sure it's in the cache.
         _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
-        try:
-            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
-            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
-
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
             _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
-        finally:
-            transformers.utils.hub.requests.head = requests.head
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
 
 @is_staging_test

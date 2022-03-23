@@ -23,14 +23,13 @@ import random
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
-from unittest.mock import Mock
 
 import numpy as np
 
-import requests
 import transformers
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
@@ -2276,20 +2275,19 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
-        response_mock = Mock()
+        response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = []
         response_mock.raise_for_status.side_effect = HTTPError
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        try:
-            # Patch the `requests.head` method used in utils.hub to always return a 500 mock response
-            transformers.utils.hub.requests.head = Mock(return_value=response_mock)
 
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        finally:
-            transformers.utils.hub.requests.head = requests.head
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
 
 @require_torch
