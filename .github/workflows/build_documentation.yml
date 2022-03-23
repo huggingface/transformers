@@ -3,7 +3,7 @@ name: Build documentation
 on:
   push:
     branches:
-      - master
+      - main
       - doc-builder*
       - v*-release
       - use_templates
