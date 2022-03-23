@@ -237,6 +237,10 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```
 
     ```python
+    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> num_labels = len(model.config.id2label)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+
     >>> labels = torch.tensor(1)
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
@@ -260,6 +264,12 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_class_id = logits.argmax().item()
     >>> model.config.id2label[predicted_class_id]
     {expected_output}
+    ```
+
+    ```python
+    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> num_labels = len(model.config.id2label)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
     >>> num_labels = len(model.config.id2label)
     >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
