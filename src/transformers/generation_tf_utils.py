@@ -1597,9 +1597,9 @@ class TFGenerationMixin:
             # 9. run beam search
             return self.beam_search(
                 input_ids,
-                max_length,
-                pad_token_id,
-                eos_token_id,
+                max_length=max_length,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
                 length_penalty=length_penalty,
                 early_stopping=early_stopping,
                 logits_processor=logits_processor,
@@ -2396,7 +2396,7 @@ class TFGenerationMixin:
         ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
         ... )
 
-        >>> outputs = model.beam_sample(input_ids, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model.beam_search(input_ids, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
@@ -2419,6 +2419,7 @@ class TFGenerationMixin:
             """
             Gathers the beam slices indexed by beam_indices into new beam array.
             """
+
             def gather_fn(tensor):
                 # ignore scalars (e.g. cache index)
                 if tf.rank(tensor) == 0:
@@ -2577,7 +2578,9 @@ class TFGenerationMixin:
 
             # TODO (Joao): after the removal of the old beam_search, do not make an exception of the repetition penalty
             # (all logits processors should be computed after the softmax)
-            logits = repetition_processor(flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(logits))
+            logits = repetition_processor(
+                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(logits), cur_len=cur_len
+            )
             logits = unflatten_beam_dim(logits, batch_size, num_beams)
 
             log_probs = tf.nn.log_softmax(logits)

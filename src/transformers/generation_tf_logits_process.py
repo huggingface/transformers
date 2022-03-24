@@ -216,14 +216,10 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        # create boolean flag to decide if min length penalty should be applied
-        cur_len = input_ids.shape[-1]
-        apply_penalty = 1 - tf.clip_by_value(cur_len - self.min_length, 0, 1)
-
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         # TODO(Matt) - this if statement has to be rewritten for XLA. Leaving it now though since
         # generate is not XLA - compileable anyways
-        if apply_penalty:
+        if cur_len < self.min_length:
             eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
             scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
 
@@ -259,8 +255,8 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
             np.put(token_penalties[i], prev_input_id, logit_penalties)
         return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        score_penalties = self._create_score_penalties(input_ids, scores)
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        score_penalties = self._create_score_penalties(input_ids[:, :cur_len], scores)
 
         scores = tf.math.multiply(scores, score_penalties)
 
