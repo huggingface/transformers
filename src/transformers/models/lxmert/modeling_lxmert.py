@@ -19,7 +19,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -180,7 +180,7 @@ class LxmertForPreTrainingOutput(ModelOutput):
 
     """
 
-    loss: [torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
     prediction_logits: Optional[torch.FloatTensor] = None
     cross_relationship_score: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
@@ -907,17 +907,17 @@ class LxmertModel(LxmertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        visual_feats=None,
-        visual_pos=None,
-        attention_mask=None,
-        visual_attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        visual_feats: Optional[torch.FloatTensor] = None,
+        visual_pos: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1154,22 +1154,22 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
     @replace_return_docstrings(output_type=LxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        visual_feats=None,
-        visual_pos=None,
-        attention_mask=None,
-        visual_attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        obj_labels=None,
-        matched_label=None,
-        ans=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        visual_feats: Optional[torch.FloatTensor] = None,
+        visual_pos: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        obj_labels: Optional[Dict[str, Tuple[torch.FloatTensor, torch.FloatTensor]]] = None,
+        matched_label: Optional[torch.LongTensor] = None,
+        ans: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1390,18 +1390,18 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        visual_feats=None,
-        visual_pos=None,
-        attention_mask=None,
-        visual_attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        visual_feats: Optional[torch.FloatTensor] = None,
+        visual_pos: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels: (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer
