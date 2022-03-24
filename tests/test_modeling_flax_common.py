@@ -901,7 +901,7 @@ class FlaxModelTesterMixin:
             else:
                 _check_attentions_validity(outputs.attentions)
 
-    def test__do_init(self):
+    def test_no_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -936,7 +936,7 @@ class FlaxModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             model(**inputs, params=params)
 
-    def test_from_pretrained_with__do_init(self):
+    def test_from_pretrained_with_no_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
