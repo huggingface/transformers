@@ -142,37 +142,37 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     ImageNetPreTrainedConfig = partial(ResNetDConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
 
     names_to_config = {
-        "resnetd-18": ImageNetPreTrainedConfig(
+        "resnet-d-18": ImageNetPreTrainedConfig(
             depths=[2, 2, 2, 2], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
         ),
-        "resnetd-26": ImageNetPreTrainedConfig(
+        "resnet-d-26": ImageNetPreTrainedConfig(
             depths=[2, 2, 2, 2], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
-        "resnetd-34": ImageNetPreTrainedConfig(
+        "resnet-d-34": ImageNetPreTrainedConfig(
             depths=[3, 4, 6, 3], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
         ),
-        "resnetd-50": ImageNetPreTrainedConfig(
+        "resnet-d-50": ImageNetPreTrainedConfig(
             depths=[3, 4, 6, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
-        "resnetd-101": ImageNetPreTrainedConfig(
+        "resnet-d-101": ImageNetPreTrainedConfig(
             depths=[3, 4, 23, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
-        "resnetd-152": ImageNetPreTrainedConfig(
+        "resnet-d-152": ImageNetPreTrainedConfig(
             depths=[3, 8, 36, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
-        "resnetd-200": ImageNetPreTrainedConfig(
+        "resnet-d-200": ImageNetPreTrainedConfig(
             depths=[3, 24, 36, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
     }
 
     names_to_timm = {
-        "resnetd-18": "resnet18d",
-        "resnetd-26": "resnet26d",
-        "resnetd-34": "resnet34d",
-        "resnetd-50": "resnet50d",
-        "resnetd-101": "resnet101d",
-        "resnetd-152": "resnet152d",
-        "resnetd-200": "resnet200d",
+        "resnet-d-18": "resnet18d",
+        "resnet-d-26": "resnet26d",
+        "resnet-d-34": "resnet34d",
+        "resnet-d-50": "resnet50d",
+        "resnet-d-101": "resnet101d",
+        "resnet-d-152": "resnet152d",
+        "resnet-d-200": "resnet200d",
     }
 
     if model_name:
