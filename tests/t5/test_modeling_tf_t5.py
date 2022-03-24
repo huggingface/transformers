@@ -553,6 +553,28 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(expected_output_string, output_strings)
 
+    # TODO (Joao): enable this in a future PR. T5 itself needs a few changes to become XLA-compatible with beam search.
+    # @slow
+    # def test_beam_search_xla_generate_simple(self):
+    #     model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+    #     tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+    #     sentence = "Translate English to German: Today is a beautiful day."
+    #     input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+
+    #     xla_generate = tf.function(model.generate, jit_compile=True)
+
+    #     output_ids = model.generate(input_ids, num_beams=4)
+    #     output_ids_xla = xla_generate(input_ids, num_beams=4)
+
+    #     output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    #     output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+
+    #     expected_output_string = ["Heute ist ein schöner Tag."]
+
+    #     self.assertListEqual(expected_output_string, output_strings)
+    #     self.assertListEqual(expected_output_string, output_strings_xla)
+
     @slow
     def test_beam_search_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
