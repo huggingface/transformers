@@ -95,7 +95,7 @@ _deps = [
     "Pillow",
     "black~=22.0",
     "codecarbon==1.2.0",
-    "cookiecutter==1.7.2",
+    "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.0",
