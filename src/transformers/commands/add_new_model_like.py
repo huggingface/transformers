@@ -784,7 +784,7 @@ def clean_frameworks_in_init(
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
-        # Remove the import from file_utils
+        # Remove the import from utils
         elif re_is_xxx_available.search(lines[idx]) is not None:
             line = lines[idx]
             for framework in to_remove:
