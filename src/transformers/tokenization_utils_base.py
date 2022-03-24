@@ -31,11 +31,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-from requests import HTTPError
-
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
@@ -43,11 +41,6 @@ from .file_utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_tensorflow,
-    _is_torch,
-    _is_torch_device,
     add_end_docstrings,
     cached_path,
     copy_func,
@@ -59,10 +52,11 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    logging,
     to_py_obj,
     torch_required,
 )
-from .utils import logging
+from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -1584,7 +1578,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 when running `transformers-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -1755,12 +1749,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
                     resolved_vocab_files[file_id] = None
 
-                except HTTPError as err:
-                    if "404 Client Error" in str(err):
-                        logger.debug(f"Connection problem to access {file_path}.")
-                        resolved_vocab_files[file_id] = None
-                    else:
-                        raise err
+                except ValueError:
+                    logger.debug(f"Connection problem to access {file_path} and it wasn't found in the cache.")
+                    resolved_vocab_files[file_id] = None
 
         if len(unresolved_files) > 0:
             logger.info(

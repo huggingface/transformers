@@ -23,8 +23,7 @@ from copy import deepcopy
 from functools import partialmethod
 
 from .dependency_versions_check import dep_version_check
-from .file_utils import is_torch_available
-from .utils import logging
+from .utils import is_torch_available, logging
 
 
 if is_torch_available():

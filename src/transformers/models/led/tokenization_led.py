@@ -16,9 +16,8 @@
 
 from typing import Dict, Optional, Union
 
-from ...file_utils import PaddingStrategy
 from ...tokenization_utils_base import BatchEncoding, EncodedInput
-from ...utils import logging
+from ...utils import PaddingStrategy, logging
 from ..bart.tokenization_bart import BartTokenizer
 
 

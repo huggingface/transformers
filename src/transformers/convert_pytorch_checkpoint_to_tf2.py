@@ -95,8 +95,7 @@ from . import (
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-from .file_utils import hf_bucket_url
-from .utils import logging
+from .utils import hf_bucket_url, logging
 
 
 if is_torch_available():

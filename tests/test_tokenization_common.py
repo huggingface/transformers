@@ -24,6 +24,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
@@ -3740,6 +3741,24 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
+
+
+class TokenizerUtilTester(unittest.TestCase):
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
 
 @is_staging_test

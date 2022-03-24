@@ -17,7 +17,7 @@
 import copy
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import add_start_docstrings
+from ...utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""

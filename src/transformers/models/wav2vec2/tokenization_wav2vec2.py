@@ -24,7 +24,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import (
+from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
+from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...utils import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
@@ -32,11 +34,9 @@ from ...file_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
+    logging,
     to_py_obj,
 )
-from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
-from ...tokenization_utils_base import AddedToken, BatchEncoding
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

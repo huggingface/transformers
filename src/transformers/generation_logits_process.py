@@ -20,7 +20,7 @@ from typing import Callable, Iterable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from .file_utils import add_start_docstrings
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
@@ -240,6 +240,9 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        mass = float(mass)
+        if not (mass > 0 and mass < 1):
+            raise ValueError(f"`typical_p` has to be a float > 0 and < 1, but is {mass}")
 
         self.filter_value = filter_value
         self.mass = mass

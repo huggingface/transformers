@@ -90,7 +90,7 @@ config.save_pretrained(model_dir)
 ### Train model
 
 Next we can run the example script to pretrain the model.
-Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py), we introduced 4 new training settings:
+Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transformers/blob/main/examples/flax/language-modeling/run_mlm_flax.py), we introduced 4 new training settings:
 - `num_train_steps` - how many update steps should be run.
 - `num_eval_samples` - how many training samples should be taken for evaluation.
 - `logging_steps` - at what rate should the training loss be logged.
