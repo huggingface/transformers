@@ -1081,15 +1081,10 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         >>> masked_index = torch.nonzero(inputs.input_ids.squeeze() == tokenizer.mask_token_id, as_tuple=False)
         >>> logits = outputs.logits[0, masked_index.item(), :]
         >>> probs = logits.softmax(dim=0)
-        >>> values, predictions = probs.topk(5)
+        >>> predicted_id = probs.argmax().item()
 
-        >>> for value, pred in zip(values, predictions):
-        ...     print(f"{tokenizer.decode([pred])} with confidence {value}")
-        di with confidence 0.9995357990264893
-        and with confidence 0.00029978735256008804
-        de with confidence 9.941472671926022e-05
-        & with confidence 2.6531068215263076e-05
-        del with confidence 5.27906877323403e-06
+        >>> print(f"{tokenizer.decode([predicted_id])}")
+        di
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
