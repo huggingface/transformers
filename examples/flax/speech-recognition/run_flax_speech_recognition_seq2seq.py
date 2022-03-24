@@ -685,7 +685,7 @@ def main():
 
     # Augment adam optimizer to facilitate gradient accumulation
     if gradient_accumulation_steps > 1:
-        optim = optax.MultiSteps(optim, gradient_accumulation_steps, use_grad_mean=False)
+        optim = optax.chain(optim, optax.apply_every(gradient_accumulation_steps), use_grad_mean=False)
 
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
@@ -838,7 +838,6 @@ def main():
 
                 train_metrics = []
 
-        wandb.log()
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
