@@ -23,7 +23,6 @@ import black
 
 
 BLACK_AVOID_PATTERNS = {
-    "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
     "{processor_class}": "FakeProcessorClass",
     "{model_class}": "FakeModelClass",
     "{object_class}": "FakeObjectClass",
@@ -171,9 +170,14 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
         # black may have added some new lines, we remove them
         code_sample = code_sample.strip()
         in_triple_quotes = False
+        in_decorator = False
         for line in code_sample.strip().split("\n"):
             if has_doctest and not is_empty_line(line):
-                prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] or in_triple_quotes else ">>> "
+                prefix = (
+                    "... "
+                    if line.startswith(" ") or line in [")", "]", "}"] or in_triple_quotes or in_decorator
+                    else ">>> "
+                )
             else:
                 prefix = ""
             indent_str = "" if is_empty_line(line) else (" " * indent)
@@ -181,10 +185,13 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
 
             if '"""' in line:
                 in_triple_quotes = not in_triple_quotes
+            if line.startswith(" "):
+                in_decorator = False
+            if line.startswith("@"):
+                in_decorator = True
 
         formatted_lines.extend([" " * indent + line for line in output.split("\n")])
-        if not output.endswith("===PT-TF-SPLIT==="):
-            formatted_lines.append("")
+        formatted_lines.append("")
 
     result = "\n".join(formatted_lines)
     return result.rstrip(), error

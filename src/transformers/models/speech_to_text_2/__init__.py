@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_sentencepiece_available, is_speech_available, is_torch_available
+from ...utils import _LazyModule, is_sentencepiece_available, is_speech_available, is_torch_available
 
 
 _import_structure = {

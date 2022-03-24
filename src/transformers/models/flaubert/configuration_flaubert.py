@@ -14,6 +14,10 @@
 # limitations under the License.
 """ Flaubert configuration, based on XLM."""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..xlm.configuration_xlm import XLMConfig
 
@@ -137,3 +141,14 @@ class FlaubertConfig(XLMConfig):
         self.layerdrop = layerdrop
         self.pre_norm = pre_norm
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
+
+
+class FlaubertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )

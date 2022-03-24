@@ -22,9 +22,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_pytesseract_available, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
 
 
 # soft dependency
@@ -120,8 +119,6 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.resample = resample
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
-        if apply_ocr:
-            requires_backends(self, "pytesseract")
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -200,6 +197,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Tesseract OCR to get words + normalized bounding boxes
         if self.apply_ocr:
+            requires_backends(self, "pytesseract")
             words_batch = []
             boxes_batch = []
             for image in images:

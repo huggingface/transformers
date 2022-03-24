@@ -254,7 +254,7 @@ You should have understood the following aspects of BigBird by now:
 - BigBird's self-attention layer is composed of three mechanisms: block sparse (local) self-attention, global self-attention, random self-attention
 - BigBird's block sparse (local) self-attention is different from Longformer's local self-attention. How so? Why does that matter? => Can be deployed on TPU much easier this way
 - BigBird can be implemented for both an encoder-only model **and** 
-  for an encoder-decoder model, which means that we can reuse lots of [code from RoBERTa](https://github.com/huggingface/transformers/blob/master/src/transformers/models/roberta/modeling_roberta.py) and [from PEGASUS](https://github.com/huggingface/transformers/blob/master/src/transformers/models/pegasus/modeling_pegasus.py) at a later stage.
+  for an encoder-decoder model, which means that we can reuse lots of [code from RoBERTa](https://github.com/huggingface/transformers/blob/main/src/transformers/models/roberta/modeling_roberta.py) and [from PEGASUS](https://github.com/huggingface/transformers/blob/main/src/transformers/models/pegasus/modeling_pegasus.py) at a later stage.
 
 
 If any of the mentioned aspects above are **not** clear to you, now is a great time to talk to Patrick.
@@ -569,12 +569,12 @@ Cookiecutter!
 **Use the Cookiecutter to automatically generate the model's code**
 
 To begin with head over to the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 to make use of our `cookiecutter` implementation to automatically
 generate all the relevant files for your model. Again, we recommend only
 adding the PyTorch version of the model at first. Make sure you follow
 the instructions of the `README.md` on the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 carefully.
 Since you will first implement the Encoder-only/RoBERTa-like version of BigBird you should 
 select the `is_encoder_decoder_model = False` option in the cookiecutter. Also, it is recommended
@@ -591,7 +591,7 @@ Transformers.
 
 You should do the following:
 
-1.  Create a branch with a descriptive name from your master branch
+1.  Create a branch with a descriptive name from your main branch
 
 ```
     git checkout -b add_big_bird
@@ -604,11 +604,11 @@ You should do the following:
     git commit
 ```
 
-3.  Fetch and rebase to current master
+3.  Fetch and rebase to current main
 
 ```
     git fetch upstream
-    git rebase upstream/master
+    git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
@@ -627,10 +627,10 @@ You should do the following:
 In the following, whenever you have done some progress, don't forget to
 commit your work and push it to your account so that it shows in the
 pull request. Additionally, you should make sure to update your work
-with the current master from time to time by doing:
+with the current main from time to time by doing:
 
     git fetch upstream
-    git merge upstream/master
+    git merge upstream/main
 
 In general, all questions you might have regarding the model or your
 implementation should be asked in your PR and discussed/solved in the
@@ -1129,7 +1129,7 @@ for the community.
 **14. Submit your finished PR**
 
 You're done programming now and can move to the last step, which is
-getting your PR merged into master. Usually, Patrick
+getting your PR merged into main. Usually, Patrick
 should have helped you already at this point, but it is worth taking
 some time to give your finished PR a nice description and eventually add
 comments to your code, if you want to point out certain design choices

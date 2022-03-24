@@ -50,6 +50,8 @@ class MT5Config(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
+        relative_attention_max_distance (`int`, *optional*, defaults to 128):
+            The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
@@ -75,6 +77,7 @@ class MT5Config(PretrainedConfig):
         num_decoder_layers=None,
         num_heads=6,
         relative_attention_num_buckets=32,
+        relative_attention_max_distance=128,
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
@@ -107,6 +110,7 @@ class MT5Config(PretrainedConfig):
         )  # default = symmetry
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor

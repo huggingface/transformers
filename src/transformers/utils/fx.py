@@ -45,8 +45,9 @@ from .. import (
     XLNetForQuestionAnswering,
     logging,
 )
-from ..file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 from ..models.auto import get_values
+from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -115,7 +116,9 @@ _SPECIAL_SUPPORTED_MODELS = [
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
-_SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
+_SUPPORTED_MODELS = tuple(
+    sorted(list(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)), key=lambda c: c.__name__)
+)
 
 
 class HFProxy(Proxy):
@@ -472,7 +475,7 @@ class HFTracer(Tracer):
 
         self._patch_leaf_functions_for_root(root)
 
-        graph = super().trace(root, concrete_args=concrete_args)
+        self.graph = super().trace(root, concrete_args=concrete_args)
 
         self._patch_leaf_functions_for_root(root, restore=True)
 
@@ -482,16 +485,16 @@ class HFTracer(Tracer):
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
         # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
-        for node in graph.nodes:
+        for node in self.graph.nodes:
             if node.op == "placeholder":
                 # Removing default values for inputs as the forward pass will fail with them.
                 if node.target in input_names:
                     node.args = ()
                 # It is a concrete arg so it is not used and should be removed.
                 else:
-                    graph.erase_node(node)
+                    self.graph.erase_node(node)
 
-        return graph
+        return self.graph
 
     def _insert_module_as_submodule(self, mod: nn.Module) -> str:
         """
@@ -561,7 +564,7 @@ def symbolic_trace(
         model ([`PretrainedModel`]):
             The model to trace.
         input_names (`List[str]`, *optional*):
-            The names of the inputs of the traced model. If unset, model.dummy_inputs().keys() are used instead.
+            The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.

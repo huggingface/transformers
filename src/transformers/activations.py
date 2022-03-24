@@ -30,9 +30,6 @@ class NewGELUActivation(nn.Module):
     the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, input: Tensor) -> Tensor:
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
@@ -64,9 +61,6 @@ class FastGELUActivation(nn.Module):
     Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
     """
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, input: Tensor) -> Tensor:
         return 0.5 * input * (1.0 + torch.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
@@ -76,11 +70,33 @@ class QuickGELUActivation(nn.Module):
     Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
     """
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, input: Tensor) -> Tensor:
         return input * torch.sigmoid(1.702 * input)
+
+
+class ClippedGELUActivation(nn.Module):
+    """
+    Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
+    it allows mapping negatives values in the GeLU spectrum. For more information on this trick, please refer to
+    https://arxiv.org/abs/2004.09602.
+
+    Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
+    initially created.
+
+    For information: OpenAI GPT's gelu is slightly different (and gives slightly different results): 0.5 * x * (1 +
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://arxiv.org/abs/1606.08415
+    """
+
+    def __init__(self, min: float, max: float):
+        if min > max:
+            raise ValueError(f"min should be < max (got min: {min}, max: {max})")
+
+        super().__init__()
+        self.min = min
+        self.max = max
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.clip(gelu(x), self.min, self.max)
 
 
 class SiLUActivation(nn.Module):
@@ -93,6 +109,7 @@ class SiLUActivation(nn.Module):
     """
 
     def __init__(self):
+        super().__init__()
         if version.parse(torch.__version__) < version.parse("1.7"):
             self.act = self._silu_python
         else:
@@ -130,9 +147,6 @@ class LinearActivation(nn.Module):
     Applies the linear activation function, i.e. forwarding input directly to output.
     """
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, input: Tensor) -> Tensor:
         return input
 
@@ -147,6 +161,7 @@ ACT2FN = {
     "gelu_new": NewGELUActivation(),
     "gelu_fast": FastGELUActivation(),
     "quick_gelu": QuickGELUActivation(),
+    "gelu_10": ClippedGELUActivation(-10, 10),
     "mish": MishActivation(),
     "linear": LinearActivation(),
     "sigmoid": nn.Sigmoid(),

@@ -25,12 +25,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import http_get, is_tf_available, is_torch_available
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -62,6 +61,7 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
+from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
 
 if is_tf_available():
@@ -102,6 +102,7 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
+        AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForSpeechSeq2Seq,
@@ -239,6 +240,13 @@ SUPPORTED_TASKS = {
         },
         "type": "text",
     },
+    "zero-shot-image-classification": {
+        "impl": ZeroShotImageClassificationPipeline,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {"model": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"}},
+        "type": "multimodal",
+    },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
@@ -256,7 +264,7 @@ SUPPORTED_TASKS = {
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
-        "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
+        "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
         "type": "image",
     },
@@ -337,6 +345,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"translation_xx_to_yy"`
             - `"summarization"`
             - `"zero-shot-classification"`
+            - `"zero-shot-image-classification"`
 
     Returns:
         (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
