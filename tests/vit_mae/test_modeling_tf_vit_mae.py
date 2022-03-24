@@ -151,10 +151,11 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (TFViTMAEModel, TFViTMAEForPreTraining) if is_tf_available() else ()
-    test_resize_embeddings = False
+
     test_pruning = False
-    test_head_masking = False
     test_onnx = False
+    test_resize_embeddings = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFViTMAEModelTester(self)
@@ -197,7 +198,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keyword_and_dict_args(self):
         # make the mask reproducible
@@ -221,7 +222,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
             self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
-    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_numpy_arrays_inputs(self):
         # make the mask reproducible
@@ -404,7 +405,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
             extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
-    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keras_save_load(self):
         # make mask reproducible
@@ -451,7 +452,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
-    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_save_load(self):
         # make mask reproducible
@@ -490,7 +491,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_save_load_config(self):
         # make mask reproducible
