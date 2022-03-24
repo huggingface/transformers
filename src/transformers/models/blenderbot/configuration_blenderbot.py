@@ -173,7 +173,6 @@ class BlenderbotConfig(PretrainedConfig):
         )
 
 
-# Copied from transformers.models.bart.configuration_bart.BartOnnxConfig
 class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -265,7 +264,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 encoder_seq_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
-            decoder_past_length = decoder_seq_length  # + 3
+            decoder_past_length = decoder_seq_length
             decoder_shape = (
                 batch,
                 num_decoder_attention_heads,
@@ -339,13 +338,13 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
         )
 
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
         seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
         )
 
         # Generate dummy inputs according to compute batch and sequence
