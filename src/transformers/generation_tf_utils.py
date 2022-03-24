@@ -1575,10 +1575,10 @@ class TFGenerationMixin:
             )
 
         elif is_beam_gen_mode:
-            if num_beams >= num_return_sequences:
+            if num_beams < num_return_sequences:
                 raise ValueError(
-                    "Greedy beam search decoding cannot return more sequences than it has beams. "
-                    "Please set num_beams >= num_return_sequences"
+                    "Greedy beam search decoding cannot return more sequences than it has beams. Please set "
+                    f"num_beams >= num_return_sequences, got {num_beams} and {num_return_sequences} (respectivelly)"
                 )
 
             # 8. broadcast inputs to the desired number of beams
@@ -2442,7 +2442,9 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        num_return_sequences = num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2544,7 +2546,7 @@ class TFGenerationMixin:
         ):
             """beam search state update fn."""
             # TODO (joao): this loop is probably faster with gather/scatters, instead of using `tf.TensorArray`.
-            # Experiment when enabling XLA.
+            # Alternativelly, attempt to rewrite function with permuted axis when enabling XLA.
 
             # 1. Forward current tokens
 
@@ -2684,7 +2686,9 @@ class TFGenerationMixin:
 
         # 5. run generation
         # Adds the `intermediary_running_sequences` TensorArray into the body, needed as a scratchpad
-        beam_search_body_fn = partial(beam_search_body_fn, intermediary_running_sequences=intermediary_running_sequences)
+        beam_search_body_fn = partial(
+            beam_search_body_fn, intermediary_running_sequences=intermediary_running_sequences
+        )
 
         # 1st generation step has to be run before to initialize `past`
         cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs = partial(
@@ -2715,9 +2719,9 @@ class TFGenerationMixin:
         sequences_seq_last = tf.where(none_finished[:, None, None], sequences_seq_last, running_sequences_seq_last)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
-        # take best beam for each batch (the score is sorted in ascending order)
-        sequences_seq_last = sequences_seq_last[:, -1]
-        scores = scores[:, -1]
+        # take best beams for each batch (the score is sorted in ascending order)
+        sequences_seq_last = flatten_beam_dim(sequences_seq_last[:, -num_return_sequences:, :])
+        scores = flatten_beam_dim(scores[:, -num_return_sequences:])
 
         # (non-XLA) cut for backward compatibility
         sequences_seq_last = sequences_seq_last[:, :cur_len]
