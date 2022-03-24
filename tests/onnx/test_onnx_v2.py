@@ -194,7 +194,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
     ("m2m-100", "facebook/m2m100_418M"),
-    ("blenderbotsmall", "facebook/blenderbot_small-90M"),
+    ("blenderbot-small", "facebook/blenderbot_small-90M"),
     ("blenderbot", "facebook/blenderbot-400M-distill"),
 }
 

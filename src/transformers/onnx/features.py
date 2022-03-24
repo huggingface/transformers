@@ -279,7 +279,7 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls=BlenderbotOnnxConfig,
         ),
-        "blenderbotsmall": supported_features_mapping(
+        "blenderbot-small": supported_features_mapping(
             "default",
             "default-with-past",
             "causal-lm",
