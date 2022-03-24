@@ -176,8 +176,10 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 </tf>
 </frameworkcontent>
 
-## Fine-tune with Trainer
+## Train
 
+<frameworkcontent>
+<pt>
 Load BERT with [`AutoModelForMultipleChoice`]:
 
 ```py
@@ -220,18 +222,9 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
-
-## Fine-tune with TensorFlow
-
-To fine-tune a model in TensorFlow is just as easy, with only a few differences.
-
-<Tip>
-
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
-
-</Tip>
-
-Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs in `columns`, targets in `label_cols`, whether to shuffle the dataset order, batch size, and the data collator:
+</pt>
+<tf>
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs in `columns`, targets in `label_cols`, whether to shuffle the dataset order, batch size, and the data collator:
 
 ```py
 >>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
@@ -251,6 +244,12 @@ Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](htt
 ...     collate_fn=data_collator,
 ... )
 ```
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+
+</Tip>
 
 Set up an optimizer function, learning rate schedule, and some training hyperparameters:
 
@@ -285,3 +284,5 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2)
 ```
+</tf>
+</frameworkcontent>

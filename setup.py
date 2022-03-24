@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
+Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
 To create the package for pypi.
 
@@ -26,10 +26,10 @@ To create the package for pypi.
 
 4. Commit these changes with the message: "Release: <VERSION>" and push.
 
-5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
+5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin master
+   Push the tag to git: git push --tags origin main
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -60,7 +60,7 @@ To create the package for pypi.
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
-    you need to go back to master before executing this.
+    you need to go back to main before executing this.
 """
 
 import os

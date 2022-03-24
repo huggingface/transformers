@@ -57,11 +57,11 @@ of the script.
 
 ## Old version of the script
 
-You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/token-classification/run_ner.py).
+You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/main/examples/legacy/token-classification/run_ner.py).
 
 ## Pytorch version, no Trainer
 
-Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/token-classification/run_ner_no_trainer.py).
+Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/token-classification/run_ner_no_trainer.py).
 
 Like `run_ner.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
 token classification task, either NER, POS or CHUNKS tasks or your own data in a csv or a JSON file. The main difference is that this

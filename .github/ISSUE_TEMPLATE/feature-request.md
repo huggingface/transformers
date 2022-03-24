@@ -22,4 +22,4 @@ assignees: ''
 
 <!-- Is there any way that you could help, e.g. by submitting a PR?
      Make sure to read the CONTRIBUTING.MD readme:
-     https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md -->
+     https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md -->
