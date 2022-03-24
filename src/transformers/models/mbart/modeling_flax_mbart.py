@@ -30,7 +30,6 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -47,7 +46,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_mbart import MBartConfig
 
 
@@ -1330,7 +1329,7 @@ class FlaxMBartForConditionalGenerationModule(nn.Module):
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias.astype(self.dtype)
+        lm_logits += jax.lax.stop_gradient(self.final_logits_bias.astype(self.dtype))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]

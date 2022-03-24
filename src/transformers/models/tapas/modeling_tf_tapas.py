@@ -23,14 +23,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_tensorflow_probability_available,
-    replace_return_docstrings,
-    requires_backends,
-)
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFBaseModelOutputWithPooling,
@@ -47,7 +39,15 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list
-from ...utils import logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_tensorflow_probability_available,
+    logging,
+    replace_return_docstrings,
+    requires_backends,
+)
 from .configuration_tapas import TapasConfig
 
 

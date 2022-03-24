@@ -43,9 +43,8 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, is_offline_mode
 from transformers.utils.versions import require_version
 
 

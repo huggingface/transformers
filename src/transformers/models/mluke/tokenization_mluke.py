@@ -25,7 +25,6 @@ import numpy as np
 
 import sentencepiece as spm
 
-from ...file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -41,7 +40,7 @@ from ...tokenization_utils_base import (
     _is_torch,
     to_py_obj,
 )
-from ...utils import logging
+from ...utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)

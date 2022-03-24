@@ -28,13 +28,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -45,7 +38,14 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...utils import logging
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -1378,6 +1378,13 @@ class BigBirdAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
+        # fp16 compatibility
+        if band_mask is not None:
+            band_mask = band_mask.to(hidden_states.dtype)
+        if from_mask is not None:
+            from_mask = from_mask.to(hidden_states.dtype)
+        if to_mask is not None:
+            to_mask = to_mask.to(hidden_states.dtype)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(

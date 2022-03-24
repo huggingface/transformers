@@ -27,15 +27,15 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -134,7 +134,7 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# copied from transformers.models.vit.modeling_vit.to_2tuple
+# copied from transformers.models.vit.modeling_vit.to_2tuple ViT->ViTMAE
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -319,9 +319,9 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention ViT->ViTMAE
 class ViTMAESelfAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -387,7 +387,7 @@ class ViTMAESelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -402,7 +402,7 @@ class ViTMAESelfOutput(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ViTMAE
 class ViTMAEAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.attention = ViTMAESelfAttention(config)
         self.output = ViTMAESelfOutput(config)
@@ -440,9 +440,9 @@ class ViTMAEAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->ViTMAE
 class ViTMAEIntermediate(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -458,9 +458,9 @@ class ViTMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput
+# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->ViTMAE
 class ViTMAEOutput(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -478,7 +478,7 @@ class ViTMAEOutput(nn.Module):
 class ViTMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -519,7 +519,7 @@ class ViTMAELayer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ViTMAE
 class ViTMAEEncoder(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])

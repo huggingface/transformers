@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
-from .file_utils import (
+from .utils import (
     _LazyModule,
     is_flax_available,
     is_scatter_available,
@@ -39,8 +39,8 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -94,39 +94,7 @@ _import_structure = {
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
-    "file_utils": [
-        "CONFIG_NAME",
-        "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
-        "SPIECE_UNDERLINE",
-        "TF2_WEIGHTS_NAME",
-        "TF_WEIGHTS_NAME",
-        "TRANSFORMERS_CACHE",
-        "WEIGHTS_NAME",
-        "TensorType",
-        "add_end_docstrings",
-        "add_start_docstrings",
-        "cached_path",
-        "is_apex_available",
-        "is_datasets_available",
-        "is_faiss_available",
-        "is_flax_available",
-        "is_phonemizer_available",
-        "is_psutil_available",
-        "is_py3nvml_available",
-        "is_pyctcdecode_available",
-        "is_scipy_available",
-        "is_sentencepiece_available",
-        "is_sklearn_available",
-        "is_speech_available",
-        "is_tf_available",
-        "is_timm_available",
-        "is_tokenizers_available",
-        "is_torch_available",
-        "is_torch_tpu_available",
-        "is_vision_available",
-    ],
+    "file_utils": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_comet_available",
@@ -147,8 +115,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    # Models
     "models": [],
+    # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -205,6 +173,7 @@ _import_structure = {
     "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -396,7 +365,40 @@ _import_structure = {
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
-    "utils": ["logging"],
+    "utils": [
+        "CONFIG_NAME",
+        "MODEL_CARD_NAME",
+        "PYTORCH_PRETRAINED_BERT_CACHE",
+        "PYTORCH_TRANSFORMERS_CACHE",
+        "SPIECE_UNDERLINE",
+        "TF2_WEIGHTS_NAME",
+        "TF_WEIGHTS_NAME",
+        "TRANSFORMERS_CACHE",
+        "WEIGHTS_NAME",
+        "TensorType",
+        "add_end_docstrings",
+        "add_start_docstrings",
+        "cached_path",
+        "is_apex_available",
+        "is_datasets_available",
+        "is_faiss_available",
+        "is_flax_available",
+        "is_phonemizer_available",
+        "is_psutil_available",
+        "is_py3nvml_available",
+        "is_pyctcdecode_available",
+        "is_scipy_available",
+        "is_sentencepiece_available",
+        "is_sklearn_available",
+        "is_speech_available",
+        "is_tf_available",
+        "is_timm_available",
+        "is_tokenizers_available",
+        "is_torch_available",
+        "is_torch_tpu_available",
+        "is_vision_available",
+        "logging",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -898,6 +900,15 @@ if is_torch_available():
             "DebertaV2ForTokenClassification",
             "DebertaV2Model",
             "DebertaV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.decision_transformer"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerGPT2Model",
+            "DecisionTransformerGPT2PreTrainedModel",
+            "DecisionTransformerModel",
+            "DecisionTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -2439,41 +2450,6 @@ if TYPE_CHECKING:
 
     # Feature Extractor
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-
-    # Files and general utilities
-    from .file_utils import (
-        CONFIG_NAME,
-        MODEL_CARD_NAME,
-        PYTORCH_PRETRAINED_BERT_CACHE,
-        PYTORCH_TRANSFORMERS_CACHE,
-        SPIECE_UNDERLINE,
-        TF2_WEIGHTS_NAME,
-        TF_WEIGHTS_NAME,
-        TRANSFORMERS_CACHE,
-        WEIGHTS_NAME,
-        TensorType,
-        add_end_docstrings,
-        add_start_docstrings,
-        cached_path,
-        is_apex_available,
-        is_datasets_available,
-        is_faiss_available,
-        is_flax_available,
-        is_phonemizer_available,
-        is_psutil_available,
-        is_py3nvml_available,
-        is_pyctcdecode_available,
-        is_scipy_available,
-        is_sentencepiece_available,
-        is_sklearn_available,
-        is_speech_available,
-        is_tf_available,
-        is_timm_available,
-        is_tokenizers_available,
-        is_torch_available,
-        is_torch_tpu_available,
-        is_vision_available,
-    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -2550,6 +2526,10 @@ if TYPE_CHECKING:
     from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DecisionTransformerConfig,
+    )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -2721,7 +2701,42 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
-    from .utils import logging
+
+    # Files and general utilities
+    from .utils import (
+        CONFIG_NAME,
+        MODEL_CARD_NAME,
+        PYTORCH_PRETRAINED_BERT_CACHE,
+        PYTORCH_TRANSFORMERS_CACHE,
+        SPIECE_UNDERLINE,
+        TF2_WEIGHTS_NAME,
+        TF_WEIGHTS_NAME,
+        TRANSFORMERS_CACHE,
+        WEIGHTS_NAME,
+        TensorType,
+        add_end_docstrings,
+        add_start_docstrings,
+        cached_path,
+        is_apex_available,
+        is_datasets_available,
+        is_faiss_available,
+        is_flax_available,
+        is_phonemizer_available,
+        is_psutil_available,
+        is_py3nvml_available,
+        is_pyctcdecode_available,
+        is_scipy_available,
+        is_sentencepiece_available,
+        is_sklearn_available,
+        is_speech_available,
+        is_tf_available,
+        is_timm_available,
+        is_tokenizers_available,
+        is_torch_available,
+        is_torch_tpu_available,
+        is_vision_available,
+        logging,
+    )
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -3133,6 +3148,13 @@ if TYPE_CHECKING:
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+        )
+        from .models.decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
+            DecisionTransformerModel,
+            DecisionTransformerPreTrainedModel,
         )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
-from .file_utils import (
+from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
@@ -33,10 +34,9 @@ from .file_utils import (
     is_torch_bf16_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    logging,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
-from .utils import logging
 
 
 if is_torch_available():
@@ -138,6 +138,9 @@ class TrainingArguments:
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
+        eval_delay (`float`, *optional*):
+            Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
+            evaluation_strategy.
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -470,6 +473,13 @@ class TrainingArguments:
     eval_accumulation_steps: Optional[int] = field(
         default=None,
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
+    )
+
+    eval_delay: Optional[float] = field(
+        default=0,
+        metadata={
+            "help": "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the evaluation_strategy."
+        },
     )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})

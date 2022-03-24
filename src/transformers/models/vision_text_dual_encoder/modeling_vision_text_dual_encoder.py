@@ -20,9 +20,8 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel

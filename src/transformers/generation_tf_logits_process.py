@@ -19,8 +19,8 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
-from .file_utils import add_start_docstrings
 from .tf_utils import set_tensor_by_indices_to_value
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
