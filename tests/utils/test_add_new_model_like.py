@@ -874,7 +874,7 @@ NEW_BERT_CONSTANT = "value"
         test_init = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -918,7 +918,7 @@ else:
         init_no_tokenizer = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -954,7 +954,7 @@ else:
         init_pt_only = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -986,7 +986,7 @@ else:
         init_pt_only_no_tokenizer = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -1026,7 +1026,7 @@ else:
         test_init = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 _import_structure = {
     "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -1068,7 +1068,7 @@ else:
         init_no_feature_extractor = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
     "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -1104,7 +1104,7 @@ else:
         init_pt_only = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available, is_vision_available
+from ...utils import _LazyModule, is_torch_available, is_vision_available
 
 _import_structure = {
     "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -1134,7 +1134,7 @@ else:
         init_pt_only_no_feature_extractor = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
     "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],

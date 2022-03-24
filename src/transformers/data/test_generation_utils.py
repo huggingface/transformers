@@ -17,8 +17,8 @@ import unittest
 
 import timeout_decorator
 
-from ..file_utils import cached_property, is_torch_available
 from ..testing_utils import require_torch
+from ..utils import cached_property, is_torch_available
 
 
 if is_torch_available():

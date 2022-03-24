@@ -18,8 +18,8 @@ import unittest
 import numpy as np
 
 from transformers import BeitConfig
-from transformers.file_utils import cached_property, is_flax_available, is_vision_available
 from transformers.testing_utils import require_flax, require_vision, slow
+from transformers.utils import cached_property, is_flax_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor

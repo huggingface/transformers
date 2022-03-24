@@ -35,7 +35,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-all-latest-gpu
 
@@ -62,9 +62,33 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu
+
+  doc-builder:
+    name: "Doc builder"
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Check out code
+        uses: actions/checkout@v2
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-doc-builder
+          push: true
+          tags: huggingface/transformers-doc-builder
 
   latest-pytorch:
     name: "Latest PyTorch [dev]"
@@ -89,7 +113,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
@@ -116,6 +140,6 @@ jobs:
         with:
           context: ./docker/transformers-tensorflow-gpu
           build-args: |
-            REF=master
+            REF=main
           push: true
           tags: huggingface/transformers-tensorflow-gpu

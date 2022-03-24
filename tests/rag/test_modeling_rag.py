@@ -25,7 +25,6 @@ from unittest.mock import patch
 import numpy as np
 
 from transformers import BartTokenizer, T5Tokenizer
-from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
@@ -37,6 +36,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..dpr.test_modeling_dpr import DPRModelTester

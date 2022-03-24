@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_flax_available, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flax,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_flax_available, is_torch_available, is_vision_available
 
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..clip.test_modeling_flax_clip import FlaxCLIPVisionModelTester

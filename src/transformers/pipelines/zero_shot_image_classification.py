@@ -1,13 +1,13 @@
 from typing import List, Union
 
-from ..file_utils import (
+from ..utils import (
     add_end_docstrings,
     is_tf_available,
     is_torch_available,
     is_vision_available,
+    logging,
     requires_backends,
 )
-from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
 
@@ -35,7 +35,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     `"zero-shot-image-classification"`.
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=zer-shot-image-classification).
+    [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-image-classification).
     """
 
     def __init__(self, **kwargs):

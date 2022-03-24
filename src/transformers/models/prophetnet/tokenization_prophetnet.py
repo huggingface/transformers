@@ -102,6 +102,11 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
+    # first name has to correspond to main model input name
+    # to make sure `tokenizer.pad(...)` works correctly
+    # `ProphetNet` doesn't have `token_type_ids` as argument.
+    model_input_names: List[str] = ["input_ids", "attention_mask"]
+
     def __init__(
         self,
         vocab_file,

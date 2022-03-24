@@ -323,6 +323,9 @@ class TFEncoderDecoderMixin:
         if "labels" in pt_inputs:
             pt_inputs["labels"] = pt_inputs["labels"].type(torch.LongTensor)
 
+        # send pytorch inputs to the correct device
+        pt_inputs = {k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()}
+
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
 
@@ -333,7 +336,7 @@ class TFEncoderDecoderMixin:
         self.assertEqual(len(tf_outputs), len(pt_outputs), "Output lengths differ between TF and PyTorch")
 
         for tf_output, pt_output in zip(tf_outputs, pt_outputs):
-            self.assert_almost_equals(tf_output.numpy(), pt_output.numpy(), 1e-3)
+            self.assert_almost_equals(tf_output.numpy(), pt_output.detach().to("cpu").numpy(), 1e-3)
 
         # PT -> TF
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
@@ -353,7 +356,7 @@ class TFEncoderDecoderMixin:
         self.assertEqual(len(tf_outputs_loaded), len(pt_outputs), "Output lengths differ between TF and PyTorch")
 
         for tf_output_loaded, pt_output in zip(tf_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-3)
+            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.detach().to("cpu").numpy(), 1e-3)
 
     def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
 
@@ -506,8 +509,7 @@ class TFEncoderDecoderMixin:
         model = TFEncoderDecoderModel(encoder_decoder_config)
         model(**inputs_dict)
 
-    @slow
-    def test_real_model_save_load_from_pretrained(self):
+    def test_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         input_ids = ids_tensor([13, 5], model_2.config.encoder.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
@@ -539,7 +541,10 @@ class TFEncoderDecoderMixin:
 @require_tf
 class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-bert",
+            "hf-internal-testing/tiny-random-bert",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFBertModel(config, name="encoder")
@@ -634,7 +639,10 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 @require_tf
 class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "../gpt2")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-bert",
+            "hf-internal-testing/tiny-random-gpt2",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFBertModel(config, name="encoder")
@@ -723,7 +731,10 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 @require_tf
 class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-roberta",
+            "hf-internal-testing/tiny-random-roberta",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFRobertaModel(config, name="encoder")
@@ -779,7 +790,10 @@ class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
 @require_tf
 class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("google/rembert", "google/rembert")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-rembert",
+            "hf-internal-testing/tiny-random-rembert",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFRemBertModel(config, name="encoder")

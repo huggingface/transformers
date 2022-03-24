@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -35,10 +35,10 @@
 - sections:
   - local: create_a_model
     title: Create a custom model
-  - local: examples
-    title: Examples
+  - local: multilingual
+    title: Inference for multilingual models
   - local: troubleshooting
-    title: Troubleshooting
+    title: Troubleshoot
   - local: custom_datasets
     title: Fine-tuning with custom datasets
   - sections:
@@ -56,7 +56,15 @@
       title: Summarization
     - local: tasks/multiple_choice
       title: Multiple choice
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
+    - local: tasks/image_classification
+      title: Image classification
     title: Fine-tune for downstream tasks
+  - local: run_scripts
+    title: Train with a script
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
@@ -112,6 +120,8 @@
       title: Logging
     - local: main_classes/model
       title: Models
+    - local: main_classes/text_generation
+      title: Text Generation
     - local: main_classes/onnx
       title: ONNX
     - local: main_classes/optimizer_schedules
@@ -184,6 +194,8 @@
       title: DeBERTa
     - local: model_doc/deberta-v2
       title: DeBERTa-v2
+    - local: model_doc/decision_transformer
+      title: Decision Transformer
     - local: model_doc/deit
       title: DeiT
     - local: model_doc/detr
@@ -192,6 +204,8 @@
       title: DialoGPT
     - local: model_doc/distilbert
       title: DistilBERT
+    - local: model_doc/dit
+      title: DiT
     - local: model_doc/dpr
       title: DPR
     - local: model_doc/electra
@@ -206,6 +220,8 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/glpn
+      title: GLPN
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/ibert
@@ -228,6 +244,8 @@
       title: LXMERT
     - local: model_doc/marian
       title: MarianMT
+    - local: model_doc/maskformer
+      title: MaskFormer
     - local: model_doc/m2m_100
       title: M2M100
     - local: model_doc/mbart
@@ -280,6 +298,8 @@
       title: Reformer
     - local: model_doc/rembert
       title: RemBERT
+    - local: model_doc/resnet
+      title: ResNet
     - local: model_doc/retribert
       title: RetriBERT
     - local: model_doc/roberta
@@ -318,6 +338,8 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/van
+      title: VAN
     - local: model_doc/vilt
       title: ViLT
     - local: model_doc/vision-encoder-decoder

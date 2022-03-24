@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():

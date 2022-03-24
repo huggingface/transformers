@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -45,6 +45,8 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_bart"] = [
+        "FlaxBartDecoderPreTrainedModel",
+        "FlaxBartForCausalLM",
         "FlaxBartForConditionalGeneration",
         "FlaxBartForQuestionAnswering",
         "FlaxBartForSequenceClassification",
@@ -76,6 +78,8 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_bart import (
+            FlaxBartDecoderPreTrainedModel,
+            FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
