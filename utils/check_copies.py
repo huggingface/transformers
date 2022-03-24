@@ -364,6 +364,14 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+    if overwrite:
+        # Fix potential doc links in the README
+        with open(os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n"):
+            readme = f.read()
+        new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
+        if new_readme != readme:
+            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n"):
+                f.write(new_readme)
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     index_list, start_index, end_index, lines = _find_text_in_file(
