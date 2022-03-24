@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -194,6 +194,8 @@
       title: DeBERTa
     - local: model_doc/deberta-v2
       title: DeBERTa-v2
+    - local: model_doc/decision_transformer
+      title: Decision Transformer
     - local: model_doc/deit
       title: DeiT
     - local: model_doc/detr
@@ -218,6 +220,8 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/glpn
+      title: GLPN
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/ibert

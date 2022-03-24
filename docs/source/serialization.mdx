@@ -52,7 +52,9 @@ Ready-made configurations include the following architectures:
 - Data2VecText
 - DistilBERT
 - ELECTRA
+- FlauBERT
 - GPT Neo
+- GPT-J
 - I-BERT
 - LayoutLM
 - M2M100
@@ -168,7 +170,7 @@ checkpoint as follows:
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 >>> # Load tokenizer and PyTorch weights form the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-pt-checkpoint")
@@ -187,7 +189,7 @@ python -m transformers.onnx --model=local-pt-checkpoint onnx/
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-tf-checkpoint")
@@ -614,9 +616,9 @@ deployment on Inf1. The Neuron SDK provides:
 
 #### Implications
 
-Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/master/model_doc/bert)
-architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/master/model_doc/distilbert)
- and [roBERTa](https://huggingface.co/docs/transformers/master/model_doc/roberta)
+Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
+architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert)
+ and [roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)
  will run best on Inf1 for non-generative tasks such as Extractive Question Answering,
  Sequence Classification, Token Classification. Alternatively, text generation
 tasks can be adapted to run on Inf1, according to this [AWS Neuron MarianMT tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
@@ -632,7 +634,7 @@ Using AWS Neuron to convert models requires the following dependencies and envir
 
 #### Converting a Model for AWS Neuron
 
-Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/master/en/serialization#using-torchscript-in-python)
+Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/main/en/serialization#using-torchscript-in-python)
 to trace a "BertModel", you import `torch.neuron` framework extension to access
 the components of the Neuron SDK through a Python API.
 

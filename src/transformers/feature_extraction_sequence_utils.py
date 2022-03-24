@@ -20,16 +20,8 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .file_utils import (
-    PaddingStrategy,
-    TensorType,
-    _is_tensorflow,
-    _is_torch,
-    is_tf_available,
-    is_torch_available,
-    to_numpy,
-)
-from .utils import logging
+from .utils import PaddingStrategy, TensorType, is_tf_available, is_torch_available, logging, to_numpy
+from .utils.generic import _is_tensorflow, _is_torch
 
 
 logger = logging.get_logger(__name__)

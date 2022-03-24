@@ -21,12 +21,14 @@ import os
 import random
 import tempfile
 import unittest
+import unittest.mock as mock
 from importlib import import_module
 from typing import List, Tuple
 
 from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
+from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
@@ -80,6 +82,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
+    from transformers.modeling_tf_utils import unpack_inputs
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -114,6 +117,7 @@ class TFModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     is_encoder_decoder = False
+    has_attentions = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -539,9 +543,7 @@ class TFModelTesterMixin:
 
             # Output all for aggressive testing
             config.output_hidden_states = True
-            # Pure convolutional models have no attention
-            # TODO: use a better and general criteria
-            if "TFConvNext" not in model_class.__name__:
+            if self.has_attentions:
                 config.output_attentions = True
 
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
@@ -566,8 +568,6 @@ class TFModelTesterMixin:
 
             pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
-
-            config.output_hidden_states = True
 
             tf_model = model_class(config)
             pt_model = pt_model_class(config)
@@ -1555,6 +1555,84 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    # tests whether the unpack_inputs function behaves as expected
+    def test_unpack_inputs(self):
+        class DummyModel:
+            def __init__(self):
+                config_kwargs = {"output_attentions": False, "output_hidden_states": False, "return_dict": False}
+                self.config = PretrainedConfig(**config_kwargs)
+
+            @unpack_inputs
+            def call(
+                self, input_ids=None, past=None, output_attentions=None, output_hidden_states=None, return_dict=None
+            ):
+                return input_ids, past, output_attentions, output_hidden_states, return_dict
+
+        dummy_model = DummyModel()
+        input_ids = tf.constant([0, 1, 2, 3])
+        past = tf.constant([4, 5, 6, 7])
+
+        # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
+        output = dummy_model.call(input_ids=input_ids, past=past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 2: Same as above, but with positional arguments.
+        output = dummy_model.call(input_ids, past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 3: We can also pack everything in the first input.
+        output = dummy_model.call(input_ids={"input_ids": input_ids, "past": past})
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 4: Explicit boolean arguments should override the config.
+        output = dummy_model.call(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertTrue(output[4])
+
+        # test case 5: Unexpected arguments should raise an exception.
+        with self.assertRaises(ValueError):
+            output = dummy_model.call(input_ids=input_ids, past=past, foo="bar")
+
+        # test case 6: Despite the above, `past_key_values` should be interchangeable with `past`
+        # (the decorator moves it to `past`, or vice-versa, depending on the signature).
+        output = dummy_model.call(input_ids=input_ids, past_key_values=past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
 
 
 @require_tf

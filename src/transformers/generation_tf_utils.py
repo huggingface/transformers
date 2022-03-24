@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from .file_utils import ModelOutput
 from .generation_tf_logits_process import (
     TFLogitsProcessorList,
     TFMinLengthLogitsProcessor,
@@ -33,7 +32,7 @@ from .generation_tf_logits_process import (
     TFTopPLogitsWarper,
 )
 from .tf_utils import set_tensor_by_indices_to_value, shape_list
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)

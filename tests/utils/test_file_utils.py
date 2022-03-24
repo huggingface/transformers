@@ -24,7 +24,8 @@ import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
-from transformers.file_utils import (
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -39,7 +40,6 @@ from transformers.file_utils import (
     has_file,
     hf_bucket_url,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER
