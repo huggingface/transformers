@@ -587,7 +587,13 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
     module_class: nn.Module = None
 
     def __init__(
-        self, config: {{cookiecutter.camelcase_modelname}}Config, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self,
+        config: {{cookiecutter.camelcase_modelname}}Config,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -2041,7 +2047,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
     def __init__(
         self,
         config: {{cookiecutter.camelcase_modelname}}Config,
-               input_shape: Tuple[int] = (1, 1),
+        input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
