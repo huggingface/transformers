@@ -398,9 +398,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         else:
             head_mask = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            input_ids, inputs_embeds=inputs_embeds
-        )  # (bs, seq_length, dim)
+        embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
             embedding_output,
             attention_mask,
@@ -928,9 +926,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             seq_length = shape_list(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = (
-            tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        )
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_inputs_embeds = (
             tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
             if inputs_embeds is not None
