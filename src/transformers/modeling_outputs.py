@@ -73,7 +73,7 @@ class BaseModelOutputWithPooling(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, 1, 1)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Last layer hidden-state after a pooling operation on the spatial dimensions.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -102,7 +102,7 @@ class BaseModelOutputWithNoAttentionAndWithPooling(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, 1, 1)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Last layer hidden-state after a pooling operation on the spatial dimensions.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
