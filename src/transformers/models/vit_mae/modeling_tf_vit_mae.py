@@ -194,6 +194,8 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     pos = tf.reshape(pos, [-1])  # (M,)
     out = tf.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
 
+    # half of the positions get sinusoidal pattern and the rest gets
+    # cosine pattern and then they are concatenated
     emb_sin = tf.sin(out)  # (M, D/2)
     emb_cos = tf.cos(out)  # (M, D/2)
 
@@ -386,12 +388,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(
             tensor=tensor,
-            shape=(
-                batch_size,
-                -1,
-                self.num_attention_heads,
-                self.attention_head_size,
-            ),
+            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
         )
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
@@ -455,12 +452,7 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob, name="dropout")
 
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        input_tensor: tf.Tensor,
-        training: bool = False,
-    ) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
 
@@ -491,9 +483,7 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
             training=training,
         )
         attention_output = self.dense_output(
-            hidden_states=self_outputs[0],
-            input_tensor=input_tensor,
-            training=training,
+            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
@@ -531,17 +521,9 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
-        self.dropout = tf.keras.layers.Dropout(
-            rate=config.hidden_dropout_prob,
-            name="dropout",
-        )
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob, name="dropout")
 
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        input_tensor: tf.Tensor,
-        training: bool = False,
-    ) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = hidden_states + input_tensor
@@ -592,9 +574,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
 
         # second residual connection is done here
         layer_output = self.vit_output(
-            hidden_states=intermediate_output,
-            input_tensor=hidden_states,
-            training=training,
+            hidden_states=intermediate_output, input_tensor=hidden_states, training=training
         )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
@@ -684,9 +664,7 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
         embedding_output, mask, ids_restore = self.embeddings(
-            pixel_values=pixel_values,
-            training=training,
-            noise=noise,
+            pixel_values=pixel_values, training=training, noise=noise
         )
 
         # Prepare head mask if needed
@@ -740,12 +718,7 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
             dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
@@ -759,8 +732,9 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         """
-        Args:
         Method used for serving the model.
+
+        Args:
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -983,11 +957,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return TFViTMAEDecoderOutput(
-            logits=logits,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return TFViTMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
 
 
 @add_start_docstrings(
@@ -1014,11 +984,8 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
 
     def patchify(self, imgs):
         """
-        imgs: (N, H, W, 3) x: (N, L, patch_size**2 *3)
+        imgs: (batch_size, height, width, 3) x: (batch_size, num_patches, patch_size**2 *3)
         """
-        # if tf.math.equal(shape_list(imgs)[1], 3):
-        #     imgs = tf.transpose(imgs, perm=(0, 2, 3, 1))
-
         imgs = tf.cond(
             tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
         )
@@ -1035,7 +1002,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 *3) imgs: (N, H, W, 3)
+        x: (batch_size, num_patches, patch_size**2 *3) imgs: (batch_size, height, width, 3)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         h = w = int(shape_list(x)[1] ** 0.5)
@@ -1048,7 +1015,8 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
 
     def forward_loss(self, imgs, pred, mask):
         """
-        imgs: [N, H, W, 3] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
+        imgs: [batch_size, height, width, 3] pred: [batch_size, num_patches, patch_size**2*3] mask: [N, L], 0 is keep,
+        1 is remove,
         """
         target = self.patchify(imgs)
         if self.config.norm_pix_loss:
@@ -1114,7 +1082,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
-        decoder_outputs = self.decoder(latent, ids_restore)  # [N, L, p*p*3]
+        decoder_outputs = self.decoder(latent, ids_restore)  # [batch_size, num_patches, patch_size**2*3]
         logits = decoder_outputs.logits
 
         loss = self.forward_loss(pixel_values, logits, mask)

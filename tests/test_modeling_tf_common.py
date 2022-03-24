@@ -669,12 +669,6 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 
-            # `TFViTMAEForPreTraining` outputs are not recommended to be used for
-            #  downstream application. This is just to check if the outputs of
-            # `TFViTMAEForPreTraining` can be integrated with other keras modules.
-            if model_class.__name__ == "TFViTMAEForPreTraining":
-                hidden_states = outputs_dict["logits"]
-
             # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 

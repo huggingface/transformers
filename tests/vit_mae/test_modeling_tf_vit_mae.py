@@ -197,7 +197,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keyword_and_dict_args(self):
         # make the mask reproducible
@@ -221,7 +221,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
             self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
-    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_numpy_arrays_inputs(self):
         # make the mask reproducible
@@ -360,7 +360,51 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    def test_compile_tf_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+
+        for model_class in self.all_model_classes:
+            # `pixel_values` implies that the input is an image
+            inputs = tf.keras.Input(
+                batch_shape=(
+                    3,
+                    self.model_tester.num_channels,
+                    self.model_tester.image_size,
+                    self.model_tester.image_size,
+                ),
+                name="pixel_values",
+                dtype="float32",
+            )
+
+            # Prepare our model
+            model = model_class(config)
+            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+            # Let's load it from the disk to be sure we can use pretrained weights
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+                model = model_class.from_pretrained(tmpdirname)
+
+            outputs_dict = model(inputs)
+            hidden_states = outputs_dict[0]
+
+            # `TFViTMAEForPreTraining` outputs are not recommended to be used for
+            #  downstream application. This is just to check if the outputs of
+            # `TFViTMAEForPreTraining` can be integrated with other keras modules.
+            if model_class.__name__ == "TFViTMAEForPreTraining":
+                hidden_states = outputs_dict["logits"]
+
+            # Add a dense layer on top to test integration with other keras modules
+            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+
+            # Compile extended model
+            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keras_save_load(self):
         # make mask reproducible
@@ -407,7 +451,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
-    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_save_load(self):
         # make mask reproducible
@@ -446,7 +490,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    # Since TFViTMAEForPretraining has random masking, we need to fix the noise
+    # overwrire from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_save_load_config(self):
         # make mask reproducible
@@ -479,20 +523,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     to get deterministic results."""
     )
     def test_determinism(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
