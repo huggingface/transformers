@@ -2276,8 +2276,9 @@ class ModelUtilsTest(TestCasePlus):
     def test_checkpoint_sharding_local(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        for max_size in ["50kB", "100kB", "200kB"]:
-            with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
+            for max_size in ["50kB", "100kB", "200kB"]:
                 model.save_pretrained(tmp_dir, max_shard_size=max_size)
 
                 # Get each shard file and its size

@@ -250,7 +250,7 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
         return {WEIGHTS_NAME: sharded_state_dicts[0]}, None
-    
+
     # Otherwise, let's build the index
     weight_map = {}
     shards = {}
@@ -259,69 +259,11 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
         shards[shard_file] = shard
         for key in shard.keys():
             weight_map[key] = shard_file
-    
+
     # Add the metadata
     metadata = {"total_size": total_size}
     index = {"metadata": metadata, "weight_map": weight_map}
     return shards, index
-
-
-def save_and_shard_checkpoint(
-    save_directory: Union[str, os.PathLike],
-    state_dict: Dict[str, torch.Tensor],
-    max_shard_size: Union[int, str] = "10GB",
-    save_function: Callable = torch.save,
-):
-    """
-    Shards a model state dictionary and saves it in a given directory.
-
-    Arguments:
-        save_directory (`str` or `os.PathLike`):
-            Directory to which to save. Will be created if it doesn't exist.
-        state_dict (dictionary of `torch.Tensor`):
-            The state dictionary of the model to save.
-        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
-            The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size lower
-            than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
-
-            <Tip warning={true}>
-
-            If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
-            which will be bigger than `max_shard_size`.
-
-            </Tip>
-
-        save_function (`Callable`):
-            The function to use to save the state dictionary. Useful on distributed training like TPUs when one needs
-            to replace `torch.save` by another method.
-    """
-    shards, total_size = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
-    # One shard only means the whole model doesn't exceed the maximum size.
-    if len(shards) == 1:
-        save_file = os.path.join(save_directory, WEIGHTS_NAME)
-        logger.info(f"Model weights saved in {save_file}")
-        save_function(shards[0], save_file)
-        return
-
-    # Otherwise we build the index.
-    save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
-    weight_map = {}
-    for idx, shard in enumerate(shards):
-        shard_file = WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(shards):05d}.bin")
-        save_function(shard, os.path.join(save_directory, shard_file))
-        for key in shard.keys():
-            weight_map[key] = shard_file
-
-    logger.info(
-        f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be split in "
-        f"{len(shards)} checkpoint shards. You can find where each parameters has been saved in the index located "
-        f"at {save_index_file}."
-    )
-    metadata = {"total_size": total_size}
-    index = {"metadata": metadata, "weight_map": weight_map}
-    with open(save_index_file, "w", encoding="utf-8") as f:
-        content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-        f.write(content)
 
 
 def get_checkpoint_shard_files(
@@ -1416,9 +1358,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
 
-        # Actually save the `state_dict`, with sharding if the model is too big.
+        # Shard the model if it is too big.
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
-        
+
+        # Clean the folder from a previous save
+        for filename in os.listdir(save_directory):
+            full_filename = os.path.join(save_directory, filename)
+            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+                os.remove(full_filename)
+
+        # Save the model
         for shard_file, shard in shards.items():
             save_function(shard, os.path.join(save_directory, shard_file))
 
@@ -2246,12 +2195,109 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         cls._auto_class = auto_class
 
+    def push_to_hub(
+        self,
+        repo_path_or_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        use_temp_dir: bool = False,
+        commit_message: str = "add model",
+        organization: Optional[str] = None,
+        private: Optional[bool] = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Union[int, str] = "10GB",
+        **model_card_kwargs
+    ) -> str:
+        """
+        Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
 
-# To update the docstring, we need to copy the method, otherwise we change the original docstring.
-PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
-PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="AutoModel", object_files="model checkpoint"
-)
+        Parameters:
+            repo_path_or_name (`str`, *optional*):
+                Can either be a repository name for your model in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder). If not specified, will default to the name
+                given by `repo_url` and a local directory with that name will be created.
+            repo_url (`str`, *optional*):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an `organization`) with `repo_name`.
+            use_temp_dir (`bool`, *optional*, defaults to `False`):
+                Whether or not to clone the distant repo in a temporary directory or in `repo_path_or_name` inside the
+                current working directory. This will slow things down if you are making changes in an existing repo
+                since you will need to clone the repo before every push.
+            commit_message (`str`, *optional*, defaults to `"add model"`):
+                Message to commit while pushing.
+            organization (`str`, *optional*):
+                Organization in which you want to push your {object} (you must be a member of this organization).
+            private (`bool`, *optional*):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
+                `repo_url` is not specified.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+
+                <Tip warning={true}>
+
+                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                which will be bigger than `max_shard_size`.
+
+                </Tip>
+
+        Returns:
+            `str`: The url of the commit of your {object} in the given repository.
+
+        Examples:
+
+        ```python
+        from transformers import AutoModel
+
+        model = AutoModel.from_pretrained("bert-base-cased")
+
+        # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        model.push_to_hub("my-finetuned-bert")
+
+        # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
+        model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+
+        # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        model.push_to_hub("my-finetuned-bert", organization="huggingface")
+
+        # Make a change to an existing repo that has been cloned locally in *my-finetuned-bert*.
+        model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        ```
+        """
+        if use_temp_dir:
+            # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
+            if repo_url is None:
+                if use_auth_token is None:
+                    use_auth_token = True
+                repo_name = Path(repo_path_or_name).name
+                repo_url = self._get_repo_url_from_name(
+                    repo_name, organization=organization, private=private, use_auth_token=use_auth_token
+                )
+            repo_path_or_name = tempfile.mkdtemp()
+
+        # Create or clone the repo. If the repo is already cloned, this just retrieves the path to the repo.
+        repo = self._create_or_get_repo(
+            repo_path_or_name=repo_path_or_name,
+            repo_url=repo_url,
+            organization=organization,
+            private=private,
+            use_auth_token=use_auth_token,
+        )
+        # Save the files in the cloned repo
+        self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
+
+        # Commit and push!
+        url = self._push_to_hub(repo, commit_message=commit_message)
+
+        # Clean up! Clean up! Everybody everywhere!
+        if use_temp_dir:
+            shutil.rmtree(repo_path_or_name)
+
+        return url
 
 
 class Conv1D(nn.Module):
