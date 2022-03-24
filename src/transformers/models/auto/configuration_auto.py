@@ -226,13 +226,10 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-<<<<<<< HEAD
         ("fastspeech2", "FastSpeech2"),
-=======
         ("decision_transformer", "Decision Transformer"),
         ("glpn", "GLPN"),
         ("maskformer", "MaskFormer"),
->>>>>>> master
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
         ("van", "VAN"),
