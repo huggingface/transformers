@@ -29,7 +29,6 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import datasets
 import numpy as np
-import wandb as wandb
 from datasets import DatasetDict, load_dataset, load_metric
 from tqdm import tqdm
 
@@ -38,6 +37,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
+import wandb as wandb
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
@@ -126,8 +126,7 @@ class DataTrainingArguments:
         metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
     )
     dataset_cache_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to cache directory for saving and loading datasets"}
+        default=None, metadata={"help": "Path to cache directory for saving and loading datasets"}
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -336,7 +335,7 @@ def write_train_metric(summary_writer, train_metrics, train_time, step):
 
 
 def write_eval_metric(summary_writer, eval_metrics, pred_str, step):
-    summary_writer.text('eval_predictions', "\n".join(pred_str), step)
+    summary_writer.text("eval_predictions", "\n".join(pred_str), step)
 
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
@@ -410,8 +409,8 @@ def main():
     logger.info(f"JAX devices: {jax.device_count()}")
 
     # Set up wandb run
-    if jax.process_index() == 0:
-        wandb.init(project="flax-speech-recognition-seq2seq")
+    # if jax.process_index() == 0:
+    # wandb.init(project="flax-speech-recognition-seq2seq")
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
@@ -433,12 +432,18 @@ def main():
 
     if training_args.do_train:
         raw_datasets["train"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name, cache_dir=data_args.dataset_cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.train_split_name,
+            cache_dir=data_args.dataset_cache_dir,
         )
 
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name, cache_dir=data_args.dataset_cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            cache_dir=data_args.dataset_cache_dir,
         )
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
@@ -637,13 +642,14 @@ def main():
     rng = jax.random.PRNGKey(training_args.seed)
     rng, dropout_rng = jax.random.split(rng)
 
-    # Store some constant
+    # Store some constants
     num_epochs = int(training_args.num_train_epochs)
+    gradient_accumulation_steps = int(training_args.gradient_accumulation_steps)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    batch_size_per_update = train_batch_size * gradient_accumulation_steps
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     steps_per_epoch = len(vectorized_datasets["train"]) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
-    gradient_accumulation_steps = int(training_args.gradient_accumulation_steps)
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -680,33 +686,16 @@ def main():
         mask=decay_mask_fn,
     )
 
-    # Gradient clipping
-    optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
-
-    # Augment adam optimizer to facilitate gradient accumulation
-    if gradient_accumulation_steps > 1:
-        optim = optax.chain(optim, optax.apply_every(gradient_accumulation_steps), use_grad_mean=False)
+    # Gradient clipping -> need to alter depending on gradient accumulation
+    optim = optax.chain(optax.clip(training_args.max_grad_norm), adamw)
 
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
 
-    # label smoothed cross entropy
-    def loss_fn(logits, labels, label_smoothing_factor=0.0):
-        """
-        The label smoothing implementation is adapted from Flax's official example:
-        https://github.com/google/flax/blob/87a211135c6a377c8f29048a1cac3840e38b9da4/examples/wmt/train.py#L104
-        """
+    # Cross entropy loss
+    def loss_fn(logits, labels):
         vocab_size = logits.shape[-1]
-        confidence = 1.0 - label_smoothing_factor
-        low_confidence = (1.0 - confidence) / (vocab_size - 1)
-        normalizing_constant = -(
-            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
-        )
-        soft_labels = onehot(labels, vocab_size, on_value=confidence, off_value=low_confidence)
-
-        loss = optax.softmax_cross_entropy(logits, soft_labels)
-        loss = loss - normalizing_constant
-
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, vocab_size))
         # ignore padded tokens from loss, i.e. where labels are not set to -100
         padding = labels >= 0
         loss = loss * padding
@@ -714,13 +703,13 @@ def main():
         return loss
 
     # Define gradient update step fn
-    def train_step(state, batch, label_smoothing_factor=0.0):
+    def train_step(state, batch):
         dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
-        def compute_loss(params):
-            labels = batch.pop("labels")
+        def compute_loss(params, minibatch):
+            labels = minibatch.pop("labels")
             outputs = state.apply_fn(
-                **batch,
+                **minibatch,
                 params=params,
                 dropout_rng=dropout_rng,
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
@@ -733,25 +722,55 @@ def main():
             logits = outputs.logits
 
             # compute the l2-norm over key intermediate hidden-states for detailed logging
-            logs = {"encoder_last_hidden_state": jnp.linalg.norm(encoder_last_hidden_state),
-                    "decoder_first_hidden_state": jnp.linalg.norm(decoder_hidden_states[0]),
-                    "logits": jnp.linalg.norm(logits),
-                    }
+            logs = {
+                "encoder_last_hidden_state": jnp.linalg.norm(encoder_last_hidden_state),
+                "decoder_first_hidden_state": jnp.linalg.norm(decoder_hidden_states[0]),
+                "logits": jnp.linalg.norm(logits),
+            }
 
-            loss = loss_fn(logits, labels, label_smoothing_factor)
-            # normalize loss over gradient accumulation steps
-            loss = loss / gradient_accumulation_steps
-            return loss, logs
+            loss = loss_fn(logits, labels)
+            # just return loss for now, treat logs later
+            return loss
 
-        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
-        (loss, logs), grad = grad_fn(state.params)
+        grad_fn = jax.value_and_grad(compute_loss)
+
+        if gradient_accumulation_steps == 1:
+            loss, grad = grad_fn(state.params, batch)
+
+        # Custom gradient accumulation
+        else:
+            # add a first dimension over gradient_accumulation_steps for minibatch slices
+            batch = jax.tree_map(
+                lambda x: x.reshape(gradient_accumulation_steps, training_args.per_device_train_batch_size, -1), batch
+            )
+
+            def accum_loss_grads(i, cumul_loss_grads):
+                # get a minibatch (one gradient accumulation slice)
+                minibatch = jax.tree_map(lambda x: jax.lax.dynamic_index_in_dim(x, i, keepdims=False), batch,)
+                # accumulate losses and grads
+                return jax.tree_map(lambda x, y: x + y, cumul_loss_grads, grad_fn(state.params, minibatch))
+
+            # create initial state for accumulating losses and gradients
+            init_loss_grads = (0, jax.tree_map(jnp.zeros_like, state.params))
+            loss, grad = jax.tree_map(
+                lambda x: x / gradient_accumulation_steps,
+                jax.lax.fori_loop(
+                    0,
+                    gradient_accumulation_steps,
+                    accum_loss_grads,
+                    init_loss_grads,
+                ),
+            )
+
+        # straight mean over pmapped axis
         grad = jax.lax.pmean(grad, "batch")
+        logs = {}
 
         # compute gradient norm for monitoring
         grad_norm_layer = jax.tree_map(jnp.linalg.norm, grad)
-        logs['encoder_grad_norm'] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["encoder"]))
-        logs['decoder_grad_norm'] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["decoder"]))
-        grad_norm = jnp.linalg.norm([logs['encoder_grad_norm'], logs['decoder_grad_norm']])
+        logs["encoder_grad_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["encoder"]))
+        logs["decoder_grad_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["decoder"]))
+        grad_norm = jnp.linalg.norm([logs["encoder_grad_norm"], logs["decoder_grad_norm"]])
         # grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
@@ -764,10 +783,10 @@ def main():
         return new_state, metrics
 
     # Define eval fn
-    def eval_step(params, batch, label_smoothing_factor=0.0):
+    def eval_step(params, batch):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, label_smoothing_factor)
+        loss = loss_fn(logits, labels)
 
         # summarize metrics
         metrics = {"loss": loss}
@@ -783,10 +802,8 @@ def main():
         return output_ids.sequences
 
     # Create parallel version of the train and eval step
-    p_train_step = jax.pmap(
-        partial(train_step, label_smoothing_factor=training_args.label_smoothing_factor), "batch", donate_argnums=(0,)
-    )
-    p_eval_step = jax.pmap(partial(eval_step, label_smoothing_factor=training_args.label_smoothing_factor), "batch")
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+    p_eval_step = jax.pmap(eval_step, "batch")
     p_generate_step = jax.pmap(generate_step, "batch")
 
     # Replicate the train state on each device
@@ -797,6 +814,7 @@ def main():
     logger.info(f"  Num Epochs = {num_epochs}")
     logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
     logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
+    logger.info(f"  Num gradient accumulation steps = {gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
     train_time = 0
@@ -812,7 +830,7 @@ def main():
         # Generate an epoch by shuffling sampling indices from the train dataset
         num_train_samples = len(vectorized_datasets["train"])
         train_samples_idx = jax.random.permutation(input_rng, np.arange(num_train_samples))
-        train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
+        train_batch_idx = generate_batch_splits(train_samples_idx, batch_size_per_update)
 
         # Gather the indexes for creating the batch and do a training step
         for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
