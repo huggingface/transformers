@@ -17,6 +17,7 @@
 
 import inspect
 import unittest
+from datasets import load_dataset
 
 from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -29,7 +30,12 @@ from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextForImageClassification, ConvNextModel
+    from transformers import (
+        ConvNextForImageClassification,
+        ConvNextModel,
+        ConvNextFeatureExtractor,
+        ConvNextForSemanticSegmentation,
+    )
     from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -258,3 +264,34 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_semantic_segmentation(self):
+        model = ConvNextForSemanticSegmentation.from_pretrained("facebook/convnext-tiny-512")
+        model = model.to(torch_device)
+
+        feature_extractor = ConvNextFeatureExtractor(do_resize=True, size=512, do_center_crop=False)
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = Image.open(ds[0]["file"])
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 150, 128, 128))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [
+                [[-10.4096, -10.4618, -10.3934], [-11.0884, -11.3042, -11.4534], [-10.6485, -10.7991, -11.0215]],
+                [[-13.9544, -14.8303, -14.7000], [-15.4058, -16.8784, -16.9054], [-15.0149, -16.4674, -16.5872]],
+                [[-11.8820, -11.8910, -11.6943], [-12.9487, -14.0089, -14.1486], [-12.6669, -13.8496, -14.1494]],
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
