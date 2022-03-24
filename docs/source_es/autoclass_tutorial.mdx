@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Carga las instancias preentrenadas con un AutoClass
 
-Con tantas arquitecturas diferentes de Transformer, puede ser retador crear una para tu checkpoint. Como parte de la filosofía central de 🤗 Transformers para hacer que la biblioteca sea fácil, simple y flexible de usar; una `AutoClass` automáticamente infiere y carga la arquitectura correcta desde un checkpoint dado. El método `from_pretrained` te permite cargar rápidamente un modelo preentrenado para cualquier arquitectura, por lo que no tendrás que dedicar tiempo y recursos para entrenar uno desde cero. Producir este tipo de código con checkpoint implica que si funciona con uno, funcionará con también con otro - siempre que haya sido entrenado para una tarea similar - e incluso si la arquitectura es distinta.
+Con tantas arquitecturas diferentes de Transformer, puede ser retador crear una para tu checkpoint. Como parte de la filosofía central de 🤗 Transformers para hacer que la biblioteca sea fácil, simple y flexible de usar; una `AutoClass` automáticamente infiere y carga la arquitectura correcta desde un checkpoint dado. El método `from_pretrained` te permite cargar rápidamente un modelo preentrenado para cualquier arquitectura, por lo que no tendrás que dedicar tiempo y recursos para entrenar uno desde cero. Producir este tipo de código con checkpoint implica que si funciona con uno, funcionará también con otro - siempre que haya sido entrenado para una tarea similar - e incluso si la arquitectura es distinta.
 
 <Tip>
 
@@ -20,12 +20,12 @@ Recuerda, la arquitectura se refiere al esqueleto del modelo y los checkpoints s
 
 </Tip>
 
-En este tutorial, aprende a:
+En este tutorial, aprenderás a:
 
 * Cargar un tokenizador preentrenado.
-* Carga un extractor de características preentrenado.
-* Carga un procesador preentrenado.
-* Carga un modelo preentrenado.
+* Cargar un extractor de características preentrenado.
+* Cargar un procesador preentrenado.
+* Cargar un modelo preentrenado.
 
 ## AutoTokenizer
 
@@ -39,7 +39,7 @@ Carga un tokenizador con [`AutoTokenizer.from_pretrained`]:
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 ```
 
-Luego tokeniza tu input como lo mostrado a continuación:
+Luego tokeniza tu input como se muestra a continuación:
 
 ```py
 >>> sequence = "In a hole in the ground there lived a hobbit."
@@ -51,7 +51,7 @@ Luego tokeniza tu input como lo mostrado a continuación:
 
 ## AutoFeatureExtractor
 
-Para tareas de habla/audio y visión, un extractor de características procesa la señal de audio o imagen a el formato de input correcto.
+Para tareas de habla/audio y visión, un extractor de características procesa la señal de audio o imagen al formato de input correcto.
 
 Carga un extractor de características con [`AutoFeatureExtractor.from_pretrained`]:
 
