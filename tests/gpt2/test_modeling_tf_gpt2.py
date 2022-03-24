@@ -549,7 +549,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
-    # TODO (Joao): enable this in a future PR.
+    # TODO (Joao): enable this in a future PR. Some generate Ops not yet compatible
     # @slow
     # def test_lm_generate_greedy_distilgpt2_beam_search_special_xla(self):
     #     """This test gives the exact same results as the non-xla test above"""

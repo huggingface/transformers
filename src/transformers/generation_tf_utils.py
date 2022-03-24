@@ -2747,7 +2747,6 @@ class TFGenerationMixin:
         if beam_search_cond_fn(
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
         ):
-            # maximum_iterations = max_length - cur_len - 1
             maximum_iterations = max_length - cur_len
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _ = tf.while_loop(
                 beam_search_cond_fn,
