@@ -30,6 +30,7 @@ src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/roberta/modeling_roberta.py
+src/transformers/models/roberta/modeling_tf_roberta.py
 src/transformers/models/segformer/modeling_segformer.py
 src/transformers/models/sew/modeling_sew.py
 src/transformers/models/sew_d/modeling_sew_d.py
