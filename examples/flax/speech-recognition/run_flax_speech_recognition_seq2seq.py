@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import datasets
 import numpy as np
+import wandb as wandb
 from datasets import DatasetDict, load_dataset, load_metric
 from tqdm import tqdm
 
@@ -123,6 +124,10 @@ class DataTrainingArguments:
     text_column: Optional[str] = field(
         default=None,
         metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
+    )
+    dataset_cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to cache directory for saving and loading datasets"}
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -330,7 +335,9 @@ def write_train_metric(summary_writer, train_metrics, train_time, step):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
 
-def write_eval_metric(summary_writer, eval_metrics, step):
+def write_eval_metric(summary_writer, eval_metrics, pred_str, step):
+    summary_writer.text('eval_predictions', "\n".join(pred_str), step)
+
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
@@ -402,6 +409,10 @@ def main():
 
     logger.info(f"JAX devices: {jax.device_count()}")
 
+    # Set up wandb run
+    if jax.process_index() == 0:
+        wandb.init(project="flax-speech-recognition-seq2seq")
+
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -422,12 +433,12 @@ def main():
 
     if training_args.do_train:
         raw_datasets["train"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+            data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name, cache_dir=data_args.dataset_cache_dir
         )
 
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+            data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name, cache_dir=data_args.dataset_cache_dir
         )
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
@@ -659,7 +670,7 @@ def main():
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
-    # create adam optimizer
+    # Create adam optimizer
     adamw = optax.adamw(
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
@@ -669,11 +680,15 @@ def main():
         mask=decay_mask_fn,
     )
 
-    # augment adam optimizer to facilitate gradient accumulation (ignore for now)
-    # optim = optax.chain(adamw, optax.apply_every(gradient_accumulation_steps))
+    # Gradient clipping
+    optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
+
+    # Augment adam optimizer to facilitate gradient accumulation
+    if gradient_accumulation_steps > 1:
+        optim = optax.MultiSteps(optim, gradient_accumulation_steps, use_grad_mean=False)
 
     # Setup train state
-    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
+    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
 
     # label smoothed cross entropy
     def loss_fn(logits, labels, label_smoothing_factor=0.0):
@@ -704,28 +719,46 @@ def main():
 
         def compute_loss(params):
             labels = batch.pop("labels")
-            logits = state.apply_fn(
+            outputs = state.apply_fn(
                 **batch,
                 params=params,
                 dropout_rng=dropout_rng,
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
+                output_hidden_states=True,
+                return_dict=True,
                 train=True,
-            )[0]
-            loss = loss_fn(logits, labels, label_smoothing_factor)
-            # normalize loss over gradient accumulation steps (ignore for now)
-            # loss = loss / gradient_accumulation_steps
-            return loss
+            )
+            encoder_last_hidden_state = outputs.encoder_last_hidden_state
+            decoder_hidden_states = jnp.asarray(outputs.decoder_hidden_states)
+            logits = outputs.logits
 
-        grad_fn = jax.value_and_grad(compute_loss)
-        loss, grad = grad_fn(state.params)
+            # compute the l2-norm over key intermediate hidden-states for detailed logging
+            logs = {"encoder_last_hidden_state": jnp.linalg.norm(encoder_last_hidden_state),
+                    "decoder_first_hidden_state": jnp.linalg.norm(decoder_hidden_states[0]),
+                    "logits": jnp.linalg.norm(logits),
+                    }
+
+            loss = loss_fn(logits, labels, label_smoothing_factor)
+            # normalize loss over gradient accumulation steps
+            loss = loss / gradient_accumulation_steps
+            return loss, logs
+
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, logs), grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
 
         # compute gradient norm for monitoring
-        grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
+        grad_norm_layer = jax.tree_map(jnp.linalg.norm, grad)
+        logs['encoder_grad_norm'] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["encoder"]))
+        logs['decoder_grad_norm'] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["decoder"]))
+        grad_norm = jnp.linalg.norm([logs['encoder_grad_norm'], logs['decoder_grad_norm']])
+        # grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step), "grad_norm": grad_norm}
+        metrics.update(logs)
+
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state, metrics
@@ -778,7 +811,7 @@ def main():
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         num_train_samples = len(vectorized_datasets["train"])
-        train_samples_idx = np.random.permutation(np.arange(num_train_samples))
+        train_samples_idx = jax.random.permutation(input_rng, np.arange(num_train_samples))
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
@@ -798,12 +831,14 @@ def main():
                 if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
-                # Log everything
-                metric_desc = " ".join([f"{key}: {value} |" for key, value in train_metric.items()])
-                epochs.write(f"Step... ({cur_step}) | {metric_desc}")
+                epochs.write(
+                    f"Step... ({cur_step} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']}, Gradient Norm: {train_metric['grad_norm']})"
+                )
+                wandb.log(train_metric, cur_step)
 
                 train_metrics = []
 
+        wandb.log()
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
@@ -833,6 +868,7 @@ def main():
 
         # compute WER metric
         wer_desc = ""
+        pred_str = ""
         if training_args.predict_with_generate:
             wer_metric, pred_str = compute_metrics(eval_preds, eval_labels)
             eval_metrics.update(wer_metric)
@@ -846,9 +882,7 @@ def main():
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
-            write_eval_metric(summary_writer, eval_metrics, cur_step)
-            if training_args.predict_with_generate:
-                summary_writer.text('eval_predictions', "\n".join(pred_str), cur_step)
+            write_eval_metric(summary_writer, eval_metrics, pred_str, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
