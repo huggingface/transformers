@@ -933,6 +933,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         output_type=TFLxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1265,6 +1266,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @unpack_inputs
     def call(
         self,
         input_ids=None,
