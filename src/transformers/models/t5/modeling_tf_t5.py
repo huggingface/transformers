@@ -26,7 +26,7 @@ import tensorflow as tf
 from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
+from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
