@@ -616,7 +616,7 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> import tensorflow as tf
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", from_pt=True)
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer(
     ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf"
@@ -649,7 +649,7 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> import tensorflow as tf
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", from_pt=True)
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
 
