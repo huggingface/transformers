@@ -18,9 +18,12 @@ import inspect
 import json
 import os
 import re
+import shutil
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -47,7 +50,6 @@ from .utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_path,
-    copy_func,
     has_file,
     hf_bucket_url,
     is_offline_mode,
