@@ -940,6 +940,19 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
+        def _assert_all_params_initialised(model, params):
+            # Check if all required parmas are loaded
+            keys = set(flatten_dict(unfreeze(params)).keys())
+            self.assertTrue(all(k in keys for k in model.required_params))
+            # Check if the shapes match
+            flat_params = flatten_dict(unfreeze(params))
+            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
+                self.assertEqual(
+                    v.shape,
+                    flat_params[k].shape,
+                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
+                )
+
         for model_class in self.all_model_classes:
             # init the model
             model = model_class(config)
@@ -955,31 +968,25 @@ class FlaxModelTesterMixin:
                 params = model.params
 
             # Check if all required parmas are loaded
-            keys = set(flatten_dict(unfreeze(params)).keys())
-            self.assertTrue(all(k in keys for k in model.required_params))
-            # Check if the shapes match
-            flat_params = flatten_dict(unfreeze(params))
-            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
-                self.assertEqual(
-                    v.shape,
-                    flat_params[k].shape,
-                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
-                )
+            _assert_all_params_initialised(model, params)
 
             # Check that setting params raises an ValueError when _do_init is False
             with self.assertRaises(ValueError):
                 model.params = params
 
-            # Check if from_pretrained raises if a key is missing
+            # Check if init_weights initializes missing keys from from_pretrained
+            flat_params = flatten_dict(unfreeze(params))
             random_key = random.choice(list(flat_params.keys()))
             flat_params.pop(random_key)
             params = freeze(unflatten_dict(flat_params))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, params=params)
+                model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
 
-                with self.assertRaises(ValueError):
-                    model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
+                params = model.init_weights(model.key, model.input_shape, params=params)
+                # Check if all required parmas are loaded
+                _assert_all_params_initialised(model, params)
 
 
 @require_flax
