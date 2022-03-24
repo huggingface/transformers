@@ -366,11 +366,12 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
     if overwrite:
         # Fix potential doc links in the README
-        with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n"):
+        with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
             readme = f.read()
         new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
+        new_readme = readme.replace("https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main")
         if new_readme != readme:
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n"):
+            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
                 f.write(new_readme)
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
