@@ -697,8 +697,8 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)    
-    
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+
     >>> labels = tf.constant(1)
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(float(loss), 2)
