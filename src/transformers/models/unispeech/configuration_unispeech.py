@@ -14,7 +14,8 @@
 # limitations under the License.
 """ UniSpeech model configuration"""
 
-import math
+import functools
+import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -294,4 +295,4 @@ class UniSpeechConfig(PretrainedConfig):
 
     @property
     def inputs_to_logits_ratio(self):
-        return math.prod(self.conv_stride)
+        return functools.reduce(operator.mul, self.conv_stride, 1)

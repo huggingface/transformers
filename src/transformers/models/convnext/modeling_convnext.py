@@ -24,12 +24,14 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     replace_return_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
 )
 
 from ...modeling_outputs import SemanticSegmentationModelOutput, SequenceClassifierOutput
@@ -51,7 +53,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",

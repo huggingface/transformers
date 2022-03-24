@@ -29,7 +29,7 @@ from requests import HTTPError
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     CONFIG_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -41,8 +41,8 @@ from .file_utils import (
     is_offline_mode,
     is_remote_url,
     is_torch_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -295,6 +295,7 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -472,7 +473,7 @@ class PretrainedConfig(PushToHubMixin):
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -619,12 +620,16 @@ class PretrainedConfig(PushToHubMixin):
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {configuration_file}."
             )
-        except HTTPError:
+        except HTTPError as err:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
-                "file.\nCheckout your internet connection or see how to run the library in offline mode at "
-                "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n{err}"
+            )
+        except ValueError:
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
+                "{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
+                "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
         except EnvironmentError:
             raise EnvironmentError(
@@ -849,12 +854,15 @@ class PretrainedConfig(PushToHubMixin):
 
     def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary has a *torch_dtype* key and if it's not None, converts torch.dtype to a
-        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can then be
-        stored in the json format.
+        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
+        string, which can then be stored in the json format.
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        for value in d.values():
+            if isinstance(value, dict):
+                self.dict_torch_dtype_to_str(value)
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):

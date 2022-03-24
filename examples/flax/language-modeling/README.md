@@ -249,7 +249,7 @@ cd ./norwegian-t5-base
 
 In the first step, we train a tokenizer to efficiently process the text input for the model. 
 We make use of the [tokenizers](https://github.com/huggingface/tokenizers) library to train 
-a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling/t5_tokenizer_model.py) 
+a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling/t5_tokenizer_model.py) 
 which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https://github.com/yandex-research/DeDLOC/blob/5c994bc64e573702a9a79add3ecd68b38f14b548/sahajbert/tokenizer/tokenizer_model.py) .
 
 The tokenizer is trained on the complete Norwegian dataset of OSCAR

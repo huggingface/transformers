@@ -21,10 +21,9 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from ...file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, logging, requires_backends
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
 

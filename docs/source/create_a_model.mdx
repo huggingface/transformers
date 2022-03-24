@@ -107,6 +107,8 @@ You can also save your configuration file as a dictionary or even just the diffe
 
 The next step is to create a [model](main_classes/models). The model - also loosely referred to as the architecture - defines what each layer is doing and what operations are happening. Attributes like `num_hidden_layers` from the configuration are used to define the architecture. Every model shares the base class [`PreTrainedModel`] and a few common methods like resizing input embeddings and pruning self-attention heads. In addition, all models are also either a [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) or [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. This means models are compatible with each of their respective framework's usage.
 
+<frameworkcontent>
+<pt>
 Load your custom configuration attributes into the model:
 
 ```py
@@ -114,11 +116,6 @@ Load your custom configuration attributes into the model:
 
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 >>> model = DistilBertModel(my_config)
-===PT-TF-SPLIT===
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
 ```
 
 This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
@@ -127,32 +124,52 @@ Create a pretrained model with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
-===PT-TF-SPLIT===
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
 When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+Load your custom configuration attributes into the model:
+
+```py
+>>> from transformers import TFDistilBertModel
+
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> tf_model = TFDistilBertModel(my_config)
+```
+
+This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
+
+Create a pretrained model with [`~TFPreTrainedModel.from_pretrained`]:
+
+```py
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+```
+
+When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
+
+```py
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
 ```
+</tf>
+</frameworkcontent>
 
 ### Model heads
 
 At this point, you have a base DistilBERT model which outputs the *hidden states*. The hidden states are passed as inputs to a model head to produce the final output. 🤗 Transformers provides a different model head for each task as long as a model supports the task (i.e., you can't use DistilBERT for a sequence-to-sequence task like translation).
 
+<frameworkcontent>
+<pt>
 For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
 >>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
-===PT-TF-SPLIT===
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
 Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`DistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
@@ -161,11 +178,26 @@ Easily reuse this checkpoint for another task by switching to a different model 
 >>> from transformers import DistilBertForQuestionAnswering
 
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+For example, [`TFDistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
+
+```py
+>>> from transformers import TFDistilBertForSequenceClassification
+
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`TFDistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
+
+```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
 >>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 ```
+</tf>
+</frameworkcontent>
 
 ## Tokenizer
 

@@ -58,7 +58,7 @@ from transformers import (
     is_tensorboard_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
+from transformers.utils import get_full_repo_name
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())

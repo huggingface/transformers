@@ -22,17 +22,17 @@ from typing import Optional
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
+from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, input_processing
+from ...tf_utils import shape_list
+from ...utils import (
     DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, input_processing
-from ...tf_utils import shape_list
-from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
@@ -678,19 +678,17 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         # The starting index of the remaining elements in `decoder_outputs`
         start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
 
-        past = (encoder_outputs[0], past_key_values) if past_key_values else None
-
         if not decoder_inputs["return_dict"]:
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
-            output = (loss, logits, past) + decoder_outputs[start_index:] + encoder_outputs
+            output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
             output = tuple([x for x in output if x is not None])
             return output
 
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=decoder_outputs.logits,
-            past_key_values=past,
+            past_key_values=past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -722,45 +720,25 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             cross_attentions=cross_attns,
         )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, use_cache=None, **kwargs):
-        if past is None or len(past) not in {1, 2}:
-            raise ValueError(f"past has to be an iterable of length 1,2 got {past}")
-
-        if len(past) == 1:
-            if not isinstance(past[0], tf.Tensor):
-                raise ValueError(f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}")
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            past_key_values = None
-        else:
-            if len(past) != 2:
-                raise ValueError(
-                    "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
-                )
-            encoder_outputs, past_key_values = past
-            if isinstance(encoder_outputs, tuple):
-                if not isinstance(encoder_outputs[0], tf.Tensor):
-                    raise ValueError(
-                        f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                    )
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            if not past_key_values:
-                raise ValueError(
-                    f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
-                )
-            decoder_input_ids = decoder_input_ids[:, -1:]
-
-        if not isinstance(encoder_outputs, TFBaseModelOutput):
-            raise ValueError(f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}.")
-
-        return {
-            "pixel_values": None,  # encoder_outputs is defined. pixel_values not needed
-            "encoder_outputs": encoder_outputs,
+    def prepare_inputs_for_generation(
+        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+    ):
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
+        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        past_key_values = decoder_inputs.get("past_key_values")
+        if past_key_values is None:
+            past_key_values = decoder_inputs.get("past")  # e.g. on TF GPT2
+        input_dict = {
+            "pixel_values": None,  # needs to be passed to make Keras.layer.__call__ happy
+            "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_input_ids": decoder_inputs["input_ids"],
+            # TODO (joao): the `TFBaseModelOutput` wrapper should not be needed after the generate refactor is complete
+            "encoder_outputs": TFBaseModelOutput(last_hidden_state=encoder_outputs[0]),
             "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            "use_cache": use_cache,
         }
+        return input_dict
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
@@ -773,9 +751,4 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
-        if len(past) == 1:
-            return past
-
-        encoder_outputs, past_key_values = past
-
-        return (encoder_outputs, self.decoder._reorder_cache(past_key_values, beam_idx))
+        return self.decoder._reorder_cache(past, beam_idx)
