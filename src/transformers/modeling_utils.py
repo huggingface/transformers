@@ -246,7 +246,24 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
 
     # Add the last block
     sharded_state_dicts.append(current_block)
-    return sharded_state_dicts, total_size
+
+    # If we only have one shard, we return it
+    if len(sharded_state_dicts) == 1:
+        return {WEIGHTS_NAME: sharded_state_dicts[0]}, None
+    
+    # Otherwise, let's build the index
+    weight_map = {}
+    shards = {}
+    for idx, shard in enumerate(sharded_state_dicts):
+        shard_file = WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
+        shards[shard_file] = shard
+        for key in shard.keys():
+            weight_map[key] = shard_file
+    
+    # Add the metadata
+    metadata = {"total_size": total_size}
+    index = {"metadata": metadata, "weight_map": weight_map}
+    return shards, index
 
 
 def save_and_shard_checkpoint(
@@ -1400,9 +1417,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[ignore_key]
 
         # Actually save the `state_dict`, with sharding if the model is too big.
-        save_and_shard_checkpoint(
-            save_directory, state_dict, max_shard_size=max_shard_size, save_function=save_function
-        )
+        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
+        
+        for shard_file, shard in shards.items():
+            save_function(shard, os.path.join(save_directory, shard_file))
+
+        if index is None:
+            logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
+        else:
+            save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
+            )
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
