@@ -2655,6 +2655,13 @@ class TFGenerationMixin:
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
             did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
+            # only the top `num_beams` can be considered as "just finished"
+            did_topk_just_finished = (
+                did_topk_just_finished
+                & tf.broadcast_to(
+                    tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0), did_topk_just_finished.shape
+                )
+            )
             running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
 
             # 5. Get running sequences scores for next
@@ -2740,7 +2747,8 @@ class TFGenerationMixin:
         if beam_search_cond_fn(
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
         ):
-            maximum_iterations = max_length - cur_len - 1
+            # maximum_iterations = max_length - cur_len - 1
+            maximum_iterations = max_length - cur_len
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _ = tf.while_loop(
                 beam_search_cond_fn,
                 beam_search_body_fn,
