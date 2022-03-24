@@ -21,6 +21,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
+import numpy as np
 from torch import nn
 
 from ...file_utils import (
@@ -643,24 +644,10 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
 
 
 class FastSpeech2Model(FastSpeech2PreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.encoder = FastSpeech2Encoder(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -677,19 +664,21 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def set_mean(self, mean):
-        # NOTE: add dimensionality check?
-        self.encoder.mean = mean
+        valid_shape = self.encoder.mean.shape
+        if mean.shape != valid_shape:
+            raise ValueError(f"`mean` should be of shape {valid_shape}, but got {mean.shape} instead")
+        if isinstance(mean, np.ndarray):
+            mean = torch.from_numpy(mean)
+        self.encoder.mean = mean.to(self.encoder.mean.device, dtype=torch.float32)
 
     def set_std(self, std):
-        # NOTE: add dimensionality check?
-        self.encoder.std = std
+        valid_shape = self.encoder.std.shape
+        if std.shape != valid_shape:
+            raise ValueError(f"`std` should be of shape {valid_shape}, but got {std.shape} instead")
+        if isinstance(std, np.ndarray):
+            std = torch.from_numpy(std)
+        self.encoder.std = std.to(self.encoder.std.device, dtype=torch.float32)
 
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=FastSpeech2ModelOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
     def forward(
         self,
         input_ids,
