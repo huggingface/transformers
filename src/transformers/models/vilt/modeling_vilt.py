@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -35,7 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vilt import ViltConfig
 
 
@@ -389,12 +388,12 @@ class ViltSelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -438,7 +437,7 @@ class ViltAttention(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Vilt
 class ViltIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -446,7 +445,7 @@ class ViltIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -456,12 +455,12 @@ class ViltIntermediate(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Vilt
 class ViltOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -661,7 +660,7 @@ VILT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
@@ -716,7 +715,7 @@ VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -933,6 +932,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import re
+        >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -954,9 +954,9 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> with torch.no_grad():
         ...     for i in range(tl):
         ...         encoded = processor.tokenizer(inferred_token)
-        ...         input_ids = torch.tensor(encoded.input_ids).to(device)
+        ...         input_ids = torch.tensor(encoded.input_ids)
         ...         encoded = encoded["input_ids"][0][1:-1]
-        ...         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        ...         outputs = model(input_ids=input_ids, pixel_values=encoding.pixel_values)
         ...         mlm_logits = outputs.logits[0]  # shape (seq_len, vocab_size)
         ...         # only take into account text features (minus CLS and SEP token)
         ...         mlm_logits = mlm_logits[1 : input_ids.shape[1] - 1, :]
@@ -969,7 +969,8 @@ class ViltForMaskedLM(ViltPreTrainedModel):
 
         >>> selected_token = ""
         >>> encoded = processor.tokenizer(inferred_token)
-        >>> processor.decode(encoded.input_ids[0], skip_special_tokens=True)
+        >>> output = processor.decode(encoded.input_ids[0], skip_special_tokens=True)
+        >>> print(output)
         a bunch of cats laying on a couch.
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1215,12 +1216,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
         >>> model = ViltForImageAndTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
 
-        >>> # prepare inputs
-        >>> encoding = processor(image, text, return_tensors="pt")
-
         >>> # forward pass
         >>> scores = dict()
         >>> for text in texts:
+        ...     # prepare inputs
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, :].item()

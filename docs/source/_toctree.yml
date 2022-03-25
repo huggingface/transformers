@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -56,6 +56,12 @@
       title: Summarization
     - local: tasks/multiple_choice
       title: Multiple choice
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
+    - local: tasks/image_classification
+      title: Image classification
     title: Fine-tune for downstream tasks
   - local: run_scripts
     title: Train with a script
@@ -188,6 +194,8 @@
       title: DeBERTa
     - local: model_doc/deberta-v2
       title: DeBERTa-v2
+    - local: model_doc/decision_transformer
+      title: Decision Transformer
     - local: model_doc/deit
       title: DeiT
     - local: model_doc/detr
@@ -212,6 +220,8 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/glpn
+      title: GLPN
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/ibert
@@ -288,6 +298,8 @@
       title: Reformer
     - local: model_doc/rembert
       title: RemBERT
+    - local: model_doc/resnet
+      title: ResNet
     - local: model_doc/retribert
       title: RetriBERT
     - local: model_doc/roberta
@@ -326,6 +338,8 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/van
+      title: VAN
     - local: model_doc/vilt
       title: ViLT
     - local: model_doc/vision-encoder-decoder

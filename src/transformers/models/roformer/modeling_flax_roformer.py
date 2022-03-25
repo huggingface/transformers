@@ -25,7 +25,6 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxMaskedLMOutput,
@@ -35,7 +34,7 @@ from ...modeling_flax_outputs import (
     FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_roformer import RoFormerConfig
 
 
@@ -124,7 +123,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -594,12 +593,13 @@ class FlaxRoFormerClassificationHead(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
+        self.activation = ACT2FN[self.config.hidden_act]
 
     def __call__(self, hidden_states, deterministic=True):
         hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.dense(hidden_states)
-        hidden_states = nn.tanh(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states

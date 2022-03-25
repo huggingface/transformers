@@ -12,15 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Train with a script
 
-Along with the 🤗 Transformers [notebooks](./noteboks/README), there are also example scripts demonstrating how to train a model for a task with [PyTorch](https://github.com/huggingface/transformers/tree/master/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/master/examples/tensorflow), or [JAX/Flax](https://github.com/huggingface/transformers/tree/master/examples/flax).
+Along with the 🤗 Transformers [notebooks](./noteboks/README), there are also example scripts demonstrating how to train a model for a task with [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), or [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
-You will also find scripts we've used in our [research projects](https://github.com/huggingface/transformers/tree/master/examples/research_projects) and [legacy examples](https://github.com/huggingface/transformers/tree/master/examples/legacy) which are mostly community contributed. These scripts are not actively maintained and require a specific version of 🤗 Transformers that will most likely be incompatible with the latest version of the library.
+You will also find scripts we've used in our [research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects) and [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy) which are mostly community contributed. These scripts are not actively maintained and require a specific version of 🤗 Transformers that will most likely be incompatible with the latest version of the library.
 
 The example scripts are not expected to work out-of-the-box on every problem, and you may need to adapt the script to the problem you're trying to solve. To help you with this, most of the scripts fully expose how data is preprocessed, allowing you to edit it as necessary for your use case.
 
 For any feature you'd like to implement in an example script, please discuss it on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) before submitting a Pull Request. While we welcome bug fixes, it is unlikely we will merge a Pull Request that adds more functionality at the cost of readability.
 
-This guide will show you how to run an example summarization training script in [PyTorch](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization) and [TensorFlow](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/summarization). All examples are expected to work with both frameworks unless otherwise specified.
+This guide will show you how to run an example summarization training script in [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). All examples are expected to work with both frameworks unless otherwise specified.
 
 ## Setup
 
@@ -81,6 +81,8 @@ pip install -r requirements.txt
 
 ## Run a script
 
+<frameworkcontent>
+<pt>
 The example script downloads and preprocesses a dataset from the 🤗 [Datasets](https://huggingface.co/docs/datasets/) library. Then the script fine-tunes a dataset with the [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) on an architecture that supports summarization. The following example shows how to fine-tune [T5-small](https://huggingface.co/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) dataset. The T5 model requires an additional `source_prefix` argument due to how it was trained. This prompt lets T5 know this is a summarization task.
 
 ```bash
@@ -96,7 +98,12 @@ python examples/pytorch/summarization/run_summarization.py \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
     --predict_with_generate
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+The example script downloads and preprocesses a dataset from the 🤗 [Datasets](https://huggingface.co/docs/datasets/) library. Then the script fine-tunes a dataset using Keras on an architecture that supports summarization. The following example shows how to fine-tune [T5-small](https://huggingface.co/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) dataset. The T5 model requires an additional `source_prefix` argument due to how it was trained. This prompt lets T5 know this is a summarization task.
+
+```bash
 python examples/tensorflow/summarization/run_summarization.py  \
     --model_name_or_path t5-small \
     --dataset_name cnn_dailymail \
@@ -108,6 +115,8 @@ python examples/tensorflow/summarization/run_summarization.py  \
     --do_train \
     --do_eval
 ```
+</tf>
+</frameworkcontent>
 
 ## Distributed training and mixed precision
 
@@ -137,9 +146,9 @@ TensorFlow scripts utilize a [`MirroredStrategy`](https://www.tensorflow.org/gui
 
 ## Run a script on a TPU
 
+<frameworkcontent>
+<pt>
 Tensor Processing Units (TPUs) are specifically designed to accelerate performance. PyTorch supports TPUs with the [XLA](https://www.tensorflow.org/xla) deep learning compiler (see [here](https://github.com/pytorch/xla/blob/master/README.md) for more details). To use a TPU, launch the `xla_spawn.py` script and use the `num_cores` argument to set the number of TPU cores you want to use.
-
-TensorFlow scripts utilize a [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) for training on TPUs. To use a TPU, pass the name of the TPU resource to the `tpu` argument.
 
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -155,7 +164,12 @@ python xla_spawn.py --num_cores 8 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
     --predict_with_generate
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+Tensor Processing Units (TPUs) are specifically designed to accelerate performance. TensorFlow scripts utilize a [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) for training on TPUs. To use a TPU, pass the name of the TPU resource to the `tpu` argument.
+
+```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
     --model_name_or_path t5-small \
@@ -168,6 +182,8 @@ python run_summarization.py  \
     --do_train \
     --do_eval
 ```
+</tf>
+</frameworkcontent>
 
 ## Run a script with 🤗 Accelerate
 

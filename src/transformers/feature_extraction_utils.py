@@ -27,16 +27,13 @@ import numpy as np
 from requests import HTTPError
 
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     FEATURE_EXTRACTOR_NAME,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_torch_device,
     cached_path,
     copy_func,
     hf_bucket_url,
@@ -45,9 +42,10 @@ from .file_utils import (
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    logging,
     torch_required,
 )
-from .utils import logging
+from .utils.generic import _is_jax, _is_numpy, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -119,9 +117,9 @@ class BatchFeature(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (`str` or [`~file_utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum
-                [`~file_utils.TensorType`]. If `None`, no modification is done.
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
         """
         if tensor_type is None:
             return self
@@ -261,7 +259,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -330,7 +328,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -429,10 +427,14 @@ class FeatureExtractionMixin(PushToHubMixin):
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
             )
-        except HTTPError:
+        except HTTPError as err:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
+                f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n{err}"
+            )
+        except ValueError:
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
                 f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )

@@ -16,9 +16,8 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
-from .utils import logging
+from .utils import cached_property, is_tf_available, logging, tf_required
 
 
 logger = logging.get_logger(__name__)
@@ -46,16 +45,16 @@ class TFTrainingArguments(TrainingArguments):
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 

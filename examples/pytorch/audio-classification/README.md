@@ -19,9 +19,9 @@ limitations under the License.
 The following examples showcase how to fine-tune `Wav2Vec2` for audio classification using PyTorch.
 
 Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, 
-*e.g.* [Wav2Vec2](https://huggingface.co/transformers/master/model_doc/wav2vec2.html), 
-[HuBERT](https://huggingface.co/transformers/master/model_doc/hubert.html), 
-[XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html), have shown to require only 
+*e.g.* [Wav2Vec2](https://huggingface.co/transformers/main/model_doc/wav2vec2.html), 
+[HuBERT](https://huggingface.co/transformers/main/model_doc/hubert.html), 
+[XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html), have shown to require only 
 very little annotated data to yield good performance on speech classification datasets.
 
 ## Single-GPU 

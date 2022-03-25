@@ -36,9 +36,9 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 from transformers.testing_utils import PASS, USER, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))

@@ -25,7 +25,6 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPooling,
@@ -41,7 +40,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -182,7 +181,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
 """
 
@@ -2124,7 +2123,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).astype("i4")
             logits_mask = jnp.expand_dims(logits_mask, axis=2)
-            logits_mask = jax.ops.index_update(logits_mask, jax.ops.index[:, 0], False)
+            logits_mask = logits_mask.at[:, 0].set(False)
 
         # init input tensors if not passed
         if token_type_ids is None:

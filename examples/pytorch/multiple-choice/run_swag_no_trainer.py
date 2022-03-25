@@ -50,7 +50,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import PaddingStrategy, get_full_repo_name
+from transformers.utils import PaddingStrategy, get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ class DataCollatorForMultipleChoice:
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 

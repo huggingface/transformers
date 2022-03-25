@@ -25,7 +25,6 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from .file_utils import ModelOutput
 from .generation_flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
@@ -35,7 +34,7 @@ from .generation_flax_logits_process import (
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
 )
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)
@@ -242,7 +241,7 @@ class FlaxGenerationMixin:
                 should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
 
         Return:
-            [`~file_utils.ModelOutput`].
+            [`~utils.ModelOutput`].
 
         Examples:
 
@@ -560,10 +559,10 @@ class FlaxGenerationMixin:
 
             # apply min_length, ...
             logits = logits_processor(state.sequences, logits, state.cur_len)
-            # apply top_k, top_k, temperature
+            # apply top_p, top_k, temperature
             logits = logits_warper(logits, logits, state.cur_len)
 
-            next_token = jax.random.categorical(prng_key, model_outputs.logits[:, -1], axis=-1)
+            next_token = jax.random.categorical(prng_key, logits, axis=-1)
 
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished

@@ -28,9 +28,15 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("glpn", "GLPNModel"),
         ("maskformer", "MaskFormerModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
+        ("van", "VanModel"),
+        ("resnet", "ResNetModel"),
         ("yoso", "YosoModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
@@ -294,6 +300,8 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ),
         ("swin", "SwinForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
+        ("van", "VanForImageClassification"),
+        ("resnet", "ResNetForImageClassification"),
         ("poolformer", "PoolFormerForImageClassification"),
     ]
 )

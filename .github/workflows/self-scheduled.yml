@@ -76,7 +76,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Run all non-slow tests on GPU
+      - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
@@ -208,6 +208,14 @@ jobs:
       - name: Update clone
         working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Re-compile DeepSpeed
+        working-directory: /workspace
+        run: |
+          pip install deepspeed # installs the deps correctly
+          rm -rf DeepSpeed
+          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
