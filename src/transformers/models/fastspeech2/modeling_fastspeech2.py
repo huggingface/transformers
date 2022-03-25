@@ -24,18 +24,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...file_utils import (
+from ...file_utils import (  # add_code_sample_docstrings,; add_start_docstrings,; add_start_docstrings_to_model_forward,; replace_return_docstrings,
     ModelOutput,
-    # add_code_sample_docstrings,
-    # add_start_docstrings,
-    # add_start_docstrings_to_model_forward,
-    # replace_return_docstrings,
 )
-from ...modeling_utils import (
+from ...modeling_utils import (  # apply_chunking_to_forward,; find_pruneable_heads_and_indices,; prune_linear_layer,
     PreTrainedModel,
-    # apply_chunking_to_forward,
-    # find_pruneable_heads_and_indices,
-    # prune_linear_layer,
 )
 from ...utils import logging
 from .configuration_fastspeech2 import FastSpeech2Config
@@ -364,30 +357,30 @@ class LengthRegulator(nn.Module):
 
 
 class VariancePredictor(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super().__init__()
         self.conv1 = nn.Sequential(
             nn.Conv1d(
-                args.encoder_embed_dim,
-                args.var_pred_hidden_dim,
-                kernel_size=args.var_pred_kernel_size,
-                padding=(args.var_pred_kernel_size - 1) // 2,
+                config.encoder_embed_dim,
+                config.var_pred_hidden_dim,
+                kernel_size=config.var_pred_kernel_size,
+                padding=(config.var_pred_kernel_size - 1) // 2,
             ),
             nn.ReLU(),
         )
-        self.ln1 = nn.LayerNorm(args.var_pred_hidden_dim)
-        self.dropout_module = nn.Dropout(args.var_pred_dropout)
+        self.ln1 = nn.LayerNorm(config.var_pred_hidden_dim)
+        self.dropout_module = nn.Dropout(config.var_pred_dropout)
         self.conv2 = nn.Sequential(
             nn.Conv1d(
-                args.var_pred_hidden_dim,
-                args.var_pred_hidden_dim,
-                kernel_size=args.var_pred_kernel_size,
+                config.var_pred_hidden_dim,
+                config.var_pred_hidden_dim,
+                kernel_size=config.var_pred_kernel_size,
                 padding=1,
             ),
             nn.ReLU(),
         )
-        self.ln2 = nn.LayerNorm(args.var_pred_hidden_dim)
-        self.proj = nn.Linear(args.var_pred_hidden_dim, 1)
+        self.ln2 = nn.LayerNorm(config.var_pred_hidden_dim)
+        self.proj = nn.Linear(config.var_pred_hidden_dim, 1)
 
     def forward(self, x):
         # Input: B x T x C; Output: B x T
@@ -399,19 +392,19 @@ class VariancePredictor(nn.Module):
 
 
 class VarianceAdaptor(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super().__init__()
-        self.args = args
+        self.config = config
         self.length_regulator = LengthRegulator()
-        self.duration_predictor = VariancePredictor(args)
-        self.pitch_predictor = VariancePredictor(args)
-        self.energy_predictor = VariancePredictor(args)
+        self.duration_predictor = VariancePredictor(config)
+        self.pitch_predictor = VariancePredictor(config)
+        self.energy_predictor = VariancePredictor(config)
 
-        n_bins, steps = self.args.var_pred_n_bins, self.args.var_pred_n_bins - 1
-        self.pitch_bins = torch.linspace(args.pitch_min, args.pitch_max, steps)
-        self.embed_pitch = nn.Embedding(n_bins, args.encoder_embed_dim)
-        self.energy_bins = torch.linspace(args.energy_min, args.energy_max, steps)
-        self.embed_energy = nn.Embedding(n_bins, args.encoder_embed_dim)
+        n_bins, steps = self.config.var_pred_n_bins, self.config.var_pred_n_bins - 1
+        self.pitch_bins = torch.linspace(config.pitch_min, config.pitch_max, steps)
+        self.embed_pitch = nn.Embedding(n_bins, config.encoder_embed_dim)
+        self.energy_bins = torch.linspace(config.energy_min, config.energy_max, steps)
+        self.embed_energy = nn.Embedding(n_bins, config.encoder_embed_dim)
 
     def get_pitch_emb(self, x, tgt=None, factor=1.0):
         out = self.pitch_predictor(x)
@@ -492,71 +485,73 @@ class Postnet(nn.Module):
 
 
 class FastSpeech2Encoder(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super().__init__()
-        self.args = args
-        self.padding_idx = args.pad_token_id
-        self.n_frames_per_step = args.n_frames_per_step
-        self.out_dim = args.output_frame_dim * args.n_frames_per_step
+        self.config = config
+        self.padding_idx = config.pad_token_id
+        self.n_frames_per_step = config.n_frames_per_step
+        self.out_dim = config.output_frame_dim * config.n_frames_per_step
 
         self.spk_emb_proj = None
         self.embed_speaker = None
-        if args.num_speakers > 1:
-            self.embed_speaker = nn.Embedding(args.num_speakers, args.speaker_embed_dim)
-            self.spk_emb_proj = nn.Linear(args.encoder_embed_dim + args.speaker_embed_dim, args.encoder_embed_dim)
+        if config.num_speakers > 1:
+            self.embed_speaker = nn.Embedding(config.num_speakers, config.speaker_embed_dim)
+            self.spk_emb_proj = nn.Linear(
+                config.encoder_embed_dim + config.speaker_embed_dim, config.encoder_embed_dim
+            )
 
-        self.dropout_module = nn.Dropout(args.dropout)
-        self.embed_tokens = nn.Embedding(args.vocab_size, args.encoder_embed_dim, padding_idx=self.padding_idx)
+        self.dropout_module = nn.Dropout(config.dropout)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.encoder_embed_dim, padding_idx=self.padding_idx)
 
         self.embed_positions = FastSpeech2PositionalEmbedding(
-            args.max_source_positions, args.encoder_embed_dim, self.padding_idx
+            config.max_source_positions, config.encoder_embed_dim, self.padding_idx
         )
         self.pos_emb_alpha = nn.Parameter(torch.ones(1))
         self.dec_pos_emb_alpha = nn.Parameter(torch.ones(1))
 
         self.encoder_fft_layers = nn.ModuleList(
             FFTLayer(
-                args.encoder_embed_dim,
-                args.encoder_attention_heads,
-                args.fft_hidden_dim,
-                args.fft_kernel_size,
-                dropout=args.dropout,
-                attention_dropout=args.attention_dropout,
+                config.encoder_embed_dim,
+                config.encoder_attention_heads,
+                config.fft_hidden_dim,
+                config.fft_kernel_size,
+                dropout=config.dropout,
+                attention_dropout=config.attention_dropout,
             )
-            for _ in range(args.encoder_layers)
+            for _ in range(config.encoder_layers)
         )
 
-        self.var_adaptor = VarianceAdaptor(args)
+        self.var_adaptor = VarianceAdaptor(config)
 
         self.decoder_fft_layers = nn.ModuleList(
             FFTLayer(
-                args.decoder_embed_dim,
-                args.decoder_attention_heads,
-                args.fft_hidden_dim,
-                args.fft_kernel_size,
-                dropout=args.dropout,
-                attention_dropout=args.attention_dropout,
+                config.decoder_embed_dim,
+                config.decoder_attention_heads,
+                config.fft_hidden_dim,
+                config.fft_kernel_size,
+                dropout=config.dropout,
+                attention_dropout=config.attention_dropout,
             )
-            for _ in range(args.decoder_layers)
+            for _ in range(config.decoder_layers)
         )
 
-        self.out_proj = nn.Linear(args.decoder_embed_dim, self.out_dim)
+        self.out_proj = nn.Linear(config.decoder_embed_dim, self.out_dim)
 
         self.postnet = None
-        if args.add_postnet:
+        if config.add_postnet:
             self.postnet = Postnet(
                 self.out_dim,
-                args.postnet_conv_dim,
-                args.postnet_conv_kernel_size,
-                args.postnet_layers,
-                args.postnet_dropout,
+                config.postnet_conv_dim,
+                config.postnet_conv_kernel_size,
+                config.postnet_layers,
+                config.postnet_dropout,
             )
 
-        if args.mean:
+        if config.mean:
             self.register_buffer("mean", torch.zeros(self.out_dim))
         else:
             self.mean = None
-        if args.std:
+        if config.std:
             self.register_buffer("std", torch.zeros(self.out_dim))
         else:
             self.std = None
@@ -622,20 +617,12 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
+        # NOTE: followed initialization scheme in fairseq
+        if isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Conv1d):
+        elif isinstance(module, nn.Conv1d):
             nn.init.xavier_uniform_(module.weight, nn.init.calculate_gain("relu"))
 
     def _set_gradient_checkpointing(self, module, value=False):
