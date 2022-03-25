@@ -1647,7 +1647,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         preds_probs = class_queries_logits
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
-           # downsample the target mask, save memory
+            # downsample the target mask, save memory
             target_mask = nn.functional.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
@@ -1721,6 +1721,31 @@ class MaskFormerLoss(nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
+    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+
+    def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
+        # get the maximum size in the batch
+        max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
+        batch_size = len(tensors)
+        # compute finel size
+        batch_shape = [batch_size] + max_size
+        b, _, h, w = batch_shape
+        # get metadata
+        dtype = tensors[0].dtype
+        device = tensors[0].device
+        padded_tensors = torch.zeros(batch_shape, dtype=dtype, device=device)
+        padding_masks = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        for tensor, padded_tensor, padding_mask in zip(tensors, padded_tensors, padding_masks):
+            padded_tensor[: tensor.shape[0], : tensor.shape[1], : tensor.shape[2]].copy_(tensor)
+            padding_mask[: tensor.shape[1], : tensor.shape[2]] = False
+
+        return padded_tensors, padding_masks
+
     def loss_labels(
         self, class_queries_logits: Tensor, class_labels: Tensor, indices: Tuple[np.array]
     ) -> Dict[str, Tensor]:
@@ -1781,7 +1806,8 @@ class MaskFormerLoss(nn.Module):
         tgt_idx = self._get_targets_permutation_indices(indices)
         pred_masks = masks_queries_logits  # shape [BATCH, NUM_QUERIES, H, W]
         pred_masks = pred_masks[src_idx]  # shape [BATCH * NUM_QUERIES, H, W]
-        target_masks = mask_labels  # shape [BATCH, NUM_QUERIES, H, W]
+        # shape [BATCH, NUM_QUERIES, H, W]
+        target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
         target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
         # upsample predictions to the target size, we have to add one dim to use interpolate
         pred_masks = nn.functional.interpolate(
@@ -1790,7 +1816,6 @@ class MaskFormerLoss(nn.Module):
         pred_masks = pred_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(pred_masks.shape)
         losses = {
             "loss_mask": sigmoid_focal_loss(pred_masks, target_masks, num_masks),
             "loss_dice": dice_loss(pred_masks, target_masks, num_masks),
@@ -1847,7 +1872,7 @@ class MaskFormerLoss(nn.Module):
         indices = self.matcher(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
 
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: Number = self.get_num_masks(class_labels, device=class_labels.device)
+        num_masks: Number = self.get_num_masks(class_labels, device=class_labels[0].device)
 
         # Compute all the requested losses
         losses: Dict[str, Tensor] = {
@@ -1868,8 +1893,7 @@ class MaskFormerLoss(nn.Module):
 
     def get_num_masks(self, class_labels: torch.Tensor, device: torch.device) -> torch.Tensor:
         # Compute the average number of target masks accross the batch, for normalization purposes
-        batch_size, num_classes = class_labels.shape
-        num_masks = batch_size * num_classes
+        num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         return num_masks_pt
 

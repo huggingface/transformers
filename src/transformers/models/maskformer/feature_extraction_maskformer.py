@@ -91,14 +91,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         image_std=None,
         ignore_index=None,
         reduce_labels=False,
-        num_labels=None,
         **kwargs
     ):
         super().__init__(**kwargs)
-        if num_labels is None:
-            raise ValueError(
-                "`num_labels` must be set since MaskFormer takes as input binary masks of size `(batch, num_labels, height, width)."
-            )
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
@@ -109,7 +104,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
-        self.num_labels = num_labels
 
     def _resize_with_size_divisibility(self, image, size, target=None, max_size=None):
         """
@@ -216,11 +210,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **labels** -- Optional list of labels. Each element is a dictionary and contains the following keys:
-                - **masks** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
-                model (when `annotations` are provided).
-                - **classes** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
-                `annotations` are provided).
+            - **mask_labels** -- Optional a list of mask labels of shape `(labels, height, width)` to be fed to a model
+              (when `annotations` are provided).
+            - **class_labels** -- Optional a list of class labels of shape `(labels, num_labels)` to be fed to a model
+              (when `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+              `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         # Input type checking for clearer error
 
@@ -289,7 +283,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             images,
             segmentation_maps,
             pad_and_return_pixel_mask,
-            num_labels=self.num_labels,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             return_tensors=return_tensors,
         )
@@ -344,7 +337,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         pixel_values_list: List["np.ndarray"],
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
-        num_labels: Optional[int] = None,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
@@ -367,9 +359,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            num_labels (`int`, *optional*):
-                The number of labels in the dataset.
-
             instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
                 If passed, we treat `segmentation_maps` as an instance segmentation map where each pixel represents an
                 instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
@@ -385,10 +374,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
-              model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
-              `annotations` are provided).
+            - **mask_labels** -- Optional a list of mask labels of shape `(labels, height, width)` to be fed to a model
+              (when `annotations` are provided).
+            - **class_labels** -- Optional a list of class labels of shape `(labels, num_labels)` to be fed to a model
+              (when `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+              `mask_labels[i][j]` if `class_labels[i][j]`.
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
@@ -396,9 +386,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         annotations = None
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
-            converted_segmentation_maps = map(
-                self.convert_segmentation_map_to_binary_masks, segmentation_maps
-            )
+            converted_segmentation_maps = map(self.convert_segmentation_map_to_binary_masks, segmentation_maps)
 
             annotations = []
             for mask, classes in converted_segmentation_maps:
@@ -433,17 +421,15 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # return as BatchFeature
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-        # we cannot batch them since they don't share a common class size 
+        # we cannot batch them since they don't share a common class size
         if annotations:
-            # force to torch, maskformer only works for torch
             for label in annotations:
-                masks = torch.from_numpy(label["masks"])
-                classes = torch.from_numpy(label["classes"])
-                mask_labels.append(masks)
-                class_labels.append(classes)
+                mask_labels.append(label["masks"])
+                class_labels.append(label["classes"])
+
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
-        
+
         return encoded_inputs
 
     def post_process_segmentation(
