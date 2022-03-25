@@ -49,7 +49,7 @@ class BaseModelOutput(ModelOutput):
 @dataclass
 class BaseModelOutputWithNoAttention(ModelOutput):
     """
-    Base class for model's outputs, with potential hidden states and attentions.
+    Base class for model's outputs, with potential hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -95,7 +95,7 @@ class BaseModelOutputWithPooling(ModelOutput):
 
 
 @dataclass
-class BaseModelOutputWithNoAttentionAndWithPooling(ModelOutput):
+class BaseModelOutputWithPoolingAndNoAttention(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
