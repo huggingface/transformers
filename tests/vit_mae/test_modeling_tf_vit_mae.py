@@ -375,6 +375,8 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
+        pt_noise = torch.from_numpy(noise).to(device=torch_device)
+        tf_noise = tf.constant(noise)
 
         def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
 
@@ -395,10 +397,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                     Currently unused, but in the future, we could use this information to make the error message clearer
                     by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
             """
-
-            # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
-            if names == "past_key_values":
-                return
 
             # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
             if type(tf_outputs) in [tuple, list]:
@@ -454,8 +452,8 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # Original test: check without `labels`
             with torch.no_grad():
-                pt_outputs = pt_model(**pt_inputs_dict, noise=torch.from_numpy(noise))
-            tf_outputs = tf_model(tf_inputs_dict, noise=noise)
+                pt_outputs = pt_model(**pt_inputs_dict, noise=pt_noise)
+            tf_outputs = tf_model(tf_inputs_dict, noise=tf_noise)
 
             tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
             pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
@@ -471,26 +469,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             if self.has_attentions:
                 config.output_attentions = True
-
-            for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
-                if k in inputs_dict:
-                    attention_mask = inputs_dict[k]
-                    # make sure no all 0s attention masks - to avoid failure at this moment.
-                    # TODO: remove this line once the TODO below is implemented.
-                    attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
-                    # Here we make the first sequence with all 0s as attention mask.
-                    # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
-                    # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
-                    # TODO: enable this block once the large negative values thing is cleaned up.
-                    # (see https://github.com/huggingface/transformers/issues/14859)
-                    # attention_mask = tf.concat(
-                    #     [
-                    #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
-                    #         tf.cast(attention_mask[1:], dtype=tf.int32)
-                    #     ],
-                    #     axis=0
-                    # )
-                    inputs_dict[k] = attention_mask
 
             pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)

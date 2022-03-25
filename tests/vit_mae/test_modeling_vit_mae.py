@@ -319,6 +319,8 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # overwrite from common since ViTMAEForPretraining has random masking, we need to fix the noise
+    # to generate masks during test
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
         import numpy as np
@@ -332,6 +334,8 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
+        pt_noise = torch.from_numpy(noise).to(device=torch_device)
+        tf_noise = tf.constant(noise)
 
         def prepare_tf_inputs_from_pt_inputs(pt_inputs_dict):
 
@@ -352,10 +356,6 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
                     Currently unused, but in the future, we could use this information to make the error message clearer
                     by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
             """
-
-            # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
-            if names == "past_key_values":
-                return
 
             # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
             if type(tf_outputs) in [tuple, list]:
@@ -411,8 +411,8 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
             # Original test: check without `labels`
             with torch.no_grad():
-                pt_outputs = pt_model(**pt_inputs_dict, noise=torch.from_numpy(noise))
-            tf_outputs = tf_model(tf_inputs_dict, noise=noise)
+                pt_outputs = pt_model(**pt_inputs_dict, noise=pt_noise)
+            tf_outputs = tf_model(tf_inputs_dict, noise=tf_noise)
 
             tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
             pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
@@ -425,33 +425,9 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
 
-            if not hasattr(transformers, tf_model_class_name):
-                # transformers does not have TF version yet
-                return
-
             # Output all for aggressive testing
             config.output_hidden_states = True
             config.output_attentions = self.has_attentions
-
-            for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
-                if k in inputs_dict:
-                    attention_mask = inputs_dict[k]
-                    # make sure no all 0s attention masks - to avoid failure at this moment.
-                    # TODO: remove this line once the TODO below is implemented.
-                    attention_mask = torch.ones_like(attention_mask, dtype=torch.int32)
-                    # Here we make the first sequence with all 0s as attention mask.
-                    # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
-                    # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
-                    # TODO: enable this block once the large negative values thing is cleaned up.
-                    # (see https://github.com/huggingface/transformers/issues/14859)
-                    # attention_mask = torch.cat(
-                    #     [
-                    #         torch.zeros_like(attention_mask[:1], dtype=torch.int32),
-                    #         attention_mask[1:].type(dtype=torch.int32)
-                    #     ],
-                    #     dim=0
-                    # )
-                    inputs_dict[k] = attention_mask
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
