@@ -22,8 +22,7 @@ import pickle
 import re
 import warnings
 from collections import OrderedDict
-from dataclasses import fields, is_dataclass
-from typing import Dict, List, Optional, Union, get_type_hints
+from typing import Dict, List, Optional, Union
 
 import h5py
 import numpy as np
