@@ -425,8 +425,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     ((0, 0), (0, height - masks.shape[1]), (0, width - masks.shape[2])),
                     constant_values=self.ignore_index,
                 )
-                # mask_labels.append(masks)
-                # class_labels.append(annotation["labels"])
             # create pixel mask
             mask = np.zeros((height, width), dtype=np.int64)
             mask[: image.shape[1], : image.shape[2]] = True
@@ -437,10 +435,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         # we cannot batch them since they don't share a common class size 
         if annotations:
+            # force to torch, maskformer only works for torch
             for label in annotations:
-                label["masks"] = torch.from_numpy(label["masks"])
-                label["classes"] = torch.from_numpy(label["classes"])
-            encoded_inputs["labels"] = annotations
+                masks = torch.from_numpy(label["masks"])
+                classes = torch.from_numpy(label["classes"])
+                mask_labels.append(masks)
+                class_labels.append(classes)
+            encoded_inputs["mask_labels"] = mask_labels
+            encoded_inputs["class_labels"] = class_labels
         
         return encoded_inputs
 
