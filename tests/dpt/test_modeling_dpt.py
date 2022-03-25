@@ -296,9 +296,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
@@ -317,9 +314,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
-
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
