@@ -66,7 +66,7 @@ def global_version_update(version, patch=False):
         update_version_in_examples(version)
 
 
-def clean_master_ref_in_model_list():
+def clean_main_ref_in_model_list():
     """Replace the links from main doc tp stable doc in the model list of the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
@@ -124,7 +124,7 @@ def pre_release_work(patch=False):
     global_version_update(version, patch=patch)
     if not patch:
         print("Cleaning main README")
-        clean_master_ref_in_model_list()
+        clean_main_ref_in_model_list()
 
 
 def post_release_work():
