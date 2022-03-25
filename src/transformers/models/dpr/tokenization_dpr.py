@@ -144,7 +144,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (`str` or `List[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
@@ -174,7 +174,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
                 If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
                 is required by one of the truncation/padding parameters. If the model has no specific maximum input
                 length (like XLNet) truncation/padding to a maximum length will be deactivated.
-        return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

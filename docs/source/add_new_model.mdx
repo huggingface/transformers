@@ -381,7 +381,7 @@ important. Here is some advice is to make your debugging environment as efficien
   original code so that you can directly input the ids instead of an input string.
 - Make sure that the model in your debugging setup is **not** in training mode, which often causes the model to yield
   random outputs due to multiple dropout layers in the model. Make sure that the forward pass in your debugging
-  environment is **deterministic** so that the dropout layers are not used. Or use *transformers.file_utils.set_seed*
+  environment is **deterministic** so that the dropout layers are not used. Or use *transformers.utils.set_seed*
   if the old and new implementations are in the same framework.
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
