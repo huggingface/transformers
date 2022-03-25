@@ -925,6 +925,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.lxmert = TFLxmertMainLayer(config, name="lxmert")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -932,7 +933,6 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         output_type=TFLxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1262,9 +1262,9 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
