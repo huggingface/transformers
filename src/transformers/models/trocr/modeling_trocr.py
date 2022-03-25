@@ -931,7 +931,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> generated_text
         'industry, " Mr. Brown commented icily. " Let us have a'
-
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
