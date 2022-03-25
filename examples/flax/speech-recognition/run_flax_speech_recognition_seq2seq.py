@@ -23,7 +23,6 @@ import os
 import sys
 import time
 from dataclasses import field
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -217,6 +216,14 @@ class DataTrainingArguments:
         default=True,
         metadata={"help": "Whether the target text should be lower cased."},
     )
+    wandb_project: str = field(
+        default="flax-speech-recognition-seq2seq",
+        metadata={"help": "The name of the wandb project."},
+    )
+    wandb_job_type: str = field(
+        default="Seq2Seq",
+        metadata={"help": "The name of the wandb job type."},
+    )
 
 
 class TrainState(train_state.TrainState):
@@ -355,7 +362,56 @@ def create_learning_rate_fn(
     return schedule_fn
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+class FlaxLengthGroupedSampler:
+    """
+    Sampler that samples indices in a way that groups together features of the dataset of roughly the same length while
+    keeping a bit of randomness (optional).
+    Args:
+        mega_batch_mult (:obj:`int`, `optional`):
+            Default for mega_batch_mult: 50 or the number to get 4 megabatches, whichever is smaller.
+    """
+    mega_batch_mult: Optional[int] = None
+
+    def __call__(self, dataset, batch_size: int, rng: Optional[List[int]] = None) -> np.ndarray:
+        """
+        Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of similar
+        lengths. To do this, the indices are:
+
+        - randomly permuted if a JAX rng is specified
+        - grouped in mega-batches of size `mega_batch_mult * batch_size`
+        - sorted by length in each mega-batch
+
+        The result is the concatenation of all mega-batches, with the batch of `batch_size` containing the element of
+        maximum length placed first, so that an OOM happens sooner rather than later.
+        """
+        lengths = dataset["input_length"]
+
+        if self.mega_batch_mult is None:
+            self.mega_batch_mult = min(len(lengths) // (batch_size * 4), 50)
+            # Just in case, for tiny datasets
+            if self.mega_batch_mult == 0:
+                self.mega_batch_mult = 1
+
+        # We need to use JAX for the random permutation as the PRNG key will be set based on the seed outside of the sampler.
+        num_samples = len(lengths)
+        indices = jax.random.permutation(rng, np.arange(num_samples)) if rng is not None else np.arange(num_samples)
+
+        megabatch_size = self.mega_batch_mult * batch_size
+        megabatches = [indices[i: i + megabatch_size].tolist() for i in range(0, len(lengths), megabatch_size)]
+        megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
+
+        # The rest is to get the biggest batch first.
+        # Since each megabatch is sorted by descending length, the longest element is the first
+        megabatch_maximums = [lengths[megabatch[0]] for megabatch in megabatches]
+        max_idx = np.argmax(megabatch_maximums).item()
+        # Switch to put the longest element in first position
+        megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
+
+        megabatches = [i for megabatch in megabatches for i in megabatch]
+
+        return generate_batch_splits(np.array(megabatches), batch_size)
+
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -409,8 +465,8 @@ def main():
     logger.info(f"JAX devices: {jax.device_count()}")
 
     # Set up wandb run
-    # if jax.process_index() == 0:
-    # wandb.init(project="flax-speech-recognition-seq2seq")
+    if jax.process_index() == 0:
+        wandb.init(project=data_args.wandb_project, job_type=data_args.wandb_job_type)
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
@@ -610,6 +666,8 @@ def main():
         pad_target_to_multiple_of=pad_target_to_multiple_of,
     )
 
+    data_sampler = FlaxLengthGroupedSampler()
+
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
     if has_tensorboard and jax.process_index() == 0:
@@ -648,8 +706,10 @@ def main():
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     batch_size_per_update = train_batch_size * gradient_accumulation_steps
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
-    steps_per_epoch = len(vectorized_datasets["train"]) // train_batch_size
+    num_train_samples = len(vectorized_datasets["train"])
+    steps_per_epoch = num_train_samples // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
+    num_eval_samples = len(vectorized_datasets["eval"])
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -687,7 +747,7 @@ def main():
     )
 
     # Gradient clipping -> need to alter depending on gradient accumulation
-    optim = optax.chain(optax.clip(training_args.max_grad_norm), adamw)
+    optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
 
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
@@ -827,10 +887,8 @@ def main():
         rng, input_rng = jax.random.split(rng)
         train_metrics = []
 
-        # Generate an epoch by shuffling sampling indices from the train dataset
-        num_train_samples = len(vectorized_datasets["train"])
-        train_samples_idx = jax.random.permutation(input_rng, np.arange(num_train_samples))
-        train_batch_idx = generate_batch_splits(train_samples_idx, batch_size_per_update)
+        # Generate an epoch by randomly shuffling sampling indices from the train dataset and grouping by length
+        train_batch_idx = data_sampler(vectorized_datasets['train'], batch_size_per_update, input_rng)
 
         # Gather the indexes for creating the batch and do a training step
         for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
@@ -861,9 +919,9 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        num_eval_samples = len(vectorized_datasets["eval"])
-        eval_samples_idx = jnp.arange(num_eval_samples)
-        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+        # Generate eval set by deterministically shuffling sampling indices from the eval dataset and grouping by length
+        eval_batch_idx = data_sampler(vectorized_datasets["eval"], batch_size_per_update)
+
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [vectorized_datasets["eval"][int(idx)] for idx in batch_idx]
             batch = data_collator(samples)
@@ -900,6 +958,7 @@ def main():
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
             write_eval_metric(summary_writer, eval_metrics, pred_str, cur_step)
+            wandb.log({f"eval_{k}": v for k, v in eval_metrics.items()})
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
