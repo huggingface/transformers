@@ -41,7 +41,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_utils import shard_checkpoint
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     PASS,
@@ -91,6 +90,7 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
+    from transformers.modeling_utils import shard_checkpoint
 
 if is_flax_available():
     import jax.numpy as jnp
