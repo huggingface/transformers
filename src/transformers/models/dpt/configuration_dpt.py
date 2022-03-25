@@ -122,7 +122,6 @@ class DPTConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=384,
         patch_size=16,
         num_channels=3,

@@ -310,6 +310,7 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
+# copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput
 class DPTViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -323,7 +324,6 @@ class DPTViTLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -353,6 +353,7 @@ class DPTViTLayer(nn.Module):
         return outputs
 
 
+# copied from transformers.models.vit.modeling_vit.ViTEncoder with ViTConfig -> DPTConfig, ViTLayer->DPTViTLayer
 class DPTViTEncoder(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
@@ -360,7 +361,6 @@ class DPTViTEncoder(nn.Module):
         self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEncoder.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
