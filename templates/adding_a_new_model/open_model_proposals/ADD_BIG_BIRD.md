@@ -532,7 +532,7 @@ to make your debugging environment as efficient as possible.
     due to multiple dropout layers in the model. Make sure that the
     forward pass in your debugging environment is **deterministic** so
     that the dropout layers are not used. Or use
-    `transformers.file_utils.set_seed` if the old and new
+    `transformers.utils.set_seed` if the old and new
     implementations are in the same framework.
 
 #### (Important) More details on how to create a debugging environment for BigBird 
