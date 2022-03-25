@@ -284,6 +284,7 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
