@@ -413,6 +413,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     ((0, 0), (0, height - masks.shape[1]), (0, width - masks.shape[2])),
                     constant_values=self.ignore_index,
                 )
+                annotation["masks"] = masks
             # create pixel mask
             mask = np.zeros((height, width), dtype=np.int64)
             mask[: image.shape[1], : image.shape[2]] = True

@@ -324,27 +324,20 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
                 self.assertTrue((pixel_values.shape[-2] % size_divisibility) == 0)
 
     def test_call_with_segmentation_maps(self):
-        batch_size = self.feature_extract_tester.batch_size
-
         def common(is_instance_map=False, segmentation_type=None):
             inputs = self.comm_get_feature_extractor_inputs(
                 with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
             )
 
-            # check the batch_size
-            for el in inputs.values():
-                self.assertEqual(el.shape[0], batch_size)
-
-            pixel_values = inputs["pixel_values"]
             mask_labels = inputs["mask_labels"]
-
-            self.assertTrue(mask_labels.max().item() <= self.feature_extract_tester.num_labels)
             class_labels = inputs["class_labels"]
+            pixel_values = inputs["pixel_values"]
 
-            self.assertEqual(pixel_values.shape[-2], mask_labels.shape[-2])
-            self.assertEqual(pixel_values.shape[-1], mask_labels.shape[-1])
-            self.assertEqual(mask_labels.shape[1], class_labels.shape[1])
-            self.assertEqual(mask_labels.shape[1], self.feature_extract_tester.num_labels)
+            # check the batch_size
+            for mask_label, class_label in zip(mask_labels, class_labels):
+                self.assertEqual(mask_label.shape[0], class_label.shape[0])
+                # this ensure padding has happened
+                self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
 
         common()
         common(is_instance_map=True)
