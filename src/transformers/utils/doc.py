@@ -156,12 +156,28 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
+    >>> inputs = tokenizer(
+    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt"
+    ... )
 
-    >>> outputs = model(**inputs, labels=labels)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_token_class_ids = logits.argmax(-1)
+
+    >>> # Note that tokens are classified rather then input words which means that
+    >>> # there might be more predicted token classes than words.
+    >>> # Multiple token classes might account for the same word
+    >>> predicted_tokens_classes = [model.config.id2label[t.item()] for t in predicted_token_class_ids[0]]
+    >>> predicted_tokens_classes
+    {expected_output}
+    ```
+
+    ```python
+    >>> labels = predicted_token_class_ids
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
     ```
 """
 
@@ -172,28 +188,31 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> from transformers import {processor_class}, {model_class}
     >>> import torch
 
-    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-    >>> inputs = tokenizer(question, text, return_tensors="pt")
-    >>> start_positions = torch.tensor([1])
-    >>> end_positions = torch.tensor([3])
 
-    >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
+    >>> inputs = tokenizer(question, text, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> answer_start_index = outputs.start_logits.argmax()
+    >>> answer_end_index = outputs.end_logits.argmax()
+
+    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+    >>> tokenizer.decode(predict_answer_tokens)
+    {expected_output}
+    ```
+
+    ```python
+    >>> # target is "nice puppet"
+    >>> target_start_index, target_end_index = torch.tensor([14]), torch.tensor([15])
+
+    >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = outputs.loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
-    >>> start_scores = outputs.start_logits
-    >>> list(start_scores.shape)
-    {expected_output}
-
-    >>> end_scores = outputs.end_logits
-    >>> list(end_scores.shape)
-    {expected_output}
     ```
 """
 
@@ -204,18 +223,28 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> import torch
     >>> from transformers import {processor_class}, {model_class}
 
-    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=2)
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-    >>> outputs = model(**inputs, labels=labels)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
-    >>> list(logits.shape)
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_class_id = logits.argmax().item()
+    >>> model.config.id2label[predicted_class_id]
     {expected_output}
+    ```
+
+    ```python
+    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> num_labels = len(model.config.id2label)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+
+    >>> labels = torch.tensor(1)
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
     ```
 
     Example of multi-label classification:
@@ -224,20 +253,32 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> import torch
     >>> from transformers import {processor_class}, {model_class}
 
-    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification", num_labels=2)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    >>> labels = torch.tensor([[1, 1]], dtype=torch.float)  # need dtype=float for BCEWithLogitsLoss
-    >>> outputs = model(**inputs, labels=labels)
-    >>> loss = outputs.loss
-    >>> list(logits.shape)
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_class_id = logits.argmax().item()
+    >>> model.config.id2label[predicted_class_id]
     {expected_output}
     ```
-"""
 
+    ```python
+    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> num_labels = len(model.config.id2label)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+
+    >>> num_labels = len(model.config.id2label)
+    >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+    ...     torch.float
+    ... )
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> loss.backward()  # doctest: +IGNORE_RESULT
+    ```
+"""
 
 PT_MASKED_LM_SAMPLE = r"""
     Example:
@@ -250,11 +291,26 @@ PT_MASKED_LM_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> # retrieve index of {mask}
+    >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+
+    >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+    >>> tokenizer.decode(predicted_token_id)
+    {expected_output}
+    ```
+
+    ```python
     >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
+    >>> # mask labels of non-{mask} tokens
+    >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
 
     >>> outputs = model(**inputs, labels=labels)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> round(outputs.loss.item(), 2)
+    {expected_loss}
     ```
 """
 
@@ -562,15 +618,26 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-    >>> input_ids = inputs["input_ids"]
-    >>> inputs["labels"] = tf.reshape(
-    ...     tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))
-    >>> )  # Batch size 1
+    >>> inputs = tokenizer(
+    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf"
+    ... )
 
-    >>> outputs = model(inputs)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> logits = model(**inputs).logits
+    >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
+
+    >>> # Note that tokens are classified rather then input words which means that
+    >>> # there might be more predicted token classes than words.
+    >>> # Multiple token classes might account for the same word
+    >>> predicted_tokens_classes = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
+    >>> predicted_tokens_classes
+    {expected_output}
+    ```
+
+    ```python
+    >>> labels = predicted_token_class_ids
+    >>> loss = tf.math.reduce_mean(model(**inputs, labels=labels).loss)
+    >>> round(float(loss), 2)
+    {expected_loss}
     ```
 """
 
@@ -585,13 +652,26 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-    >>> input_dict = tokenizer(question, text, return_tensors="tf")
-    >>> outputs = model(input_dict)
-    >>> start_logits = outputs.start_logits
-    >>> end_logits = outputs.end_logits
 
-    >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-    >>> answer = " ".join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0] + 1])
+    >>> inputs = tokenizer(question, text, return_tensors="tf")
+    >>> outputs = model(**inputs)
+
+    >>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
+    >>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
+
+    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+    >>> tokenizer.decode(predict_answer_tokens)
+    {expected_output}
+    ```
+
+    ```python
+    >>> # target is "nice puppet"
+    >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
+
+    >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
+    >>> loss = tf.math.reduce_mean(outputs.loss)
+    >>> round(float(loss), 2)
+    {expected_loss}
     ```
 """
 
@@ -606,11 +686,23 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-    >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1))  # Batch size 1
 
-    >>> outputs = model(inputs)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> logits = model(**inputs).logits
+
+    >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
+    >>> model.config.id2label[predicted_class_id]
+    {expected_output}
+    ```
+
+    ```python
+    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> num_labels = len(model.config.id2label)
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+
+    >>> labels = tf.constant(1)
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> round(float(loss), 2)
+    {expected_loss}
     ```
 """
 
@@ -625,11 +717,24 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
-    >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+    >>> logits = model(**inputs).logits
 
-    >>> outputs = model(inputs)
-    >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> # retrieve index of {mask}
+    >>> mask_token_index = tf.where(inputs.input_ids == tokenizer.mask_token_id)[0][1]
+
+    >>> predicted_token_id = tf.math.argmax(logits[0, mask_token_index], axis=-1)
+    >>> tokenizer.decode(predicted_token_id)
+    {expected_output}
+    ```
+
+    ```python
+    >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+    >>> # mask labels of non-{mask} tokens
+    >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
+
+    >>> outputs = model(**inputs, labels=labels)
+    >>> round(float(outputs.loss), 2)
+    {expected_loss}
     ```
 """
 

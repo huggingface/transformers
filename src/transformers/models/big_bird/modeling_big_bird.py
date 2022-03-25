@@ -1378,6 +1378,13 @@ class BigBirdAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
+        # fp16 compatibility
+        if band_mask is not None:
+            band_mask = band_mask.to(hidden_states.dtype)
+        if from_mask is not None:
+            from_mask = from_mask.to(hidden_states.dtype)
+        if to_mask is not None:
+            to_mask = to_mask.to(hidden_states.dtype)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(
@@ -1837,7 +1844,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 

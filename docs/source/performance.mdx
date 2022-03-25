@@ -855,7 +855,7 @@ If you need to switch a tensor to bf16, it's just: `t.to(dtype=torch.bfloat16)`
 Here is how you can check if your setup supports bf16:
 
 ```
-python -c 'import transformers; print(f"BF16 support is {transformers.file_utils.is_torch_bf16_available()}")'
+python -c 'import transformers; print(f"BF16 support is {transformers.utils.is_torch_bf16_available()}")'
 ```
 
 On the other hand bf16 has a much worse precision than fp16, so there are certain situations where you'd still want to use fp16 and not bf16.
