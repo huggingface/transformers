@@ -17,6 +17,7 @@
 
 import inspect
 import math
+import os
 import tempfile
 import unittest
 
@@ -372,6 +373,8 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue(isinstance(pt_outputs, torch.Tensor))
 
                 tf_outputs = tf_outputs.numpy()
+                if isinstance(tf_outputs, np.float32):
+                    tf_outputs = np.array(tf_outputs, dtype=np.float32)
                 pt_outputs = pt_outputs.detach().to("cpu").numpy()
 
                 tf_nans = np.isnan(tf_outputs)
