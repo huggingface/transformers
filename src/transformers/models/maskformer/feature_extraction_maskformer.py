@@ -74,9 +74,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
             used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
             background label will be replaced by `ignore_index`.
-        num_labels (`int`, *optional*):
-            The number of labels in the dataset. Needed to create the binary masks of shape `(batch, num_labels,
-            height, width)`.
+
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -218,10 +216,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
-              model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
-              `annotations` are provided).
+            - **labels** -- Optional list of labels. Each element is a dictionary and contains the following keys:
+                - **masks** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
+                model (when `annotations` are provided).
+                - **classes** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
+                `annotations` are provided).
         """
         # Input type checking for clearer error
 
@@ -318,7 +317,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
-        num_labels: int,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
         if self.reduce_labels:
@@ -337,18 +335,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # remove ignore index (if we have one)
         if self.ignore_index is not None:
             labels = labels[labels != self.ignore_index]
-        # sanity check
-        max_label = labels.max().item()
-        if max_label > num_labels:
-            raise ValueError(f"We found label = {max_label}, but `self.num_labels` is {num_labels}.")
-        # we need to convert mask from [W,H] to [C, W, H]
-        all_labels = np.arange(num_labels)
         # helping broadcast by making mask [1,W,H] and labels [C, 1, 1]
-        binary_masks = segmentation_map[None] == all_labels[:, None, None]
-        # convert labels to multi label format
-        one_hot_labels = np.zeros(num_labels, dtype=np.int64)
-        one_hot_labels[labels] = 1
-        return binary_masks.astype(np.float32), one_hot_labels
+        binary_masks = segmentation_map[None] == labels[:, None, None]
+        return binary_masks.astype(np.float32), labels.astype(np.int64)
 
     def encode_inputs(
         self,
@@ -408,12 +397,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
             converted_segmentation_maps = map(
-                lambda x: self.convert_segmentation_map_to_binary_masks(x, num_labels), segmentation_maps
+                self.convert_segmentation_map_to_binary_masks, segmentation_maps
             )
 
             annotations = []
-            for mask, labels in converted_segmentation_maps:
-                annotations.append({"masks": mask, "labels": labels})
+            for mask, classes in converted_segmentation_maps:
+                annotations.append({"masks": mask, "classes": classes})
 
         channels, height, width = max_size
         pixel_values = []
@@ -436,8 +425,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     ((0, 0), (0, height - masks.shape[1]), (0, width - masks.shape[2])),
                     constant_values=self.ignore_index,
                 )
-                mask_labels.append(masks)
-                class_labels.append(annotation["labels"])
+                # mask_labels.append(masks)
+                # class_labels.append(annotation["labels"])
             # create pixel mask
             mask = np.zeros((height, width), dtype=np.int64)
             mask[: image.shape[1], : image.shape[2]] = True
@@ -445,13 +434,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # return as BatchFeature
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
-
-        if annotations:
-            data["mask_labels"] = mask_labels
-            data["class_labels"] = class_labels
-
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
+        # we cannot batch them since they don't share a common class size 
+        if annotations:
+            for label in annotations:
+                label["masks"] = torch.from_numpy(label["masks"])
+                label["classes"] = torch.from_numpy(label["classes"])
+            encoded_inputs["labels"] = annotations
+        
         return encoded_inputs
 
     def post_process_segmentation(

@@ -1645,21 +1645,19 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         preds_masks = masks_queries_logits
         preds_probs = class_queries_logits
-        # downsample all masks in one go -> save memory
-        mask_labels = nn.functional.interpolate(mask_labels, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
+           # downsample the target mask, save memory
+            target_mask = nn.functional.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, labels]
             # flatten spatial dimension "q h w -> q (h w)"
-            num_queries, height, width = pred_mask.shape
-            pred_mask_flat = pred_mask.view(num_queries, height * width)  # [num_queries, H*W]
+            pred_mask_flat = pred_mask.flatten(1)  # [num_queries, H*W]
             # same for target_mask "c h w -> c (h w)"
-            num_channels, height, width = target_mask.shape
-            target_mask_flat = target_mask.view(num_channels, height * width)  # [num_total_labels, H*W]
+            target_mask_flat = target_mask[:, 0].flatten(1)  # [num_total_labels, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_mask = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
