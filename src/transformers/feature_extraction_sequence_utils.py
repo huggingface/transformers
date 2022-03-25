@@ -19,6 +19,22 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
+'''
+importing librosa for MCTC feature extraction, because the paper states:
+
+FROM THE PAPER: 
+    The input to the encoder is a sequence of 80-dimensional log mel filterbank frames, extracted using
+    25 ms Hamming windows every 10 ms from the 16 kHz audio signal
+
+and I felt safe doing so because librosa is part of the list of dependencies of the transformers package.
+
+Main problem is that librosa is really only used for testing & examples throughout the package, meant only for
+loading data in the user-side(outside the src/transformers itself). Will need to review whether we expect the user
+to handle all this or it's okay to include librosa here for the purpose of making an easy feature extractor.
+'''
+import librosa
+
+
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .file_utils import (
     PaddingStrategy,
@@ -372,3 +388,30 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+# class SpectrogramFeatureExtractor(FeatureExtractionMixin):
+    """
+    This is a spectrogram feature extraction class for speech recognition.
+
+    Args:
+        sampling_rate (`int`):
+            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+        hop_length (`int`):
+            Number of samples between successive frames.
+        win_length (`int`):
+            Length of windows for the frames of audio.
+        win_function (Union[`str`, Callable]):
+            Name of supported window function or the function itself, like `scipy.signal.windows.hamming`
+        center (`boolean`):
+            The value that is used to fill the padding values / vectors.
+    """
+
+    def __init__(self, feature_size: int, sampling_rate: int, padding_value: float, **kwargs):
+        self.feature_size = feature_size
+        self.sampling_rate = sampling_rate
+        self.padding_value = padding_value
+
+        self.padding_side = kwargs.pop("padding_side", "right")
+        self.return_attention_mask = kwargs.pop("return_attention_mask", True)
+
+        super().__init__(**kwargs)
