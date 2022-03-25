@@ -5,6 +5,8 @@ from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_avail
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.blenderbot import BlenderbotOnnxConfig
+from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
@@ -268,6 +270,24 @@ class FeaturesManager:
             onnx_config_cls=ElectraOnnxConfig,
         ),
         "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
+        "blenderbot": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotOnnxConfig,
+        ),
+        "blenderbot-small": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
