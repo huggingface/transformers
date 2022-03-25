@@ -26,7 +26,7 @@ from transformers.utils import cached_property, is_sagemaker_dp_enabled, logging
 
 logger = logging.get_logger(__name__)
 
-# TODO: should be moved to `file_utils` after refactoring of SageMakerTrainer
+# TODO: should be moved to `utils` after refactoring of SageMakerTrainer
 
 
 def is_sagemaker_model_parallel_available():

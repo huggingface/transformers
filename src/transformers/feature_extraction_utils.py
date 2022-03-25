@@ -117,9 +117,9 @@ class BatchFeature(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (`str` or [`~file_utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum
-                [`~file_utils.TensorType`]. If `None`, no modification is done.
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
         """
         if tensor_type is None:
             return self
@@ -328,7 +328,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")

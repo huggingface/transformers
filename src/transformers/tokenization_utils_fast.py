@@ -334,7 +334,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         section.
 
         Args:
-            padding_strategy ([`~file_utils.PaddingStrategy`]):
+            padding_strategy ([`~utils.PaddingStrategy`]):
                 The kind of padding that will be applied to the input
             truncation_strategy ([`~tokenization_utils_base.TruncationStrategy`]):
                 The kind of truncation that will be applied to the input

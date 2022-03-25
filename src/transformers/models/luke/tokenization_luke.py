@@ -1108,7 +1108,7 @@ class LukeTokenizer(RobertaTokenizer):
                 List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function. Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or
                 TensorFlow tensors), see the note above for the return type.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
@@ -1129,7 +1129,7 @@ class LukeTokenizer(RobertaTokenizer):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are attention
                 masks?](../glossary#attention-mask)
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
