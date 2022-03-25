@@ -344,6 +344,7 @@ class FeaturesManager:
             )
         return task_to_automodel[task]
 
+    @staticmethod
     def get_model_from_feature(
         feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:
