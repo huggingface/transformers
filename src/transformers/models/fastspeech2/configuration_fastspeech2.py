@@ -38,37 +38,28 @@ class FastSpeech2Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 75):
             Vocabulary size of the FastSpeech2 model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`~FastSpeech2Model`] or [`~TFFastSpeech2Model`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
+        encoder_layers (`int`, *optional*, defaults to 4):
+            Number of hidden layers in the FastSpeech2 encoder.
+        decoder_layers (`int`, *optional*, defaults to 4):
+            Number of hidden layers in the FastSpeech2 decoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the FastSpeech2 encoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the FastSpeech2 decoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        max_source_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~FastSpeech2Model`] or
-            [`~TFFastSpeech2Model`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         Example:
 
     ```python
@@ -87,7 +78,6 @@ class FastSpeech2Config(PretrainedConfig):
 
     def __init__(
         self,
-        pad_token_id=1,
         n_frames_per_step=1,
         output_frame_dim=80,
         encoder_embed_dim=256,
@@ -117,15 +107,22 @@ class FastSpeech2Config(PretrainedConfig):
         pitch_min=-4.660287183665281,
         energy_max=3.2244551181793213,
         energy_min=-4.9544901847839355,
+        initializer_range=0.0625,
         mean=True,
         std=True,
+        pad_token_id=1,
         **kwargs
     ):
+        if fft_kernel_size % 2 == 0:
+            raise ValueError(f"`fft_kernel_size` must be odd, but got {fft_kernel_size} instead.")
+        if postnet_conv_kernel_size % 2 == 0:
+            raise ValueError(f"`postnet_conv_kernel_size` must be odd, but got {postnet_conv_kernel_size} instead.")
+        if var_pred_kernel_size % 2 == 0:
+            raise ValueError(f"`var_pred_kernel_size` must be odd, but got {var_pred_kernel_size} instead.")
         self.n_frames_per_step = n_frames_per_step
         self.output_frame_dim = output_frame_dim
         self.encoder_embed_dim = encoder_embed_dim
         self.speaker_embed_dim = speaker_embed_dim
-        self.encoder_embed_dim = encoder_embed_dim
         self.dropout = dropout
         self.max_source_positions = max_source_positions
         self.encoder_attention_heads = encoder_attention_heads
@@ -151,7 +148,7 @@ class FastSpeech2Config(PretrainedConfig):
         self.pitch_max = pitch_max
         self.energy_min = energy_min
         self.energy_max = energy_max
-        self.initializer_range = self.encoder_embed_dim**-0.5
+        self.initializer_range = initializer_range
         self.mean = mean
         self.std = std
         super().__init__(pad_token_id=pad_token_id, **kwargs)
