@@ -891,7 +891,14 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel, TrOCRForCausalLM, ViTModel, TrOCRConfig, ViTConfig
+        >>> from transformers import (
+        ...     TrOCRProcessor,
+        ...     VisionEncoderDecoderModel,
+        ...     TrOCRForCausalLM,
+        ...     ViTModel,
+        ...     TrOCRConfig,
+        ...     ViTConfig,
+        ... )
         >>> import requests
         >>> from PIL import Image
 
