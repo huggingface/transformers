@@ -1048,14 +1048,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
         # When using dummy_loss, reorder things so the loss key isn't in position[0]
-        if isinstance(y_pred, ModelOutput) and self._using_dummy_loss:
+        if isinstance(y_pred, ModelOutput) and not isinstance(y, dict):
             output_keys = list(y_pred.keys())
-            if output_keys[0] == "loss" and y_pred.loss is not None:
-                reordered_keys = output_keys[1:] + output_keys[:1]
-                reordered_output = IndexableOrderedDict()
-                for key in reordered_keys:
-                    reordered_output[key] = y_pred[key]
-                y_pred = reordered_output
+
 
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
