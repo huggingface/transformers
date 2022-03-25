@@ -169,6 +169,7 @@ class FlaxModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    # (Copied from tests.test_modeling_common.ModelTesterMixin.check_outputs)
     def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
         """
         Args:
