@@ -216,6 +216,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     @property
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.outputs
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task in ["default", "seq2seq-lm"]:
             common_outputs = super().outputs
@@ -320,6 +321,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             ]
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
     def _generate_dummy_inputs_for_sequence_classification_and_question_answering(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -346,6 +348,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.generate_dummy_inputs
     def generate_dummy_inputs(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -358,6 +361,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
                 tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
             )
+
         elif self.task == "causal-lm":
             common_inputs = self._generate_dummy_inputs_for_causal_lm(
                 tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
@@ -369,6 +373,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._flatten_past_key_values_
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         if self.task in ["default", "seq2seq-lm"]:
             flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
