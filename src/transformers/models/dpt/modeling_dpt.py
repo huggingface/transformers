@@ -154,9 +154,9 @@ class DPTViTPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
 class DPTViTSelfAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -215,14 +215,14 @@ class DPTViTSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DPT
 class DPTViTSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in DPTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -235,14 +235,14 @@ class DPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DPTViT
 class DPTViTAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.attention = DPTViTSelfAttention(config)
         self.output = DPTViTSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
     def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
@@ -261,6 +261,7 @@ class DPTViTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -275,9 +276,9 @@ class DPTViTAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DPT
 class DPTViTIntermediate(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -293,9 +294,9 @@ class DPTViTIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DPT
 class DPTViTOutput(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -309,11 +310,10 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DPTViT
 class DPTViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -323,6 +323,7 @@ class DPTViTLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -330,7 +331,7 @@ class DPTViTLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in DPTViT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -340,7 +341,7 @@ class DPTViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in DPTViT, layernorm is also applied after self-attention
+        # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -352,14 +353,14 @@ class DPTViTLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DPTViT
 class DPTViTEncoder(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEncoder.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -604,7 +605,9 @@ class DPTFeatureFusionLayer(nn.Module):
             hidden_state = hidden_state + self.residual_layer1(residual)
 
         hidden_state = self.residual_layer2(hidden_state)
-        hidden_state = nn.functional.interpolate(hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
+        hidden_state = nn.functional.interpolate(
+            hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners
+        )
         hidden_state = self.projection(hidden_state)
 
         return hidden_state
@@ -757,9 +760,9 @@ class DPTModel(DPTPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DPT
 class DPTViTPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DPTConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
