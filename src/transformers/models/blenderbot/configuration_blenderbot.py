@@ -183,14 +183,12 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
                 ]
             )
-
             if self.use_past:
                 common_inputs["decoder_input_ids"] = {0: "batch"}
                 common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
             else:
                 common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
                 common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
             if self.use_past:
                 self.fill_with_past_key_values_(common_inputs, direction="inputs")
         elif self.task == "causal-lm":
@@ -241,7 +239,6 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         encoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
             tokenizer, batch_size, seq_length, is_pair, framework
         )
-
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
@@ -271,11 +268,9 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 decoder_past_length,
                 self._config.hidden_size // num_decoder_attention_heads,
             )
-
             common_inputs["decoder_attention_mask"] = torch.cat(
                 [common_inputs["decoder_attention_mask"], torch.ones(batch, decoder_past_length)], dim=1
             )
-
             common_inputs["past_key_values"] = []
             _, num_decoder_layers = self.num_layers
 
@@ -317,7 +312,6 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 past_key_values_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
-
             common_inputs["attention_mask"] = torch.cat(
                 [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
             )
@@ -364,7 +358,6 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
                 tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
             )
-
         elif self.task == "causal-lm":
             common_inputs = self._generate_dummy_inputs_for_causal_lm(
                 tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
