@@ -125,7 +125,7 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -356,9 +356,8 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        # TODO update model name
-        feature_extractor = DPTFeatureExtractor.from_pretrained("nielsr/dpt-large-redesign")
-        model = DPTForDepthEstimation.from_pretrained("nielsr/dpt-large-redesign").to(torch_device)
+        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(torch_device)
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
@@ -366,21 +365,21 @@ class DPTModelIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
 
-        # verify the logits
+        # verify the predicted depth
         expected_shape = torch.Size((1, 384, 384))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_semantic_segmentation(self):
-        # TODO update model name
-        feature_extractor = DPTFeatureExtractor.from_pretrained("nielsr/dpt-large-ade")
-        model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(torch_device)
+        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
