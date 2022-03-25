@@ -492,7 +492,7 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.ViTIntermediate with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with TFViT->TFViTMAE
 class TFViTMAEIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
