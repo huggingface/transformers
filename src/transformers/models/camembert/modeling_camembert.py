@@ -81,7 +81,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     """
 
     config_class = CamembertConfig
-
+    
 
 @add_start_docstrings(
     """
