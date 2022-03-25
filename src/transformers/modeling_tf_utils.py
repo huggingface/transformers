@@ -81,6 +81,7 @@ TFModelInputType = Union[
 def dummy_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred)
 
+
 class TFModelUtilsMixin:
     """
     A few utilities for `tf.keras.Model`, to be used as a mixin.
