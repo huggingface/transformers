@@ -241,7 +241,7 @@ class FlaxGenerationMixin:
                 should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
 
         Return:
-            [`~file_utils.ModelOutput`].
+            [`~utils.ModelOutput`].
 
         Examples:
 

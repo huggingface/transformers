@@ -123,7 +123,7 @@ This should take less than 18 hours.
 Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg).
 
 For a step-by-step walkthrough of how to do masked language modeling in Flax, please have a 
-look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb) google colab.
+look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb) google colab.
 
 ## Causal language modeling
 
@@ -224,7 +224,7 @@ This should take less than ~21 hours.
 Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
 For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a 
-look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb) google colab.
+look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb) google colab.
 
 ## T5-like span-masked language modeling
 

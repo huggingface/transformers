@@ -370,7 +370,7 @@ class PushToHubCallback(Callback):
 
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done:
-            logger.info("Waiting for existing upload to finish...")
+            self.last_job._process.terminate()  # Gotta go fast
             while not self.last_job.is_done:
                 sleep(1)
         self.model.save_pretrained(self.output_dir)

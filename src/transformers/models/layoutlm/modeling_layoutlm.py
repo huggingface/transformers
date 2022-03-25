@@ -695,7 +695,7 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
             If set to `True`, the hidden states of all layers are returned. See `hidden_states` under returned tensors
             for more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
