@@ -7,7 +7,7 @@ RUN apt -y update
 RUN apt install -y libaio-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
-ARG REF=master
+ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 RUN python3 -m pip install --no-cache-dir -e ./transformers[testing,deepspeed]
 

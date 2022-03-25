@@ -120,7 +120,7 @@ class ProcessorMixin(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)

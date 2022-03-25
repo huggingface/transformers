@@ -815,7 +815,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
 
 @dataclass
-class SemanticSegmentationModelOutput(ModelOutput):
+class SemanticSegmenterOutput(ModelOutput):
     """
     Base class for outputs of semantic segmentation models.
 
