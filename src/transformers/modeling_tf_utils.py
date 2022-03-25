@@ -81,16 +81,6 @@ TFModelInputType = Union[
 def dummy_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred)
 
-
-class IndexableOrderedDict(OrderedDict):
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            key = list(self.keys())[item]
-            return super().__getitem__(key)
-        else:
-            return super().__getitem__(item)
-
-
 class TFModelUtilsMixin:
     """
     A few utilities for `tf.keras.Model`, to be used as a mixin.
