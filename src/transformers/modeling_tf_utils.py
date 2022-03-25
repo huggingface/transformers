@@ -924,34 +924,36 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             loss = {"loss": dummy_loss}
             self._using_dummy_loss = True
-            if metrics is not None and not isinstance(metrics, dict):
-                type_hints = get_type_hints(self.call)
-                if "return" not in type_hints:
-                    output_types = []
-                else:
-                    return_types = get_type_hints(self.call)["return"].__args__
-                    output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
-                if len(output_types) == 0:
-                    raise TypeError(
-                        f"Code analysis failed to identify the output types of model {type(self)}! "
-                        "This is most likely because that model class does not have type annotations. "
-                        "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
-                        "heads of the model for each metric."
-                    )
-                if len(output_types) > 1:
-                    raise TypeError(
-                        "This model has an unusual output structure, and we could not automatically "
-                        "determine output heads for metrics. Please pass a `dict` of metrics instead "
-                        "of a list/tuple, specifying the output heads of the model for each metric."
-                    )
-                output_type = output_types[0]
-                # Optional fields that allow NoneType (this includes loss) are not the main model outputs
-                outputs = [
-                    field.name
-                    for field in fields(output_type)
-                    if type(None) not in getattr(field.type, "__args__", [])
-                ]
-                metrics = {output: metrics for output in outputs}
+            if metrics is not None and isinstance(metrics, dict):
+                raise ValueError("When using the internal loss, passing metrics as a dict is not supported!")
+            # if metrics is not None and not isinstance(metrics, dict):
+            #     type_hints = get_type_hints(self.call)
+            #     if "return" not in type_hints:
+            #         output_types = []
+            #     else:
+            #         return_types = get_type_hints(self.call)["return"].__args__
+            #         output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
+            #     if len(output_types) == 0:
+            #         raise TypeError(
+            #             f"Code analysis failed to identify the output types of model {type(self)}! "
+            #             "This is most likely because that model class does not have type annotations. "
+            #             "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
+            #             "heads of the model for each metric."
+            #         )
+            #     if len(output_types) > 1:
+            #         raise TypeError(
+            #             "This model has an unusual output structure, and we could not automatically "
+            #             "determine output heads for metrics. Please pass a `dict` of metrics instead "
+            #             "of a list/tuple, specifying the output heads of the model for each metric."
+            #         )
+            #     output_type = output_types[0]
+            #     # Optional fields that allow NoneType (this includes loss) are not the main model outputs
+            #     outputs = [
+            #         field.name
+            #         for field in fields(output_type)
+            #         if type(None) not in getattr(field.type, "__args__", [])
+            #     ]
+            #     metrics = {output: metrics for output in outputs}
         else:
             self._using_dummy_loss = False
         super().compile(
@@ -1003,6 +1005,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             "end_position",
             "next_sentence_label",
         }
+        metric_renamings = {
+            "start_positions": "start_logits",
+            "end_positions": "end_logits",
+        }
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
@@ -1040,6 +1046,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         x[label_kwarg] = y[label_kwarg]
             # If neither of the above cases are true, we assume the user is doing
             # their own custom loss and let them at it.
+        if self._using_dummy_loss and isinstance(y, dict):
+            label_keys = list(y.keys())  # Store this now because it changes when loss is computed
 
         # Run forward pass.
         with tf.GradientTape() as tape:
@@ -1047,11 +1055,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        # When using dummy_loss, reorder things so the loss key isn't in position[0]
-        if isinstance(y_pred, ModelOutput) and not isinstance(y, dict):
-            output_keys = list(y_pred.keys())
 
-
+        # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
+        if self._using_dummy_loss and isinstance(y_pred, ModelOutput):
+            # Single-output
+            if isinstance(y, tf.Tensor) or (isinstance(y, dict) and len(y) == 1):
+                y_pred = y_pred[1] if "loss" in y_pred else y_pred[0]
+            elif isinstance(y, dict):
+                y_pred_metrics = dict()
+                for key in label_keys:
+                    if key in y_pred:
+                        y_pred_metrics[key] = y_pred[key]
+                    elif key in metric_renamings and metric_renamings[key] in y_pred:
+                        y_pred_metrics[key] = y_pred[metric_renamings[key]]
+                    else:
+                        print(f"Rewrite aborted on key {key}!")
+                        print(label_keys)
+                        print(y_pred.keys())
+                        # We couldn't match this key up at all - abort and do not attempt to rewrite
+                        break
+                else:  # Only happens if all keys matched up
+                    y_pred = y_pred_metrics
+                    y = {key: val for key, val in y.items() if key in label_keys}
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
