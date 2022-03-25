@@ -760,39 +760,37 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         )
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
+        return self.lm_head
 
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
+        # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
+        # tests will need to be fixed after the change
+
         # only last token for inputs_ids if past is defined in kwargs
-        token_type_ids = kwargs.get("token_type_ids", None)
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
-            if token_type_ids is not None:
-                token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
 
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = tf.math.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
-            position_ids = tf.where(position_ids == 0, 1, position_ids)
-            if past:
-                position_ids = position_ids[:, -1]
-                position_ids = tf.reshape(position_ids, shape_list(position_ids) + [1])
-        else:
-            position_ids = None
+        # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
+        # for a future PR to not change too many things for now.
+        # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
+        position_ids = None
+        attention_mask = None
+        if use_xla:
+            attention_mask = kwargs.get("attention_mask", None)
+            if past is not None and attention_mask is not None:
+                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
+            elif attention_mask is not None:
+                position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
 
         return {
             "input_ids": inputs,
-            "past": past,
-            "use_cache": kwargs["use_cache"],
-            "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
+            "position_ids": position_ids,
+            "past": past,
+            "use_cache": use_cache,
         }
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

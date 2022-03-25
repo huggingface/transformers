@@ -349,6 +349,10 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         model = TFGPTJModel.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Currently, model embeddings are going to undergo a major refactor.")
+    def test_resize_token_embeddings(self):
+        super().test_resize_token_embeddings()
+
 
 @require_tf
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
@@ -383,7 +387,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+        EXPECTED_OUTPUT_STR = "Today is a nice day and I am taking an hour to sit in the hammock and just enjoy"
 
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
@@ -479,7 +483,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
 
         expected_output_sentence = [
             "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
-            "Today, I’m going to talk about the most important thing in the",
+            "Today, I’m going to share with you a few of my favorite",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
