@@ -708,7 +708,7 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = ViTMAEConfig
-    base_model_prefix = "vit_mae"
+    base_model_prefix = "vit"
     main_input_name = "pixel_values"
 
     @property
