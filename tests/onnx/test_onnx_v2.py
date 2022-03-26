@@ -181,6 +181,7 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
+    ("beit", "microsoft/beit-base-patch16-224"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
