@@ -554,7 +554,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in ViT, layernorm is also applied after self-attention
+        # in ViTMAE, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(inputs=hidden_states)
 
         intermediate_output = self.intermediate(hidden_states=layer_output)
