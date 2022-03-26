@@ -351,7 +351,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         return x
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->ViTMAE
 class TFViTMAESelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -427,7 +427,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->ViTMAE
 class TFViTMAESelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFViTMAELayer instead of here (as is the case with other models), due to the
@@ -449,7 +449,7 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->ViTMAE
 class TFViTMAEAttention(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -478,7 +478,7 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->ViTMAE
 class TFViTMAEIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -499,7 +499,7 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with ViT->ViTMAE
 class TFViTMAEOutput(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -517,7 +517,7 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->ViTMAE
 class TFViTMAELayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -568,7 +568,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with TFViT->TFViTMAE
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->ViTMAE
 class TFViTMAEEncoder(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
