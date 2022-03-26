@@ -180,7 +180,7 @@ class DataTrainingArguments:
         },
     )
     pad_input_to_multiple_of: Optional[int] = field(
-        default=None,
+        default=32000,
         metadata={
             "help": "If set will pad the input sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
         },
@@ -281,7 +281,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
 
     processor: Any
     decoder_start_token_id: int
-    input_padding: Union[bool, str] = "max_length"
+    input_padding: Union[bool, str] = "longest"
     target_padding: Union[bool, str] = "max_length"
     max_input_length: Optional[float] = None
     max_target_length: Optional[int] = None
@@ -658,9 +658,8 @@ def main():
     data_collator = FlaxDataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
-        input_padding="max_length",
+        input_padding="longest",
         target_padding="max_length",
-        max_input_length=max_input_length,
         max_target_length=max_target_length,
         pad_input_to_multiple_of=pad_input_to_multiple_of,
         pad_target_to_multiple_of=pad_target_to_multiple_of,
@@ -709,7 +708,6 @@ def main():
     num_train_samples = len(vectorized_datasets["train"])
     steps_per_epoch = num_train_samples // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
-    num_eval_samples = len(vectorized_datasets["eval"])
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -768,28 +766,13 @@ def main():
 
         def compute_loss(params, minibatch):
             labels = minibatch.pop("labels")
-            outputs = state.apply_fn(
+            logits = state.apply_fn(
                 **minibatch,
                 params=params,
                 dropout_rng=dropout_rng,
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
-                output_hidden_states=True,
-                return_dict=True,
-                train=True,
-            )
-            encoder_last_hidden_state = outputs.encoder_last_hidden_state
-            decoder_hidden_states = jnp.asarray(outputs.decoder_hidden_states)
-            logits = outputs.logits
-
-            # compute the l2-norm over key intermediate hidden-states for detailed logging
-            logs = {
-                "encoder_last_hidden_state": jnp.linalg.norm(encoder_last_hidden_state),
-                "decoder_first_hidden_state": jnp.linalg.norm(decoder_hidden_states[0]),
-                "logits": jnp.linalg.norm(logits),
-            }
-
+                train=True)[0]
             loss = loss_fn(logits, labels)
-            # just return loss for now, treat logs later
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
@@ -920,7 +903,7 @@ def main():
         eval_labels = []
 
         # Generate eval set by deterministically shuffling sampling indices from the eval dataset and grouping by length
-        eval_batch_idx = data_sampler(vectorized_datasets["eval"], batch_size_per_update)
+        eval_batch_idx = data_sampler(vectorized_datasets["eval"], eval_batch_size)
 
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [vectorized_datasets["eval"][int(idx)] for idx in batch_idx]
