@@ -135,7 +135,7 @@ class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
 
 # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdSelfAttention with BigBird->BigBirdPegasus
 class BigBirdPegasusSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -154,21 +154,21 @@ class BigBirdPegasusSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, ...]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -240,7 +240,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
 # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdBlockSparseAttention with BigBird->BigBirdPegasus
 class BigBirdPegasusBlockSparseAttention(nn.Module):
-    def __init__(self, config, seed=None):
+    def __init__(self, config: BigBirdPegasusConfig, seed: Optional[int] = None):
         super().__init__()
 
         self.max_seqlen = config.max_position_embeddings
@@ -263,21 +263,21 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
-        hidden_states,
-        band_mask=None,
-        from_mask=None,
-        to_mask=None,
+        hidden_states: torch.Tensor,
+        band_mask: Optional[torch.Tensor] = None,
+        from_mask: Optional[torch.Tensor] = None,
+        to_mask: Optional[torch.Tensor] = None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        output_attentions=None,
-    ):
+        output_attentions: Optional[bool] = None,
+    ) -> Tuple[torch.Tensor, ...]:
         # Currently this `class` can't be used in decoder.
 
         batch_size, seqlen, _ = hidden_states.size()
@@ -320,7 +320,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         return outputs
 
     @staticmethod
-    def torch_bmm_nd(inp_1, inp_2, ndim=None):
+    def torch_bmm_nd(inp_1: torch.Tensor, inp_2: torch.Tensor, ndim: Optional[int] = None) -> torch.Tensor:
         """Fast nd matrix multiplication"""
         # faster replacement of torch.einsum ("bhqk,bhkd->bhqd")
         return torch.bmm(inp_1.reshape((-1,) + inp_1.shape[-2:]), inp_2.reshape((-1,) + inp_2.shape[-2:])).view(
@@ -328,7 +328,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )
 
     @staticmethod
-    def torch_bmm_nd_transpose(inp_1, inp_2, ndim=None):
+    def torch_bmm_nd_transpose(inp_1: torch.Tensor, inp_2: torch.Tensor, ndim: Optional[int] = None) -> torch.Tensor:
         """Fast nd matrix multiplication with transpose"""
         # faster replacement of torch.einsum (bhqd,bhkd->bhqk)
         return torch.bmm(
@@ -337,27 +337,27 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     def bigbird_block_sparse_attention(
         self,
-        query_layer,
-        key_layer,
-        value_layer,
-        band_mask,
-        from_mask,
-        to_mask,
+        query_layer: torch.Tensor,
+        key_layer: torch.Tensor,
+        value_layer: torch.Tensor,
+        band_mask: Optional[torch.Tensor],
+        from_mask: Optional[torch.Tensor],
+        to_mask: Optional[torch.Tensor],
         from_blocked_mask,
         to_blocked_mask,
-        n_heads,
-        n_rand_blocks,
-        attention_head_size,
-        from_block_size,
-        to_block_size,
-        batch_size,
-        from_seq_len,
-        to_seq_len,
-        seed,
-        plan_from_length,
-        plan_num_rand_blocks,
-        output_attentions,
-    ):
+        n_heads: int,
+        n_rand_blocks: int,
+        attention_head_size: int,
+        from_block_size: int,
+        to_block_size: int,
+        batch_size: int,
+        from_seq_len: int,
+        to_seq_len: int,
+        seed: Optional[int],
+        plan_from_length: Optional[list],
+        plan_num_rand_blocks: Optional[list],
+        output_attentions: Optional[bool],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
 
         # BigBirdPegasus block-sparse attention as suggested in paper
 
@@ -785,7 +785,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         return context_layer, attention_probs
 
     @staticmethod
-    def torch_gather_b2(params, indices):
+    def torch_gather_b2(params: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         # this operation is equivalent to tf.gather when batch_dims=2
 
         if params.shape[:2] != indices.shape[:2]:
@@ -812,25 +812,22 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def _create_rand_mask_from_inputs(
-        from_blocked_mask,
-        to_blocked_mask,
-        rand_attn,
-        num_attention_heads,
-        num_rand_blocks,
-        batch_size,
-        from_seq_length,
-        from_block_size,
-    ):
+        from_blocked_mask: torch.Tensor,
+        to_blocked_mask: torch.LongTensor,
+        rand_attn: torch.Tensor,
+        num_attention_heads: int,
+        num_rand_blocks: int,
+        batch_size: int,
+        from_seq_length: int,
+        from_block_size: int,
+    ) -> torch.FloatTensor:
         """
         Create 3D attention mask from a 2D tensor mask.
 
         Args:
-            from_blocked_mask: 2D Tensor of shape [batch_size,
-            from_seq_length//from_block_size, from_block_size].
-            to_blocked_mask: int32 Tensor of shape [batch_size,
-            to_seq_length//to_block_size, to_block_size].
-            rand_attn: [batch_size, num_attention_heads,
-            from_seq_length//from_block_size-2, num_rand_blocks]
+            from_blocked_mask: 2D Tensor of shape [batch_size, from_seq_length//from_block_size, from_block_size].
+            to_blocked_mask: int32 Tensor of shape [batch_size, to_seq_length//to_block_size, to_block_size].
+            rand_attn: [batch_size, num_attention_heads, from_seq_length//from_block_size-2, num_rand_blocks].
             num_attention_heads: int. Number of attention heads.
             num_rand_blocks: int. Number of random chunks per row.
             batch_size: int. Batch size for computation.
@@ -848,7 +845,9 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         return rand_mask
 
     @staticmethod
-    def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
+    def _get_rand_attn_plan(
+        from_seq_length: int, from_block_size: int, num_rand_blocks: int
+    ) -> Tuple[List[int], List[int]]:
         """
         Gives the plan of where to put random attention.
 
@@ -882,8 +881,13 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
-    ):
+        from_seq_length: int,
+        to_seq_length: int,
+        from_block_size: int,
+        to_block_size: int,
+        num_rand_blocks: int,
+        last_idx: int = -1,
+    ) -> np.ndarray:
         """
         Create adjacency list of random attention.
 
@@ -939,20 +943,20 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     def _bigbird_block_rand_mask_with_head(
         self,
-        from_seq_length,
-        to_seq_length,
-        from_block_size,
-        to_block_size,
-        num_heads,
-        plan_from_length,
-        plan_num_rand_blocks,
-        window_block_left=1,
-        window_block_right=1,
-        global_block_top=1,
-        global_block_bottom=1,
-        global_block_left=1,
-        global_block_right=1,
-    ):
+        from_seq_length: int,
+        to_seq_length: int,
+        from_block_size: int,
+        to_block_size: int,
+        num_heads: int,
+        plan_from_length: List[int],
+        plan_num_rand_blocks: List[int],
+        window_block_left: int = 1,
+        window_block_right: int = 1,
+        global_block_top: int = 1,
+        global_block_bottom: int = 1,
+        global_block_left: int = 1,
+        global_block_right: int = 1,
+    ) -> List[np.ndarray]:
         """
         Create adjacency list of random attention.
 
@@ -1072,15 +1076,15 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def _get_single_block_row_attention(
-        block_id,
-        to_start_block_id,
-        to_end_block_id,
-        num_rand_blocks,
-        window_block_left=1,
-        window_block_right=1,
-        global_block_left=1,
-        global_block_right=1,
-    ):
+        block_id: int,
+        to_start_block_id: int,
+        to_end_block_id: int,
+        num_rand_blocks: int,
+        window_block_left: int = 1,
+        window_block_right: int = 1,
+        global_block_left: int = 1,
+        global_block_right: int = 1,
+    ) -> np.ndarray:
         """
         For a single row block get random row attention.
 

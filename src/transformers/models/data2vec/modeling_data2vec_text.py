@@ -160,7 +160,7 @@ class Data2VecTextForTextEmbeddings(nn.Module):
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Data2VecText
 class Data2VecTextSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: Data2VecTextConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -286,9 +286,9 @@ class Data2VecTextSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Data2VecText
 class Data2VecTextSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -303,7 +303,7 @@ class Data2VecTextSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText
 class Data2VecTextAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: Data2VecTextConfig, position_embedding_type=None):
         super().__init__()
         self.self = Data2VecTextSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = Data2VecTextSelfOutput(config)
@@ -351,9 +351,9 @@ class Data2VecTextAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Data2VecText
 class Data2VecTextIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -367,9 +367,9 @@ class Data2VecTextIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Data2VecText
 class Data2VecTextOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -384,7 +384,7 @@ class Data2VecTextOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Data2VecText
 class Data2VecTextLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -470,7 +470,7 @@ class Data2VecTextLayer(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2VecText
 class Data2VecTextEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([Data2VecTextLayer(config) for _ in range(config.num_hidden_layers)])
@@ -566,9 +566,9 @@ class Data2VecTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Data2VecText
 class Data2VecTextPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()

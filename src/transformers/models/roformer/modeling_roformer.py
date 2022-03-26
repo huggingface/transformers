@@ -353,7 +353,7 @@ class RoFormerSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RoFormer
 class RoFormerSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -421,7 +421,7 @@ class RoFormerAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RoFormer
 class RoFormerIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -437,7 +437,7 @@ class RoFormerIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RoFormer
 class RoFormerOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -683,7 +683,7 @@ class RoFormerLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RoFormer
 class RoFormerOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__()
         self.predictions = RoFormerLMPredictionHead(config)
 

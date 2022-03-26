@@ -1096,9 +1096,9 @@ class LongformerSelfAttention(nn.Module):
         return global_attn_output, global_attn_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Longformer
 class LongformerSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1160,9 +1160,9 @@ class LongformerAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Longformer
 class LongformerIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -1176,9 +1176,9 @@ class LongformerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Longformer
 class LongformerOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1331,9 +1331,9 @@ class LongformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Longformer
 class LongformerPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()

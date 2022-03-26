@@ -222,7 +222,7 @@ class ElectraEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Electra
 class ElectraSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: ElectraConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -348,9 +348,9 @@ class ElectraSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Electra
 class ElectraSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -365,7 +365,7 @@ class ElectraSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
 class ElectraAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: ElectraConfig, position_embedding_type=None):
         super().__init__()
         self.self = ElectraSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = ElectraSelfOutput(config)
@@ -413,9 +413,9 @@ class ElectraAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Electra
 class ElectraIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -429,9 +429,9 @@ class ElectraIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Electra
 class ElectraOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -446,7 +446,7 @@ class ElectraOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Electra
 class ElectraLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -532,7 +532,7 @@ class ElectraLayer(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Electra
 class ElectraEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ElectraLayer(config) for _ in range(config.num_hidden_layers)])

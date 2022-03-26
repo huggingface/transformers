@@ -915,7 +915,7 @@ class SEWDAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->SEWD
 class SEWDIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):

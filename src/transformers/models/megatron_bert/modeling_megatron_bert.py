@@ -195,7 +195,7 @@ class MegatronBertEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
 class MegatronBertSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: MegatronBertConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -388,7 +388,7 @@ class MegatronBertAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->MegatronBert
 class MegatronBertIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -610,7 +610,7 @@ class MegatronBertEncoder(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->MegatronBert
 class MegatronBertPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -626,7 +626,7 @@ class MegatronBertPooler(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->MegatronBert
 class MegatronBertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -644,7 +644,7 @@ class MegatronBertPredictionHeadTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->MegatronBert
 class MegatronBertLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.transform = MegatronBertPredictionHeadTransform(config)
 
@@ -665,7 +665,7 @@ class MegatronBertLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->MegatronBert
 class MegatronBertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.predictions = MegatronBertLMPredictionHead(config)
 
@@ -676,7 +676,7 @@ class MegatronBertOnlyMLMHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->MegatronBert
 class MegatronBertOnlyNSPHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
@@ -687,7 +687,7 @@ class MegatronBertOnlyNSPHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->MegatronBert
 class MegatronBertPreTrainingHeads(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__()
         self.predictions = MegatronBertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)

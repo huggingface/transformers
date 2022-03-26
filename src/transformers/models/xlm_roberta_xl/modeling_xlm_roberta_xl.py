@@ -154,7 +154,7 @@ class XLMRobertaXLEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->XLMRobertaXL
 class XLMRobertaXLSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: XLMRobertaXLConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -344,9 +344,9 @@ class XLMRobertaXLAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->XLMRobertaXL
 class XLMRobertaXLIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -558,9 +558,9 @@ class XLMRobertaXLEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->XLMRobertaXL
 class XLMRobertaXLPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()

@@ -441,9 +441,9 @@ class TapasSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Tapas
 class TapasSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -507,9 +507,9 @@ class TapasAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Tapas
 class TapasIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -523,9 +523,9 @@ class TapasIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Tapas
 class TapasOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -693,9 +693,9 @@ class TapasEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Tapas
 class TapasPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -711,7 +711,7 @@ class TapasPooler(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Tapas
 class TapasPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -729,7 +729,7 @@ class TapasPredictionHeadTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Tapas
 class TapasLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.transform = TapasPredictionHeadTransform(config)
 
@@ -750,7 +750,7 @@ class TapasLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Tapas
 class TapasOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__()
         self.predictions = TapasLMPredictionHead(config)
 

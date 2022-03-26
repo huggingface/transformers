@@ -267,7 +267,7 @@ class VisualBertSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->VisualBert
 class VisualBertSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -325,7 +325,7 @@ class VisualBertAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->VisualBert
 class VisualBertIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -341,7 +341,7 @@ class VisualBertIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->VisualBert
 class VisualBertOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -459,7 +459,7 @@ class VisualBertEncoder(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->VisualBert
 class VisualBertPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -475,7 +475,7 @@ class VisualBertPooler(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->VisualBert
 class VisualBertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -493,7 +493,7 @@ class VisualBertPredictionHeadTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->VisualBert
 class VisualBertLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.transform = VisualBertPredictionHeadTransform(config)
 
@@ -514,7 +514,7 @@ class VisualBertLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->VisualBert
 class VisualBertPreTrainingHeads(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__()
         self.predictions = VisualBertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)

@@ -241,7 +241,7 @@ class LayoutLMv2SelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->LayoutLMv2
 class LayoutLMv2Intermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv2Config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -255,9 +255,9 @@ class LayoutLMv2Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LayoutLM
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LayoutLMv2
 class LayoutLMv2Output(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv2Config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

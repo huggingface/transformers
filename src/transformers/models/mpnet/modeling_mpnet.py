@@ -248,9 +248,9 @@ class MPNetAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->MPNet
 class MPNetIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -264,9 +264,9 @@ class MPNetIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->MPNet
 class MPNetOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -400,9 +400,9 @@ class MPNetEncoder(nn.Module):
         return ret
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->MPNet
 class MPNetPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()

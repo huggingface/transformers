@@ -160,7 +160,7 @@ class RobertaEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
 class RobertaSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: RobertaConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -286,9 +286,9 @@ class RobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Roberta
 class RobertaSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -303,7 +303,7 @@ class RobertaSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 class RobertaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: RobertaConfig, position_embedding_type=None):
         super().__init__()
         self.self = RobertaSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = RobertaSelfOutput(config)
@@ -351,9 +351,9 @@ class RobertaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Roberta
 class RobertaIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -367,9 +367,9 @@ class RobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Roberta
 class RobertaOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -384,7 +384,7 @@ class RobertaOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
 class RobertaLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -470,7 +470,7 @@ class RobertaLayer(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta
 class RobertaEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([RobertaLayer(config) for _ in range(config.num_hidden_layers)])
@@ -566,9 +566,9 @@ class RobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Roberta
 class RobertaPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()

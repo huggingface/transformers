@@ -1211,7 +1211,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1317,7 +1317,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1418,7 +1418,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
@@ -1519,7 +1519,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

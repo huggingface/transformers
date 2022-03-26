@@ -292,7 +292,7 @@ class DebertaV2Attention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->DebertaV2
 class DebertaV2Intermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):

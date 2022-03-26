@@ -223,7 +223,7 @@ class FNetFourierTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->FNet
 class FNetIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -239,7 +239,7 @@ class FNetIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->FNet
 class FNetOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -318,7 +318,7 @@ class FNetEncoder(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->FNet
 class FNetPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -334,7 +334,7 @@ class FNetPooler(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->FNet
 class FNetPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -384,7 +384,7 @@ class FNetOnlyMLMHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->FNet
 class FNetOnlyNSPHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
@@ -395,7 +395,7 @@ class FNetOnlyNSPHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->FNet
 class FNetPreTrainingHeads(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__()
         self.predictions = FNetLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)

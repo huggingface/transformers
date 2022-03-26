@@ -132,7 +132,7 @@ class LayoutLMEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->LayoutLM
 class LayoutLMSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: LayoutLMConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -260,7 +260,7 @@ class LayoutLMSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->LayoutLM
 class LayoutLMSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -275,7 +275,7 @@ class LayoutLMSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
 class LayoutLMAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: LayoutLMConfig, position_embedding_type=None):
         super().__init__()
         self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = LayoutLMSelfOutput(config)
@@ -323,9 +323,9 @@ class LayoutLMAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->LayoutLM
 class LayoutLMIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -341,7 +341,7 @@ class LayoutLMIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LayoutLM
 class LayoutLMOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -356,7 +356,7 @@ class LayoutLMOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->LayoutLM
 class LayoutLMLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -442,7 +442,7 @@ class LayoutLMLayer(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->LayoutLM
 class LayoutLMEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LayoutLMLayer(config) for _ in range(config.num_hidden_layers)])
@@ -538,9 +538,9 @@ class LayoutLMEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->LayoutLM
 class LayoutLMPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -556,7 +556,7 @@ class LayoutLMPooler(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->LayoutLM
 class LayoutLMPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -574,7 +574,7 @@ class LayoutLMPredictionHeadTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->LayoutLM
 class LayoutLMLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.transform = LayoutLMPredictionHeadTransform(config)
 
@@ -595,7 +595,7 @@ class LayoutLMLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->LayoutLM
 class LayoutLMOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__()
         self.predictions = LayoutLMLMPredictionHead(config)
 

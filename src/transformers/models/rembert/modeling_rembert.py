@@ -200,7 +200,7 @@ class RemBertEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->RemBert
 class RemBertPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -321,7 +321,7 @@ class RemBertSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RemBert
 class RemBertSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -387,7 +387,7 @@ class RemBertAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RemBert
 class RemBertIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -403,7 +403,7 @@ class RemBertIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RemBert
 class RemBertOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -606,7 +606,7 @@ class RemBertEncoder(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RemBert
 class RemBertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -640,7 +640,7 @@ class RemBertLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RemBert
 class RemBertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__()
         self.predictions = RemBertLMPredictionHead(config)
 

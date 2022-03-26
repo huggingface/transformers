@@ -243,9 +243,9 @@ class NystromformerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Nystromformer
 class NystromformerSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -292,7 +292,7 @@ class NystromformerAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nystromformer
 class NystromformerIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -308,7 +308,7 @@ class NystromformerIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nystromformer
 class NystromformerOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -407,7 +407,7 @@ class NystromformerEncoder(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nystromformer
 class NystromformerPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -425,7 +425,7 @@ class NystromformerPredictionHeadTransform(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Nystromformer
 class NystromformerLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.transform = NystromformerPredictionHeadTransform(config)
 
@@ -446,7 +446,7 @@ class NystromformerLMPredictionHead(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Nystromformer
 class NystromformerOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__()
         self.predictions = NystromformerLMPredictionHead(config)
 

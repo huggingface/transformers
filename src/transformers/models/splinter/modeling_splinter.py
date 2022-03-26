@@ -104,7 +104,7 @@ class SplinterEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Splinter
 class SplinterSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: SplinterConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -232,7 +232,7 @@ class SplinterSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Splinter
 class SplinterSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -247,7 +247,7 @@ class SplinterSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Splinter
 class SplinterAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: SplinterConfig, position_embedding_type=None):
         super().__init__()
         self.self = SplinterSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = SplinterSelfOutput(config)
@@ -297,7 +297,7 @@ class SplinterAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Splinter
 class SplinterIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -313,7 +313,7 @@ class SplinterIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Splinter
 class SplinterOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -328,7 +328,7 @@ class SplinterOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Splinter
 class SplinterLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -414,7 +414,7 @@ class SplinterLayer(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Splinter
 class SplinterEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([SplinterLayer(config) for _ in range(config.num_hidden_layers)])

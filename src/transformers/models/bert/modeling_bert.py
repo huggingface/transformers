@@ -166,7 +166,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -229,7 +229,7 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: BertConfig, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -356,7 +356,7 @@ class BertSelfAttention(nn.Module):
 
 
 class BertSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -370,7 +370,7 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: BertConfig, position_embedding_type=None):
         super().__init__()
         self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = BertSelfOutput(config)
@@ -419,7 +419,7 @@ class BertAttention(nn.Module):
 
 
 class BertIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -434,7 +434,7 @@ class BertIntermediate(nn.Module):
 
 
 class BertOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -448,7 +448,7 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -533,7 +533,7 @@ class BertLayer(nn.Module):
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -630,7 +630,7 @@ class BertEncoder(nn.Module):
 
 
 class BertPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -645,7 +645,7 @@ class BertPooler(nn.Module):
 
 
 class BertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -662,7 +662,7 @@ class BertPredictionHeadTransform(nn.Module):
 
 
 class BertLMPredictionHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.transform = BertPredictionHeadTransform(config)
 
@@ -682,7 +682,7 @@ class BertLMPredictionHead(nn.Module):
 
 
 class BertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.predictions = BertLMPredictionHead(config)
 
@@ -692,7 +692,7 @@ class BertOnlyMLMHead(nn.Module):
 
 
 class BertOnlyNSPHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
@@ -702,7 +702,7 @@ class BertOnlyNSPHead(nn.Module):
 
 
 class BertPreTrainingHeads(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__()
         self.predictions = BertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -863,7 +863,7 @@ class BertModel(BertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BertConfig, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -1034,7 +1034,7 @@ class BertModel(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForPreTraining(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1142,7 +1142,7 @@ class BertLMHeadModel(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1293,7 +1293,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1400,7 +1400,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1504,7 +1504,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1606,7 +1606,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForMultipleChoice(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1704,7 +1704,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1789,7 +1789,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
