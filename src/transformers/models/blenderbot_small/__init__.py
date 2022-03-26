@@ -21,7 +21,11 @@ from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokeniz
 
 
 _import_structure = {
-    "configuration_blenderbot_small": ["BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotSmallConfig"],
+    "configuration_blenderbot_small": [
+        "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlenderbotSmallConfig",
+        "BlenderbotSmallOnnxConfig",
+    ],
     "tokenization_blenderbot_small": ["BlenderbotSmallTokenizer"],
 }
 
@@ -52,7 +56,11 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_blenderbot_small import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotSmallConfig
+    from .configuration_blenderbot_small import (
+        BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BlenderbotSmallConfig,
+        BlenderbotSmallOnnxConfig,
+    )
     from .tokenization_blenderbot_small import BlenderbotSmallTokenizer
 
     if is_tokenizers_available():

@@ -52,6 +52,7 @@ from .utils import (
     USE_JAX,
     USE_TF,
     USE_TORCH,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
     DummyObject,

@@ -1240,7 +1240,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
-        freeze_feature_enocder=False,
+        freeze_feature_encoder=False,
         return_dict=None,
     ):
         r"""
@@ -1261,7 +1261,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             output_hidden_states=output_hidden_states,
             mask_time_indices=mask_time_indices,
             deterministic=deterministic,
-            freeze_feature_encoder=freeze_feature_enocder,
+            freeze_feature_encoder=freeze_feature_encoder,
             return_dict=return_dict,
         )
 
