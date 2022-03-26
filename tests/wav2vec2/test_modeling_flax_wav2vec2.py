@@ -254,17 +254,20 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 outputs.projected_states, outputs.projected_quantized_states, epsilon=epsilon
             )
             loss = cosine_sim.sum()
-            return loss
+            return loss, outputs.to_tuple()
 
         # transform the loss function to get the gradients
-        grad_fn = jax.value_and_grad(compute_loss)
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
-        # compute loss and gradients for unfrozen model
-        loss, grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
+        # compute loss, outputs and gradients for unfrozen model
+        (loss, outputs), grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
 
-        # compare to loss and gradients for frozen model
-        loss_frozen, grads_frozen = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=True)
+        # compare to loss, outputs and gradients for frozen model
+        (loss_frozen, outputs_frozen), grads_frozen = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=True)
 
+        # ensure that the outputs and losses remain precisely equal
+        for output, output_frozen in zip(outputs, outputs_frozen):
+            self.assertTrue((output == output_frozen).all())
         self.assertEqual(loss, loss_frozen)
 
         grads = flatten_dict(grads)

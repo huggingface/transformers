@@ -360,19 +360,21 @@ class FlaxEncoderDecoderMixin:
             logits = outputs_enc_dec.logits
             vocab_size = logits.shape[-1]
             loss = cross_entropy(logits, onehot(labels=decoder_input_ids, num_classes=vocab_size)).sum()
-            return loss
+            return (loss, logits)
 
         # transform the loss function to get the gradients
-        grad_fn = jax.value_and_grad(compute_loss)
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
-        # compute the loss and gradients for the unfrozen model
-        loss, grads = grad_fn(params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False)
+        # compute the loss, logits, and gradients for the unfrozen model
+        (loss, logits), grads = grad_fn(params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False)
 
-        # compare to the loss and gradients for the frozen model
-        loss_frozen, grads_frozen = grad_fn(
+        # compare to the loss, logits and gradients for the frozen model
+        (loss_frozen, logits_frozen), grads_frozen = grad_fn(
             params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=True
         )
 
+        # ensure that the logits and losses remain precisely equal
+        self.assertTrue((logits == logits_frozen).all())
         self.assertEqual(loss, loss_frozen)
 
         grads = flatten_dict(grads)
