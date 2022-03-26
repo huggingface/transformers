@@ -120,7 +120,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
@@ -145,7 +145,7 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxBaseModelOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxBaseModelOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
@@ -191,8 +191,8 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxCausalLMOutputWithCrossAttentions`] instead of
-            a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxCausalLMOutputWithCrossAttentions`] instead of a
+            plain tuple.
 """
 
 
