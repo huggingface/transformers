@@ -5,6 +5,7 @@ from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_avail
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.big_bird import BigBirdOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
@@ -154,6 +155,16 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=BertOnnxConfig,
+        ),
+        "bigbird": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=BigBirdOnnxConfig,
         ),
         "ibert": supported_features_mapping(
             "default",
