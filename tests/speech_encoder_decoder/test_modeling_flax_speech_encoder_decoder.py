@@ -373,7 +373,7 @@ class FlaxEncoderDecoderMixin:
             params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=True
         )
 
-        self.assert_almost_equals(loss, loss_frozen, 1e-5)
+        self.assertEqual(loss, loss_frozen)
 
         grads = flatten_dict(grads)
         grads_frozen = flatten_dict(grads_frozen)
@@ -381,7 +381,7 @@ class FlaxEncoderDecoderMixin:
         # ensure that the dicts of gradients contain the same keys
         self.assertEqual(grads.keys(), grads_frozen.keys())
 
-        # ensure that the gradients of the frozen layers are precisely zero and that they differ to the gradients of the unfrozen layers
+        # ensure that the gradients of the feature extractor layers are precisely zero when frozen and contain non-zero entries when unfrozen
         feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
         feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
 
@@ -389,14 +389,14 @@ class FlaxEncoderDecoderMixin:
             feature_extractor_grads, feature_extractor_grads_frozen
         ):
             self.assertTrue((feature_extractor_grad_frozen == 0.0).all())
-            self.assert_difference(feature_extractor_grad, feature_extractor_grad_frozen, 1e-5)
+            self.assertTrue((feature_extractor_grad > 0.0).any())
 
-        # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
+        # ensure that the gradients of all unfrozen layers remain precisely equal, i.e. all layers excluding the frozen 'feature_extractor'
         grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
         grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
 
         for grad, grad_frozen in zip(grads, grads_frozen):
-            self.assert_almost_equals(grad, grad_frozen, 1e-5)
+            self.assertTrue((grad == grad_frozen).all())
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
 
@@ -504,11 +504,7 @@ class FlaxEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between arrays is {diff} (>= {tol}).")
-
-    def assert_difference(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
-        self.assertGreaterEqual(diff, tol, f"Difference between arrays is {diff} (<= {tol}).")
+        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
