@@ -15,6 +15,8 @@
 """PyTorch BERT model specific for generation."""
 
 
+from typing import Dict, Optional, Tuple, Union
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -128,7 +130,7 @@ def load_tf_weights_in_bert_generation(
 class BertGenerationEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -140,7 +142,13 @@ class BertGenerationEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -267,7 +275,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
         self.config = config
 
@@ -300,19 +308,19 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor, ...], ...] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -420,13 +428,13 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
 
 class BertGenerationOnlyLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__()
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         logits = self.decoder(hidden_states)
         return logits
 
@@ -440,7 +448,7 @@ class BertGenerationOnlyLMHead(nn.Module):
     BERT_GENERATION_START_DOCSTRING,
 )
 class BertGenerationDecoder(BertGenerationPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -462,20 +470,20 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, ...], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -563,7 +571,13 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past=None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        **model_kwargs
+    ) -> Dict:
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
