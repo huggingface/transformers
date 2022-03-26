@@ -26,6 +26,10 @@ EOF_STRINGS = ["\nclass", "\ndef", "\n#", "\n@", "\nprint", "\nif"]
 
 
 class TokenizeDataset(IterableDataset):
+    """Tokenize and preprocess the dataset
+    Multiple copies of the same prompt are sent sequentially.
+    See compute_code for more details.
+    """
     def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1):
         self.tokenizer = tokenizer
         self.dataset = dataset
@@ -34,7 +38,7 @@ class TokenizeDataset(IterableDataset):
 
     def __iter__(self):
         for task in range(self.n_tasks):
-            # with out strip, the model generate commented codes ...
+            # without strip, the model generate commented codes ...
             prompt = self.tokenizer.eos_token + self.dataset[task]['prompt'].strip()
             # codeparrot model is not robust to padding
             input_ids = self.tokenizer(prompt)['input_ids']
@@ -68,8 +72,46 @@ def remove_last_block(string):
 
 
 def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size=20, **gen_kwargs):
+    """Generate multiple codes for each task in the dataset. This function leverage accelerator to distribute
+    the processing to multiple GPUs.
+    dataloader, a wrapper around a TokenizeDataset objectm is supposed to send all the prompts from 
+    the evalution dataset to the modelm as the following:
+    [p_0_0, p_0_1, ..., p_0_nc-1, p_1_0, ..., p_nt-1_nc-1]
+    where nc is the number of copies of the prompt, and nt is the number of tasks.
+    nc is such that num_sample = nc * batch_size
+    In this way, the same prompt is sent to the model on all the GPUs to avoid zero padding.
+    (accelerate require all the batch having the same shape before feeding it to multiple GPUs)
+
+    Parameters
+    ----------
+    accelerator: Accelerator
+
+    model: transformers.PreTrainedModel
+        Code generation model. AutoTokenizer.from_pretrained(model_ckpt), ex model_ckpt = "lvwerra/codeparrot"
+    
+    tokenizer: transformers.AutoTokenizer
+        The tokenizer used to train model
+    
+    dataloader: DataLoader
+        The dataloader is a wrapper around a TokenizeDataset object. It is designed to be used with multiple GPUs.
+
+    n_tasks: int
+        Number of tasks to generate codes for. Must be equal to the number of tasks in the TokenizeDataset.n_tasks.
+
+    batch_size: int
+        num_return_sequences per copy of the prompt such that num_sample = batch_size * n_copies
+    
+    gen_kwargs: dict
+        Keyword arguments for the generation function of the model.
+    
+    Returns
+    -------
+    code_gens: list, len = n_tasks
+        List of generated codes for each task.
+        Each element is a list of generated codes for each task, with length num_samples
+    """
     gen_dataset_tokens = []  # list of shape n_steps
-    for step, batch in enumerate(dataloader):
+    for step, batch in tqdm(enumerate(dataloader)):
         with torch.no_grad():
             gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
             generated_tokens = accelerator.unwrap_model(model).generate(
@@ -110,8 +152,6 @@ def main():
 
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
-    # add pad_token to pad for multi gpu
-    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(args.model_ckpt)
 
     # Generation settings
@@ -136,6 +176,7 @@ def main():
     if n_copies % accelerator.num_processes != 0:
         raise ValueError(f'n_samples({args.n_samples}) should be a mulitple of batch_size({args.batch_size}) x num_processes({accelerator.num_processes})')
     human_eval_td = TokenizeDataset(tokenizer, human_eval["test"], n_copies=n_copies, n_tasks=n_tasks)
+    # do not confuse args.batch_size, which is actually the num_return_sequences
     human_eval_loader = DataLoader(human_eval_td, batch_size=1)
 
     # Run a quick test to see if code evaluation is enabled
