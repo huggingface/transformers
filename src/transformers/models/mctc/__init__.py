@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
 from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available
+from ...file_utils import is_torch_available, is_speech_available
 
 
 _import_structure = {
@@ -30,15 +30,13 @@ _import_structure = {
 if is_tokenizers_available():
     _import_structure["tokenization_mctc_fast"] = ["MCTCTokenizerFast"]
 
+if is_speech_available():
+    _import_structure["feature_extraction_mctc"] = ["MCTCFeatureExtractor"]
+
+
 if is_torch_available():
     _import_structure["modeling_mctc"] = [
         "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MCTCForMaskedLM",
-        "MCTCForCausalLM",
-        "MCTCForMultipleChoice",
-        "MCTCForQuestionAnswering",
-        "MCTCForSequenceClassification",
-        "MCTCForTokenClassification",
         "MCTCLayer",
         "MCTCModel",
         "MCTCPreTrainedModel",
@@ -54,6 +52,9 @@ if TYPE_CHECKING:
 
     if is_tokenizers_available():
         from .tokenization_mctc_fast import MCTCTokenizerFast
+
+    if is_speech_available():
+        from .feature_extraction_mctc import MCTCFeatureExtractor
 
     if is_torch_available():
         from .modeling_mctc import (

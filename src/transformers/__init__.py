@@ -502,6 +502,7 @@ else:
 # Speech-specific objects
 if is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.mctc"].append("MCTCFeatureExtractor")
 else:
     from .utils import dummy_speech_objects
 
@@ -2808,6 +2809,7 @@ if TYPE_CHECKING:
 
     if is_speech_available():
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.mctc import MCTCFeatureExtractor
     else:
         from .utils.dummy_speech_objects import *
 

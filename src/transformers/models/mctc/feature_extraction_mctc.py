@@ -19,6 +19,8 @@ Feature extractor class for Wav2Vec2
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
+from torchaudio.transforms import MelSpectrogram
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -40,59 +42,115 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, defaults to 1):
-            The feature dimension of the extracted features.
+        feature_size (`int`, defaults to 80):
+            The feature dimension of the extracted features. This is the number of mel_frequency
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-            improve the performance for some models, *e.g.*,
-            [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
-        return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~Wav2Vec2FeatureExtractor.__call__`] should return `attention_mask`.
-
+        hop_length (`int`, defaults to 10):
+            Number of audio samples between windows. Otherwise referred to as "shift" in many papers.
+        win_length (`int`, defaults to 25):
+            Number of ms per window
+        win_function (`str`, defaults to `hamming_window`):
+            name for the window function used for windowing, must be accessible via `torch.{win_function}`
+        normalize_means (`bool`, *optional*, defaults to `True`):
+            Whether or not to zero-mean normalize the extracted features.
+        normalize_vars (`bool`, *optional*, defaults to `True`):
+            Whether or not to unit-variance normalize the extracted features.
         """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
-        feature_size=1,
+        feature_size=80,
         sampling_rate=16000,
         padding_value=0.0,
-        return_attention_mask=False,
-        do_normalize=True,
+        hop_length=10,
+        win_length=25,
+        win_function="hamming_window",
+        normalize_means=True,
+        normalize_vars=True,
         **kwargs
     ):
-
-
+        '''
+        NOTE TO SELF: maybe raise an issue about Speech2TextFeatureExtractor for not having
+        separate num_mel_bins and feature_size parameters, since they must both be the same.
+        '''
+        # if num_mel_bins != feature_size:
+        #     '''Very redundant code, but I'm conflicted between following the standard of using "feature_size" for FeatureExtractor
+        #     classes & the fact that the "features" here are mel bins. Should be easy change either way.
+        #     '''
+        #     raise ValueError("`num_mel_bins` must be the same as `feature_size`")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.return_attention_mask = return_attention_mask
-        self.do_normalize = do_normalize
+        
+        self.feature_size = feature_size
+        self.sampling_rate = sampling_rate
+        self.padding_value = padding_value
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.normalize_means = normalize_means
+        self.normalize_vars = normalize_vars
+        self.win_function = win_function
+        self.return_attention_mask = True
 
     @staticmethod
-    def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+    def _normalize_one(
+        x: np.ndarray,
+        input_length: int,
+        normalize_means: Optional[bool] = True,
+        normalize_vars: Optional[bool] = True,
+        padding_value: float = 0.0,
+    ) -> np.ndarray:
+        # make sure we normalize float32 arrays
+        if normalize_means:
+            mean = x[:input_length].mean(axis=0)
+            x = np.subtract(x, mean)
+        if normalize_vars:
+            std = x[:input_length].std(axis=0)
+            x = np.divide(x, std)
+
+        if input_length < x.shape[0]:
+            x[input_length:] = padding_value
+
+        # make sure array is in float32
+        x = x.astype(np.float32)
+
+        return x
+
+    def _normalize(
+        self, 
+        input_features: List[np.ndarray], 
+        attention_mask: Optional[np.ndarray] = None
+    ):
+        lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
+        
+        return [
+            self._normalize_one(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
+            for x, n in zip(input_features, lengths)
+        ]
+
+    def _extract_fbank_features(
+        self,
+        waveform: np.ndarray,
+    ) -> np.ndarray:
         """
-        Every array in the list is normalized to have zero mean and unit variance
+        Get mel-filter bank features using TorchAudio.
         """
-        if attention_mask is not None:
-            attention_mask = np.array(attention_mask, np.int32)
-            normed_input_values = []
 
-            for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length < normed_slice.shape[0]:
-                    normed_slice[length:] = padding_value
+        mel_transform = MelSpectrogram(
+            sample_rate=self.sampling_rate,
+            win_length=self.win_length,
+            hop_length=self.hop_length,
+            n_mels=self.feature_size,
+            window_fn=getattr(torch, self.win_function),
+            normalized=False
+        )
 
-                normed_input_values.append(normed_slice)
-        else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
-
-        return normed_input_values
+        waveform = torch.from_numpy(waveform)
+        mel_specgram = mel_transform(waveform) # (n_mels, time)
+        return mel_specgram.numpy().transpose((1, 0)) # (time, n_mels)
 
     def __call__(
         self,
@@ -142,7 +200,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
 
                 Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
                 [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-                `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
+                `attention_mask`. For such models, `input_features` should simply be padded with 0 and no
                 `attention_mask` should be passed.
 
                 For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
@@ -180,12 +238,22 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
+        if is_batched:
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
+        elif not is_batched and not isinstance(raw_speech, np.ndarray):
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+            raw_speech = raw_speech.astype(np.float32)
+
         # always return batch
         if not is_batched:
             raw_speech = [raw_speech]
 
+        # extract fbank features
+        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+
         # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": raw_speech})
+        encoded_inputs = BatchFeature({"input_features": features})
 
         padded_inputs = self.pad(
             encoded_inputs,
@@ -194,37 +262,31 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
+            **kwargs,
         )
+        # make sure list is in array format
+        input_features = padded_inputs.get("input_features")
+        if isinstance(input_features[0], list):
+            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
-        # convert input values to correct format
-        input_values = padded_inputs["input_values"]
-        if not isinstance(input_values[0], np.ndarray):
-            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
-        elif (
-            not isinstance(input_values, np.ndarray)
-            and isinstance(input_values[0], np.ndarray)
-            and input_values[0].dtype is np.dtype(np.float64)
-        ):
-            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
-            padded_inputs["input_values"] = input_values.astype(np.float32)
-
-        # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
+        
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
-        # zero-mean and unit-variance normalization
-        if self.do_normalize:
+
+        if self.normalize_means or self.normalize_vars:
+            
             attention_mask = (
-                attention_mask
+                np.array(attention_mask, dtype=np.int32)
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
                 else None
             )
-            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
-            )
 
+            padded_inputs["input_features"] = self._normalize(
+                padded_inputs["input_features"], attention_mask=attention_mask
+            )
+    
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
