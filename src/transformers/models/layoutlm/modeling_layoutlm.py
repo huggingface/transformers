@@ -16,7 +16,7 @@
 
 
 import math
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -132,7 +132,7 @@ class LayoutLMEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->LayoutLM
 class LayoutLMSelfAttention(nn.Module):
-    def __init__(self, config: LayoutLMConfig, position_embedding_type=None):
+    def __init__(self, config: LayoutLMConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -158,7 +158,7 @@ class LayoutLMSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -275,13 +275,13 @@ class LayoutLMSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
 class LayoutLMAttention(nn.Module):
-    def __init__(self, config: LayoutLMConfig, position_embedding_type=None):
+    def __init__(self, config: LayoutLMConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = LayoutLMSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -434,7 +434,7 @@ class LayoutLMLayer(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output: torch.Tensor) -> torch.Tensor:
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
@@ -587,7 +587,7 @@ class LayoutLMLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states

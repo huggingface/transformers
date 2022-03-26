@@ -195,7 +195,7 @@ class MegatronBertEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
 class MegatronBertSelfAttention(nn.Module):
-    def __init__(self, config: MegatronBertConfig, position_embedding_type=None):
+    def __init__(self, config: MegatronBertConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -221,7 +221,7 @@ class MegatronBertSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -657,7 +657,7 @@ class MegatronBertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -680,7 +680,7 @@ class MegatronBertOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
@@ -692,7 +692,7 @@ class MegatronBertPreTrainingHeads(nn.Module):
         self.predictions = MegatronBertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score

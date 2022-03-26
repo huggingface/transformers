@@ -1722,7 +1722,7 @@ class BigBirdLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -1745,7 +1745,7 @@ class BigBirdOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
@@ -1757,7 +1757,7 @@ class BigBirdPreTrainingHeads(nn.Module):
         self.predictions = BigBirdLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score

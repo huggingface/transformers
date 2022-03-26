@@ -388,7 +388,7 @@ class FNetOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
@@ -400,7 +400,7 @@ class FNetPreTrainingHeads(nn.Module):
         self.predictions = FNetLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score

@@ -154,7 +154,7 @@ class XLMRobertaXLEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->XLMRobertaXL
 class XLMRobertaXLSelfAttention(nn.Module):
-    def __init__(self, config: XLMRobertaXLConfig, position_embedding_type=None):
+    def __init__(self, config: XLMRobertaXLConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -180,7 +180,7 @@ class XLMRobertaXLSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)

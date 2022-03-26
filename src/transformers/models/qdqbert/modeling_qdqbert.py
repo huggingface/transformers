@@ -712,7 +712,7 @@ class QDQBertOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 

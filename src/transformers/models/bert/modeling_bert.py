@@ -20,7 +20,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -229,7 +229,7 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
-    def __init__(self, config: BertConfig, position_embedding_type=None):
+    def __init__(self, config: BertConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -255,7 +255,7 @@ class BertSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -370,13 +370,13 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config: BertConfig, position_embedding_type=None):
+    def __init__(self, config: BertConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -526,7 +526,7 @@ class BertLayer(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output: torch.Tensor) -> torch.Tensor:
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
@@ -675,7 +675,7 @@ class BertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -696,7 +696,7 @@ class BertOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
@@ -707,7 +707,7 @@ class BertPreTrainingHeads(nn.Module):
         self.predictions = BertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
@@ -875,13 +875,13 @@ class BertModel(BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -1043,10 +1043,10 @@ class BertForPreTraining(BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1154,10 +1154,10 @@ class BertLMHeadModel(BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1268,7 +1268,13 @@ class BertLMHeadModel(BertPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: Optional[torch.Tensor],
+        past=None,
+        attention_mask: Optional[torch.Tensor] = None,
+        **model_kwargs
+    ) -> dict:
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1308,10 +1314,10 @@ class BertForMaskedLM(BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1378,7 +1384,9 @@ class BertForMaskedLM(BertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids: Optional[torch.Tensor], attention_mask: Optional[torch.Tensor] = None, **model_kwargs
+    ) -> dict:
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
