@@ -307,7 +307,7 @@ class MBartEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -390,7 +390,7 @@ class MBartDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -722,14 +722,14 @@ class MBartEncoder(MBartPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -913,19 +913,19 @@ class MBartDecoder(MBartPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1168,22 +1168,22 @@ class MBartModel(MBartPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqModelOutput, Tuple[torch.FloatTensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1297,23 +1297,23 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
     @add_end_docstrings(MBART_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
