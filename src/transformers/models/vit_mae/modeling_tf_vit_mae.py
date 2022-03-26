@@ -543,7 +543,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
-            # in ViT, layernorm is applied before self-attention
+            # in ViTMAE, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states),
             head_mask=head_mask,
             output_attentions=output_attentions,
