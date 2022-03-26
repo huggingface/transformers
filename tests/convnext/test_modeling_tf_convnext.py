@@ -19,8 +19,8 @@ import unittest
 from typing import List, Tuple
 
 from transformers import ConvNextConfig
-from transformers.file_utils import cached_property, is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor

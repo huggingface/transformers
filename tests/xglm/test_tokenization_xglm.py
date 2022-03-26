@@ -20,8 +20,8 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, XGLMTokenizer, XGLMTokenizerFast
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
+from transformers.utils import cached_property
 
 from ..test_tokenization_common import TokenizerTesterMixin
 

@@ -3,7 +3,7 @@ name: Model templates runner
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     paths:
       - "src/**"
@@ -60,7 +60,7 @@ jobs:
 
       - name: Run style changes
         run: |
-          git fetch origin master:master
+          git fetch origin main:main
           make style && make quality && make repo-consistency
 
       - name: Failure short reports
