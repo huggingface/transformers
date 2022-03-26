@@ -336,7 +336,7 @@ class BigBirdSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x: torch.Tensor):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -1481,7 +1481,7 @@ class BigBirdLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states,
+        hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -1600,7 +1600,7 @@ class BigBirdEncoder(nn.Module):
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
         blocked_encoder_mask: Optional[torch.Tensor] = None,
-        return_dict=True,
+        return_dict: bool = True,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None

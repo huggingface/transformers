@@ -871,7 +871,13 @@ class PLBartDecoder(PLBartPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embed_tokens = value
 
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_shape: torch.Size,
+        inputs_embeds: torch.FloatTensor,
+        past_key_values_length: int,
+    ) -> Optional[torch.Tensor]:
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
