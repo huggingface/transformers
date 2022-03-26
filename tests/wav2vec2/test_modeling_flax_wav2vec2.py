@@ -263,7 +263,9 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         (loss, outputs), grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
 
         # compare to loss, outputs and gradients for frozen model
-        (loss_frozen, outputs_frozen), grads_frozen = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=True)
+        (loss_frozen, outputs_frozen), grads_frozen = grad_fn(
+            params, input_values, attention_mask, freeze_feature_encoder=True
+        )
 
         # ensure that the outputs and losses remain precisely equal
         for output, output_frozen in zip(outputs, outputs_frozen):

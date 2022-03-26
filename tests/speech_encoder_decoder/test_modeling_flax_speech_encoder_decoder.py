@@ -366,7 +366,9 @@ class FlaxEncoderDecoderMixin:
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
         # compute the loss, logits, and gradients for the unfrozen model
-        (loss, logits), grads = grad_fn(params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False)
+        (loss, logits), grads = grad_fn(
+            params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False
+        )
 
         # compare to the loss, logits and gradients for the frozen model
         (loss_frozen, logits_frozen), grads_frozen = grad_fn(
