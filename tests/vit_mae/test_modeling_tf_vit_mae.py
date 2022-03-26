@@ -496,6 +496,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
             check_pt_tf_models(tf_model, pt_model)
 
+    # overwrite from common since TFViTMAEForPretraining outputs loss along with
+    # logits and mask indices. loss and mask indicies are not suitable for integration
+    # with other keras modules.
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)

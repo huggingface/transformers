@@ -368,28 +368,19 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.query = tf.keras.layers.Dense(
-            units=self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="query",
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
         self.key = tf.keras.layers.Dense(
-            units=self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="key",
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
         self.value = tf.keras.layers.Dense(
-            units=self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="value",
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob, name="dropout")
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(
-            tensor=tensor,
-            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
-        )
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -447,11 +438,9 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob, name="dropout")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -479,10 +468,7 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            hidden_states=input_tensor,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            training=training,
+            hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
@@ -498,9 +484,7 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -521,11 +505,9 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob, name="dropout")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -628,9 +610,7 @@ class TFViTMAEEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
