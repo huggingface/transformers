@@ -69,7 +69,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int) -> torch.Tensor:
     """
     Shift input ids one token to the right.
     """
@@ -85,7 +85,9 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0
+) -> torch.Tensor:
     """
     Make causal mask used for bi-directional self-attention.
     """
@@ -100,7 +102,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None) -> torch.Tensor:
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -125,7 +127,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
@@ -164,7 +166,7 @@ class BartAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int) -> torch.Tensor:
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
@@ -720,10 +722,10 @@ class BartEncoder(BartPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embed_tokens
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embed_tokens = value
 
     def forward(
@@ -891,10 +893,10 @@ class BartDecoder(BartPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embed_tokens
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
@@ -1148,18 +1150,18 @@ class BartModel(BartPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.shared
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
+    def get_encoder(self) -> BartEncoder:
         return self.encoder
 
-    def get_decoder(self):
+    def get_decoder(self) -> BartDecoder:
         return self.decoder
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
@@ -1275,10 +1277,10 @@ class BartForConditionalGeneration(BartPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self) -> BartEncoder:
         return self.model.get_encoder()
 
-    def get_decoder(self):
+    def get_decoder(self) -> BartDecoder:
         return self.model.get_decoder()
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
@@ -1295,10 +1297,10 @@ class BartForConditionalGeneration(BartPretrainedModel):
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
@@ -1384,16 +1386,16 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
     def prepare_inputs_for_generation(
         self,
-        decoder_input_ids,
+        decoder_input_ids: Optional[torch.LongTensor],
         past=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         **kwargs
-    ):
+    ) -> dict:
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1558,7 +1560,7 @@ class BartForSequenceClassification(BartPretrainedModel):
     BART_START_DOCSTRING,
 )
 class BartForQuestionAnswering(BartPretrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1679,7 +1681,7 @@ class BartDecoderWrapper(BartPretrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
         self.decoder = BartDecoder(config)
 
@@ -1688,7 +1690,7 @@ class BartDecoderWrapper(BartPretrainedModel):
 
 
 class BartForCausalLM(BartPretrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
@@ -1700,22 +1702,22 @@ class BartForCausalLM(BartPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.model.decoder.embed_tokens
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.model.decoder.embed_tokens = value
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head = new_embeddings
 
-    def set_decoder(self, decoder):
+    def set_decoder(self, decoder: BartDecoder) -> None:
         self.model.decoder = decoder
 
-    def get_decoder(self):
+    def get_decoder(self) -> BartDecoder:
         return self.model.decoder
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
@@ -1862,7 +1864,14 @@ class BartForCausalLM(BartPretrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past=None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs
+    ) -> dict:
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)

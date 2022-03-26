@@ -241,7 +241,7 @@ class BeitSelfAttention(nn.Module):
         else:
             self.relative_position_bias = None
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -319,7 +319,7 @@ class BeitAttention(nn.Module):
         self.output = BeitSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -1039,7 +1039,7 @@ class BeitUperHead(nn.Module):
             padding=1,
         )
 
-    def psp_forward(self, inputs):
+    def psp_forward(self, inputs: torch.Tensor) -> torch.Tensor:
         x = inputs[-1]
         psp_outs = [x]
         psp_outs.extend(self.psp_modules(x))
@@ -1170,7 +1170,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, logits, auxiliary_logits, labels):
+    def compute_loss(
+        self, logits: torch.FloatTensor, auxiliary_logits: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
         # upsample logits to the images' original size
         upsampled_logits = nn.functional.interpolate(
             logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
