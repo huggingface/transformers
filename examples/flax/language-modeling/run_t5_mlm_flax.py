@@ -338,7 +338,7 @@ class FlaxDataCollatorForT5MLM:
                 f"`labels` are incorrectly preprocessed. `labels` length is {batch['labels'].shape[-1]}, but should be {self.target_length}."
             )
 
-        # to check that tokens are correctly proprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
+        # to check that tokens are correctly preprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )
