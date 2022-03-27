@@ -18,7 +18,7 @@
 import math
 import os
 from operator import attrgetter
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -187,7 +187,7 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
 class ConvBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
@@ -206,7 +206,13 @@ class ConvBertEmbeddings(nn.Module):
                 persistent=False,
             )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -276,7 +282,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
 class SeparableConv1D(nn.Module):
     """This class implements separable convolution, i.e. a depthwise and a pointwise layer"""
 
-    def __init__(self, config, input_filters, output_filters, kernel_size, **kwargs):
+    def __init__(self, config: ConvBertConfig, input_filters: int, output_filters: int, kernel_size: int, **kwargs):
         super().__init__()
         self.depthwise = nn.Conv1d(
             input_filters,
@@ -292,7 +298,7 @@ class SeparableConv1D(nn.Module):
         self.depthwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
         self.pointwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         x = self.depthwise(hidden_states)
         x = self.pointwise(x)
         x += self.bias
@@ -300,7 +306,7 @@ class SeparableConv1D(nn.Module):
 
 
 class ConvBertSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -340,19 +346,19 @@ class ConvBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         mixed_query_layer = self.query(hidden_states)
         batch_size = hidden_states.size(0)
         # If this is instantiated as a cross-attention module, the keys
@@ -426,13 +432,13 @@ class ConvBertSelfAttention(nn.Module):
 
 
 class ConvBertSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -440,13 +446,13 @@ class ConvBertSelfOutput(nn.Module):
 
 
 class ConvBertAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.self = ConvBertSelfAttention(config)
         self.output = ConvBertSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -466,12 +472,12 @@ class ConvBertAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -485,7 +491,7 @@ class ConvBertAttention(nn.Module):
 
 
 class GroupedLinearLayer(nn.Module):
-    def __init__(self, input_size, output_size, num_groups):
+    def __init__(self, input_size: int, output_size: int, num_groups: int):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -495,7 +501,7 @@ class GroupedLinearLayer(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_groups, self.group_in_dim, self.group_out_dim))
         self.bias = nn.Parameter(torch.empty(output_size))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size = list(hidden_states.size())[0]
         x = torch.reshape(hidden_states, [-1, self.num_groups, self.group_in_dim])
         x = x.permute(1, 0, 2)
@@ -507,7 +513,7 @@ class GroupedLinearLayer(nn.Module):
 
 
 class ConvBertIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         if config.num_groups == 1:
             self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -520,14 +526,14 @@ class ConvBertIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 class ConvBertOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         if config.num_groups == 1:
             self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -538,7 +544,7 @@ class ConvBertOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -546,7 +552,7 @@ class ConvBertOutput(nn.Module):
 
 
 class ConvBertLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -561,13 +567,13 @@ class ConvBertLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -597,14 +603,14 @@ class ConvBertLayer(nn.Module):
         outputs = (layer_output,) + outputs
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output: torch.Tensor) -> torch.Tensor:
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
 class ConvBertEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ConvBertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -612,15 +618,15 @@ class ConvBertEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -679,7 +685,7 @@ class ConvBertEncoder(nn.Module):
 
 
 class ConvBertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -688,7 +694,7 @@ class ConvBertPredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -764,7 +770,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertModel(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.embeddings = ConvBertEmbeddings(config)
 
@@ -776,13 +782,13 @@ class ConvBertModel(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -799,16 +805,16 @@ class ConvBertModel(ConvBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -862,13 +868,13 @@ class ConvBertModel(ConvBertPreTrainedModel):
 class ConvBertGeneratorPredictions(nn.Module):
     """Prediction module for the generator, made up of two dense layers."""
 
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
 
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
-    def forward(self, generator_hidden_states):
+    def forward(self, generator_hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(generator_hidden_states)
         hidden_states = get_activation("gelu")(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -878,7 +884,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -888,10 +894,10 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.generator_lm_head
 
-    def set_output_embeddings(self, word_embeddings):
+    def set_output_embeddings(self, word_embeddings: nn.Linear) -> None:
         self.generator_lm_head = word_embeddings
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -959,7 +965,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
 class ConvBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         classifier_dropout = (
@@ -970,7 +976,7 @@ class ConvBertClassificationHead(nn.Module):
 
         self.config = config
 
-    def forward(self, hidden_states, **kwargs):
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
@@ -988,7 +994,7 @@ class ConvBertClassificationHead(nn.Module):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1084,7 +1090,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -1178,7 +1184,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1260,7 +1266,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
