@@ -18,9 +18,9 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
+from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from .test_feature_extraction_wav2vec2 import floats_list
 

@@ -23,7 +23,6 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from .file_utils import ModelOutput
 from .generation_beam_constraints import Constraint, DisjunctiveConstraint, PhrasalConstraint
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
@@ -52,7 +51,7 @@ from .generation_stopping_criteria import (
     validate_stopping_criteria,
 )
 from .pytorch_utils import torch_int_div
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)
@@ -741,7 +740,7 @@ class GenerationMixin:
                 )
         if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None and min_length > -1:
+        if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams // num_beam_groups))
@@ -1004,7 +1003,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             forced_bos_token_id (`int`, *optional*):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
                 for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
@@ -1027,11 +1026,11 @@ class GenerationMixin:
                 should be prefixed with *decoder_*.
 
         Return:
-            [`~file_utils.ModelOutput`] or `torch.LongTensor`: A [`~file_utils.ModelOutput`] (if
-            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
 
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
-                [`~file_utils.ModelOutput`] types are:
+                [`~utils.ModelOutput`] types are:
 
                     - [`~generation_utils.GreedySearchDecoderOnlyOutput`],
                     - [`~generation_utils.SampleDecoderOnlyOutput`],
@@ -1039,7 +1038,7 @@ class GenerationMixin:
                     - [`~generation_utils.BeamSampleDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
-                [`~file_utils.ModelOutput`] types are:
+                [`~utils.ModelOutput`] types are:
 
                     - [`~generation_utils.GreedySearchEncoderDecoderOutput`],
                     - [`~generation_utils.SampleEncoderDecoderOutput`],
@@ -1532,7 +1531,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -1768,7 +1767,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2023,7 +2022,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2340,7 +2339,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2657,7 +2656,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
 
@@ -3027,7 +3026,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -3075,7 +3074,7 @@ class GenerationMixin:
         ...     )
         ... }
 
-        >>> constraint_str = "sind"
+        >>> constraint_str = "Sie"
         >>> constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # slice to remove eos token
         >>> constraints = [PhrasalConstraint(token_ids=constraint_token_ids)]
 
@@ -3174,10 +3173,6 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits[:, -1, :]
-
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = outputs.logits[:, -1, :]
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.

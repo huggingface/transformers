@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 from transformers import Speech2TextConfig
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     is_torch_available,
     require_sentencepiece,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import cached_property
 
 from ..generation.test_generation_utils import GenerationTesterMixin
 from ..test_configuration_common import ConfigTester

@@ -31,11 +31,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-from requests import HTTPError
-
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .utils import (
     EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
@@ -43,11 +41,6 @@ from .file_utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_tensorflow,
-    _is_torch,
-    _is_torch_device,
     add_end_docstrings,
     cached_path,
     copy_func,
@@ -59,10 +52,11 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    logging,
     to_py_obj,
     torch_required,
 )
-from .utils import logging
+from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -652,9 +646,9 @@ class BatchEncoding(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (`str` or [`~file_utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum
-                [`~file_utils.TensorType`]. If `None`, no modification is done.
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
             prepend_batch_axis (`int`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
         """
@@ -1259,7 +1253,7 @@ class SpecialTokensMixin:
 ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
@@ -1301,7 +1295,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -1584,7 +1578,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 when running `transformers-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -1755,12 +1749,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
                     resolved_vocab_files[file_id] = None
 
-                except HTTPError as err:
-                    if "404 Client Error" in str(err):
-                        logger.debug(f"Connection problem to access {file_path}.")
-                        resolved_vocab_files[file_id] = None
-                    else:
-                        raise err
+                except ValueError:
+                    logger.debug(f"Connection problem to access {file_path} and it wasn't found in the cache.")
+                    resolved_vocab_files[file_id] = None
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -2740,7 +2731,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
                 the note above for the return type.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
@@ -2762,7 +2753,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 to the specific tokenizer's default, defined by the `return_outputs` attribute.
 
                 [What are attention masks?](../glossary#attention-mask)
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -3462,7 +3453,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             max_target_length (`int`, *optional*):
                 Controls the maximum length of decoder inputs (target language texts or summaries) If left unset or set
                 to `None`, this will use the max_length value.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
@@ -3471,7 +3462,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

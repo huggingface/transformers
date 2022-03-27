@@ -34,14 +34,14 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .file_utils import (
+from .tokenization_utils_base import BatchEncoding
+from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
     is_training_run_on_sagemaker,
+    logging,
 )
-from .tokenization_utils_base import BatchEncoding
-from .utils import logging
 
 
 if is_sagemaker_dp_enabled():

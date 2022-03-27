@@ -41,7 +41,7 @@ eval_loss = 0.44457291918821606
 
 ## With Accelerate
 
-Based on the script [run_swag_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/multiple-choice/run_swag_no_trainer.py).
+Based on the script [run_swag_no_trainer.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/multiple-choice/run_swag_no_trainer.py).
 
 Like `run_swag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on
 the SWAG dataset or your own data in a csv or a JSON file. The main difference is that this

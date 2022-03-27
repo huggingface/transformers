@@ -17,6 +17,7 @@
 
 import math
 import os
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,7 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -40,7 +40,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_yoso import YosoConfig
 
 
@@ -444,7 +444,7 @@ class YosoSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -493,7 +493,7 @@ class YosoIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -507,7 +507,7 @@ class YosoOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -609,7 +609,7 @@ class YosoPredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -643,7 +643,7 @@ class YosoOnlyMLMHead(nn.Module):
         super().__init__()
         self.predictions = YosoLMPredictionHead(config)
 
-    def forward(self, sequence_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
@@ -737,7 +737,7 @@ YOSO_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -779,16 +779,16 @@ class YosoModel(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -882,17 +882,17 @@ class YosoForMaskedLM(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -978,17 +978,17 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1071,17 +1071,17 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,

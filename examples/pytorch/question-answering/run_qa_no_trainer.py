@@ -49,8 +49,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, get_full_repo_name
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
 

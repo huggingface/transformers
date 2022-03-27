@@ -58,8 +58,8 @@ During preprocessing the dataset is downloaded and stored locally as well as cac
 ## Tokenizer
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
-python scripts/bpe_training.py
-    --base_tokenizer gpt2
+python scripts/bpe_training.py \
+    --base_tokenizer gpt2 \
     --dataset_name lvwerra/codeparrot-clean-train
 ```
 
@@ -111,6 +111,32 @@ Recall that you can see the full set of possible options with descriptions (for 
 
 ```bash
 python scripts/codeparrot_training.py --help
+```
+
+Instead of streaming the dataset from the hub you can also stream it from disk. This can be helpful for long training runs where the connection can be interrupted sometimes. To stream locally you simply need to clone the datasets and replace the dataset name with their path. In this example we store the data in a folder called `data`: 
+
+```bash
+git lfs install
+mkdir data
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
+```
+
+And then pass the paths to the datasets when we run the training script:
+
+```bash
+accelerate launch scripts/codeparrot_training.py \
+--model_ckpt lvwerra/codeparrot-small \
+--dataset_name_train ./data/codeparrot-clean-train \
+--dataset_name_valid ./data/codeparrot-clean-valid \
+--train_batch_size 12 \
+--valid_batch_size 12 \
+--learning_rate 5e-4 \
+--num_warmup_steps 2000 \
+--gradient_accumulation 1 \
+--gradient_checkpointing False \
+--max_train_steps 150000 \
+--save_checkpoint_steps 15000
 ```
 
 ## Evaluation

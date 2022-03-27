@@ -12,7 +12,7 @@ This document explains the testing strategy for releasing the new Hugging Face D
 Before we can run the tests we need to adjust the `requirements.txt` for PyTorch under `/tests/sagemaker/scripts/pytorch` and for TensorFlow under `/tests/sagemaker/scripts/pytorch`. We adjust the branch to the new RC-tag.
 
 ```
-git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install master or adjust ist with vX.X.X for installing version specific-transforms
+git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install main or adjust ist with vX.X.X for installing version specific-transforms
 ```
 
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  

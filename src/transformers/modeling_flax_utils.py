@@ -30,7 +30,9 @@ from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_flax_utils import FlaxGenerationMixin
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
+from .utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
@@ -45,11 +47,9 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
     replace_return_docstrings,
 )
-from .generation_flax_utils import FlaxGenerationMixin
-from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -373,7 +373,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -523,11 +523,16 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError:
+            except HTTPError as err:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
-                    f"{FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
+                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
+                    f"{err}"
+                )
+            except ValueError:
+                raise EnvironmentError(
+                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
+                    f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
@@ -676,7 +681,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
