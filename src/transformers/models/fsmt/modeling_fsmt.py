@@ -37,13 +37,6 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -51,7 +44,14 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fsmt import FSMTConfig
 
 
@@ -282,7 +282,7 @@ FSMT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 

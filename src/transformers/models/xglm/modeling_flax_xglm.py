@@ -31,13 +31,12 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_xglm import XGLMConfig
 
 
@@ -108,7 +107,7 @@ XGLM_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -534,13 +533,18 @@ class FlaxXGLMModule(nn.Module):
         last_hidden_states = outputs[0]
         last_hidden_states = self.layer_norm(last_hidden_states)
 
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
+
         if not return_dict:
-            outputs = (last_hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )

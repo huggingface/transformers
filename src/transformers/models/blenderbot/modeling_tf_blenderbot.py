@@ -18,18 +18,11 @@
 import os
 import random
 import warnings
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -48,7 +41,14 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -608,8 +608,8 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -700,8 +700,8 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
                 for more detail. This argument can be used only in eager mode, in graph mode the value in the config
                 will be used instead.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be
-                used in eager mode, in graph mode the value will always be set to True.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used
+                in eager mode, in graph mode the value will always be set to True.
             training (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
@@ -885,8 +885,8 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
                 for more detail. This argument can be used only in eager mode, in graph mode the value in the config
                 will be used instead.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be
-                used in eager mode, in graph mode the value will always be set to True.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used
+                in eager mode, in graph mode the value will always be set to True.
             training (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
@@ -1143,24 +1143,24 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        decoder_input_ids: Optional[tf.Tensor] = None,
+        decoder_attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        decoder_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        past_key_values: Optional[List[tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1259,25 +1259,25 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
     @add_end_docstrings(BLENDERBOT_GENERATION_EXAMPLE)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        decoder_input_ids: Optional[tf.Tensor] = None,
+        decoder_attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        decoder_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

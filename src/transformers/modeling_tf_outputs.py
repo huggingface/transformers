@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple
 
 import tensorflow as tf
 
-from .file_utils import ModelOutput
+from .utils import ModelOutput
 
 
 @dataclass

@@ -25,8 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
 
-from ..file_utils import is_flax_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
 
@@ -785,7 +784,7 @@ def clean_frameworks_in_init(
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
-        # Remove the import from file_utils
+        # Remove the import from utils
         elif re_is_xxx_available.search(lines[idx]) is not None:
             line = lines[idx]
             for framework in to_remove:

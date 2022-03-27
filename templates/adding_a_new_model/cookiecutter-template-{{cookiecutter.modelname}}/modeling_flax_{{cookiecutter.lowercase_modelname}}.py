@@ -27,7 +27,7 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPooling,
@@ -119,7 +119,7 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
             - 0 indicates the head is **masked**.
 
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
 """
 
@@ -1136,7 +1136,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -1244,7 +1244,7 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1275,7 +1275,7 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 {{cookiecutter.uppercase_modelname}}_DECODE_INPUTS_DOCSTRING = r"""
@@ -1322,7 +1322,7 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:

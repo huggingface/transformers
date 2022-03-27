@@ -25,12 +25,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import http_get, is_tf_available, is_torch_available
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (

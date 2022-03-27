@@ -28,7 +28,9 @@ from torch import Tensor, nn
 from transformers.utils import logging
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions
+from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,8 +39,6 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions
-from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 from .configuration_maskformer import MaskFormerConfig
@@ -1482,7 +1482,7 @@ class DetrDecoder(nn.Module):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
