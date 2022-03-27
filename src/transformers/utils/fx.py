@@ -45,8 +45,9 @@ from .. import (
     XLNetForQuestionAnswering,
     logging,
 )
-from ..file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 from ..models.auto import get_values
+from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)

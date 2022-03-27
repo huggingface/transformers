@@ -21,9 +21,14 @@ from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
 import numpy as np
 from packaging.version import Version, parse
 
-from ..file_utils import TensorType, is_tf_available, is_torch_available, is_torch_onnx_dict_inputs_support_available
 from ..tokenization_utils_base import PreTrainedTokenizerBase
-from ..utils import logging
+from ..utils import (
+    TensorType,
+    is_tf_available,
+    is_torch_available,
+    is_torch_onnx_dict_inputs_support_available,
+    logging,
+)
 from .config import OnnxConfig
 
 
@@ -294,7 +299,7 @@ def export(
         preprocessor = tokenizer
 
     if is_torch_available():
-        from ..file_utils import torch_version
+        from ..utils import torch_version
 
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")

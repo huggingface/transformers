@@ -23,8 +23,8 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
-from ...file_utils import ModelOutput, requires_backends
 from ...processing_utils import ProcessorMixin
+from ...utils import ModelOutput, requires_backends
 
 
 if TYPE_CHECKING:

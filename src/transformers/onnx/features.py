@@ -5,11 +5,15 @@ from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_avail
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.blenderbot import BlenderbotOnnxConfig
+from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
+from ..models.flaubert import FlaubertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.gptj import GPTJOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
@@ -179,6 +183,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
         ),
+        "flaubert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=FlaubertOnnxConfig,
+        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
@@ -223,6 +236,15 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
         ),
+        "gpt-j": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "question-answering",
+            "sequence-classification",
+            onnx_config_cls=GPTJOnnxConfig,
+        ),
         "gpt-neo": supported_features_mapping(
             "default",
             "default-with-past",
@@ -248,6 +270,24 @@ class FeaturesManager:
             onnx_config_cls=ElectraOnnxConfig,
         ),
         "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
+        "blenderbot": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotOnnxConfig,
+        ),
+        "blenderbot-small": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
@@ -324,6 +364,7 @@ class FeaturesManager:
             )
         return task_to_automodel[task]
 
+    @staticmethod
     def get_model_from_feature(
         feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:

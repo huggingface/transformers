@@ -37,7 +37,11 @@ from requests import HTTPError
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_tf_utils import TFGenerationMixin
+from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
+from .tokenization_utils_base import BatchEncoding
+from .utils import (
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -52,12 +56,8 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
 )
-from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
-from .tf_utils import shape_list
-from .tokenization_utils_base import BatchEncoding
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -372,7 +372,7 @@ def unpack_inputs(func):
 
         # process the inputs and call the wrapped function
         main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
-        main_input = fn_args_and_kwargs.pop(main_input_name)
+        main_input = fn_args_and_kwargs.pop(main_input_name, None)
         unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
@@ -423,13 +423,13 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
             "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
-    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
@@ -497,6 +497,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
             )
 
+    # Populates any unspecified argument with their default value, according to the signature.
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
             output[name] = kwargs.pop(name, signature[name].default)
@@ -1400,7 +1401,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -1677,11 +1678,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError:
+            except HTTPError as err:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
-                    f"{TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
+                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
+                    f"{err}"
+                )
+            except ValueError:
+                raise EnvironmentError(
+                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
+                    f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )

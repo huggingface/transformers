@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_torch_available, is_vision_available
+from ...utils import _LazyModule, is_flax_available, is_torch_available, is_vision_available
 
 
 _import_structure = {

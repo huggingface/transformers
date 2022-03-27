@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 
-fork_point_sha = subprocess.check_output("git merge-base master HEAD".split()).decode("utf-8")
+fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
 modified_files = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8").split()
 
 joined_dirs = "|".join(sys.argv[1:])

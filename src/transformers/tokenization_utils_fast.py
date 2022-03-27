@@ -27,7 +27,6 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
-from .file_utils import PaddingStrategy, add_end_docstrings
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -41,7 +40,7 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .utils import logging
+from .utils import PaddingStrategy, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
@@ -335,7 +334,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         section.
 
         Args:
-            padding_strategy ([`~file_utils.PaddingStrategy`]):
+            padding_strategy ([`~utils.PaddingStrategy`]):
                 The kind of padding that will be applied to the input
             truncation_strategy ([`~tokenization_utils_base.TruncationStrategy`]):
                 The kind of truncation that will be applied to the input
