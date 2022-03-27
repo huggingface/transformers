@@ -1416,7 +1416,7 @@ LONGFORMER_GENERATION_DOCSTRING = r"""
     >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
     >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
 
-    >>> TXT = "My friends are <mask> but they eat too many carbs." + " That's why I decide not to eat with them."*300
+    >>> TXT = "My friends are <mask> but they eat too many carbs." + " That's why I decide not to eat with them." * 300
     >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
     >>> logits = model(input_ids).logits
 
@@ -1658,9 +1658,20 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        >>> attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device)  # initialize to local attention
-        >>> global_attention_mask = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)  # initialize to global attention to be deactivated for all tokens
-        >>> global_attention_mask[:,[1,4,21,],] = 1  # Set global attention to random tokens for the sake of this example
+        >>> attention_mask = torch.ones(
+        ...     input_ids.shape, dtype=torch.long, device=input_ids.device
+        >>> )  # initialize to local attention
+        >>> global_attention_mask = torch.zeros(
+        ...     input_ids.shape, dtype=torch.long, device=input_ids.device
+        >>> )  # initialize to global attention to be deactivated for all tokens
+        >>> global_attention_mask[
+        ...     :,
+        ...     [
+        ...         1,
+        ...         4,
+        ...         21,
+        ...     ],
+        >>> ] = 1  # Set global attention to random tokens for the sake of this example
         >>> # Usually, set global attention based on the task. For example,
         >>> # classification: the <s> token
         >>> # QA: question tokens
@@ -1866,8 +1877,8 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         checkpoint="jpelhaw/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=[1,2],
-        expected_loss=0.08
+        expected_output=[1, 2],
+        expected_loss=0.08,
     )
     def forward(
         self,
@@ -2040,7 +2051,9 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
         >>> answer_tokens = all_tokens[torch.argmax(start_logits) : torch.argmax(end_logits) + 1]
-        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+        >>> answer = tokenizer.decode(
+        ...     tokenizer.convert_tokens_to_ids(answer_tokens)
+        >>> )  # remove space prepending space token
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
