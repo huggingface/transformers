@@ -15,7 +15,7 @@
 """ PyTorch ConvNext model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -116,7 +116,7 @@ class ConvNextClassifierOutput(ModelOutput):
 
 # Stochastic depth implementation
 # Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
     DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
@@ -137,11 +137,11 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -151,7 +151,7 @@ class ConvNextLayerNorm(nn.Module):
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
+    def __init__(self, normalized_shape: int, eps: float = 1e-6, data_format: str = "channels_last"):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(normalized_shape))
         self.bias = nn.Parameter(torch.zeros(normalized_shape))
@@ -161,7 +161,7 @@ class ConvNextLayerNorm(nn.Module):
             raise NotImplementedError(f"Unsupported data format: {self.data_format}")
         self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
@@ -177,14 +177,14 @@ class ConvNextEmbeddings(nn.Module):
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__()
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
@@ -204,7 +204,7 @@ class ConvNextLayer(nn.Module):
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
 
-    def __init__(self, config, dim, drop_path=0):
+    def __init__(self, config: ConvNextConfig, dim: int, drop_path: float = 0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.layernorm = ConvNextLayerNorm(dim, eps=1e-6)
@@ -218,9 +218,9 @@ class ConvNextLayer(nn.Module):
         )
         self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input = hidden_states
-        x = self.dwconv(hidden_states)
+        x: torch.Tensor = self.dwconv(hidden_states)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         x = self.layernorm(x)
         x = self.pwconv1(x)
@@ -245,7 +245,16 @@ class ConvNextStage(nn.Module):
         drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
     """
 
-    def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):
+    def __init__(
+        self,
+        config: ConvNextConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 2,
+        stride: int = 2,
+        depth: int = 2,
+        drop_path_rates: List[float] = None,
+    ):
         super().__init__()
 
         if in_channels != out_channels or stride > 1:
@@ -260,14 +269,14 @@ class ConvNextStage(nn.Module):
             *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
         return hidden_states
 
 
 class ConvNextEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__()
         self.stages = nn.ModuleList()
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
@@ -287,7 +296,9 @@ class ConvNextEncoder(nn.Module):
             cur += config.depths[i]
             prev_chs = out_chs
 
-    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, return_dict: bool = True
+    ) -> Union[Tuple, ConvNextEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -366,7 +377,7 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
     CONVNEXT_START_DOCSTRING,
 )
 class ConvNextModel(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.config = config
 
@@ -388,7 +399,12 @@ class ConvNextModel(ConvNextPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ConvNextModelOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -428,7 +444,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     CONVNEXT_START_DOCSTRING,
 )
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -450,7 +466,13 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ConvNextClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
