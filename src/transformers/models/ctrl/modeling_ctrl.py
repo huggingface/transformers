@@ -15,7 +15,7 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -40,12 +40,12 @@ CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def angle_defn(pos, i, d_model_size):
+def angle_defn(pos: torch.Tensor, i: torch.Tensor, d_model_size: int) -> torch.Tensor:
     angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / d_model_size)
     return pos * angle_rates
 
 
-def positional_encoding(position, d_model_size, dtype):
+def positional_encoding(position: int, d_model_size: int, dtype: torch.dtype) -> torch.Tensor:
     # create the sinusoidal pattern for the positional encoding
     angle_rads = angle_defn(
         torch.arange(position, dtype=dtype).unsqueeze(1),
@@ -60,7 +60,14 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
+def scaled_dot_product_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    mask: torch.Tensor,
+    attention_mask: Optional[torch.FloatTensor] = None,
+    head_mask: Optional[torch.FloatTensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     # calculate attention
     matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
 
@@ -87,7 +94,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model_size, num_heads):
+    def __init__(self, d_model_size: int, num_heads: int):
         super().__init__()
         self.num_heads = num_heads
         self.d_model_size = d_model_size
@@ -101,7 +108,7 @@ class MultiHeadAttention(nn.Module):
         self.dense = nn.Linear(d_model_size, d_model_size)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         attention_head_size = self.d_model_size // self.num_heads
         if len(heads) == 0:
             return
@@ -118,22 +125,22 @@ class MultiHeadAttention(nn.Module):
         self.d_model_size = attention_head_size * self.num_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def split_into_heads(self, x, batch_size):
+    def split_into_heads(self, x: torch.Tensor, batch_size: int) -> torch.Tensor:
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
         return x.permute([0, 2, 1, 3])
 
     def forward(
         self,
-        v,
-        k,
-        q,
-        mask,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
+        v: torch.Tensor,
+        k: torch.Tensor,
+        q: torch.Tensor,
+        mask: torch.Tensor,
+        layer_past: Optional[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: bool = False,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -165,12 +172,12 @@ class MultiHeadAttention(nn.Module):
         return outputs
 
 
-def point_wise_feed_forward_network(d_model_size, dff):
+def point_wise_feed_forward_network(d_model_size: int, dff: int) -> nn.Sequential:
     return nn.Sequential(nn.Linear(d_model_size, dff), nn.ReLU(), nn.Linear(dff, d_model_size))
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1):
+    def __init__(self, d_model_size: int, num_heads: int, dff: int, rate: float = 0.1):
         super().__init__()
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
@@ -183,8 +190,15 @@ class EncoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(rate)
 
     def forward(
-        self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
-    ):
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor,
+        layer_past: Optional[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: bool = False,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
             normed,
@@ -318,7 +332,7 @@ CTRL_INPUTS_DOCSTRING = r"""
     CTRL_START_DOCSTRING,
 )
 class CTRLModel(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
 
         self.d_model_size = config.n_embd
@@ -337,13 +351,13 @@ class CTRLModel(CTRLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.w
 
-    def set_input_embeddings(self, new_embeddings):
+    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
         self.w = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
@@ -359,18 +373,18 @@ class CTRLModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -491,7 +505,7 @@ class CTRLModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
@@ -499,13 +513,19 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs
+    ) -> dict:
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -521,19 +541,19 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -607,7 +627,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = CTRLModel(config)
@@ -625,19 +645,19 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
