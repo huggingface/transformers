@@ -19,7 +19,7 @@ URL: https://github.com/microsoft/CvT"""
 
 import json
 from collections import OrderedDict
-
+import argparse
 import torch
 
 from huggingface_hub import cached_download, hf_hub_url
@@ -246,7 +246,6 @@ def cls_token():
     token.append(("cvt.encoder.cls_token", "stage2.cls_token"))
     return token
 
-
 def final():
     """
     Function helps in renaming final classification layer
@@ -258,33 +257,44 @@ def final():
     head.append(("classifier.bias", "head.bias"))
     return head
 
-# Download the weights from zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
-
-if __name__ == "__main__":
-    path = "pytorch_model.bin" # save new weights file name
-
-    # get imagenet labels
-    filename = "imagenet-1k-id2label.json"
+def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
+    """
+    Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
+    """
+    img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
-    model = CvtForImageClassification(config)
-
-    original_file = "CvT-13-384x384-IN-1k.pth" #load the original weights
-    original_weights = torch.load(original_file, map_location=torch.device("cpu"))
-
-    hugging_face_weights = OrderedDict()
-    list_of_state_dict = cls_token()
+    config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     
+    if cvt_file.rsplit('/', 1)[-1][4:6] == "13":
+        config.image_size = int(cvt_file.rsplit('/', 1)[-1][7:10])
+        config.depth = [1, 2, 10]
+
+    if cvt_file.rsplit('/', 1)[-1][4:6] == "21":
+        config.image_size = int(cvt_file.rsplit('/', 1)[-1][7:10])
+        config.depth = [1, 4, 16]
+    else:
+        config.image_size = 384
+        config.depth = [2, 2, 20]
+        config.num_heads = [3, 12, 16]
+        config.embed_dim = [192, 768, 1024]
+
+    model = CvtForImageClassification(config)
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    original_weights = torch.load(cvt_file, map_location=torch.device("cpu"))
+
+    huggingface_weights = OrderedDict()
+    list_of_state_dict = cls_token()
+
     for i in range(config.num_stages):
         list_of_state_dict = list_of_state_dict + embeddings(i)
 
@@ -293,15 +303,29 @@ if __name__ == "__main__":
             list_of_state_dict = list_of_state_dict + attention(i, j)
 
     list_of_state_dict = list_of_state_dict + final()
-
     for i in range(len(list_of_state_dict)):
-        hugging_face_weights[list_of_state_dict[i][0]] = original_weights[list_of_state_dict[i][1]]
+        huggingface_weights[list_of_state_dict[i][0]] = original_weights[list_of_state_dict[i][1]]
 
-    model.load_state_dict(hugging_face_weights)
-    torch.save(model.state_dict(), path)
+    model.load_state_dict(huggingface_weights)
+    model.save_pretrained(pytorch_dump_folder)
+    feature_extractor.save_pretrained(pytorch_dump_folder)
 
-    model.push_to_hub(
-                repo_path_or_name="Repo name to push",
-                commit_message="Add model",
-            )
+
+# Download the weights from zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--cvt_name",
+        default="cvt-13",
+        type=str,
+        help="Name of the cvt model you'd like to convert.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+    )
+
+    args = parser.parse_args()
+    convert_cvt_checkpoint(args.cvt_name, args.pytorch_dump_folder_path)
+
     
