@@ -40,7 +40,7 @@ The [`Trainer`] contains the basic training loop which supports the above featur
 The [`Trainer`] class is optimized for 🤗 Transformers models and can have surprising behaviors
 when you use it on other models. When using it on your own model, make sure:
 
-- your model always return tuples or subclasses of [`~file_utils.ModelOutput`].
+- your model always return tuples or subclasses of [`~utils.ModelOutput`].
 - your model can compute the loss if a `labels` argument is provided and that loss is returned as the first
   element of the tuple (if your model returns tuples)
 - your model can accept multiple label arguments (use the `label_names` in your [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`.

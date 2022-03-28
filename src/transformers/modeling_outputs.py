@@ -17,7 +17,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from .file_utils import ModelOutput
+from .utils import ModelOutput
 
 
 @dataclass
@@ -815,7 +815,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
 
 @dataclass
-class SemanticSegmentationModelOutput(ModelOutput):
+class SemanticSegmenterOutput(ModelOutput):
     """
     Base class for outputs of semantic segmentation models.
 

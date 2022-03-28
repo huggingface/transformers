@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import (
+from ...utils import (
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
