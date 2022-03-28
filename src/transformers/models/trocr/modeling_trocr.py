@@ -922,6 +922,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
+
         >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(pixel_values, labels=labels)
         >>> loss = outputs.loss
