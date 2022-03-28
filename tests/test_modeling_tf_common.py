@@ -1302,6 +1302,34 @@ class TFModelTesterMixin:
 
                 self.assertEqual(loss.shape, [loss_size])
 
+    def test_keras_api(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", None):
+                # Test that model correctly compute the loss with kwargs
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                possible_label_cols = {
+                    "labels",
+                    "label",
+                    "label_ids",
+                    "start_positions",
+                    "start_position",
+                    "end_positions",
+                    "end_position",
+                    "next_sentence_label",
+                }
+                label_names = possible_label_cols.intersection(set(prepared_for_class))
+                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+                model.compile(optimizer='sgd')
+                # Make sure the model fits without crashing regardless of where we pass the labels
+                model.fit(prepared_for_class, validation_data=prepared_for_class, steps_per_epoch=1, validation_steps=1)
+
+                model.fit(inputs_minus_labels, labels, validation_data=(inputs_minus_labels, labels),
+                          steps_per_epoch=1, validation_steps=1)
+
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
