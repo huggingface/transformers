@@ -24,9 +24,10 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from jax import lax
 from jax.random import PRNGKey
 
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
 from ...modeling_flax_utils import FlaxPreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FlaxAutoModel, FlaxAutoModelForCausalLM
 from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -120,7 +121,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~file_utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
@@ -145,7 +146,7 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~utils.FlaxBaseModelOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~file_utils.FlaxBaseModelOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
@@ -191,8 +192,8 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~utils.FlaxCausalLMOutputWithCrossAttentions`] instead of a
-            plain tuple.
+            If set to `True`, the model will return a [`~file_utils.FlaxCausalLMOutputWithCrossAttentions`] instead of
+            a plain tuple.
 """
 
 
@@ -347,6 +348,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                     f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
                 )
 
+        # make sure input & output embeddings are not tied
+        config.tie_word_embeddings = False
         module = self.module_class(config=config, dtype=dtype, **kwargs)
 
         if input_shape is None:
@@ -889,6 +892,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
         config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # make sure input & output word embeddings are not tied
+        config.tie_word_embeddings = False
 
         # init model
         model = cls(config, dtype=dtype)
