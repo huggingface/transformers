@@ -903,7 +903,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
 
-        >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
+        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
         >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel
         >>> # init vision2text model with random weights
