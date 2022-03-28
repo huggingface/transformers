@@ -922,7 +922,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> # visualize the prediction
         >>> output = prediction.squeeze().cpu().numpy()
         >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> img = Image.fromarray(formatted)
+        >>> depth = Image.fromarray(formatted)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
