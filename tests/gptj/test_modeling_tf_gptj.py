@@ -345,6 +345,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 assert name is None
 
     @slow
+    @unittest.skipIf(not is_tf_available() or len(tf.config.list_physical_devices("GPU")) > 0, "skip testing on GPU for now to avoid GPU OOM.")
     def test_model_from_pretrained(self):
         # skip testing on GPU for now to avoid GPU OOM.
         if len(tf.config.list_physical_devices("GPU")) > 0:
