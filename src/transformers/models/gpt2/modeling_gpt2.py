@@ -640,6 +640,7 @@ PARALLELIZE_DOCSTRING = r"""
     }
     model.parallelize(device_map)
 
+
     ```
 """
 DEPARALLELIZE_DOCSTRING = r"""
@@ -658,6 +659,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     }
     model.parallelize(device_map)  # Splits the model across several devices
     model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+
 
     ```
 """
@@ -1246,6 +1248,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
         >>> lm_logits = outputs.logits
         >>> mc_logits = outputs.mc_logits
+
 
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
