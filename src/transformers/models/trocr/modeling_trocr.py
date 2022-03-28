@@ -900,7 +900,10 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         ...     VisionEncoderDecoderModel,
         ... )
         >>> import requests
+        >>> import torch
         >>> from PIL import Image
+
+        >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 
         >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel
         >>> # init vision2text model with random weights
@@ -916,7 +919,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         >>> pixel_values = processor(image, return_tensors="pt").pixel_values
-        >>> text = "hello world"
+        >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
 
         >>> # training
         >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
@@ -926,8 +929,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(pixel_values, labels=labels)
         >>> loss = outputs.loss
-        >>> loss.item()
-        22.05887222290039
+        >>> round(loss.item(), 3)
+        5.303
 
         >>> # inference
         >>> generated_ids = model.generate(pixel_values)
