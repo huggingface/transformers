@@ -1483,7 +1483,20 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.0,
-        expected_output=['LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0'],
+        expected_output=[
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+            "LABEL_0",
+        ],
     )
     def forward(
         self,
