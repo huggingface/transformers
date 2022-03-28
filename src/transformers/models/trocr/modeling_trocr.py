@@ -892,12 +892,12 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
 
         ```python
         >>> from transformers import (
-        ...     TrOCRProcessor,
-        ...     VisionEncoderDecoderModel,
-        ...     TrOCRForCausalLM,
-        ...     ViTModel,
         ...     TrOCRConfig,
+        ...     TrOCRProcessor,
+        ...     TrOCRForCausalLM,
         ...     ViTConfig,
+        ...     ViTModel,
+        ...     VisionEncoderDecoderModel,
         ... )
         >>> import requests
         >>> from PIL import Image
@@ -908,15 +908,15 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> decoder = TrOCRForCausalLM(TrOCRConfig())
         >>> model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
-        >>> # If you want to start from the pretrained model, load it from a VisionEncoderDecoderModel
+        >>> # If you want to start from the pretrained model, load the checkpoint with `VisionEncoderDecoderModel`
         >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
         >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        >>> text = "hello world"
         >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        >>> text = "hello world"
 
         >>> # training
         >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
@@ -926,6 +926,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(pixel_values, labels=labels)
         >>> loss = outputs.loss
+        >>> loss.item()
+        22.05887222290039
 
         >>> # inference
         >>> generated_ids = model.generate(pixel_values)
