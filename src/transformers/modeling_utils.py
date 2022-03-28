@@ -40,6 +40,7 @@ from .generation_utils import GenerationMixin
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -331,7 +332,7 @@ def get_checkpoint_shard_files(
             )
         except HTTPError:
             raise EnvironmentError(
-                f"We couldn't connect to 'https://huggingface.co/' to load {shard_filename}. You should try again "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try again "
                 "after checking your internet connection."
             )
 
@@ -1749,7 +1750,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
                     f"{FLAX_WEIGHTS_NAME}.\n"

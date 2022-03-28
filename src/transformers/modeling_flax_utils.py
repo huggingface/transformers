@@ -34,6 +34,7 @@ from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import (
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     WEIGHTS_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -530,7 +531,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
