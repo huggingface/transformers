@@ -425,8 +425,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # we cannot batch them since they don't share a common class size
         if annotations:
             for label in annotations:
-                mask_labels.append(label["masks"])
-                class_labels.append(label["classes"])
+                mask_labels.append(torch.from_numpy(label["masks"]))
+                class_labels.append(torch.from_numpy(label["classes"]))
 
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
