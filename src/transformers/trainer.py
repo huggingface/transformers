@@ -937,8 +937,8 @@ class Trainer:
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
-        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset.
-        When dataloader.dataset does not exist or has no length, estimates as best it can
+        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset. When
+        dataloader.dataset does not exist or has no length, estimates as best it can
         """
         try:
             return len(dataloader.dataset)
@@ -1205,8 +1205,6 @@ class Trainer:
 
         # Keeping track whether we can can len() on the dataset or not
 
-
-
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
@@ -1238,7 +1236,6 @@ class Trainer:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
-
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -1388,7 +1385,9 @@ class Trainer:
                 self._past = None
 
             steps_in_epoch = (
-                len(epoch_iterator) if len_dataloader is not None else args.max_steps * args.gradient_accumulation_steps
+                len(epoch_iterator)
+                if len_dataloader is not None
+                else args.max_steps * args.gradient_accumulation_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
@@ -2508,7 +2507,7 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        eval_dataset = getattr(dataloader, 'dataset',None)
+        eval_dataset = getattr(dataloader, "dataset", None)
 
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
