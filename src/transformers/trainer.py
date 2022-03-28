@@ -1203,8 +1203,6 @@ class Trainer:
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
-        # Keeping track whether we can can len() on the dataset or not
-
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
@@ -1214,7 +1212,7 @@ class Trainer:
         len_dataloader = None
         try:
             len_dataloader = len(train_dataloader)
-        except (NameError, TypeError):  # Not sure when this happens, don't all dataloaders have len() ?
+        except (NameError, TypeError):  # Default dataloader calls len(dataset), which may not exist
             # see __init__. max_steps is set when the dataset has no __len__
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
@@ -2423,6 +2421,7 @@ class Trainer:
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
+        eval_dataset = getattr(dataloader, "dataset", None)
 
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
@@ -2507,14 +2506,15 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        eval_dataset = getattr(dataloader, "dataset", None)
-
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
         if isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
             num_samples = eval_dataset.num_examples
         else:
-            num_samples = self.num_examples(dataloader)
+            try:
+                num_samples = self.num_examples(dataloader)
+            except TypeError:  # both len(dataloader.dataset) and len(dataloader) fail
+                num_samples = observed_num_examples
 
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
         # samplers has been rounded to a multiple of batch_size, so we truncate.
@@ -2901,8 +2901,11 @@ class Trainer:
         """
         args = self.args
 
-        if not has_length(dataloader.dataset):
-            raise ValueError("dataset must implement __len__")
+        try:
+            num_examples = self.num_examples(dataloader)
+        except TypeError:
+            raise ValueError("dataloader or it's dataset must implement __len__")
+
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
@@ -2931,7 +2934,6 @@ class Trainer:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
-        num_examples = self.num_examples(dataloader)
         logger.info(f"***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")
