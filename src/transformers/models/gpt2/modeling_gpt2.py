@@ -639,8 +639,6 @@ PARALLELIZE_DOCSTRING = r"""
         3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
     }
     model.parallelize(device_map)
-
-
     ```
 """
 DEPARALLELIZE_DOCSTRING = r"""
@@ -659,8 +657,6 @@ DEPARALLELIZE_DOCSTRING = r"""
     }
     model.parallelize(device_map)  # Splits the model across several devices
     model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-
-
     ```
 """
 
@@ -1235,8 +1231,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
-
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+        >>> # Update the model embeddings with the new vocabulary size
+        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]
@@ -1248,8 +1244,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
         >>> lm_logits = outputs.logits
         >>> mc_logits = outputs.mc_logits
-
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
