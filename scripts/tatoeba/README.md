@@ -48,7 +48,7 @@ resolver.convert_models(['heb-eng', 'eng-heb'])
 
 
 ### Upload converted models
-Since version v3.5.0, the model sharing workflow is switched to git-based system . Refer to [model sharing doc](https://huggingface.co/transformers/master/model_sharing.html#model-sharing-and-uploading) for more details.
+Since version v3.5.0, the model sharing workflow is switched to git-based system . Refer to [model sharing doc](https://huggingface.co/transformers/main/model_sharing.html#model-sharing-and-uploading) for more details.
 
 To upload all converted models, 
 

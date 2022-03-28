@@ -26,7 +26,7 @@ on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
 Whichever way you choose to contribute, please be mindful to respect our
-[code of conduct](https://github.com/huggingface/transformers/blob/master/CODE_OF_CONDUCT.md).
+[code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
 ## You can contribute in so many ways!
 
@@ -92,7 +92,7 @@ If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
 We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them
-in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) folder.
+in the [`templates`](https://github.com/huggingface/transformers/tree/main/templates) folder.
 
 ### Do you want a new feature (that is not a model)?
 
@@ -114,7 +114,7 @@ If your issue is well written we're already 80% of the way there by the time you
 post it.
 
 We have added **templates** to guide you in the process of adding a new example script for training or testing the
-models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates)
+models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/main/templates)
 folder.
 
 ## Start contributing! (Pull Requests)
@@ -148,7 +148,7 @@ Follow these steps to start contributing:
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   **Do not** work on the `master` branch.
+   **Do not** work on the `main` branch.
 
 4. Set up a development environment by running the following command in a virtual environment:
 
@@ -267,7 +267,7 @@ Follow these steps to start contributing:
 
    ```bash
    $ git fetch upstream
-   $ git rebase upstream/master
+   $ git rebase upstream/main
    ```
 
    Push the changes to your account using:
@@ -317,8 +317,8 @@ See more about the checks run on a pull request in our [PR guide](pr_checks)
 ### Tests
 
 An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
-the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the
-[examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+the [tests folder](https://github.com/huggingface/transformers/tree/main/tests) and examples tests in the
+[examples folder](https://github.com/huggingface/transformers/tree/main/examples).
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
 repository, here's how to run tests with `pytest` for the library:
@@ -365,10 +365,10 @@ $ python -m unittest discover -s examples -t examples -v
 ### Style guide
 
 For documentation strings, 🤗 Transformers follows the [google style](https://google.github.io/styleguide/pyguide.html).
-Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification)
+Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification)
 for more information.
 
-#### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)
+#### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md)
 
 
 ### Develop on Windows
@@ -386,15 +386,15 @@ One way one can run the make command on Window is to pass by MSYS2:
 
 You can now use `make` from any terminal (Powershell, cmd.exe, etc) 🎉
 
-### Syncing forked master with upstream (HuggingFace) master
+### Syncing forked main with upstream (HuggingFace) main
 
 To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnecessary notifications to the developers involved in these PRs,
-when syncing the master branch of a forked repository, please, follow these steps:
-1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked master.
+when syncing the main branch of a forked repository, please, follow these steps:
+1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked main.
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:
 ```
 $ git checkout -b your-branch-for-syncing
-$ git pull --squash --no-commit upstream master
+$ git pull --squash --no-commit upstream main
 $ git commit -m '<your message without GitHub references>'
 $ git push --set-upstream origin your-branch-for-syncing
 ```

@@ -18,11 +18,15 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig"],
+    "configuration_blenderbot": [
+        "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlenderbotConfig",
+        "BlenderbotOnnxConfig",
+    ],
     "tokenization_blenderbot": ["BlenderbotTokenizer"],
 }
 
@@ -56,7 +60,11 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
+    from .configuration_blenderbot import (
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BlenderbotConfig,
+        BlenderbotOnnxConfig,
+    )
     from .tokenization_blenderbot import BlenderbotTokenizer
 
     if is_tokenizers_available():

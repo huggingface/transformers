@@ -852,7 +852,7 @@ jobs:
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
-            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 
     check_repository_consistency:
         working_directory: ~/transformers
@@ -955,7 +955,7 @@ workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - master
+                - main
 workflows:
     version: 2
     build_and_test:
@@ -982,7 +982,7 @@ workflows:
                 filters:
                     branches:
                         only:
-                            - master
+                            - main
         jobs:
             - run_examples_torch_all
             - run_examples_flax_all
@@ -1004,7 +1004,7 @@ workflows:
 #                filters:
 #                    branches:
 #                        only:
-#                            - master
+#                            - main
 #        jobs:
 #            - cleanup-gke-jobs
 #            - run_examples_tpu

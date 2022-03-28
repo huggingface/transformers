@@ -1,8 +1,7 @@
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
