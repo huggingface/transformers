@@ -899,11 +899,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         This is a thin wrapper that sets the model's loss output head as the loss if the user does not specify a loss
         function themselves.
         """
-        # TODO:
-        #     1: Try training all the different classes of BERT model with this + metrics and seeing how it does
-        #     2: After the type annotation sprint is done, scan all model classes and check that none have
-        #        double output types.
-        #     3: Check the possible_label_names is reliable.
         if loss == "passthrough":
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
@@ -915,34 +910,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             self._using_dummy_loss = True
             if metrics is not None and isinstance(metrics, dict):
                 raise ValueError("When using the internal loss, passing metrics as a dict is not supported!")
-            # if metrics is not None and not isinstance(metrics, dict):
-            #     type_hints = get_type_hints(self.call)
-            #     if "return" not in type_hints:
-            #         output_types = []
-            #     else:
-            #         return_types = get_type_hints(self.call)["return"].__args__
-            #         output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
-            #     if len(output_types) == 0:
-            #         raise TypeError(
-            #             f"Code analysis failed to identify the output types of model {type(self)}! "
-            #             "This is most likely because that model class does not have type annotations. "
-            #             "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
-            #             "heads of the model for each metric."
-            #         )
-            #     if len(output_types) > 1:
-            #         raise TypeError(
-            #             "This model has an unusual output structure, and we could not automatically "
-            #             "determine output heads for metrics. Please pass a `dict` of metrics instead "
-            #             "of a list/tuple, specifying the output heads of the model for each metric."
-            #         )
-            #     output_type = output_types[0]
-            #     # Optional fields that allow NoneType (this includes loss) are not the main model outputs
-            #     outputs = [
-            #         field.name
-            #         for field in fields(output_type)
-            #         if type(None) not in getattr(field.type, "__args__", [])
-            #     ]
-            #     metrics = {output: metrics for output in outputs}
         else:
             self._using_dummy_loss = False
         super().compile(
