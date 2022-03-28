@@ -347,6 +347,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                     f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
                 )
 
+        # make sure input & output embeddings are not tied
+        config.tie_word_embeddings = False
         module = self.module_class(config=config, dtype=dtype, **kwargs)
 
         if input_shape is None:
@@ -889,6 +891,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
         config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # make sure input & output word embeddings are not tied
+        config.tie_word_embeddings = False
 
         # init model
         model = cls(config, dtype=dtype)

@@ -79,6 +79,7 @@ class FlaxEncoderDecoderMixin:
         enc_dec_model = FlaxSpeechEncoderDecoderModel(encoder_decoder_config)
 
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
+        self.assertFalse(enc_dec_model.config.tie_word_embeddings)
 
         outputs_encoder_decoder = enc_dec_model(
             inputs=inputs,
