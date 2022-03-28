@@ -54,9 +54,6 @@ _TOKENIZER_FOR_DOC = "CanineTokenizer"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
-# SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
-
 # QuestionAnswering docstring
 _QA_EXPECTED_LOSS = 3.95
 _QA_EXPECTED_OUTPUT_SHAPE = [1, 50]
