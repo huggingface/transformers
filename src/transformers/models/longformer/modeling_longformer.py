@@ -1351,7 +1351,7 @@ class LongformerPooler(nn.Module):
 class LongformerLMHead(nn.Module):
     """Longformer Head for masked language modeling."""
 
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1360,7 +1360,7 @@ class LongformerLMHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
+    def forward(self, features: torch.Tensor, **kwargs) -> torch.Tensor:
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -1370,7 +1370,7 @@ class LongformerLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
+    def _tie_weights(self) -> None:
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
         self.bias = self.decoder.bias
 

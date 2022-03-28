@@ -863,7 +863,7 @@ class BertModel(BertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config: BertConfig, add_pooling_layer=True):
+    def __init__(self, config: BertConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 

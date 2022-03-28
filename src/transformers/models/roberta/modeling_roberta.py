@@ -16,7 +16,7 @@
 """PyTorch RoBERTa model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -74,7 +74,7 @@ class RobertaEmbeddings(nn.Module):
     """
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -101,8 +101,13 @@ class RobertaEmbeddings(nn.Module):
         )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ) -> torch.Tensor:
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -140,7 +145,7 @@ class RobertaEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
@@ -712,7 +717,7 @@ class RobertaModel(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
@@ -724,13 +729,13 @@ class RobertaModel(RobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -884,7 +889,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -899,10 +904,10 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1011,7 +1016,13 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        **model_kwargs
+    ) -> dict:
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1023,7 +1034,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         reordered_past = ()
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
@@ -1036,7 +1047,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1054,10 +1065,10 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1131,7 +1142,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
 class RobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1140,7 +1151,7 @@ class RobertaLMHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
+    def forward(self, features: torch.Tensor, **kwargs) -> torch.Tensor:
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -1150,7 +1161,7 @@ class RobertaLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
+    def _tie_weights(self) -> None:
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
         self.bias = self.decoder.bias
 
@@ -1165,7 +1176,7 @@ class RobertaLMHead(nn.Module):
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1265,7 +1276,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         self.roberta = RobertaModel(config)
@@ -1359,7 +1370,7 @@ class RobertaForTokenClassification(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1438,7 +1449,7 @@ class RobertaForTokenClassification(RobertaPreTrainedModel):
 class RobertaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         classifier_dropout = (
@@ -1447,7 +1458,7 @@ class RobertaClassificationHead(nn.Module):
         self.dropout = nn.Dropout(classifier_dropout)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, features, **kwargs):
+    def forward(self, features: torch.Tensor, **kwargs) -> torch.Tensor:
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
@@ -1468,7 +1479,7 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1562,7 +1573,9 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         )
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(
+    input_ids: torch.LongTensor, padding_idx: int, past_key_values_length: int = 0
+) -> torch.Tensor:
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.

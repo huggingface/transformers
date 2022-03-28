@@ -1094,11 +1094,11 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Luke
 class LukeLMHead(nn.Module):
-    """Roberta Head for masked language modeling."""
+    """Luke Head for masked language modeling."""
 
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1107,7 +1107,7 @@ class LukeLMHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
+    def forward(self, features: torch.Tensor, **kwargs) -> torch.Tensor:
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -1117,7 +1117,7 @@ class LukeLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
+    def _tie_weights(self) -> None:
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
         self.bias = self.decoder.bias
 

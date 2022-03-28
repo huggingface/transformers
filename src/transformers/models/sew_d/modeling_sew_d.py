@@ -1375,7 +1375,7 @@ class SEWDModel(SEWDPreTrainedModel):
         hidden_states: torch.FloatTensor,
         mask_time_indices: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ):
+    ) -> torch.FloatTensor:
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).

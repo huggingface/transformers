@@ -1531,7 +1531,9 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(
+    input_ids: torch.LongTensor, padding_idx: int, past_key_values_length: int = 0
+) -> torch.Tensor:
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.

@@ -357,13 +357,13 @@ class Data2VecAudioFeatureEncoder(nn.Module):
         self._requires_grad = True
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder._freeze_parameters
-    def _freeze_parameters(self):
+    def _freeze_parameters(self) -> None:
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder.forward
-    def forward(self, input_values):
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -918,7 +918,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -930,7 +930,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         hidden_states: torch.FloatTensor,
         mask_time_indices: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ):
+    ) -> torch.FloatTensor:
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
@@ -982,13 +982,13 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        mask_time_indices=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Data2VecAudioBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
