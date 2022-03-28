@@ -128,7 +128,7 @@ Tokeniza el texto:
 >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
 ```
 
-M2M100 fuerza el id del idioma de destino como el primer token generado para traducir al idioma de destino. Establezca el `forced_bos_token_id` como `en` en el método `generate` para traducir al inglés:
+M2M100 fuerza el id del idioma de destino como el primer token generado para traducirlo. Establece el `forced_bos_token_id` a `en` en el método `generate` para traducir al inglés:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
