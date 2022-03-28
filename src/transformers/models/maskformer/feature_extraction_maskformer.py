@@ -210,10 +210,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional a list of mask labels of shape `(labels, height, width)` to be fed to a model
+            - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
               (when `annotations` are provided).
-            - **class_labels** -- Optional a list of class labels of shape `(labels, num_labels)` to be fed to a model
-              (when `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+            - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
+              `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         # Input type checking for clearer error
@@ -374,10 +374,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional a list of mask labels of shape `(labels, height, width)` to be fed to a model
+            - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
               (when `annotations` are provided).
-            - **class_labels** -- Optional a list of class labels of shape `(labels, num_labels)` to be fed to a model
-              (when `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+            - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
+              `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
 

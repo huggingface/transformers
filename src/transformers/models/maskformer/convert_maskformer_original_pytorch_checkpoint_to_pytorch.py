@@ -713,8 +713,8 @@ if __name__ == "__main__":
         model_name = get_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")
 
-        # feature_extractor.save_pretrained(save_directory / model_name)
-        # mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
+        feature_extractor.save_pretrained(save_directory / model_name)
+        mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
         feature_extractor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
