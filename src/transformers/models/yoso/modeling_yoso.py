@@ -17,7 +17,7 @@
 
 import math
 import os
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -243,11 +243,11 @@ class YosoLSHCumulation(torch.autograd.Function):
         return None, None, grad_query, grad_key, grad_value, None
 
 
-# Copied from transformers.models.nystromformer.modeling_nystromformer.NystromformerEmbeddings
+# Copied from transformers.models.nystromformer.modeling_nystromformer.NystromformerEmbeddings with Nystromformer->Yoso
 class YosoEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
@@ -268,7 +268,13 @@ class YosoEmbeddings(nn.Module):
                 persistent=False,
             )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -304,7 +310,7 @@ class YosoEmbeddings(nn.Module):
 
 
 class YosoSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: YosoConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -349,12 +355,17 @@ class YosoSelfAttention(nn.Module):
                 groups=config.num_attention_heads,
             )
 
-    def transpose_for_scores(self, layer):
+    def transpose_for_scores(self, layer: torch.Tensor) -> torch.Tensor:
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         layer = layer.view(*new_layer_shape)
         return layer.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -452,13 +463,13 @@ class YosoSelfOutput(nn.Module):
 
 
 class YosoAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config: YosoConfig, position_embedding_type: Optional[str] = None):
         super().__init__()
         self.self = YosoSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = YosoSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -476,7 +487,12 @@ class YosoAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple:
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -515,7 +531,7 @@ class YosoOutput(nn.Module):
 
 
 class YosoLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -524,7 +540,12 @@ class YosoLayer(nn.Module):
         self.intermediate = YosoIntermediate(config)
         self.output = YosoOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple:
         self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
         attention_output = self_attention_outputs[0]
 
@@ -537,14 +558,14 @@ class YosoLayer(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output: torch.Tensor) -> torch.Tensor:
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
 class YosoEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([YosoLayer(config) for _ in range(config.num_hidden_layers)])
@@ -552,13 +573,13 @@ class YosoEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -746,7 +767,7 @@ YOSO_INPUTS_DOCSTRING = r"""
     YOSO_START_DOCSTRING,
 )
 class YosoModel(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.config = config
 
@@ -756,13 +777,13 @@ class YosoModel(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -858,7 +879,7 @@ class YosoModel(YosoPreTrainedModel):
 
 @add_start_docstrings("""YOSO Model with a `language modeling` head on top.""", YOSO_START_DOCSTRING)
 class YosoForMaskedLM(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -936,7 +957,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
 class YosoClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -944,7 +965,7 @@ class YosoClassificationHead(nn.Module):
 
         self.config = config
 
-    def forward(self, features, **kwargs):
+    def forward(self, features: torch.Tensor, **kwargs) -> torch.Tensor:
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
@@ -960,7 +981,7 @@ class YosoClassificationHead(nn.Module):
     YOSO_START_DOCSTRING,
 )
 class YosoForSequenceClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.yoso = YosoModel(config)
@@ -1052,7 +1073,7 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
     YOSO_START_DOCSTRING,
 )
 class YosoForMultipleChoice(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -1144,7 +1165,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
     YOSO_START_DOCSTRING,
 )
 class YosoForTokenClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1164,17 +1185,17 @@ class YosoForTokenClassification(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1230,7 +1251,7 @@ class YosoForTokenClassification(YosoPreTrainedModel):
     YOSO_START_DOCSTRING,
 )
 class YosoForQuestionAnswering(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1251,18 +1272,18 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
