@@ -347,7 +347,7 @@ def _sample_negative_indices(
 
 
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: Wav2Vec2Config, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -361,14 +361,14 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 class Wav2Vec2LayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: Wav2Vec2Config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -383,7 +383,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
@@ -395,7 +395,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
 
 
 class Wav2Vec2GroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: Wav2Vec2Config, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -411,7 +411,7 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -419,7 +419,7 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
 
 
 class Wav2Vec2PositionalConvEmbedding(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.conv = nn.Conv1d(
             config.hidden_size,
@@ -442,7 +442,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.conv(hidden_states)
@@ -454,11 +454,11 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
 
 
 class Wav2Vec2SamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
+    def __init__(self, num_conv_pos_embeddings: int):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
@@ -467,7 +467,7 @@ class Wav2Vec2SamePadLayer(nn.Module):
 class Wav2Vec2FeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
 
         if config.feat_extract_norm == "group":
@@ -486,12 +486,12 @@ class Wav2Vec2FeatureEncoder(nn.Module):
         self.gradient_checkpointing = False
         self._requires_grad = True
 
-    def _freeze_parameters(self):
+    def _freeze_parameters(self) -> None:
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
 
-    def forward(self, input_values):
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -518,7 +518,7 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 
 
 class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
         warnings.warn(
             f"The class `{self.__class__.__name__}` has been depreciated "
@@ -529,13 +529,13 @@ class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
 
 
 class Wav2Vec2FeatureProjection(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
@@ -689,7 +689,7 @@ class Wav2Vec2Attention(nn.Module):
 
 
 class Wav2Vec2FeedForward(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
@@ -702,7 +702,7 @@ class Wav2Vec2FeedForward(nn.Module):
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
@@ -713,7 +713,7 @@ class Wav2Vec2FeedForward(nn.Module):
 
 
 class Wav2Vec2EncoderLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.attention = Wav2Vec2Attention(
             embed_dim=config.hidden_size,
@@ -726,7 +726,12 @@ class Wav2Vec2EncoderLayer(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
@@ -747,7 +752,7 @@ class Wav2Vec2EncoderLayer(nn.Module):
 
 
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.attention = Wav2Vec2Attention(
             embed_dim=config.hidden_size,
@@ -760,7 +765,12 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
@@ -779,7 +789,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
 
 
 class Wav2Vec2Encoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
@@ -790,12 +800,12 @@ class Wav2Vec2Encoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -864,7 +874,7 @@ class Wav2Vec2Encoder(nn.Module):
 
 
 class Wav2Vec2EncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
@@ -877,12 +887,12 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -958,7 +968,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.num_groups = config.num_codevector_groups
         self.num_vars = config.num_codevectors_per_group
@@ -979,7 +989,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         self.temperature = 2
 
     @staticmethod
-    def _compute_perplexity(probs, mask=None):
+    def _compute_perplexity(probs: torch.Tensor, mask=None) -> torch.Tensor:
         if mask is not None:
             mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
             probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
@@ -990,7 +1000,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def forward(self, hidden_states, mask_time_indices=None):
+    def forward(self, hidden_states: torch.Tensor, mask_time_indices=None) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -1032,7 +1042,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
 
 class Wav2Vec2Adapter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
 
         # feature dim might need to be down-projected
@@ -1045,7 +1055,7 @@ class Wav2Vec2Adapter(nn.Module):
         self.layers = nn.ModuleList(Wav2Vec2AdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -1063,7 +1073,7 @@ class Wav2Vec2Adapter(nn.Module):
 
 
 class Wav2Vec2AdapterLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__()
         self.conv = nn.Conv1d(
             config.output_hidden_size,
@@ -1073,7 +1083,7 @@ class Wav2Vec2AdapterLayer(nn.Module):
             padding=1,
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
@@ -1255,7 +1265,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
@@ -1267,7 +1277,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1331,13 +1341,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        mask_time_indices=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1404,7 +1414,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         self.quantizer.temperature = temperature
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
@@ -1416,7 +1426,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1429,7 +1439,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
         temperature: int = 0.1,
-    ):
+    ) -> torch.Tensor:
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
         `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
@@ -1448,14 +1458,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     @replace_return_docstrings(output_type=Wav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        mask_time_indices=None,
-        sampled_negative_indices=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: Optional[torch.BoolTensor] = None,
+        sampled_negative_indices: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1596,7 +1606,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
 @add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         warnings.warn(
@@ -1613,13 +1623,13 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -1645,7 +1655,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
@@ -1666,7 +1676,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1678,7 +1688,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1696,13 +1706,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1775,7 +1785,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1792,7 +1802,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
@@ -1804,7 +1814,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1831,13 +1841,13 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1898,7 +1908,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1913,7 +1923,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1925,14 +1935,14 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
-    def freeze_base_model(self):
+    def freeze_base_model(self) -> None:
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
         be updated during training. Only the classification head will be updated.
@@ -1951,12 +1961,12 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1998,7 +2008,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
 
 class AMSoftmaxLoss(nn.Module):
-    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
+    def __init__(self, input_dim: int, num_labels: int, scale: float = 30.0, margin: float = 0.4):
         super(AMSoftmaxLoss, self).__init__()
         self.scale = scale
         self.margin = margin
@@ -2006,7 +2016,7 @@ class AMSoftmaxLoss(nn.Module):
         self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
         self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, hidden_states, labels):
+    def forward(self, hidden_states: torch.Tensor, labels: torch.LongTensor) -> torch.Tensor:
         labels = labels.flatten()
         weight = nn.functional.normalize(self.weight, dim=0)
         hidden_states = nn.functional.normalize(hidden_states, dim=1)
@@ -2021,7 +2031,7 @@ class AMSoftmaxLoss(nn.Module):
 
 
 class TDNNLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: Wav2Vec2Config, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
         self.out_conv_dim = config.tdnn_dim[layer_id]
@@ -2031,7 +2041,7 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.unsqueeze(1)
         hidden_states = nn.functional.unfold(
             hidden_states,
@@ -2053,7 +2063,7 @@ class TDNNLayer(nn.Module):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
@@ -2072,7 +2082,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -2084,14 +2094,14 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
-    def freeze_base_model(self):
+    def freeze_base_model(self) -> None:
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
         be updated during training. Only the classification head will be updated.
@@ -2125,13 +2135,13 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, XVectorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,

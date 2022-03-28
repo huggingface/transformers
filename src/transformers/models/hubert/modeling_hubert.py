@@ -193,7 +193,7 @@ def _compute_mask_indices(
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Hubert
 class HubertNoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: HubertConfig, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -207,7 +207,7 @@ class HubertNoLayerNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -215,7 +215,7 @@ class HubertNoLayerNormConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
 class HubertLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: HubertConfig, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -230,7 +230,7 @@ class HubertLayerNormConvLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
@@ -243,7 +243,7 @@ class HubertLayerNormConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
 class HubertGroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: HubertConfig, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -259,7 +259,7 @@ class HubertGroupNormConvLayer(nn.Module):
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -268,7 +268,7 @@ class HubertGroupNormConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
 class HubertPositionalConvEmbedding(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.conv = nn.Conv1d(
             config.hidden_size,
@@ -291,7 +291,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.conv(hidden_states)
@@ -304,11 +304,11 @@ class HubertPositionalConvEmbedding(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Hubert
 class HubertSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
+    def __init__(self, num_conv_pos_embeddings: int):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
@@ -318,7 +318,7 @@ class HubertSamePadLayer(nn.Module):
 class HubertFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
 
         if config.feat_extract_norm == "group":
@@ -335,12 +335,12 @@ class HubertFeatureEncoder(nn.Module):
         self.gradient_checkpointing = False
         self._requires_grad = True
 
-    def _freeze_parameters(self):
+    def _freeze_parameters(self) -> None:
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
 
-    def forward(self, input_values):
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -542,7 +542,7 @@ class HubertAttention(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Hubert
 class HubertFeedForward(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
@@ -555,7 +555,7 @@ class HubertFeedForward(nn.Module):
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
@@ -567,7 +567,7 @@ class HubertFeedForward(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Hubert
 class HubertEncoderLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.attention = HubertAttention(
             embed_dim=config.hidden_size,
@@ -580,7 +580,12 @@ class HubertEncoderLayer(nn.Module):
         self.feed_forward = HubertFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
@@ -602,7 +607,7 @@ class HubertEncoderLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
 class HubertEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.attention = HubertAttention(
             embed_dim=config.hidden_size,
@@ -615,7 +620,12 @@ class HubertEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = HubertFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
@@ -635,7 +645,7 @@ class HubertEncoderLayerStableLayerNorm(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Hubert
 class HubertEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.config = config
         self.pos_conv_embed = HubertPositionalConvEmbedding(config)
@@ -646,12 +656,12 @@ class HubertEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -721,7 +731,7 @@ class HubertEncoder(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
 class HubertEncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__()
         self.config = config
         self.pos_conv_embed = HubertPositionalConvEmbedding(config)
@@ -734,12 +744,12 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1084,7 +1094,7 @@ class HubertModel(HubertPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
 class HubertForCTC(HubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__(config)
 
         self.hubert = HubertModel(config)
@@ -1105,7 +1115,7 @@ class HubertForCTC(HubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1117,7 +1127,7 @@ class HubertForCTC(HubertPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1135,13 +1145,13 @@ class HubertForCTC(HubertPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1215,7 +1225,7 @@ class HubertForCTC(HubertPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
 class HubertForSequenceClassification(HubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1232,7 +1242,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
@@ -1244,7 +1254,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1271,13 +1281,13 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,

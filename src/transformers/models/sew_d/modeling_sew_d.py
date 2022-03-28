@@ -272,7 +272,7 @@ def get_mask(input, local_context):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SEWD
 class SEWDNoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: SEWDConfig, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -286,7 +286,7 @@ class SEWDNoLayerNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -294,7 +294,7 @@ class SEWDNoLayerNormConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SEWD
 class SEWDLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: SEWDConfig, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -309,7 +309,7 @@ class SEWDLayerNormConvLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
@@ -322,7 +322,7 @@ class SEWDLayerNormConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SEWD
 class SEWDGroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config: SEWDConfig, layer_id: int = 0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
@@ -338,7 +338,7 @@ class SEWDGroupNormConvLayer(nn.Module):
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -381,11 +381,11 @@ class SEWDPositionalConvEmbedding(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SEW
 class SEWDSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
+    def __init__(self, num_conv_pos_embeddings: int):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
@@ -418,7 +418,7 @@ class SEWDUpsampling(nn.Module):
 class SEWDFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__()
 
         if config.feat_extract_norm == "group":
@@ -435,12 +435,12 @@ class SEWDFeatureEncoder(nn.Module):
         self.gradient_checkpointing = False
         self._requires_grad = True
 
-    def _freeze_parameters(self):
+    def _freeze_parameters(self) -> None:
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
 
-    def forward(self, input_values):
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -1480,7 +1480,7 @@ class SEWDModel(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
 class SEWDForCTC(SEWDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__(config)
 
         self.sew_d = SEWDModel(config)
@@ -1501,7 +1501,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1513,7 +1513,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1531,13 +1531,13 @@ class SEWDForCTC(SEWDPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1611,7 +1611,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
 class SEWDForSequenceClassification(SEWDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1628,7 +1628,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_extractor(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
@@ -1640,7 +1640,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
-    def freeze_feature_encoder(self):
+    def freeze_feature_encoder(self) -> None:
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
@@ -1667,13 +1667,13 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
