@@ -21,7 +21,6 @@ import os
 import pickle
 import re
 import warnings
-from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
 import h5py
