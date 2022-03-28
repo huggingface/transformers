@@ -662,7 +662,6 @@ class TFViTModel(TFViTPreTrainedModel):
         Returns:
 
         Examples:
-
         ```python
         >>> from transformers import ViTFeatureExtractor, TFViTModel
         >>> from PIL import Image
@@ -677,6 +676,8 @@ class TFViTModel(TFViTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 197, 768]
         ```"""
 
         outputs = self.vit(
@@ -768,7 +769,6 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         Returns:
 
         Examples:
-
         ```python
         >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
         >>> import tensorflow as tf
@@ -787,6 +787,7 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
         >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
+        Predicted class: Egyptian cat
         ```"""
 
         outputs = self.vit(
