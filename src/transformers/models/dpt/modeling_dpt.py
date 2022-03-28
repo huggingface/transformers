@@ -503,7 +503,6 @@ class DPTFeatureFusionStage(nn.Module):
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DPTFeatureFusionLayer(config))
-        self.layers[0].residual_layer1 = None
 
     def forward(self, hidden_states):
         # reversing the hidden_states, we start from the last
@@ -894,6 +893,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         Examples:
         ```python
         >>> from transformers import DPTFeatureExtractor, DPTForDepthEstimation
+        >>> import torch
+        >>> import numpy as np
         >>> from PIL import Image
         >>> import requests
 
@@ -903,10 +904,25 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
 
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
-        >>> predicted_depth = outputs.predicted_depth  # shape (batch_size, height, width)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     predicted_depth = outputs.predicted_depth
+
+        >>> # interpolate to original size
+        >>> prediction = torch.nn.functional.interpolate(
+        ...     predicted_depth.unsqueeze(1),
+        ...     size=image.size[::-1],
+        ...     mode="bicubic",
+        ...     align_corners=False,
+        ... )
+
+        >>> # visualize the prediction
+        >>> output = prediction.squeeze().cpu().numpy()
+        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
+        >>> img = Image.fromarray(formatted)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
