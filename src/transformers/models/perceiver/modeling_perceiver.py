@@ -420,7 +420,7 @@ class PerceiverMLP(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.dense2 = nn.Linear(input_size, input_size)
+        self.dense2 = nn.Linear(widening_factor * input_size, input_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense1(hidden_states)

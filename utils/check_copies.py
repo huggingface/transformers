@@ -19,7 +19,7 @@ import os
 import re
 
 import black
-from style_doc import style_docstrings_in_code
+from doc_builder.style_doc import style_docstrings_in_code
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command

@@ -160,16 +160,17 @@ class TokenSpan(NamedTuple):
 
 class BatchEncoding(UserDict):
     """
-    Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
-    [`~tokenization_utils_base.PreTrainedTokenizerBase.batch_encode`] methods (tokens, attention_masks, etc).
+    Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.__call__`],
+    [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
+    [`~tokenization_utils_base.PreTrainedTokenizerBase.batch_encode_plus`] methods (tokens, attention_masks, etc).
 
     This class is derived from a python dictionary and can be used as a dictionary. In addition, this class exposes
     utility methods to map from word/character space to token space.
 
     Args:
         data (`dict`):
-            Dictionary of lists/arrays/tensors returned by the encode/batch_encode methods ('input_ids',
-            'attention_mask', etc.).
+            Dictionary of lists/arrays/tensors returned by the `__call__`/`encode_plus`/`batch_encode_plus` methods
+            ('input_ids', 'attention_mask', etc.).
         encoding (`tokenizers.Encoding` or `Sequence[tokenizers.Encoding]`, *optional*):
             If the tokenizer is a fast tokenizer which outputs additional information like mapping from word/character
             space to token space the `tokenizers.Encoding` instance or list of instance (for batches) hold this

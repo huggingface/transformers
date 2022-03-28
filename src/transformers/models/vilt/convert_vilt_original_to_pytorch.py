@@ -23,7 +23,7 @@ import torch
 from PIL import Image
 
 import requests
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from transformers import (
     BertTokenizer,
     ViltConfig,
@@ -182,7 +182,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 3129
         repo_id = "datasets/huggingface/label-files"
         filename = "vqa2-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
