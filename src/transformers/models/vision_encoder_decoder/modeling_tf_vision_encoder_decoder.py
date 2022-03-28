@@ -593,12 +593,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": kwargs_encoder,
+                "kwargs_call": {},
             }
 
             # Add arguments to encoder from `kwargs_encoder`
             encoder_processing_inputs.update(kwargs_encoder)
-            kwargs_encoder = {}
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
 
@@ -654,12 +653,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             "past_key_values": past_key_values,
             "return_dict": return_dict,
             "training": training,
-            "kwargs_call": kwargs_decoder,
+            "kwargs_call": {},
         }
 
         # Add arguments to decoder from `kwargs_decoder`
         decoder_processing_inputs.update(kwargs_decoder)
-        kwargs_decoder = {}
 
         decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
