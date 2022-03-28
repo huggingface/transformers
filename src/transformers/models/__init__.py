@@ -50,6 +50,7 @@ from . import (
     distilbert,
     dit,
     dpr,
+    dpt,
     electra,
     encoder_decoder,
     flaubert,
