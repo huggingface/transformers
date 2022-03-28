@@ -345,7 +345,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 assert name is None
 
     @slow
-    @unittest.skipIf(len(tf.config.list_physical_devices('GPU')) > 0, "skip testing on GPU for now to avoid GPU OOM.")
+    @unittest.skipIf(len(tf.config.list_physical_devices("GPU")) > 0, "skip testing on GPU for now to avoid GPU OOM.")
     def test_model_from_pretrained(self):
         model = TFGPTJModel.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         self.assertIsNotNone(model)
