@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CvtFeatureExtractor
+    from transformers import AutoFeatureExtractor
 
 class CvtConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
@@ -329,11 +329,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return CvtFeatureExtractor.from_pretrained("anugunj/cvt-13-224x224-1k") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("anugunj/cvt-13") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("anugunj/cvt-13-224x224-1k").to(torch_device)
+        model = CvtForImageClassification.from_pretrained("anugunj/cvt-13").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
