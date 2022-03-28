@@ -237,10 +237,11 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```
 
     ```python
-    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> # to train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
+    >>> # in case of single-label classification, labels should be of shape (batch_size,)
     >>> labels = torch.tensor(1)
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
@@ -267,11 +268,13 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```
 
     ```python
-    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+    >>> # to train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+    >>> model = {model_class}.from_pretrained(
+    ...     "{checkpoint}", problem_type="multi_label_classification", num_labels=num_labels
+    ... )
 
-    >>> num_labels = len(model.config.id2label)
+    >>> # in case of multi-label classification, labels should be of shape (batch_size, num_labels)
     >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
     ...     torch.float
     ... )

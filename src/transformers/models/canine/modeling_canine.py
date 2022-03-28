@@ -1287,10 +1287,11 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="celine98/canine-s-finetuned-sst2",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output="'LABEL_0'",
+        expected_loss=4.94,
     )
     def forward(
         self,
