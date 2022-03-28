@@ -27,7 +27,7 @@ import torch.nn as nn
 from torch import Tensor
 
 import timm
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
@@ -129,7 +129,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
