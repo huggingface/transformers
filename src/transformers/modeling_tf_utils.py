@@ -940,16 +940,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def train_step(self, data):
         """
         A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
-        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
-        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
+        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`.
 
-        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
-        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
-        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
+        When the model is compiled without specifying the loss, our overridden compile function can set an additional
+        loss function that reduces a `loss` output, and the model will output a `loss` component (notice the name
+        matching) containing the loss that was used to train the pre-trained model.
 
-        This is possible under the aforementioned circumstances because our overriden compile function can set an
-        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
-        name matching) containing the loss that was used to train the pre-trained model.
+        When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
+        labels.
         """
         possible_label_cols = {
             "labels",
@@ -1050,22 +1048,96 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def test_step(self, data):
         """
-        A modification of Keras's default test_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `test_step` that cleans up the printed metrics when we use a dummy loss. If a
+        user specifies a loss at model compile time, this function behaves as the original Keras `test_step`.
+
+        When the model is compiled without specifying the loss, our overridden compile function can set an additional
+        loss function that reduces a `loss` output, and the model will output a `loss` component (notice the name
+        matching) containing the loss that was used to train the pre-trained model.
+
+        When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
+        labels.
         """
+        possible_label_cols = {
+            "labels",
+            "label",
+            "label_ids",
+            "start_positions",
+            "start_position",
+            "end_positions",
+            "end_position",
+            "next_sentence_label",
+        }
+        metric_renamings = {
+            "start_positions": "start_logits",
+            "end_positions": "end_logits",
+        }
+        # These are the only transformations `Model.fit` applies to user-input
+        # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
-        y_pred = self(x, training=False)
-        self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-        # Updates stateful loss metrics.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+
+        # In this block, we handle the situations where labels might be either in the input dict or passed
+        # separately. Specifically, when labels are in the input dict only, we copy them to the separate labels argument
+        if y is None:
+            if not isinstance(x, dict):
+                raise RuntimeError("No labels passed to fit()!")
+            label_keys = possible_label_cols.intersection(x.keys())
+            if len(label_keys) == 1:
+                label_key = next(iter(label_keys))
+                y = x[label_key]
+            elif len(label_keys) > 1:
+                y = {key: x[key] for key in label_keys}
+            else:
+                raise RuntimeError("Could not find labels in either the input dict or labels argument!")
+        # And when using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        elif self._using_dummy_loss:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            label_kwargs = possible_label_cols.intersection(arg_names)
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for label_kwarg in label_kwargs:
+                    if label_kwarg not in x:
+                        x[label_kwarg] = y[label_kwarg]
+            # If neither of the above cases are true, we assume the user is doing
+            # their own custom loss and let them at it.
+        if self._using_dummy_loss and isinstance(y, dict):
+            label_keys = list(y.keys())  # Store this now because it changes when loss is computed
+
+        # Run forward pass.
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)
+            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
+        # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
+        if self._using_dummy_loss and isinstance(y_pred, ModelOutput):
+            # Single-output
+            if isinstance(y, tf.Tensor) or (isinstance(y, dict) and len(y) == 1):
+                y_pred = y_pred[1] if "loss" in y_pred else y_pred[0]
+            elif isinstance(y, dict):
+                y_pred_metrics = dict()
+                for key in label_keys:
+                    if key in y_pred:
+                        y_pred_metrics[key] = y_pred[key]
+                    elif key in metric_renamings and metric_renamings[key] in y_pred:
+                        y_pred_metrics[key] = y_pred[metric_renamings[key]]
+                    else:
+                        print(f"Rewrite aborted on key {key}!")
+                        print(label_keys)
+                        print(y_pred.keys())
+                        # We couldn't match this key up at all - abort and do not attempt to rewrite
+                        break
+                else:  # Only happens if all keys matched up
+                    y_pred = y_pred_metrics
+                    y = {key: val for key, val in y.items() if key in label_keys}
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
