@@ -72,7 +72,7 @@ class EvalPrediction(NamedTuple):
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
     """
-
+    inputs: Union[np.ndarray, Tuple[np.ndarray]]
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Union[np.ndarray, Tuple[np.ndarray]]
 
