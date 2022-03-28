@@ -437,7 +437,7 @@ class WavLMFeatureEncoder(nn.Module):
 
 
 class WavLMFeatureExtractor(WavLMFeatureEncoder):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
         warnings.warn(
             f"The class `{self.__class__.__name__}` has been depreciated "
@@ -670,7 +670,14 @@ class WavLMEncoderLayer(nn.Module):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_bias: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        index: int = 0,
+    ) -> Tuple:
         attn_residual = hidden_states
         hidden_states, attn_weights, position_bias = self.attention(
             hidden_states,
@@ -711,7 +718,13 @@ class WavLMEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_bias: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, position_bias = self.attention(
@@ -733,7 +746,7 @@ class WavLMEncoderLayerStableLayerNorm(nn.Module):
 
 
 class WavLMEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__()
         self.config = config
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
@@ -746,12 +759,12 @@ class WavLMEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -821,7 +834,7 @@ class WavLMEncoder(nn.Module):
 
 
 class WavLMEncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__()
         self.config = config
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
@@ -837,12 +850,12 @@ class WavLMEncoderStableLayerNorm(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -915,7 +928,7 @@ class WavLMGumbelVectorQuantizer(nn.Module):
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__()
         self.num_groups = config.num_codevector_groups
         self.num_vars = config.num_codevectors_per_group
@@ -937,12 +950,12 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         self.temperature = 2
 
     @staticmethod
-    def _compute_perplexity(probs):
+    def _compute_perplexity(probs: torch.Tensor) -> torch.Tensor:
         marginal_probs = probs.mean(dim=0)
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
