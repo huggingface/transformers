@@ -25,7 +25,7 @@ import torch
 from PIL import Image
 
 import requests
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
 from transformers.utils import logging
 
@@ -64,7 +64,7 @@ def get_convnext_config(checkpoint_url):
 
     repo_id = "datasets/huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841

@@ -16,6 +16,7 @@ src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/deit/modeling_deit.py
+src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/marian/modeling_marian.py
