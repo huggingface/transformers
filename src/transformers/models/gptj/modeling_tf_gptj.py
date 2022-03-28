@@ -65,7 +65,7 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
     seq_len_range = tf.cast(tf.range(seq_len), tf.float32)
     sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", seq_len_range, inv_freq), tf.float32)
-    return tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)
+    return tf.cast(tf.sin(sinusoid_inp), dtype=x.dtype), tf.cast(tf.cos(sinusoid_inp), dtype=x.dtype)
 
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
