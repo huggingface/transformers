@@ -662,7 +662,6 @@ class TFViTModel(TFViTPreTrainedModel):
         Returns:
 
         Examples:
-
         ```python
         >>> from transformers import ViTFeatureExtractor, TFViTModel
         >>> from PIL import Image
@@ -770,7 +769,6 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         Returns:
 
         Examples:
-
         ```python
         >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
         >>> import tensorflow as tf
