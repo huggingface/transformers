@@ -553,4 +553,3 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(normalized_scores.sum(dim=-1).allclose(ones))
 
         self.assertTrue(normalized_scores.allclose(scores.softmax(dim=-1)))
-
