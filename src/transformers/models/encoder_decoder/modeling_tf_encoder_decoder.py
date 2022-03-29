@@ -569,7 +569,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": {}
+                "kwargs_call": {},
             }
 
             # Add arguments to encoder from `kwargs_encoder`
