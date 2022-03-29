@@ -570,7 +570,8 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         if self.current_tokenizer == TokenizerStrategy.TOKENIZE_SOURCE:
-            assert table is not None, "Please ensure that the table is not empty if you use TAPEX to encode source."
+            if table is None:
+                raise ValueError("Please ensure that the table is not empty if you use TAPEX to encode source.")
             return self.source_call_func(
                 table=table,
                 query=query,
@@ -592,7 +593,8 @@ class TapexTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
         else:
-            assert answer is not None, "Please ensure that the answer is not empty if you use TAPEX to encode target."
+            if answer is None:
+                raise ValueError("Please ensure that the answer is not empty if you use TAPEX to encode target.")
             return self.target_call_func(
                 answer=answer,
                 add_special_tokens=add_special_tokens,
@@ -1499,7 +1501,8 @@ class TapexTokenizer(PreTrainedTokenizer):
         del table_content["rows"][maximum_keep_rows:]
 
     def estimate_delete_ratio(self, table_content: Dict, question: str, max_length=None):
-        assert "header" in table_content and "rows" in table_content
+        if "header" not in table_content or "rows" not in table_content:
+            raise ValueError("The table content should contain both 'header' and 'rows' keys.")
         # calculate the tokens of header, special tokens will only be pre-prepended into question
         question_tokens = self.tokenize(question, add_special_tokens=True)
         # calculate the tokens of header
