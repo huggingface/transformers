@@ -264,6 +264,7 @@ def total_processes_number(local_rank):
         return xm.xrt_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
+
         return torch.distributed.get_world_size()
     return 1
 
