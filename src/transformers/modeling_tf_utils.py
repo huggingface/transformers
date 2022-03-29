@@ -38,7 +38,6 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
@@ -1060,12 +1059,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         x[key] = val
 
         # Run forward pass.
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
-            if self._using_dummy_loss:
-                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
-            else:
-                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+        y_pred = self(x, training=False)
+        if self._using_dummy_loss:
+            self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+        else:
+            self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
 
         # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
         if self._using_dummy_loss:
