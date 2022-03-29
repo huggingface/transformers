@@ -2337,7 +2337,7 @@ class TFGenerationMixin:
                 Exponential penalty to the length. 1.0 means no penalty.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
-            logits_processor (`TFLogitsProcessorList`, *optional*):
+            logits_processor (`[TFLogitsProcessorList]`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
             num_return_sequences(`int`, *optional*, defaults to 1):
@@ -2423,9 +2423,7 @@ class TFGenerationMixin:
             )
 
         def gather_beams(nested, beam_indices, batch_axis=0):
-            """
-            Gathers the beam slices indexed by beam_indices into new beam array.
-            """
+            """Gathers the beam slices indexed by beam_indices into new beam array."""
 
             def gather_fn(tensor):
                 # ignore scalars (e.g. cache index)
@@ -2544,8 +2542,10 @@ class TFGenerationMixin:
         def beam_search_cond_fn(
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
         ):
-            """beam search state termination condition fn."""
-
+            """
+            Beam Search termination condition function -- halts the generation loop if any of these conditions becomes
+            False
+            """
             # 1. is less than max length?
             not_max_length_yet = cur_len < max_length
 
@@ -2572,7 +2572,10 @@ class TFGenerationMixin:
             input_ids_length=1,
             intermediary_running_sequences=None,
         ):
-            """beam search state update fn."""
+            """
+            Beam Search iterative update function -- each iteration adds a new token and updates the best sequences
+            seen so far
+            """
             # TODO (joao): this loop is probably faster with gather/scatters, instead of using `tf.TensorArray`.
             # Alternativelly, attempt to rewrite function with permuted axis, when enabling XLA.
 
@@ -2746,9 +2749,18 @@ class TFGenerationMixin:
         )
 
         # 1st generation step has to be run before to initialize `past`
-        cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs = partial(
-            beam_search_body_fn, input_ids_length=input_ids.shape[-1]
-        )(cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs)
+        beam_search_body_fn_first_iter = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])
+        (
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
+        ) = beam_search_body_fn_first_iter(
+            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+        )
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
         # NOT yield EOS token though)
