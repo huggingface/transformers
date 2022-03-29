@@ -391,8 +391,8 @@ class TFModelTesterMixin:
 
             # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
             if type(tf_outputs) in [tuple, list]:
-                self.assertEqual(type(tf_outputs), type(pt_outputs))
-                self.assertEqual(len(tf_outputs), len(pt_outputs))
+                self.assertEqual(type(tf_outputs), type(pt_outputs), "Output types differ between TF and PyTorch")
+                self.assertEqual(len(tf_outputs), len(pt_outputs), "Output lengths differ between TF and PyTorch")
                 if type(names) == tuple:
                     for tf_output, pt_output, name in zip(tf_outputs, pt_outputs, names):
                         check_outputs(tf_output, pt_output, model_class, names=name)
@@ -406,6 +406,8 @@ class TFModelTesterMixin:
 
                 tf_outputs = tf_outputs.numpy()
                 pt_outputs = pt_outputs.detach().to("cpu").numpy()
+
+                self.assertEqual(tf_outputs.shape, pt_outputs.shape, "Output shapes differ between TF and PyTorch")
 
                 tf_nans = np.isnan(tf_outputs)
                 pt_nans = np.isnan(pt_outputs)
