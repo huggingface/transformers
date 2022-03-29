@@ -820,7 +820,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
                 super().__init__(_accuracy, name=name, **kwargs)
 
         model = self.model
-        model.compile("adam", loss='sparse_categorical_crossentropy', metrics=FirstTokenAccuracy())
+        model.compile("adam", loss="sparse_categorical_crossentropy", metrics=FirstTokenAccuracy())
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
         examples = [
