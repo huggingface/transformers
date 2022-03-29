@@ -900,16 +900,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         function themselves.
         """
         if loss == "passthrough":
+            if metrics is not None:
+                raise ValueError("Passing metrics as a dict is not supported when using the internal loss! "
+                                 "Please either specify a loss, or remove the metrics argument.")
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
                 "To disable this behaviour, please pass a loss argument, or explicitly pass "
                 "loss=None if you do not want your model to compute a loss."
             )
-            loss = {"loss": dummy_loss}
+            loss = dummy_loss
             self._using_dummy_loss = True
-            if metrics is not None and isinstance(metrics, dict):
-                raise ValueError("When using the internal loss, passing metrics as a dict is not supported!")
         else:
             self._using_dummy_loss = False
         super().compile(
@@ -949,89 +950,47 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
         labels.
         """
-        possible_label_cols = {
-            "labels",
-            "label",
-            "label_ids",
-            "start_positions",
-            "start_position",
-            "end_positions",
-            "end_position",
-            "next_sentence_label",
-        }
-        metric_renamings = {
-            "start_positions": "start_logits",
-            "end_positions": "end_logits",
-        }
+        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "end_positions", "next_sentence_label"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
 
-        # In this block, we handle the situations where labels might be either in the input dict or passed
-        # separately. Specifically, when labels are in the input dict only, we copy them to the separate labels argument
-        if y is None:
-            if not isinstance(x, dict):
-                raise RuntimeError("No labels passed to fit()!")
-            label_keys = possible_label_cols.intersection(x.keys())
-            if len(label_keys) == 1:
-                label_key = next(iter(label_keys))
-                y = x[label_key]
-            elif len(label_keys) > 1:
-                y = {key: x[key] for key in label_keys}
-            else:
-                raise RuntimeError("Could not find labels in either the input dict or labels argument!")
-        # And when using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
-        elif self._using_dummy_loss:
+        if self._using_dummy_loss and y is not None:
             arg_names = list(dict(inspect.signature(self.call).parameters).keys())
             label_kwargs = possible_label_cols.intersection(arg_names)
+            # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
                     x = {arg_names[0]: x}
                 label_kwarg = next(iter(label_kwargs))
                 if label_kwarg not in x:
                     x[label_kwarg] = y
-            elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
                 if isinstance(x, tf.Tensor):
                     x = {arg_names[0]: x}
-                for label_kwarg in label_kwargs:
-                    if label_kwarg not in x:
-                        x[label_kwarg] = y[label_kwarg]
-            # If neither of the above cases are true, we assume the user is doing
-            # their own custom loss and let them at it.
-        if self._using_dummy_loss and isinstance(y, dict):
-            label_keys = list(y.keys())  # Store this now because it changes when loss is computed
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
 
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            if self._using_dummy_loss:
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+            else:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
 
         # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
-        if self._using_dummy_loss and isinstance(y_pred, ModelOutput):
-            # Single-output
-            if isinstance(y, tf.Tensor) or (isinstance(y, dict) and len(y) == 1):
-                y_pred = y_pred[1] if "loss" in y_pred else y_pred[0]
-            elif isinstance(y, dict):
-                y_pred_metrics = dict()
-                for key in label_keys:
-                    if key in y_pred:
-                        y_pred_metrics[key] = y_pred[key]
-                    elif key in metric_renamings and metric_renamings[key] in y_pred:
-                        y_pred_metrics[key] = y_pred[metric_renamings[key]]
-                    else:
-                        print(f"Rewrite aborted on key {key}!")
-                        print(label_keys)
-                        print(y_pred.keys())
-                        # We couldn't match this key up at all - abort and do not attempt to rewrite
-                        break
-                else:  # Only happens if all keys matched up
-                    y_pred = y_pred_metrics
-                    y = {key: val for key, val in y.items() if key in label_keys}
-        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        if self._using_dummy_loss:
+            self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
+        else:
+            self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
         for metric in self.metrics:
@@ -1058,87 +1017,45 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
         labels.
         """
-        possible_label_cols = {
-            "labels",
-            "label",
-            "label_ids",
-            "start_positions",
-            "start_position",
-            "end_positions",
-            "end_position",
-            "next_sentence_label",
-        }
-        metric_renamings = {
-            "start_positions": "start_logits",
-            "end_positions": "end_logits",
-        }
+        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "end_positions", "next_sentence_label"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
 
-        # In this block, we handle the situations where labels might be either in the input dict or passed
-        # separately. Specifically, when labels are in the input dict only, we copy them to the separate labels argument
-        if y is None:
-            if not isinstance(x, dict):
-                raise RuntimeError("No labels passed to fit()!")
-            label_keys = possible_label_cols.intersection(x.keys())
-            if len(label_keys) == 1:
-                label_key = next(iter(label_keys))
-                y = x[label_key]
-            elif len(label_keys) > 1:
-                y = {key: x[key] for key in label_keys}
-            else:
-                raise RuntimeError("Could not find labels in either the input dict or labels argument!")
-        # And when using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
-        elif self._using_dummy_loss:
+        if self._using_dummy_loss and y is not None:
             arg_names = list(dict(inspect.signature(self.call).parameters).keys())
             label_kwargs = possible_label_cols.intersection(arg_names)
+            # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
                     x = {arg_names[0]: x}
                 label_kwarg = next(iter(label_kwargs))
                 if label_kwarg not in x:
                     x[label_kwarg] = y
-            elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
                 if isinstance(x, tf.Tensor):
                     x = {arg_names[0]: x}
-                for label_kwarg in label_kwargs:
-                    if label_kwarg not in x:
-                        x[label_kwarg] = y[label_kwarg]
-            # If neither of the above cases are true, we assume the user is doing
-            # their own custom loss and let them at it.
-        if self._using_dummy_loss and isinstance(y, dict):
-            label_keys = list(y.keys())  # Store this now because it changes when loss is computed
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
 
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            if self._using_dummy_loss:
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+            else:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
 
         # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
-        if self._using_dummy_loss and isinstance(y_pred, ModelOutput):
-            # Single-output
-            if isinstance(y, tf.Tensor) or (isinstance(y, dict) and len(y) == 1):
-                y_pred = y_pred[1] if "loss" in y_pred else y_pred[0]
-            elif isinstance(y, dict):
-                y_pred_metrics = dict()
-                for key in label_keys:
-                    if key in y_pred:
-                        y_pred_metrics[key] = y_pred[key]
-                    elif key in metric_renamings and metric_renamings[key] in y_pred:
-                        y_pred_metrics[key] = y_pred[metric_renamings[key]]
-                    else:
-                        print(f"Rewrite aborted on key {key}!")
-                        print(label_keys)
-                        print(y_pred.keys())
-                        # We couldn't match this key up at all - abort and do not attempt to rewrite
-                        break
-                else:  # Only happens if all keys matched up
-                    y_pred = y_pred_metrics
-                    y = {key: val for key, val in y.items() if key in label_keys}
-        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        if self._using_dummy_loss:
+            self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
+        else:
+            self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
         for metric in self.metrics:

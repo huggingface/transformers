@@ -1302,7 +1302,7 @@ class TFModelTesterMixin:
 
                 self.assertEqual(loss.shape, [loss_size])
 
-    def test_keras_api(self):
+    def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -1323,19 +1323,24 @@ class TFModelTesterMixin:
                 self.assertGreater(len(label_names), 0, msg="No matching label names found!")
                 labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
                 inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
-                model.compile(optimizer="sgd")
+                self.assertGreater(len(inputs_minus_labels), 0)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.), run_eagerly=True)
                 # Make sure the model fits without crashing regardless of where we pass the labels
-                model.fit(
-                    prepared_for_class, validation_data=prepared_for_class, steps_per_epoch=1, validation_steps=1
+                history1 = model.fit(
+                    prepared_for_class, validation_data=prepared_for_class, steps_per_epoch=1, validation_steps=1,
+                    shuffle=False
                 )
-
-                model.fit(
+                val_loss1 = history1.history['val_loss'][0]
+                history2 = model.fit(
                     inputs_minus_labels,
                     labels,
                     validation_data=(inputs_minus_labels, labels),
                     steps_per_epoch=1,
                     validation_steps=1,
+                    shuffle=False
                 )
+                val_loss2 = history2.history['val_loss'][0]
+                self.AssertTrue(np.allclose(val_loss1, val_loss2, atol=1e-4, rtol=1e-3))
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
