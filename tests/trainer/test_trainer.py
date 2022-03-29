@@ -169,6 +169,28 @@ class RegressionModelConfig(PretrainedConfig):
         self.hidden_size = 1
 
 
+class MultiLoader:
+    def __init__(self, loaders):
+        self.loaders = loaders
+
+    def __len__(self):
+        return sum(len(loader) for loader in self.loaders)
+
+    def __iter__(self):
+        for loader in self.loaders:
+            yield from loader
+
+
+class CustomDataloaderTrainer(Trainer):
+    def get_train_dataloader(self):
+        dataloaders = [super(CustomDataloaderTrainer, self).get_train_dataloader() for _ in range(2)]
+        return MultiLoader(dataloaders)
+
+    def get_eval_dataloader(self, eval_dataset):
+        dataloaders = [super(CustomDataloaderTrainer, self).get_eval_dataloader(eval_dataset) for _ in range(2)]
+        return MultiLoader(dataloaders)
+
+
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
@@ -646,6 +668,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Check passing a new dataset for evaluation works
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+
+    # tests that we do not require dataloader to have a .dataset
+    def test_dataloader_without_dataset(self):
+        train_dataset = RegressionDataset(length=128)
+        trainer = CustomDataloaderTrainer(
+            model=RegressionModel(), train_dataset=train_dataset, eval_dataset=train_dataset
+        )
+        trainer.train()
+        trainer.evaluate()
 
     def test_sampler_seed(self):
         # nb: we don't want to inherit from IterableDataset to hit the right code path

@@ -1235,7 +1235,9 @@ class Trainer:
             num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
         else:
-            raise ValueError(f"args.max_steps must be set if dataloader does not have a length")
+            raise ValueError(
+                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+            )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -2410,7 +2412,7 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = dataloader.batch_size
+        batch_size = self.args.per_device_eval_batch_size
 
         logger.info(f"***** Running {description} *****")
         if has_length(dataloader):
