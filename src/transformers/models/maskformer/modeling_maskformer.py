@@ -2445,8 +2445,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[Tensor] = None,
-        class_labels: Optional[Tensor] = None,
+        mask_labels: Optional[List[Tensor]] = None,
+        class_labels: Optional[List[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2454,10 +2454,10 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
-        mask_labels (`torch.FloatTensor`, *optional*):
-            The target mask of shape `(num_classes, height, width)`.
-        class_labels (`torch.LongTensor`, *optional*):
-            The target labels of shape `(num_classes)`.
+        mask_labels (`List[torch.Tensor]`, *optional*):
+            List of mask labels of shape `(num_labels, height, width)` to be fed to a model
+        class_labels (`List[torch.LongTensor]`, *optional*):
+            list of target class labels of shape `(num_labels, height, width)` to be fed to a model.  They identify the labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
 
         Returns:
 

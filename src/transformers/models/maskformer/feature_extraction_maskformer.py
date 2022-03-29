@@ -390,9 +390,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         annotations = None
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
-            converted_segmentation_maps = map(
-                self.convert_segmentation_map_to_binary_masks, segmentation_maps, instance_id_to_semantic_id
-            )
+            converted_segmentation_maps = []
+            for segmentation_map in segmentation_maps:
+                converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
+                    segmentation_map, instance_id_to_semantic_id
+                )
+                converted_segmentation_maps.append(converted_segmentation_map)
 
             annotations = []
             for mask, classes in converted_segmentation_maps:
