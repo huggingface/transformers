@@ -399,6 +399,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         )  # token_type_ids should change output
 
     @slow
+    @unittest.skip(reason="TF generate currently has no time-based stopping criteria")
     def test_gptj_sample_max_time(self):
         tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
         model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)
