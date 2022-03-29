@@ -29,11 +29,11 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
-import torch.distributed as dist
 
 from .tokenization_utils_base import BatchEncoding
 from .utils import (

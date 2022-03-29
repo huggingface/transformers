@@ -172,6 +172,7 @@ if is_fairscale_available():
 
 import torch.distributed as dist
 
+
 if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.torch_smddp
 
