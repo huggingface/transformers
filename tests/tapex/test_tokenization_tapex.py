@@ -849,15 +849,21 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         with cased_tokenizer.as_target_tokenizer():
             with uncased_tokenizer.as_target_tokenizer():
-                self.assertNotEqual(cased_tokenizer(answer=answer_text).input_ids,
-                                    uncased_tokenizer(answer=answer_text).input_ids)
-                self.assertEqual(cased_tokenizer(answer=answer_text_lower).input_ids,
-                                 uncased_tokenizer(answer=answer_text).input_ids)
+                self.assertNotEqual(
+                    cased_tokenizer(answer=answer_text).input_ids, uncased_tokenizer(answer=answer_text).input_ids
+                )
+                self.assertEqual(
+                    cased_tokenizer(answer=answer_text_lower).input_ids,
+                    uncased_tokenizer(answer=answer_text).input_ids,
+                )
                 # batched encoding assert
-                self.assertNotEqual(cased_tokenizer(answer=[answer_text]).input_ids,
-                                    uncased_tokenizer(answer=[answer_text]).input_ids)
-                self.assertEqual(cased_tokenizer(answer=[answer_text_lower]).input_ids,
-                                 uncased_tokenizer(answer=[answer_text]).input_ids)
+                self.assertNotEqual(
+                    cased_tokenizer(answer=[answer_text]).input_ids, uncased_tokenizer(answer=[answer_text]).input_ids
+                )
+                self.assertEqual(
+                    cased_tokenizer(answer=[answer_text_lower]).input_ids,
+                    uncased_tokenizer(answer=[answer_text]).input_ids,
+                )
         # test input encoding lowercase
         question = "Greece held its last Summer Olympics in 2004"
         table_dict = {
@@ -874,5 +880,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         table = pd.DataFrame.from_dict(table_dict["rows"])
         table.columns = table_dict["header"]
 
-        self.assertNotEqual(cased_tokenizer(table=table, query=question).input_ids,
-                            uncased_tokenizer(table=table, query=question).input_ids)
+        self.assertNotEqual(
+            cased_tokenizer(table=table, query=question).input_ids,
+            uncased_tokenizer(table=table, query=question).input_ids,
+        )

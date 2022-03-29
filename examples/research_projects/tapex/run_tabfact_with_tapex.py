@@ -435,10 +435,10 @@ def main():
         predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
         predictions = np.argmax(predictions, axis=1)
 
-        output_predict_file = os.path.join(training_args.output_dir, f"predict_results_tabfact.txt")
+        output_predict_file = os.path.join(training_args.output_dir, "predict_results_tabfact.txt")
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w") as writer:
-                logger.info(f"***** Predict Results *****")
+                logger.info("***** Predict Results *****")
                 writer.write("index\tprediction\n")
                 for index, item in enumerate(predictions):
                     item = label_list[item]

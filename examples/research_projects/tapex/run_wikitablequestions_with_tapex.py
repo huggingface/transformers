@@ -23,7 +23,6 @@ import logging
 import os
 import sys
 from collections import defaultdict
-from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import partial
 from typing import List, Optional

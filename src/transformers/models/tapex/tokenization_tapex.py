@@ -1426,11 +1426,11 @@ class TapexTokenizer(PreTrainedTokenizer):
 
         if linear_table == "":
             logger.warning(
-                f"You provide an empty table, or all cells contain much tokens (e.g., >= 1024 tokens). "
+                "You provide an empty table, or all cells contain much tokens (e.g., >= 1024 tokens). "
                 + f"Please carefully check the corresponding table with the query : {query}."
             )
         if query == "":
-            logger.warning(f"You provide nothing to query with respect to the table.")
+            logger.warning("You provide nothing to query with respect to the table.")
         # step 4: concatenate query with linear_table
         separator = " " if query and linear_table else ""
         joint_input = (query + separator + linear_table) if query else linear_table
