@@ -202,11 +202,11 @@ if is_torch_available():
 
     class CustomDataloaderTrainer(Trainer):
         def get_train_dataloader(self):
-            dataloaders = [super(CustomDataloaderTrainer, self).get_train_dataloader() for _ in range(2)]
+            dataloaders = [super().get_train_dataloader(), super().get_train_dataloader()]
             return MultiLoader(dataloaders)
 
         def get_eval_dataloader(self, eval_dataset):
-            dataloaders = [super(CustomDataloaderTrainer, self).get_eval_dataloader(eval_dataset) for _ in range(2)]
+            dataloaders = [super().get_eval_dataloader(eval_dataset), super().get_eval_dataloader(eval_dataset)]
             return MultiLoader(dataloaders)
 
     class RegressionModel(nn.Module):
