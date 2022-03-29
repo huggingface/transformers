@@ -692,9 +692,7 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
-        model = TFViTMAEForPreTraining.from_pretrained(
-            "facebook/vit-mae-base", from_pt=True
-        )  # remove `from_pt` when TF weights have been uploaded.
+        model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
