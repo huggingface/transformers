@@ -1378,8 +1378,8 @@ class TFGenerationMixin:
                 the target language token.
             forced_eos_token_id (`int`, *optional*):
                 The id of the token to force as the last generated token when `max_length` is reached.
-            model_specific_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the `call` function of the model.
 
         Return:
             [`~utils.ModelOutput`] or `tf.Tensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True` or when
@@ -1491,10 +1491,12 @@ class TFGenerationMixin:
             model_kwargs["output_hidden_states"] = output_hidden_states
         if use_cache is not None:
             model_kwargs["use_cache"] = use_cache
+        model_kwargs["attention_mask"] = attention_mask
 
+        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
 
-        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(input_ids, pad_token_id)
 
         # 4. Prepare model inputs which will be used for auto-regressive generation
@@ -1618,16 +1620,18 @@ class TFGenerationMixin:
 
     def _prepare_attention_mask_for_generation(
         self,
-        input_ids: tf.Tensor,
+        inputs: tf.Tensor,
         pad_token_id: int,
     ) -> tf.Tensor:
-        # prepare `attention_mask` if not passed
-        if (pad_token_id is not None) and tf.math.reduce_any(input_ids == pad_token_id):
-            return tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+        is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
+        is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
+        # Check if input is input_ids and padded -> only then is attention_mask defined
+        if is_input_ids and is_pad_token_in_inputs:
+            return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
         else:
-            return tf.ones(input_ids.shape[:2], dtype=tf.int32)
+            return tf.ones(inputs.shape[:2], dtype=tf.int32)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids: tf.Tensor, model_kwargs) -> Dict[str, Any]:
+    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor: tf.Tensor, model_kwargs) -> Dict[str, Any]:
         # get encoder and store encoder outputs
         encoder = self.get_encoder()
 
@@ -1640,11 +1644,9 @@ class TFGenerationMixin:
         }
 
         # vision models don't use `attention_mask`.
-        signature = dict(inspect.signature(encoder.call).parameters)
-        if "attention_mask" not in signature:
-            encoder_kwargs.pop("attention_mask")
-
-        encoder_outputs = encoder(input_ids, **encoder_kwargs)
+        encoder_kwargs["return_dict"] = True
+        encoder_kwargs[self.main_input_name] = inputs_tensor
+        encoder_outputs = encoder(**encoder_kwargs)
         model_kwargs["encoder_outputs"] = encoder_outputs
 
         return model_kwargs
