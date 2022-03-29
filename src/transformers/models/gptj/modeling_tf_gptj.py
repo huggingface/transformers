@@ -59,13 +59,13 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] = None) -> Tuple[tf.Tensor, tf.Tensor]:
-    dim = x.shape[-1]
+    dim = shape_list(x)[-1]
     if seq_len is None:
-        seq_len = x.shape[seq_dim]
+        seq_len = shape_list(x)[seq_dim]
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
     seq_len_range = tf.cast(tf.range(seq_len), tf.float32)
     sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", seq_len_range, inv_freq), tf.float32)
-    return tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)
+    return tf.cast(tf.sin(sinusoid_inp), dtype=x.dtype), tf.cast(tf.cos(sinusoid_inp), dtype=x.dtype)
 
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
@@ -77,8 +77,8 @@ def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
 
 def apply_rotary_pos_emb(x: tf.Tensor, sincos: tf.Tensor, offset: int = 0) -> tf.Tensor:
     sin_pos, cos_pos = sincos
-    sin_pos = tf.repeat(sin_pos[None, offset : x.shape[1] + offset, None, :], 2, 3)
-    cos_pos = tf.repeat(cos_pos[None, offset : x.shape[1] + offset, None, :], 2, 3)
+    sin_pos = tf.repeat(sin_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
+    cos_pos = tf.repeat(cos_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
     return (x * cos_pos) + (rotate_every_two(x) * sin_pos)
 
 
@@ -173,7 +173,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         head_mask: Optional[tf.Tensor] = None,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         # compute causal mask from causal mask buffer
-        query_length, key_length = query.shape[-2], key.shape[-2]
+        query_length, key_length = shape_list(query)[-2], shape_list(key)[-2]
         causal_mask = self.get_causal_mask(key_length, query_length)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
@@ -218,11 +218,11 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         key = self._split_heads(key, True)
         value = self._split_heads(value, False)
 
-        seq_len = key.shape[1]
+        seq_len = shape_list(key)[1]
         offset = 0
 
         if layer_past is not None:
-            offset = layer_past[0].shape[-2]
+            offset = shape_list(layer_past[0])[-2]
             seq_len += offset
 
         if self.rotary_dim is not None:
