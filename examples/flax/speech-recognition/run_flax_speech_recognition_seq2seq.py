@@ -320,7 +320,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
 
         decoder_input_ids = shift_tokens_right(labels, self.decoder_start_token_id)
 
-        # replace padding with -100 to ignore loss correctly
+        # replace padding with -100 to ignore correctly when computing the loss
         labels = np.ma.array(labels, mask=np.not_equal(labels_batch.attention_mask, 1))
         labels = labels.filled(fill_value=-100)
 
@@ -330,42 +330,11 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
 
         return batch
 
-
-def write_train_metric(summary_writer, train_metrics, train_time, step):
-    summary_writer.scalar("train_time", train_time, step)
-
-    train_metrics = get_metrics(train_metrics)
-    for key, vals in train_metrics.items():
-        tag = f"train_{key}"
-        for i, val in enumerate(vals):
-            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
-
-
-def write_eval_metric(summary_writer, eval_metrics, pred_str, step):
-    summary_writer.text("eval_predictions", "\n".join(pred_str), step)
-
-    for metric_name, value in eval_metrics.items():
-        summary_writer.scalar(f"eval_{metric_name}", value, step)
-
-
-def create_learning_rate_fn(
-    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
-    """Returns a linear warmup, linear_decay learning rate function."""
-    steps_per_epoch = train_ds_size // train_batch_size
-    num_train_steps = steps_per_epoch * num_train_epochs
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
-    decay_fn = optax.linear_schedule(
-        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
-    )
-    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
-    return schedule_fn
-
-
 class FlaxLengthGroupedSampler:
     """
     Sampler that samples indices in a way that groups together features of the dataset of roughly the same length while
-    keeping a bit of randomness (optional).
+    keeping a bit of randomness (optional). Returned batch indices are purposed for one device - sharding the batched
+    data yields distributed batches grouped by length.
     Args:
         mega_batch_mult (:obj:`int`, `optional`):
             Default for mega_batch_mult: 50 or the number to get 4 megabatches, whichever is smaller.
@@ -374,10 +343,10 @@ class FlaxLengthGroupedSampler:
 
     def __call__(self, dataset, batch_size: int, rng: Optional[List[int]] = None) -> np.ndarray:
         """
-        Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of similar
-        lengths. To do this, the indices are:
+        Return a batched list of indices in which each slice contains a set of consecutive indices that correspond to
+        elements of similar lengths. To do this, the indices are:
 
-        - randomly permuted if a JAX rng is specified
+        - randomly permuted (if a JAX rng is specified)
         - grouped in mega-batches of size `mega_batch_mult * batch_size`
         - sorted by length in each mega-batch
 
@@ -412,14 +381,47 @@ class FlaxLengthGroupedSampler:
         return generate_batch_splits(np.array(megabatches), batch_size)
 
 def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
+    """Generate batches of data for a specified batch size from sample indices. If the dataset size is not divisible by
+    the batch size, the last incomplete batch is dropped."""
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
     sections_split = num_samples // batch_size
-    batch_idx = np.split(samples_idx, sections_split)
-    return batch_idx
+    return np.split(samples_idx, sections_split)
+
+
+def write_train_metric(summary_writer, train_metrics, train_time, step):
+    summary_writer.scalar("train_time", train_time, step)
+
+    train_metrics = get_metrics(train_metrics)
+    for key, vals in train_metrics.items():
+        tag = f"train_{key}"
+        for i, val in enumerate(vals):
+            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+
+
+def write_eval_metric(summary_writer, eval_metrics, pred_str, step):
+    # write output actual predictions for debugging
+    summary_writer.text("eval_predictions", "\n".join(pred_str), step)
+
+    for metric_name, value in eval_metrics.items():
+        summary_writer.scalar(f"eval_{metric_name}", value, step)
+
+
+def create_learning_rate_fn(
+    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
+) -> Callable[[int], jnp.array]:
+    """Returns a linear warmup, linear_decay learning rate function."""
+    steps_per_epoch = train_ds_size // train_batch_size
+    num_train_steps = steps_per_epoch * num_train_epochs
+    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
+    decay_fn = optax.linear_schedule(
+        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
+    )
+    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
+    return schedule_fn
 
 
 def main():
@@ -795,6 +797,7 @@ def main():
 
             # create initial state for accumulating losses and gradients
             init_loss_grads = (0, jax.tree_map(jnp.zeros_like, state.params))
+            # loop accumulate losses and gradients function over the number of gradient accumulation steps
             loss, grad = jax.tree_map(
                 lambda x: x / gradient_accumulation_steps,
                 jax.lax.fori_loop(
@@ -902,7 +905,7 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        # Generate eval set by deterministically shuffling sampling indices from the eval dataset and grouping by length
+        # Generate eval set by sequentially sampling indices from the eval dataset and grouping by length
         eval_batch_idx = data_sampler(vectorized_datasets["eval"], eval_batch_size)
 
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
@@ -924,7 +927,7 @@ def main():
         eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
-        # compute WER metric
+        # compute WER metric and get predicted string (for debugging)
         wer_desc = ""
         pred_str = ""
         if training_args.predict_with_generate:
