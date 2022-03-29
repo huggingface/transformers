@@ -80,7 +80,7 @@ class SageMakerTrainingArguments(TrainingArguments):
         if torch.distributed.is_initialized() and self.local_rank == -1:
             logger.warning(
                 "torch.distributed process group is initialized, but local_rank == -1. "
-                "In order to use Torch DDP, set local_rank or 'LOCAL_RANK' env var."
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
         if self.no_cuda:
             device = torch.device("cpu")
