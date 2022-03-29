@@ -903,7 +903,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 raise ValueError(
                     "Passing metrics as a dict is not supported when using the internal loss! "
                     "Please either compile the model with a loss, or remove the metrics argument. "
-                    "Note that advanced metrics using the KerasMetricCallback can still be used with the internal "
+                    "Note that advanced metrics using the `KerasMetricCallback` can still be used with the internal "
                     "loss."
                 )
             logger.warning(
