@@ -944,12 +944,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
         a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`.
 
-        When the model is compiled without specifying the loss, our overridden compile function can set an additional
-        loss function that reduces a `loss` output, and the model will output a `loss` component (notice the name
-        matching) containing the loss that was used to train the pre-trained model.
-
-        When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
-        labels.
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple
+        dummy loss that just reads the loss output head of the model. When using this dummy loss, inputs can be
+        passed either as keys in the input dictionary, or as normal Keras labels.
         """
         possible_label_cols = {
             "labels",
@@ -994,7 +991,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
 
-        # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
+        # When using the dummy_loss we know metrics are not present, so we can skip a lot of this
         if self._using_dummy_loss:
             self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
         else:
@@ -1018,12 +1015,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         A modification of Keras's default `test_step` that cleans up the printed metrics when we use a dummy loss. If a
         user specifies a loss at model compile time, this function behaves as the original Keras `test_step`.
 
-        When the model is compiled without specifying the loss, our overridden compile function can set an additional
-        loss function that reduces a `loss` output, and the model will output a `loss` component (notice the name
-        matching) containing the loss that was used to train the pre-trained model.
-
-        When using this "dummy loss", inputs can be passed either as keys in the input dictionary, or as normal Keras
-        labels.
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple
+        dummy loss that just reads the loss output head of the model. When using this dummy loss, inputs can be
+        passed either as keys in the input dictionary, or as normal Keras labels.
         """
         possible_label_cols = {
             "labels",
@@ -1065,7 +1059,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
 
-        # When using the dummy_loss we match up structures before passing to metrics, so it doesn't get confused
+        # When using the dummy_loss we know metrics are not present, so we can skip a lot of this
         if self._using_dummy_loss:
             self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
         else:
