@@ -669,7 +669,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
-    # tests that we do not require dataloader to have a .dataset
+    # tests that we do not require dataloader to have a .dataset attribute
     def test_dataloader_without_dataset(self):
         train_dataset = RegressionDataset(length=128)
         trainer = CustomDataloaderTrainer(
