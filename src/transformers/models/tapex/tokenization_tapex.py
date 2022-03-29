@@ -18,9 +18,9 @@ import abc
 import json
 import os
 import random
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
-from contextlib import contextmanager
 
 import regex as re
 
@@ -571,42 +571,46 @@ class TapexTokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         if self.current_tokenizer == TokenizerStrategy.TOKENIZE_SOURCE:
             assert table is not None, "Please ensure that the table is not empty if you use TAPEX to encode source."
-            return self.source_call_func(table=table,
-                                         query=query,
-                                         answer=answer,
-                                         add_special_tokens=add_special_tokens,
-                                         padding=padding,
-                                         truncation=truncation,
-                                         max_length=max_length,
-                                         stride=stride,
-                                         pad_to_multiple_of=pad_to_multiple_of,
-                                         return_tensors=return_tensors,
-                                         return_token_type_ids=return_token_type_ids,
-                                         return_attention_mask=return_attention_mask,
-                                         return_overflowing_tokens=return_overflowing_tokens,
-                                         return_special_tokens_mask=return_special_tokens_mask,
-                                         return_offsets_mapping=return_offsets_mapping,
-                                         return_length=return_length,
-                                         verbose=verbose,
-                                         **kwargs)
+            return self.source_call_func(
+                table=table,
+                query=query,
+                answer=answer,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
         else:
             assert answer is not None, "Please ensure that the answer is not empty if you use TAPEX to encode target."
-            return self.target_call_func(answer=answer,
-                                         add_special_tokens=add_special_tokens,
-                                         padding=padding,
-                                         truncation=truncation,
-                                         max_length=max_length,
-                                         stride=stride,
-                                         pad_to_multiple_of=pad_to_multiple_of,
-                                         return_tensors=return_tensors,
-                                         return_token_type_ids=return_token_type_ids,
-                                         return_attention_mask=return_attention_mask,
-                                         return_overflowing_tokens=return_overflowing_tokens,
-                                         return_special_tokens_mask=return_special_tokens_mask,
-                                         return_offsets_mapping=return_offsets_mapping,
-                                         return_length=return_length,
-                                         verbose=verbose,
-                                         **kwargs)
+            return self.target_call_func(
+                answer=answer,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
 
     def source_call_func(
         self,
@@ -1426,9 +1430,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 + f"Please carefully check the corresponding table with the query : {query}."
             )
         if query == "":
-            logger.warning(
-                f"You provide nothing to query with respect to the table."
-            )
+            logger.warning(f"You provide nothing to query with respect to the table.")
         # step 4: concatenate query with linear_table
         separator = " " if query and linear_table else ""
         joint_input = (query + separator + linear_table) if query else linear_table

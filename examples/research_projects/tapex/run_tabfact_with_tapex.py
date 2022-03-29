@@ -34,19 +34,20 @@ from datasets import load_dataset
 import transformers
 from transformers import (
     AutoConfig,
-    TapexTokenizer,
     BartForSequenceClassification,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
+    TapexTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
-    set_seed
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.17.0.dev0")
@@ -70,13 +71,14 @@ class DataTrainingArguments:
         default="tab_fact", metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
-        default="tab_fact", metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default="tab_fact",
+        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."},
     )
     max_seq_length: int = field(
         default=1024,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-                    "than this will be truncated, sequences shorter will be padded."
+            "than this will be truncated, sequences shorter will be padded."
         },
     )
     overwrite_cache: bool = field(
@@ -86,28 +88,28 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     train_file: Optional[str] = field(
@@ -128,7 +130,7 @@ class DataTrainingArguments:
             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
             validation_extension = self.validation_file.split(".")[-1]
             assert (
-                    validation_extension == train_extension
+                validation_extension == train_extension
             ), "`validation_file` should have the same extension (csv or json) as `train_file`."
 
 
@@ -163,7 +165,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                    "with private models)."
+            "with private models)."
         },
     )
 
@@ -249,7 +251,7 @@ def main():
                 train_extension = data_args.train_file.split(".")[-1]
                 test_extension = data_args.test_file.split(".")[-1]
                 assert (
-                        test_extension == train_extension
+                    test_extension == train_extension
                 ), "`test_file` should have the same extension (csv or json) as `train_file`."
                 data_files["test"] = data_args.test_file
             else:
@@ -289,7 +291,7 @@ def main():
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
-        add_prefix_space=True
+        add_prefix_space=True,
     )
     model = BartForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -325,14 +327,12 @@ def main():
             An example _table_text can be: round#clubs remaining\nfirst round#156\n
             """
             _table_content = [_table_row.split("#") for _table_row in _table_text.strip("\n").split("\n")]
-            _table_pd = pd.DataFrame.from_records(_table_content[1:],
-                                                  columns=_table_content[0])
+            _table_pd = pd.DataFrame.from_records(_table_content[1:], columns=_table_content[0])
             return _table_pd
 
         questions = examples["statement"]
         tables = list(map(_convert_table_text_to_pandas, examples["table_text"]))
-        result = tokenizer(tables, questions,
-                           padding=padding, max_length=max_seq_length, truncation=True)
+        result = tokenizer(tables, questions, padding=padding, max_length=max_seq_length, truncation=True)
 
         result["label"] = examples["label"]
         return result
@@ -393,7 +393,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        data_collator=data_collator
+        data_collator=data_collator,
     )
 
     # Training
@@ -421,9 +421,7 @@ def main():
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate(eval_dataset=eval_dataset)
-        max_eval_samples = (
-            data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
-        )
+        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)

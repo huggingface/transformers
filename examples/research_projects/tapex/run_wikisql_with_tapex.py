@@ -26,29 +26,30 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Optional, List
+from typing import List, Optional
 
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
-from filelock import FileLock
 
 import transformers
+from filelock import FileLock
 from transformers import (
     AutoConfig,
-    TapexTokenizer,
+    BartForConditionalGeneration,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
+    TapexTokenizer,
     set_seed,
 )
-from transformers import BartForConditionalGeneration
 from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
-from wikisql_utils import retrieve_wikisql_query_answer_tapas, _TYPE_CONVERTER
+from wikisql_utils import _TYPE_CONVERTER, retrieve_wikisql_query_answer_tapas
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.17.0.dev0")
@@ -79,8 +80,11 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name. "
-                                        "By default we use BART-large tokenizer for TAPEX-large."}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name. "
+            "By default we use BART-large tokenizer for TAPEX-large."
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
@@ -98,7 +102,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                    "with private models)."
+            "with private models)."
         },
     )
 
@@ -122,7 +126,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "An optional input evaluation data file to evaluate the metrics (rouge) on "
-                    "(a jsonlines or csv file)."
+            "(a jsonlines or csv file)."
         },
     )
     test_file: Optional[str] = field(
@@ -142,59 +146,59 @@ class DataTrainingArguments:
         default=1024,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-                    "than this will be truncated, sequences shorter will be padded."
+            "than this will be truncated, sequences shorter will be padded."
         },
     )
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
             "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
-                    "than this will be truncated, sequences shorter will be padded."
+            "than this will be truncated, sequences shorter will be padded."
         },
     )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                    "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-                    "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-                    "during ``evaluate`` and ``predict``."
+            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
             "help": "Whether to pad all samples to model maximum sentence length. "
-                    "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-                    "efficient on GPU but very bad for TPU."
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+            "efficient on GPU but very bad for TPU."
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-                    "value if set."
+            "value if set."
         },
     )
     num_beams: Optional[int] = field(
         default=None,
         metadata={
             "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
-                    "which is used during ``evaluate`` and ``predict``."
+            "which is used during ``evaluate`` and ``predict``."
         },
     )
     ignore_pad_token_for_loss: bool = field(
@@ -320,7 +324,7 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # IMPORTANT: the initial BART model's decoding is penalized by no_repeat_ngram_size, and thus
@@ -336,7 +340,7 @@ def main():
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
-        add_prefix_space=True
+        add_prefix_space=True,
     )
 
     # load Bart based Tapex model (default tapex-large)
@@ -385,23 +389,24 @@ def main():
         def _convert_table_types(_table):
             """Runs the type converter over the table cells."""
             ret_table = deepcopy(_table)
-            types = ret_table['types']
-            ret_table['real_rows'] = ret_table['rows']
+            types = ret_table["types"]
+            ret_table["real_rows"] = ret_table["rows"]
             typed_rows = []
-            for row in ret_table['rows']:
+            for row in ret_table["rows"]:
                 typed_row = []
                 for column, cell_value in enumerate(row):
                     typed_row.append(_TYPE_CONVERTER[types[column]](cell_value))
                 typed_rows.append(typed_row)
-            ret_table['rows'] = typed_rows
+            ret_table["rows"] = typed_rows
             return ret_table
 
         questions = [question.lower() for question in examples["question"]]
         example_tables = examples["table"]
         example_sqls = examples["sql"]
-        tables = [pd.DataFrame.from_records(example_table["rows"],
-                                            columns=example_table["header"])
-                  for example_table in example_tables]
+        tables = [
+            pd.DataFrame.from_records(example_table["rows"], columns=example_table["header"])
+            for example_table in example_tables
+        ]
 
         # using tapas utils to obtain wikisql answer
         answers = []
@@ -414,24 +419,26 @@ def main():
         # IMPORTANT: we cannot pass by answers during evaluation, answers passed during training are used to
         # truncate large tables in the train set!
         if is_training:
-            model_inputs = tokenizer(table=tables,
-                                     query=questions,
-                                     answer=answers,
-                                     max_length=data_args.max_source_length,
-                                     padding=padding,
-                                     truncation=True)
+            model_inputs = tokenizer(
+                table=tables,
+                query=questions,
+                answer=answers,
+                max_length=data_args.max_source_length,
+                padding=padding,
+                truncation=True,
+            )
         else:
-            model_inputs = tokenizer(table=tables,
-                                     query=questions,
-                                     max_length=data_args.max_source_length,
-                                     padding=padding,
-                                     truncation=True)
+            model_inputs = tokenizer(
+                table=tables, query=questions, max_length=data_args.max_source_length, padding=padding, truncation=True
+            )
 
         with tokenizer.as_target_tokenizer():
-            labels = tokenizer(answer=[", ".join(answer) for answer in answers],
-                               max_length=max_target_length,
-                               padding=padding,
-                               truncation=True)
+            labels = tokenizer(
+                answer=[", ".join(answer) for answer in answers],
+                max_length=max_target_length,
+                padding=padding,
+                truncation=True,
+            )
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -550,7 +557,7 @@ def main():
             return correct_num / len(_predictions)
 
         accuracy = get_denotation_accuracy(decoded_preds, decoded_labels)
-        result = {'denotation_accuracy': accuracy}
+        result = {"denotation_accuracy": accuracy}
 
         return result
 
@@ -562,7 +569,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.predict_with_generate else None
+        compute_metrics=compute_metrics if training_args.predict_with_generate else None,
     )
 
     if training_args.do_train:
