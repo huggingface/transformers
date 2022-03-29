@@ -944,9 +944,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
         a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`.
 
-        When the model is compiled without specifying the loss, our overridden compile function can set a simple
-        dummy loss that just reads the loss output head of the model. When using this dummy loss, inputs can be
-        passed either as keys in the input dictionary, or as normal Keras labels.
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple dummy
+        loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
+        as keys in the input dictionary, or as normal Keras labels.
         """
         possible_label_cols = {
             "labels",
@@ -1015,9 +1015,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         A modification of Keras's default `test_step` that cleans up the printed metrics when we use a dummy loss. If a
         user specifies a loss at model compile time, this function behaves as the original Keras `test_step`.
 
-        When the model is compiled without specifying the loss, our overridden compile function can set a simple
-        dummy loss that just reads the loss output head of the model. When using this dummy loss, inputs can be
-        passed either as keys in the input dictionary, or as normal Keras labels.
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple dummy
+        loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
+        as keys in the input dictionary, or as normal Keras labels.
         """
         possible_label_cols = {
             "labels",
