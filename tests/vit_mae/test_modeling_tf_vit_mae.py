@@ -428,7 +428,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
                 max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
                 # Set a higher tolerance (2e-5) here than the one in the common test (1e-5).
-                # TODO: A deeper look to decide the best tolerance for the test to be strict but not too flaky.
+                # TODO: A deeper look to decide the best (common) tolerance for the test to be strict but not too flaky.
                 self.assertLessEqual(max_diff, 2e-5)
             else:
                 raise ValueError(
