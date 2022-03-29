@@ -22,6 +22,8 @@ import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+import pdb
+import torch
 
 import datasets
 import numpy as np
@@ -64,6 +66,14 @@ task_to_keys = {
 }
 
 logger = logging.getLogger(__name__)
+
+def count_parameters(model):
+    s = 0
+    for p in model.parameters():
+        s+= p.numel()
+        print(type(p), p.numel(), " total:", s)
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 
 
 @dataclass
@@ -156,8 +166,8 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
 
-    model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    model_name_or_path: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -184,6 +194,14 @@ class ModelArguments:
             "with private models)."
         },
     )
+    config_overrides: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
+            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+        },
+    )
+
 
 
 def main():
@@ -320,6 +338,21 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    if model_args.config_overrides is not None:
+        logger.info(f"Overriding config: {model_args.config_overrides}")
+        config.update_from_string(model_args.config_overrides)
+        logger.info(f"New config: {config}")
+
+    if config.robez and config.robez_single:
+       pdb.set_trace()
+       assert (config.robez_single_size > 0)
+       hashed_weight = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+       config.robez_single_array = hashed_weight 
+
+
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -327,14 +360,26 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+    if model_args.model_name_or_path:
+        model = AutoModelForSequenceClassification.from_pretrained(
+           model_args.model_name_or_path,
+            from_tf=bool(".ckpt" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
     )
+    else:
+        logger.info("Training new model from scratch")
+        model = AutoModelForSequenceClassification.from_config(config)
+
+    print(model)
+    print("Total parameters", count_parameters(model))
+    #wt = np.concatenate([np.array(i.data.detach().cpu()).reshape(-1) for i in model.parameters()])
+    #thold = np.percentile(np.abs(wt), 50)
+    #for p in model.parameters():
+    #    p.data = p.data * (torch.abs(p.data) > thold)
+    
 
     # Preprocessing the raw_datasets
     if data_args.task_name is not None:
@@ -419,7 +464,11 @@ def main():
 
     if training_args.do_eval:
         if "validation" not in raw_datasets and "validation_matched" not in raw_datasets:
-            raise ValueError("--do_eval requires a validation dataset")
+            if "test" in raw_datasets:
+                raw_datasets["validation"] = raw_datasets["test"]
+            else:
+                raise ValueError("--do_eval requires a validation dataset or a backup test dataset")
+
         eval_dataset = raw_datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
