@@ -405,7 +405,11 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
-        ).to(torch_device)
+        )
+
+        inputs["pixel_values"] = inputs["pixel_values"].to(torch_device)
+        inputs["mask_labels"] = [el.to(torch_device) for el in inputs["mask_labels"]]
+        inputs["class_labels"] = [el.to(torch_device) for el in inputs["class_labels"]]
 
         with torch.no_grad():
             outputs = model(**inputs)
