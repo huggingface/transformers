@@ -190,3 +190,12 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
 
                     self.assertEqual(jitted_output.shape, output.shape)
+
+    # overwrite from common in order to skip the check on `attentions`
+    def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
+        # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
+        # an effort was done to return `attention_probs` (yet to be verified).
+        if type(names) == str and names.startswith("attentions"):
+            return
+        else:
+            super().check_outputs(fx_outputs, pt_outputs, model_class, names)
