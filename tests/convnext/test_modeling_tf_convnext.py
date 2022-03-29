@@ -143,7 +143,10 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.")
+    @unittest.skipIf(
+        len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
     def test_keras_fit(self):
         pass
 
