@@ -569,13 +569,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": kwargs_encoder,
+                "kwargs_call": {},
             }
 
             # Add arguments to encoder from `kwargs_encoder`
             for k, v in kwargs_encoder.items():
                 encoder_processing_inputs[k] = v
-            kwargs_encoder = {}
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
 
@@ -622,13 +621,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             "past_key_values": past_key_values,
             "return_dict": return_dict,
             "training": training,
-            "kwargs_call": kwargs_decoder,
+            "kwargs_call": {},
         }
 
         # Add arguments to decoder from `kwargs_decoder`
         for k, v in kwargs_decoder.items():
             decoder_processing_inputs[k] = v
-        kwargs_decoder = {}
 
         decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
