@@ -1309,6 +1309,12 @@ class TFModelTesterMixin:
             if getattr(model, "hf_compute_loss", None):
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = {
+                    key: val
+                    for key, val in prepared_for_class.items()
+                    if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids")
+                }
+
                 possible_label_cols = {
                     "labels",
                     "label",
