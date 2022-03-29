@@ -263,14 +263,8 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_dp_enabled() and is_torch_available():
-        import torch
-        import smdistributed.dataparallel.torch.torch_smddp
-        torch.distributed.init_process_group(backend="smddp")
-        return torch.distributed.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
-        torch.distributed.init_process_group(backend="nccl")
         return torch.distributed.get_world_size()
     return 1
 
