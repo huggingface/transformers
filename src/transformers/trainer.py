@@ -171,7 +171,6 @@ if is_fairscale_available():
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.torch_smddp
