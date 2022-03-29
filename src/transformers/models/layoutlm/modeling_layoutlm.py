@@ -34,9 +34,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...pytorch_utils import find_pruneable_heads_and_indices
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_layoutlm import LayoutLMConfig
 

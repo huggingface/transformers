@@ -124,6 +124,7 @@ dmypy.json
 # vscode
 .vs
 .vscode
+.history
 
 # Pycharm
 .idea

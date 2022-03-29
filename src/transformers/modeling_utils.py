@@ -32,6 +32,8 @@ from torch.nn import CrossEntropyLoss
 
 from requests import HTTPError
 
+from transformers.pytorch_utils import no_init_weights
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
@@ -66,22 +68,6 @@ logger = logging.get_logger(__name__)
 _init_weights = True
 
 
-@contextmanager
-def no_init_weights(_enable=True):
-    """
-    Context manager to globally disable weight initialization to speed up loading large models.
-
-    TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
-    """
-    global _init_weights
-    if _enable:
-        _init_weights = False
-    try:
-        yield
-    finally:
-        _init_weights = True
-
-
 try:
     from torch.nn import Identity
 except ImportError:
@@ -94,32 +80,6 @@ except ImportError:
 
         def forward(self, input):
             return input
-
-
-def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
-    """
-    Finds the heads and their indices taking `already_pruned_heads` into account.
-
-    Args:
-        heads (`List[int]`): List of the indices of heads to prune.
-        n_heads (`int`): The number of heads in the model.
-        head_size (`int`): The size of each head.
-        already_pruned_heads (`Set[int]`): A set of already pruned heads.
-
-    Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
-    """
-    mask = torch.ones(n_heads, head_size)
-    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
-    for head in heads:
-        # Compute how many pruned heads are before the head and move the index accordingly
-        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
-        mask[head] = 0
-    mask = mask.view(-1).contiguous().eq(1)
-    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
-    return heads, index
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):

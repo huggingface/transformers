@@ -40,9 +40,9 @@ from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...pytorch_utils import find_pruneable_heads_and_indices
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
