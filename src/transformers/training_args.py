@@ -1022,10 +1022,15 @@ class TrainingArguments:
     @torch_required
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
+        if torch.distributed.is_initialized() and self.local_rank == -1:
+            logger.warning(
+                "torch.distributed process group is initialized, but local_rank == -1. "
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+            )
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
-            if self.local_rank != -1:
+            if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
                     raise ValueError(
@@ -1076,7 +1081,8 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            if not torch.distributed.is_initialized():
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
