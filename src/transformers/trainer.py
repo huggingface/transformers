@@ -585,7 +585,6 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-
         if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
@@ -693,7 +692,7 @@ class Trainer:
                 pin_memory=self.args.dataloader_pin_memory,
             )
 
-        train_sampler = self._get_train_sampler(train_dataset)
+        train_sampler = self._get_train_sampler()
 
         return DataLoader(
             train_dataset,
@@ -1229,14 +1228,15 @@ class Trainer:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
-        else:
-            # see __init__. max_steps is set when the dataset has no __len__
+        elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
             num_update_steps_per_epoch = max_steps
             num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
+        else:
+            raise ValueError(f"args.max_steps must be set if dataloader does not have a length")
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
