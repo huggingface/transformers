@@ -902,7 +902,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if metrics is not None:
                 raise ValueError(
                     "Passing metrics as a dict is not supported when using the internal loss! "
-                    "Please either specify a loss, or remove the metrics argument."
+                    "Please either compile the model with a loss, or remove the metrics argument. "
+                    "Note that advanced metrics using the KerasMetricCallback can still be used with the internal "
+                    "loss."
                 )
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
@@ -958,7 +960,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         }
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
-        data = data_adapter.expand_1d(data)
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
 
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
@@ -1029,7 +1032,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         }
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
-        data = data_adapter.expand_1d(data)
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
 
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,

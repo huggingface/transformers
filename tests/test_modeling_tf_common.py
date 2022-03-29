@@ -1309,6 +1309,7 @@ class TFModelTesterMixin:
             if getattr(model, "hf_compute_loss", None):
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                # Is there a better way to remove these decoder inputs?
                 prepared_for_class = {
                     key: val
                     for key, val in prepared_for_class.items()
