@@ -143,6 +143,10 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.")
+    def test_keras_fit(self):
+        pass
+
     @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
