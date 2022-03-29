@@ -161,7 +161,6 @@ class BertConfig(PretrainedConfig):
         self.robez_factor = 0.01
         self.robez_chunk_size = 1
         self.robez_single = False
-        self.robez_single_array = None
         self.robez_single_size = 0
         self.robez_seed_local = 0
 

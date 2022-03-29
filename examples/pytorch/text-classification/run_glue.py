@@ -343,13 +343,6 @@ def main():
         config.update_from_string(model_args.config_overrides)
         logger.info(f"New config: {config}")
 
-    if config.robez and config.robez_single:
-       pdb.set_trace()
-       assert (config.robez_single_size > 0)
-       hashed_weight = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
-                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
-                                        ).astype(np.float32)))
-       config.robez_single_array = hashed_weight 
 
 
 

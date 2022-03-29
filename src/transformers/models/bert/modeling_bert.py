@@ -170,12 +170,12 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         if config.robez:
             print("[embedding] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params = config.vocab_size * config.hidden_size + config.max_position_embeddings * config.hidden_size + config.type_vocab_size * config.hidden_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -184,7 +184,7 @@ class BertEmbeddings(nn.Module):
                                         ).astype(np.float32)))
 
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.word_embeddings = HashedEmbeddingBag(config.vocab_size, config.hidden_size, _weight=self.hashed_weight, val_offset = 0,
                                                       uma_chunk_size = config.robez_chunk_size, seed=seed, padding_idx = config.pad_token_id)
                                                       #uma_chunk_size = config.robez_chunk_size, padding_idx = config.pad_token_id)
@@ -252,7 +252,7 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, seed=1, seed_offset=1):
+    def __init__(self, config, position_embedding_type=None, seed=1, seed_offset=1, single_robez_array=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -267,7 +267,7 @@ class BertSelfAttention(nn.Module):
             print("[SelfAttention] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
 
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  3 * config.hidden_size * self.all_head_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -275,7 +275,7 @@ class BertSelfAttention(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
 
             self.query = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             self.key = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+2)
@@ -397,12 +397,12 @@ class BertSelfAttention(nn.Module):
 
 
 class BertSelfOutput(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         if config.robez:
             print("[BertSelfOutput] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  config.hidden_size * config.hidden_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -410,7 +410,7 @@ class BertSelfOutput(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -426,11 +426,11 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, seed=1, seed_offset=1):
+    def __init__(self, config, position_embedding_type=None, seed=1, seed_offset=1, single_robez_array=None):
         super().__init__()
         seed_offset = int(seed_offset / 2)
-        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type, seed=seed, seed_offset=seed_offset)
-        self.output = BertSelfOutput(config, seed=seed+seed_offset, seed_offset=seed_offset)
+        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type, seed=seed, seed_offset=seed_offset, single_robez_array=single_robez_array)
+        self.output = BertSelfOutput(config, seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -476,13 +476,13 @@ class BertAttention(nn.Module):
 
 
 class BertIntermediate(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         if config.robez:
             print("[BertIntermediate] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
 
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  config.hidden_size * config.intermediate_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -490,7 +490,7 @@ class BertIntermediate(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.dense = RzLinear(config.hidden_size, config.intermediate_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -508,13 +508,13 @@ class BertIntermediate(nn.Module):
 
 
 class BertOutput(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         if config.robez:
             print("[BertOutput] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
 
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  config.hidden_size * config.intermediate_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -522,7 +522,7 @@ class BertOutput(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight  = config.robez_single_array
+                self.hashed_weight  = single_robez_array
             self.dense = RzLinear(config.intermediate_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -538,20 +538,20 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         seed_offset = int(seed_offset/4)
-        self.attention = BertAttention(config, seed=seed, seed_offset=seed_offset)
+        self.attention = BertAttention(config, seed=seed, seed_offset=seed_offset, single_robez_array=single_robez_array)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertAttention(config, position_embedding_type="absolute", seed=seed+seed_offset, seed_offset=seed_offset)
-        self.intermediate = BertIntermediate(config, seed=seed+2*seed_offset, seed_offset=seed_offset)
-        self.output = BertOutput(config, seed=seed+3*seed_offset, seed_offset=seed_offset)
+            self.crossattention = BertAttention(config, position_embedding_type="absolute", seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array)
+        self.intermediate = BertIntermediate(config, seed=seed+2*seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array)
+        self.output = BertOutput(config, seed=seed+3*seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array)
 
     def forward(
         self,
@@ -624,11 +624,11 @@ class BertLayer(nn.Module):
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         self.config = config
         seed_offset = int(seed_offset / config.num_hidden_layers)
-        self.layer = nn.ModuleList([BertLayer(config, seed= seed + seed_offset * i, seed_offset=seed_offset) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BertLayer(config, seed= seed + seed_offset * i, seed_offset=seed_offset, single_robez_array=single_robez_array) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -722,13 +722,13 @@ class BertEncoder(nn.Module):
 
 
 class BertPooler(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
 
         print("[BertPooler] robez config detected")
         print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
         if config.robez:
-            if config.robez_single_array is None: 
+            if single_robez_array is None: 
                 num_total_params =  config.hidden_size * config.hidden_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -736,7 +736,7 @@ class BertPooler(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -753,14 +753,14 @@ class BertPooler(nn.Module):
 
 
 class BertPredictionHeadTransform(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
 
         if config.robez:
 
             print("[BertPredictionHeadTransform] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  config.hidden_size * config.hidden_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -768,7 +768,7 @@ class BertPredictionHeadTransform(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -787,7 +787,7 @@ class BertPredictionHeadTransform(nn.Module):
 
 
 class BertLMPredictionHead(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
         self.transform = BertPredictionHeadTransform(config)
 
@@ -797,7 +797,7 @@ class BertLMPredictionHead(nn.Module):
         if config.robez:
             print("[BertSelfOutput] robez config detected")
             print("[chunk:{}, factor:{}]".format(config.robez_chunk_size, config.robez_factor))
-            if config.robez_single_array is None:
+            if single_robez_array is None:
                 num_total_params =  config.hidden_size * config.vocab_size
                 num_weight_params = int(num_total_params * config.robez_factor)
                 print("total_params", num_total_params, "compressed params", num_weight_params)
@@ -805,7 +805,7 @@ class BertLMPredictionHead(nn.Module):
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
             else:
-                self.hashed_weight = config.robez_single_array
+                self.hashed_weight = single_robez_array
             self.decoder = RzLinear(config.hidden_size, config.vocab_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
@@ -823,9 +823,9 @@ class BertLMPredictionHead(nn.Module):
 
 
 class BertOnlyMLMHead(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
-        self.predictions = BertLMPredictionHead(config, seed=seed, seed_offset=seed_offset)
+        self.predictions = BertLMPredictionHead(config, seed=seed, seed_offset=seed_offset, single_robez_array=single_robez_array)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
@@ -833,7 +833,7 @@ class BertOnlyMLMHead(nn.Module):
 
 
 class BertOnlyNSPHead(nn.Module):
-    def __init__(self, config, seed=-1, seed_offset=-1):
+    def __init__(self, config, seed=-1, seed_offset=-1, single_robez_array=None):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
@@ -843,9 +843,9 @@ class BertOnlyNSPHead(nn.Module):
 
 
 class BertPreTrainingHeads(nn.Module):
-    def __init__(self, config, seed, seed_offset):
+    def __init__(self, config, seed, seed_offset, single_robez_array):
         super().__init__()
-        self.predictions = BertLMPredictionHead(config, seed=seed, seed_offset=seed_offset)
+        self.predictions = BertLMPredictionHead(config, seed=seed, seed_offset=seed_offset, single_robez_array=single_robez_array)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -1004,14 +1004,14 @@ class BertModel(BertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True, seed=1, seed_offset=1):
+    def __init__(self, config, add_pooling_layer=True, seed=1, seed_offset=1,single_robez_array=None):
         super().__init__(config)
         self.config = config
         seed_offset = int(seed_offset / 3)
-        self.embeddings = BertEmbeddings(config, seed=seed, seed_offset=seed_offset)
-        self.encoder = BertEncoder(config, seed=seed+seed_offset, seed_offset=seed_offset)
+        self.embeddings = BertEmbeddings(config, seed=seed, seed_offset=seed_offset, single_robez_array=single_robez_array)
+        self.encoder = BertEncoder(config, seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array)
 
-        self.pooler = BertPooler(config, seed=seed+2*seed_offset, seed_offset=seed_offset) if add_pooling_layer else None
+        self.pooler = BertPooler(config, seed=seed+2*seed_offset, seed_offset=seed_offset, single_robez_array=single_robez_array) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1180,8 +1180,14 @@ class BertForPreTraining(BertPreTrainedModel):
 
         seed_offset=int(seed_offset/2)
     
-        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset)
-        self.cls = BertPreTrainingHeads(config, seed=seed+seed_offset, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
+        self.cls = BertPreTrainingHeads(config, seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1292,8 +1298,14 @@ class BertLMHeadModel(BertPreTrainedModel):
             logger.warning("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
         seed_offset = int(seed_offset / 2)
 
-        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset = seed_offset)
-        self.cls = BertOnlyMLMHead(config, seed=seed + seed_offset, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset = seed_offset, single_robez_array=self.single_robez_array)
+        self.cls = BertOnlyMLMHead(config, seed=seed + seed_offset, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1446,9 +1458,16 @@ class BertForMaskedLM(BertPreTrainedModel):
                 "bi-directional self-attention."
             )
 
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+
         seed_offset = int(seed_offset/2)
-        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset)
-        self.cls = BertOnlyMLMHead(config, seed=seed+seed_offset, seed_offset=seed_offset)
+        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
+        self.cls = BertOnlyMLMHead(config, seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1548,9 +1567,15 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     def __init__(self, config, seed=0, seed_offset=4096):
         super().__init__(config)
 
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
         seed_offset = int(seed_offset/2)
-        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset)
-        self.cls = BertOnlyNSPHead(config, seed=seed+seed_offset, seed_offset=seed_offset)
+        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
+        self.cls = BertOnlyNSPHead(config, seed=seed+seed_offset, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1655,7 +1680,13 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1755,7 +1786,13 @@ class BertForMultipleChoice(BertPreTrainedModel):
     def __init__(self, config, seed=0, seed_offset=4096):
         super().__init__(config)
 
-        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1853,8 +1890,13 @@ class BertForTokenClassification(BertPreTrainedModel):
     def __init__(self, config, seed=0, seed_offset=4096):
         super().__init__(config)
         self.num_labels = config.num_labels
-
-        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset, single_robez_array=self.single_robez_array)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1938,8 +1980,13 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     def __init__(self, config, seed=0, seed_offset=4096):
         super().__init__(config)
         self.num_labels = config.num_labels
-
-        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset)
+        if config.robez and config.robez_single:
+            self.single_robez_array = torch.nn.Parameter(torch.from_numpy(np.random.uniform(
+                                        low=-np.sqrt(1 / 10000), high=np.sqrt(1 / 10000), size=((config.robez_single_size,))
+                                        ).astype(np.float32)))
+        else:
+            self.single_robez_array = None
+        self.bert = BertModel(config, add_pooling_layer=False, seed=seed, seed_offset=seed_offset, single_robez_array=self.hashed_weight)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
