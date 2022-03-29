@@ -376,7 +376,7 @@ class TapexTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A RoBERTa sequence has the following format:
+        adding special tokens. A TAPEX sequence has the following format:
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
         Args:
@@ -423,7 +423,7 @@ class TapexTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Args:
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. TAPEX does not:
         make use of token type ids, therefore a list of zeros is returned.
             token_ids_0 (`List[int]`):
                 List of IDs.
