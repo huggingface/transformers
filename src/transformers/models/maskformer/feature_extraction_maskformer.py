@@ -171,6 +171,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         real/which are padding.
 
+        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps will be converted to lists of binary masks and their respective labels. Let's see an example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for each mask.
+
         <Tip warning={true}>
 
         NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
@@ -343,6 +345,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
+        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps will be converted to lists of binary masks and their respective labels. Let's see an example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for each mask.
+
         Args:
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
@@ -386,7 +390,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         annotations = None
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
-            converted_segmentation_maps = map(self.convert_segmentation_map_to_binary_masks, segmentation_maps)
+            converted_segmentation_maps = map(
+                self.convert_segmentation_map_to_binary_masks, segmentation_maps, instance_id_to_semantic_id
+            )
 
             annotations = []
             for mask, classes in converted_segmentation_maps:
