@@ -171,7 +171,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         real/which are padding.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps will be converted to lists of binary masks and their respective labels. Let's see an example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for each mask.
+        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
+        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
+        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
+        each mask.
 
         <Tip warning={true}>
 
@@ -345,7 +349,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps will be converted to lists of binary masks and their respective labels. Let's see an example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for each mask.
+        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
+        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
+        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
+        each mask.
 
         Args:
             pixel_values_list (`List[torch.Tensor]`):
