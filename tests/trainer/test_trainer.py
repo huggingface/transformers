@@ -169,28 +169,6 @@ class RegressionModelConfig(PretrainedConfig):
         self.hidden_size = 1
 
 
-class MultiLoader:
-    def __init__(self, loaders):
-        self.loaders = loaders
-
-    def __len__(self):
-        return sum(len(loader) for loader in self.loaders)
-
-    def __iter__(self):
-        for loader in self.loaders:
-            yield from loader
-
-
-class CustomDataloaderTrainer(Trainer):
-    def get_train_dataloader(self):
-        dataloaders = [super(CustomDataloaderTrainer, self).get_train_dataloader() for _ in range(2)]
-        return MultiLoader(dataloaders)
-
-    def get_eval_dataloader(self, eval_dataset):
-        dataloaders = [super(CustomDataloaderTrainer, self).get_eval_dataloader(eval_dataset) for _ in range(2)]
-        return MultiLoader(dataloaders)
-
-
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
@@ -210,6 +188,28 @@ if is_torch_available():
             while self.current_sample < len(self.dataset):
                 yield self.dataset[self.current_sample]
                 self.current_sample += 1
+
+
+    class MultiLoader:
+        def __init__(self, loaders):
+            self.loaders = loaders
+
+        def __len__(self):
+            return sum(len(loader) for loader in self.loaders)
+
+        def __iter__(self):
+            for loader in self.loaders:
+                yield from loader
+
+
+    class CustomDataloaderTrainer(Trainer):
+        def get_train_dataloader(self):
+            dataloaders = [super(CustomDataloaderTrainer, self).get_train_dataloader() for _ in range(2)]
+            return MultiLoader(dataloaders)
+
+        def get_eval_dataloader(self, eval_dataset):
+            dataloaders = [super(CustomDataloaderTrainer, self).get_eval_dataloader(eval_dataset) for _ in range(2)]
+            return MultiLoader(dataloaders)
 
     class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
