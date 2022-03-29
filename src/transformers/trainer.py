@@ -584,10 +584,9 @@ class Trainer:
         else:
             return dataset.remove_columns(ignored_columns)
 
-    def _get_train_sampler(self, train_dataset: Optional[Dataset] = None) -> Optional[torch.utils.data.Sampler]:
-        train_dataset = train_dataset if train_dataset is not None else self.train_dataset
+    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
 
-        if not has_length(train_dataset):
+        if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
         generator = None
@@ -606,10 +605,10 @@ class Trainer:
 
         # Build the sampler.
         if self.args.group_by_length:
-            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+            if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
                 lengths = (
-                    train_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in train_dataset.column_names
+                    self.train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in self.train_dataset.column_names
                     else None
                 )
             else:
@@ -618,7 +617,7 @@ class Trainer:
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.args.train_batch_size * self.args.gradient_accumulation_steps,
-                    dataset=train_dataset,
+                    dataset=self.train_dataset,
                     lengths=lengths,
                     model_input_name=model_input_name,
                     generator=generator,
@@ -626,7 +625,7 @@ class Trainer:
             else:
                 return DistributedLengthGroupedSampler(
                     self.args.train_batch_size * self.args.gradient_accumulation_steps,
-                    dataset=train_dataset,
+                    dataset=self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
@@ -637,15 +636,15 @@ class Trainer:
         else:
             if self.args.world_size <= 1:
                 if _is_torch_generator_available:
-                    return RandomSampler(train_dataset, generator=generator)
-                return RandomSampler(train_dataset)
+                    return RandomSampler(self.train_dataset, generator=generator)
+                return RandomSampler(self.train_dataset)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
             ):
                 # Use a loop for TPUs when drop_last is False to have all batches have the same size.
                 return DistributedSamplerWithLoop(
-                    train_dataset,
+                    self.train_dataset,
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
@@ -653,13 +652,13 @@ class Trainer:
                 )
             else:
                 return DistributedSampler(
-                    train_dataset,
+                    self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     seed=seed,
                 )
 
-    def get_train_dataloader(self, train_dataset: Optional[Dataset] = None) -> DataLoader:
+    def get_train_dataloader(self) -> DataLoader:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
 
@@ -667,18 +666,13 @@ class Trainer:
         training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
-
-        Args:
-            train_dataset (`torch.utils.data.Dataset`, *optional*):
-                If provided, will override `self.train_dataset`. If it is an `datasets.Dataset`, columns not accepted
-                by the `model.forward()` method are automatically removed.
         """
 
-        if train_dataset is None and self.train_dataset is None:
+        if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-        train_dataset = train_dataset if train_dataset is not None else self.train_dataset
 
-        if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+        train_dataset = self.train_dataset
+        if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -1218,17 +1212,8 @@ class Trainer:
         total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
-        try:
+        if has_length(train_dataloader):
             len_dataloader = len(train_dataloader)
-        except (NameError, TypeError):  # Default dataloader calls len(dataset), which may not exist
-            # see __init__. max_steps is set when the dataset has no __len__
-            max_steps = args.max_steps
-            # Setting a very large number of epochs so we go as many times as necessary over the iterator.
-            num_train_epochs = sys.maxsize
-            num_update_steps_per_epoch = max_steps
-            num_examples = total_train_batch_size * args.max_steps
-            num_train_samples = args.max_steps * total_train_batch_size
-        else:
             num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
             num_examples = self.num_examples(train_dataloader)
@@ -1244,6 +1229,14 @@ class Trainer:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
+        else:
+            # see __init__. max_steps is set when the dataset has no __len__
+            max_steps = args.max_steps
+            # Setting a very large number of epochs so we go as many times as necessary over the iterator.
+            num_train_epochs = sys.maxsize
+            num_update_steps_per_epoch = max_steps
+            num_examples = total_train_batch_size * args.max_steps
+            num_train_samples = args.max_steps * total_train_batch_size
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -2421,9 +2414,9 @@ class Trainer:
         batch_size = dataloader.batch_size
 
         logger.info(f"***** Running {description} *****")
-        try:
+        if has_length(dataloader):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
-        except TypeError:
+        else:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
@@ -2523,9 +2516,9 @@ class Trainer:
         elif isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
             num_samples = eval_dataset.num_examples
         else:
-            try:
+            if has_length(dataloader):
                 num_samples = self.num_examples(dataloader)
-            except TypeError:  # both len(dataloader.dataset) and len(dataloader) fail
+            else:  # both len(dataloader.dataset) and len(dataloader) fail
                 num_samples = observed_num_examples
 
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
@@ -2913,10 +2906,8 @@ class Trainer:
         """
         args = self.args
 
-        try:
-            num_examples = self.num_examples(dataloader)
-        except TypeError:
-            raise ValueError("dataloader or its dataset must implement __len__")
+        if not has_length(dataloader):
+            raise ValueError("dataloader must implement a working __len__")
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
@@ -2946,6 +2937,7 @@ class Trainer:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
+        num_examples = self.num_examples(dataloader)
         logger.info(f"***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")

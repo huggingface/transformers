@@ -20,7 +20,7 @@ from typing import Optional
 import IPython.display as disp
 
 from ..trainer_callback import TrainerCallback
-from ..trainer_utils import IntervalStrategy
+from ..trainer_utils import IntervalStrategy, has_length
 
 
 def format_time(t):
@@ -293,15 +293,13 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        try:
-            len_dataloader = len(eval_dataloader)
-        except (NameError, TypeError, AttributeError):
+        if not has_length(eval_dataloader):
             return
         if self.prediction_bar is None:
             if self.training_tracker is not None:
-                self.prediction_bar = self.training_tracker.add_child(len_dataloader)
+                self.prediction_bar = self.training_tracker.add_child(len(eval_dataloader))
             else:
-                self.prediction_bar = NotebookProgressBar(len_dataloader)
+                self.prediction_bar = NotebookProgressBar(len(eval_dataloader))
             self.prediction_bar.update(1)
         else:
             self.prediction_bar.update(self.prediction_bar.value + 1)
