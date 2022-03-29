@@ -910,7 +910,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
                 "To disable this behaviour, please pass a loss argument, or explicitly pass "
-                "loss=None if you do not want your model to compute a loss."
+                "`loss=None` if you do not want your model to compute a loss."
             )
             loss = dummy_loss
             self._using_dummy_loss = True
