@@ -519,11 +519,11 @@ def main():
 
             if task == "mnli-mm":
                 metrics = {k + "_mm": v for k, v in metrics.items()}
-            if "mnli" in task:
+            if task is not None and "mnli" in task:
                 combined.update(metrics)
 
             trainer.log_metrics("eval", metrics)
-            trainer.save_metrics("eval", combined if "mnli" in task else metrics)
+            trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
 
     if training_args.do_predict:
         logger.info("*** Predict ***")
