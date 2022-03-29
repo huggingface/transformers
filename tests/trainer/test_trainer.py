@@ -189,7 +189,6 @@ if is_torch_available():
                 yield self.dataset[self.current_sample]
                 self.current_sample += 1
 
-
     class MultiLoader:
         def __init__(self, loaders):
             self.loaders = loaders
@@ -200,7 +199,6 @@ if is_torch_available():
         def __iter__(self):
             for loader in self.loaders:
                 yield from loader
-
 
     class CustomDataloaderTrainer(Trainer):
         def get_train_dataloader(self):
