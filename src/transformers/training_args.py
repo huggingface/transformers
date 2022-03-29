@@ -46,8 +46,6 @@ if is_torch_available():
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.torch_smddp
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp

@@ -32,7 +32,6 @@ import numpy as np
 from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_sagemaker_dp_enabled,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,

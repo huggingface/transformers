@@ -51,6 +51,7 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -169,12 +170,6 @@ if is_fairscale_available():
     from fairscale.nn.wrap import auto_wrap
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
-
-import torch.distributed as dist
-
-
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.torch_smddp
 
 
 if is_sagemaker_mp_enabled():

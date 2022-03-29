@@ -36,17 +36,8 @@ from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .tokenization_utils_base import BatchEncoding
-from .utils import (
-    is_sagemaker_dp_enabled,
-    is_sagemaker_mp_enabled,
-    is_torch_tpu_available,
-    is_training_run_on_sagemaker,
-    logging,
-)
+from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
-
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.torch_smddp
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
