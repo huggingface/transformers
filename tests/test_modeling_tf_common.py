@@ -402,12 +402,19 @@ class TFModelTesterMixin:
                 else:
                     raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
             elif isinstance(tf_outputs, tf.Tensor):
-                self.assertTrue(isinstance(pt_outputs, torch.Tensor))
+                self.assertEqual(
+                    type(names), str, "When `tf_outputs` is a tensor, the argument `names` should be a string"
+                )
+                self.assertTrue(
+                    isinstance(pt_outputs, torch.Tensor), f"{names}: `pt_outputs` should a tensor when `tf_outputs` is"
+                )
 
                 tf_outputs = tf_outputs.numpy()
                 pt_outputs = pt_outputs.detach().to("cpu").numpy()
 
-                self.assertEqual(tf_outputs.shape, pt_outputs.shape, "Output shapes differ between TF and PyTorch")
+                self.assertEqual(
+                    tf_outputs.shape, pt_outputs.shape, f"{names}: Output shapes differ between TF and PyTorch"
+                )
 
                 tf_nans = np.isnan(tf_outputs)
                 pt_nans = np.isnan(pt_outputs)
@@ -418,7 +425,9 @@ class TFModelTesterMixin:
                 tf_outputs[pt_nans] = 0
 
                 max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-                self.assertLessEqual(max_diff, 1e-5)
+                self.assertLessEqual(
+                    max_diff, 1e-5, f"{names}: Difference between torch and tf is {max_diff} (>= {1e-5})."
+                )
             else:
                 raise ValueError(
                     f"`tf_outputs` should be a `tuple` or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
