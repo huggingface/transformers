@@ -584,8 +584,10 @@ class Trainer:
         else:
             return dataset.remove_columns(ignored_columns)
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not has_length(self.train_dataset):
+    def _get_train_sampler(self, train_dataset: Optional[Dataset] = None) -> Optional[torch.utils.data.Sampler]:
+        train_dataset = train_dataset if train_dataset is not None else self.train_dataset
+
+        if not has_length(train_dataset):
             return None
 
         generator = None
@@ -604,10 +606,10 @@ class Trainer:
 
         # Build the sampler.
         if self.args.group_by_length:
-            if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
+            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
                 lengths = (
-                    self.train_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in self.train_dataset.column_names
+                    train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in train_dataset.column_names
                     else None
                 )
             else:
@@ -616,7 +618,7 @@ class Trainer:
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.args.train_batch_size * self.args.gradient_accumulation_steps,
-                    dataset=self.train_dataset,
+                    dataset=train_dataset,
                     lengths=lengths,
                     model_input_name=model_input_name,
                     generator=generator,
@@ -624,7 +626,7 @@ class Trainer:
             else:
                 return DistributedLengthGroupedSampler(
                     self.args.train_batch_size * self.args.gradient_accumulation_steps,
-                    dataset=self.train_dataset,
+                    dataset=train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
@@ -635,15 +637,15 @@ class Trainer:
         else:
             if self.args.world_size <= 1:
                 if _is_torch_generator_available:
-                    return RandomSampler(self.train_dataset, generator=generator)
-                return RandomSampler(self.train_dataset)
+                    return RandomSampler(train_dataset, generator=generator)
+                return RandomSampler(train_dataset)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
             ):
                 # Use a loop for TPUs when drop_last is False to have all batches have the same size.
                 return DistributedSamplerWithLoop(
-                    self.train_dataset,
+                    train_dataset,
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
@@ -651,25 +653,31 @@ class Trainer:
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset,
+                    train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     seed=seed,
                 )
 
-    def get_train_dataloader(self) -> DataLoader:
+    def get_train_dataloader(self, train_dataset: Optional[Dataset] = None) -> DataLoader:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
 
-        Will use no sampler if `self.train_dataset` does not implement `__len__`, a random sampler (adapted to
-        distributed training if necessary) otherwise.
+        Will use no sampler if `train_dataset` does not implement `__len__`, a random sampler (adapted to distributed
+        training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
-        """
-        if self.train_dataset is None:
-            raise ValueError("Trainer: training requires a train_dataset.")
 
-        train_dataset = self.train_dataset
+        Args:
+            train_dataset (`torch.utils.data.Dataset`, *optional*):
+                If provided, will override `self.train_dataset`. If it is an `datasets.Dataset`, columns not accepted
+                by the `model.forward()` method are automatically removed.
+        """
+
+        if train_dataset is None and self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
+        train_dataset = train_dataset if train_dataset is not None else self.train_dataset
+
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
@@ -691,7 +699,7 @@ class Trainer:
                 pin_memory=self.args.dataloader_pin_memory,
             )
 
-        train_sampler = self._get_train_sampler()
+        train_sampler = self._get_train_sampler(train_dataset)
 
         return DataLoader(
             train_dataset,
@@ -2413,9 +2421,9 @@ class Trainer:
         batch_size = dataloader.batch_size
 
         logger.info(f"***** Running {description} *****")
-        if has_length(dataloader.dataset):
+        try:
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
-        else:
+        except TypeError:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
