@@ -929,8 +929,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(pixel_values, labels=labels)
         >>> loss = outputs.loss
-        >>> round(loss.item(), 3)
-        5.303
+        >>> round(loss.item(), 2)
+        5.30
 
         >>> # inference
         >>> generated_ids = model.generate(pixel_values)
