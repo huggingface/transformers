@@ -816,7 +816,7 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     ```
 """
 
-TF_IMAGE_CLASSIFICATION_SAMPLE = r"""
+TF_VISION_SEQ_CLASS_SAMPLE = r"""
     Example:
 
     ```python
@@ -849,7 +849,7 @@ TF_SAMPLE_DOCSTRINGS = {
     "LMHead": TF_CAUSAL_LM_SAMPLE,
     "BaseModel": TF_BASE_MODEL_SAMPLE,
     "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
-    "ImageClassification": TF_IMAGE_CLASSIFICATION_SAMPLE,
+    "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
