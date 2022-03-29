@@ -666,12 +666,11 @@ class Trainer:
 
         Subclass and override this method if you want to inject some custom behavior.
         """
-
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
-        if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
+        if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
