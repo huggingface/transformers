@@ -507,17 +507,25 @@ def main():
         if data_args.task_name == "mnli":
             tasks.append("mnli-mm")
             eval_datasets.append(raw_datasets["validation_mismatched"])
+            combined = {}
 
         for eval_dataset, task in zip(eval_datasets, tasks):
             metrics = trainer.evaluate(eval_dataset=eval_dataset)
 
             max_eval_samples = (
-                data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+                data_args.max_eval_samples
+                if data_args.max_eval_samples is not None
+                else len(eval_dataset)
             )
             metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
+            if task == "mnli-mm":
+                metrics = {k + "_mm": v for k, v in metrics.items()}
+            if "mnli" in task:
+                combined.update(metrics)
+
             trainer.log_metrics("eval", metrics)
-            trainer.save_metrics("eval", metrics)
+            trainer.save_metrics("eval", combined if "mnli" in task else metrics)
 
     if training_args.do_predict:
         logger.info("*** Predict ***")
