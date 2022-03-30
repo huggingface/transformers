@@ -22,7 +22,7 @@ import logging
 import os
 import sys
 import time
-from dataclasses import field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -182,13 +182,15 @@ class DataTrainingArguments:
     pad_input_to_multiple_of: Optional[int] = field(
         default=32000,
         metadata={
-            "help": "If set will pad the input sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+            "help": "If set will pad the input sequence to a multiple of the provided value. "
+            "This is important to avoid triggering recompilations on TPU."
         },
     )
     pad_target_to_multiple_of: Optional[int] = field(
         default=None,
         metadata={
-            "help": "If set will pad the target sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+            "help": "If set will pad the target sequence to a multiple of the provided value. "
+            "This is important to avoid triggering recompilations on TPU."
         },
     )
     preprocessing_only: bool = field(
@@ -226,6 +228,39 @@ class DataTrainingArguments:
     )
 
 
+# @flax.struct.dataclass
+@dataclass
+class FlaxSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
+    dtype: str = field(
+        default="float32",
+        metadata={
+            "help": "Floating-point format in which the computations will be performed (not the model parameters). "
+            "This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. "
+            "**Note that this only specifies the dtype of the computation and does not influence the dtype of model parameters.**"
+            "One of `[float32, float16, bfloat16]`."
+        },
+    )
+    dtype_params: str = field(
+        default=None,
+        metadata={
+            "help": "Floating-point format in which to store the model parameters. Can be used on TPU to explicitly "
+                    "convert the model parameters to bfloat16 precision to do full half-precision training "
+                    "or to save weights in bfloat16 for inference in order to save memory and improve speed. "
+                    "One of `[to_fp32, to_fp16, to_bf16]`"
+        },
+    )
+    matmul_precision: str = field(
+        default="default",
+        metadata={
+            "help": "Default floating-point precision of internal computations used in TPU matrix multiplications and convolutions. "
+            "This configuration option controls the default precision for JAX operations that take an optional precision argument (e.g. `lax.conv_general_dilated` and `lax.dot`). "
+            "This configuration option does not change the behaviours of such calls with explicit precision arguments; "
+            "it only changes the behaviors of calls with no such argument provided. "
+            "One of `['highest', 'float32', 'high', 'bfloat16_3x', 'default', 'bfloat16', 'fastest', None]`."
+        },
+    )
+
+
 class TrainState(train_state.TrainState):
     dropout_rng: jnp.ndarray
 
@@ -251,7 +286,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     Args:
         processor ([`Wav2Vec2Processor`])
             The processor used for proccessing the data.
-        decoder_start_token_id (`int`)
+        decoder_start_token_id (:obj: `int`)
             The begin-of-sentence of the decoder.
         input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned input sequences (according to the model's padding side and padding index)
@@ -330,55 +365,51 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
 
         return batch
 
-class FlaxLengthGroupedSampler:
+
+def get_grouped_indices(
+    dataset, batch_size: int, rng: Optional[List[int]] = None, mega_batch_mult: Optional[int] = None
+) -> np.array:
     """
-    Sampler that samples indices in a way that groups together features of the dataset of roughly the same length while
-    keeping a bit of randomness (optional). Returned batch indices are purposed for one device - sharding the batched
-    data yields distributed batches grouped by length.
-    Args:
-        mega_batch_mult (:obj:`int`, `optional`):
-            Default for mega_batch_mult: 50 or the number to get 4 megabatches, whichever is smaller.
+    Adapted from the `get_length_grouped_indices` function in the PyTorch Trainer utils file (https://github.com/huggingface/transformers/blob/main/src/transformers/trainer_pt_utils.py#L486)
+    Function that returns a list of indices in which each slice of `batch_size` consecutive indices correspond to elements of similar
+    lengths. To do this, the indices are:
+
+    - randomly permuted (if a JAX rng is specified)
+    - grouped in mega-batches of size `mega_batch_mult * batch_size`
+    - sorted by length in each mega-batch
+
+    The result is the concatenation of all mega-batches, with the batch of `batch_size` containing the element of
+    maximum length placed first, so that an OOM happens sooner rather than later.
     """
-    mega_batch_mult: Optional[int] = None
+    lengths = dataset["input_length"]
 
-    def __call__(self, dataset, batch_size: int, rng: Optional[List[int]] = None) -> np.ndarray:
-        """
-        Return a batched list of indices in which each slice contains a set of consecutive indices that correspond to
-        elements of similar lengths. To do this, the indices are:
+    # Default for mega_batch_mult: 50 or the number to get 4 megabatches, whichever is smaller.
+    if mega_batch_mult is None:
+        mega_batch_mult = min(len(lengths) // (batch_size * 4), 50)
+        # Just in case, for tiny datasets
+        if mega_batch_mult == 0:
+            mega_batch_mult = 1
 
-        - randomly permuted (if a JAX rng is specified)
-        - grouped in mega-batches of size `mega_batch_mult * batch_size`
-        - sorted by length in each mega-batch
+    # We need to use JAX for the random permutation as the PRNG key will be set based on the seed outside of the sampler.
+    num_samples = len(lengths)
+    indices = jax.random.permutation(rng, np.arange(num_samples)) if rng is not None else np.arange(num_samples)
 
-        The result is the concatenation of all mega-batches, with the batch of `batch_size` containing the element of
-        maximum length placed first, so that an OOM happens sooner rather than later.
-        """
-        lengths = dataset["input_length"]
+    megabatch_size = mega_batch_mult * batch_size
+    megabatches = [indices[i : i + megabatch_size].tolist() for i in range(0, len(lengths), megabatch_size)]
+    megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
 
-        if self.mega_batch_mult is None:
-            self.mega_batch_mult = min(len(lengths) // (batch_size * 4), 50)
-            # Just in case, for tiny datasets
-            if self.mega_batch_mult == 0:
-                self.mega_batch_mult = 1
+    # The rest is to get the biggest batch first.
+    # Since each megabatch is sorted by descending length, the longest element is the first
+    megabatch_maximums = [lengths[megabatch[0]] for megabatch in megabatches]
+    max_idx = np.argmax(megabatch_maximums).item()
+    # Switch to put the longest batch in first position
+    # (note that this is different to the PT grouped sampler in which we only put the longest element in the first position, and not its batch)
+    megabatches[0], megabatches[max_idx] = megabatches[max_idx], megabatches[0]
 
-        # We need to use JAX for the random permutation as the PRNG key will be set based on the seed outside of the sampler.
-        num_samples = len(lengths)
-        indices = jax.random.permutation(rng, np.arange(num_samples)) if rng is not None else np.arange(num_samples)
+    megabatches = np.array([i for megabatch in megabatches for i in megabatch])
 
-        megabatch_size = self.mega_batch_mult * batch_size
-        megabatches = [indices[i: i + megabatch_size].tolist() for i in range(0, len(lengths), megabatch_size)]
-        megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
+    return megabatches
 
-        # The rest is to get the biggest batch first.
-        # Since each megabatch is sorted by descending length, the longest element is the first
-        megabatch_maximums = [lengths[megabatch[0]] for megabatch in megabatches]
-        max_idx = np.argmax(megabatch_maximums).item()
-        # Switch to put the longest element in first position
-        megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
-
-        megabatches = [i for megabatch in megabatches for i in megabatch]
-
-        return generate_batch_splits(np.array(megabatches), batch_size)
 
 def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     """Generate batches of data for a specified batch size from sample indices. If the dataset size is not divisible by
@@ -392,6 +423,25 @@ def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarra
     return np.split(samples_idx, sections_split)
 
 
+def data_loader(dataset, batch_size, rng, sampler, collator):
+    samples_idx = sampler(dataset, batch_size, rng)
+
+    num_samples = len(samples_idx)
+    samples_to_remove = num_samples % batch_size
+
+    if samples_to_remove != 0:
+        samples_idx = samples_idx[:-samples_to_remove]
+    sections_split = num_samples // batch_size
+
+    batch_idx = np.split(samples_idx, sections_split)
+
+    for idx in batch_idx:
+        samples = dataset[idx]
+        batch = collator(samples)
+        batch = shard(batch.data)
+        yield batch
+
+
 def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
@@ -402,12 +452,34 @@ def write_train_metric(summary_writer, train_metrics, train_time, step):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
 
-def write_eval_metric(summary_writer, eval_metrics, pred_str, step):
-    # write output actual predictions for debugging
-    summary_writer.text("eval_predictions", "\n".join(pred_str), step)
-
+def write_eval_metric(summary_writer, eval_metrics, step, pred_str=None):
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
+
+    if pred_str is not None:
+        # write output actual predictions for debugging
+        summary_writer.text("eval_predictions", "\n".join(pred_str), step)
+
+
+def write_wandb_log(metrics, step, prefix=None):
+    if jax.process_index() == 0:
+        log_metrics = {}
+        for k, v in metrics.items():
+            if "layer" in k:
+                log_metrics[f"{k}/"] = v
+            elif prefix is not None:
+                log_metrics[f"{prefix}/{k}"] = v
+        wandb.log(log_metrics, step)
+
+
+def write_wandb_pred(pred_str, label_str, epoch, num_log=50):
+    if jax.process_index() == 0:
+        # convert str data to a wandb compatible format
+        str_data = [[label_str[i], pred_str[i]] for i in range(len(pred_str))]
+        # we'll log the first 50 predictions for each epoch
+        wandb.log(
+            {f"predictions/epoch_{epoch + 1}": wandb.Table(columns=["label_str", "pred_str"], data=str_data[:num_log])}
+        )
 
 
 def create_learning_rate_fn(
@@ -429,7 +501,7 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, FlaxSeq2SeqTrainingArguments))
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -439,11 +511,13 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # 2. Setup logging
+    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    # Set the verbosity to info of the Transformers logger.
     # We only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
     if jax.process_index() == 0:
@@ -453,24 +527,26 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
-
-    # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
-        transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
-    logger.info(f"JAX devices: {jax.device_count()}")
+    # Set the default TPU matmul precision and display the number of devices
+    jax.config.update("jax_default_matmul_precision", training_args.matmul_precision)
+    logger.info(f"JAX devices: {jax.device_count()}, matmul precision: {training_args.matmul_precision}")
 
     # Set up wandb run
     if jax.process_index() == 0:
         wandb.init(project=data_args.wandb_project, job_type=data_args.wandb_job_type)
+        wandb.config = {
+            "learning_rate": training_args.learning_rate,
+            "warmup_steps": training_args.warmup_steps,
+            "batch_size": training_args.per_device_train_batch_size,
+            "gradient_accumulation_steps": training_args.gradient_accumulation_steps,
+            "num_epochs": training_args.num_train_epochs,
+            "dtype": training_args.dtype,
+            "matmul_precision": training_args.matmul_precision,
+        }
 
-    # 3. Detecting last checkpoint and eventually continue from last checkpoint
+    # TODO: 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
@@ -545,10 +621,15 @@ def main():
     model = FlaxAutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
+        dtype=getattr(jnp, training_args.dtype),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    if training_args.dtype_params is not None:
+        # Cast floating-point values of given parameter `PyTree` to given `dtype` using the [`~FlaxPreTrainedModel.to_fp16`] or [`~FlaxPreTrainedModel.to_bf16`] methods
+        model.params = getattr(model, training_args.dtype_params)(model.params)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -602,8 +683,7 @@ def main():
             desc="preprocess train dataset",
         )
 
-    # filter data with inputs shorter than min_input_length or longer than
-    # max_input_length
+    # filter data with inputs shorter than min_input_length or longer than max_input_length
     def is_audio_in_length_range(length):
         return length > min_input_length and length < max_input_length
 
@@ -613,8 +693,7 @@ def main():
         input_columns=["input_length"],
     )
 
-    # filter data with targets shorter than min_target_length or longer than
-    # max_target_length
+    # filter data with targets shorter than min_target_length or longer than max_target_length
     def is_labels_in_length_range(length):
         return length > min_target_length and length < max_target_length
 
@@ -646,7 +725,7 @@ def main():
 
         wer = metric.compute(predictions=pred_str, references=label_str)
 
-        return {"wer": wer}, pred_str
+        return {"wer": wer}, pred_str, label_str
 
     # 9. Create a single speech processor
     if is_main_process(training_args.local_rank):
@@ -666,8 +745,6 @@ def main():
         pad_input_to_multiple_of=pad_input_to_multiple_of,
         pad_target_to_multiple_of=pad_target_to_multiple_of,
     )
-
-    data_sampler = FlaxLengthGroupedSampler()
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -746,7 +823,7 @@ def main():
         mask=decay_mask_fn,
     )
 
-    # Gradient clipping -> need to alter depending on gradient accumulation
+    # Augment the optimizer to facilitate gradient clipping by global norm
     optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
 
     # Setup train state
@@ -764,6 +841,7 @@ def main():
 
     # Define gradient update step fn
     def train_step(state, batch):
+        # only one single rng per grad step, with or without accumulation, as the graph should be identical over one effective training batch
         dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
         def compute_loss(params, minibatch):
@@ -773,7 +851,8 @@ def main():
                 params=params,
                 dropout_rng=dropout_rng,
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
-                train=True)[0]
+                train=True,
+            )[0]
             loss = loss_fn(logits, labels)
             return loss
 
@@ -789,39 +868,52 @@ def main():
                 lambda x: x.reshape(gradient_accumulation_steps, training_args.per_device_train_batch_size, -1), batch
             )
 
-            def accum_loss_grads(i, cumul_loss_grads):
+            def accum_minibatch_step(grad_idx, accum_loss_grad):
+                accum_loss, accum_grad = accum_loss_grad
                 # get a minibatch (one gradient accumulation slice)
-                minibatch = jax.tree_map(lambda x: jax.lax.dynamic_index_in_dim(x, i, keepdims=False), batch,)
-                # accumulate losses and grads
-                return jax.tree_map(lambda x, y: x + y, cumul_loss_grads, grad_fn(state.params, minibatch))
+                minibatch = jax.tree_map(
+                    lambda x: jax.lax.dynamic_index_in_dim(x, grad_idx, keepdims=False),
+                    batch,
+                )
+                # compute loss and grad over minibatch and accumulate
+                loss, grad = grad_fn(state.params, minibatch)
+                return jax.tree_map(jnp.add, (accum_loss, accum_grad), (loss, grad))
 
-            # create initial state for accumulating losses and gradients
-            init_loss_grads = (0, jax.tree_map(jnp.zeros_like, state.params))
-            # loop accumulate losses and gradients function over the number of gradient accumulation steps
-            loss, grad = jax.tree_map(
-                lambda x: x / gradient_accumulation_steps,
-                jax.lax.fori_loop(
-                    0,
-                    gradient_accumulation_steps,
-                    accum_loss_grads,
-                    init_loss_grads,
-                ),
+            # create an initial state for accumulating losses and gradients
+            init_loss_grad = (0, jax.tree_map(jnp.zeros_like, state.params))
+            # loop accum minibatch step over the number of gradient accumulation steps
+            loss, grad = jax.lax.fori_loop(
+                0,
+                gradient_accumulation_steps,
+                accum_minibatch_step,
+                init_loss_grad,
             )
+            # normalise losses and gradients over the number of gradient accumulation steps
+            loss, grad = jax.tree_map(lambda x: x / gradient_accumulation_steps, (loss, grad))
 
-        # straight mean over pmapped axis
+        # straight mean over pmapped axis, we'll modify this to a weighted sum later...
         grad = jax.lax.pmean(grad, "batch")
-        logs = {}
 
-        # compute gradient norm for monitoring
-        grad_norm_layer = jax.tree_map(jnp.linalg.norm, grad)
-        logs["encoder_grad_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["encoder"]))
-        logs["decoder_grad_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(grad_norm_layer["decoder"]))
-        grad_norm = jnp.linalg.norm([logs["encoder_grad_norm"], logs["decoder_grad_norm"]])
-        # grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
-
+        # update state
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
-        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step), "grad_norm": grad_norm}
+        # compute gradient norms over all layers, total encoder, total decoder and global for detailed monitoring
+        layer_grad_norm = jax.tree_map(jnp.linalg.norm, grad)
+        logs = {
+            "layer_grad_norm": layer_grad_norm,
+            "encoder_grad_norm": jnp.linalg.norm(jax.tree_util.tree_leaves(layer_grad_norm["encoder"])),
+            "decoder_grad_norm": jnp.linalg.norm(jax.tree_util.tree_leaves(layer_grad_norm["decoder"])),
+        }
+        logs["grad_norm"] = jnp.linalg.norm([logs["encoder_grad_norm"], logs["decoder_grad_norm"]])
+
+        # compute parameter norms over all layers, total encoder, total decoder and global for detailed monitoring
+        layer_param_norm = jax.tree_map(jnp.linalg.norm, new_state.params)
+        logs["layer_param_norm"] = layer_param_norm
+        logs["encoder_param_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(layer_param_norm["encoder"]))
+        logs["decoder_param_norm"] = jnp.linalg.norm(jax.tree_util.tree_leaves(layer_param_norm["decoder"]))
+        logs["param_norm"] = jnp.linalg.norm([logs["encoder_param_norm"], logs["decoder_param_norm"]])
+
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
         metrics.update(logs)
 
         metrics = jax.lax.pmean(metrics, axis_name="batch")
@@ -871,10 +963,10 @@ def main():
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)
-        train_metrics = []
 
         # Generate an epoch by randomly shuffling sampling indices from the train dataset and grouping by length
-        train_batch_idx = data_sampler(vectorized_datasets['train'], batch_size_per_update, input_rng)
+        train_samples_idx = get_grouped_indices(vectorized_datasets["train"], batch_size_per_update, input_rng)
+        train_batch_idx = generate_batch_splits(train_samples_idx, batch_size_per_update)
 
         # Gather the indexes for creating the batch and do a training step
         for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
@@ -882,7 +974,6 @@ def main():
             batch = data_collator(samples)
             batch = shard(batch.data)
             state, train_metric = p_train_step(state, batch)
-            train_metrics.append(train_metric)
 
             cur_step = epoch * (num_train_samples // train_batch_size) + step
 
@@ -890,23 +981,24 @@ def main():
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                if has_tensorboard and jax.process_index() == 0:
-                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+                write_wandb_log(train_metric, cur_step, prefix="train")
+                # we won't log to tensorboard for now (it is fiddly logging param and grad norms on a layer-by-layer basis)
+                # if has_tensorboard and jax.process_index() == 0:
+                # write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
                     f"Step... ({cur_step} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']}, Gradient Norm: {train_metric['grad_norm']})"
                 )
-                wandb.log(train_metric, cur_step)
 
-                train_metrics = []
-
+        continue
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
         eval_labels = []
 
         # Generate eval set by sequentially sampling indices from the eval dataset and grouping by length
-        eval_batch_idx = data_sampler(vectorized_datasets["eval"], eval_batch_size)
+        eval_samples_idx = get_grouped_indices(vectorized_datasets["eval"], eval_batch_size)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [vectorized_datasets["eval"][int(idx)] for idx in batch_idx]
@@ -929,9 +1021,10 @@ def main():
 
         # compute WER metric and get predicted string (for debugging)
         wer_desc = ""
-        pred_str = ""
+        pred_str = []
+        label_str = []
         if training_args.predict_with_generate:
-            wer_metric, pred_str = compute_metrics(eval_preds, eval_labels)
+            wer_metric, pred_str, label_str = compute_metrics(eval_preds, eval_labels)
             eval_metrics.update(wer_metric)
             wer_desc = " ".join([f"Eval {key}: {value} |" for key, value in wer_metric.items()])
 
@@ -941,10 +1034,11 @@ def main():
         epochs.desc = desc
 
         # Save metrics
-        if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
-            write_eval_metric(summary_writer, eval_metrics, pred_str, cur_step)
-            wandb.log({f"eval_{k}": v for k, v in eval_metrics.items()})
+        cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
+        write_wandb_log(eval_metrics, cur_step, prefix="eval")
+        write_wandb_pred(pred_str, label_str, epoch)
+        # if has_tensorboard and jax.process_index() == 0:
+        # write_eval_metric(summary_writer, eval_metrics, cur_step, pred_str=pred_str)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
