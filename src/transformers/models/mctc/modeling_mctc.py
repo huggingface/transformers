@@ -36,14 +36,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    CausalLMOutput,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
+    BaseModelOutput,
+    CausalLMOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -410,9 +404,9 @@ class MCTCSelfAttention(nn.Module):
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
-            attention_scores = attention_scores + attention_mask
+        # if attention_mask is not None:
+        #     # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
+        #     attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -447,11 +441,6 @@ class MCTCSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-        print("SELFOUTPUT")
-        print("coinfig", self.config.hidden_size)
-        print("hidden_states", hidden_states.shape)
-        print("input_tensor", input_tensor.shape)
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -601,7 +590,7 @@ class MCTCEncoder(nn.Module):
 
         self.conv = Conv1dSubsampler(config)
         self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(config.attention_head_dim)
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
 
@@ -659,8 +648,6 @@ class MCTCEncoder(nn.Module):
             ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
-            print("ENCODER", encoder_layer)
-            print("hidden_states", hidden_states.shape)
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -694,6 +681,7 @@ class MCTCEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        
         hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -844,7 +832,7 @@ class MCTCModel(MCTCPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -887,12 +875,10 @@ class MCTCModel(MCTCPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
