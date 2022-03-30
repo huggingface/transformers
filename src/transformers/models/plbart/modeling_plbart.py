@@ -16,7 +16,7 @@
 import copy
 import math
 import random
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -1143,17 +1143,17 @@ class PLBartModel(PLBartPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] =None,
-        decoder_input_ids: Optional[torch.LongTensor]=None,
-        decoder_attention_mask: Optional[torch.Tensor]=None,
-        head_mask: Optional[torch.Tensor] =None,
-        decoder_head_mask: Optional[torch.LongTensor]=None,
-        cross_attn_head_mask: Optional[torch.Tensor] =None,
-        encoder_outputs: Optional[List[torch.FloatTensor]]=None,
-        past_key_values: Optional[List[torch.FloatTensor]]=None,
-        inputs_embeds: Optional[torch.FloatTensor] =None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.LongTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds=None,
-        use_cache: Optional[bool] =None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1272,21 +1272,21 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] =None,
-        decoder_input_ids: Optional[torch.LongTensor]=None,
-        decoder_attention_mask: Optional[torch.Tensor]=None,
-        head_mask: Optional[torch.Tensor] =None,
-        decoder_head_mask: Optional[torch.LongTensor]=None,
-        cross_attn_head_mask: Optional[torch.Tensor] =None,
-        encoder_outputs: Optional[List[torch.FloatTensor]]=None,
-        past_key_values: Optional[List[torch.FloatTensor]]=None,
-        inputs_embeds: Optional[torch.FloatTensor] =None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.LongTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds=None,
-        labels: Optional[torch.Tensor] =None,
-        use_cache: Optional[bool] =None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1346,15 +1346,15 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids: torch.LongTensor,
-        past: Optional[List[torch.FloatTensor]]=None,
-        attention_mask: Optional[torch.LongTensor]=None,
-        head_mask: Optional[torch.Tensor]=None,
-        decoder_head_mask: Optional[torch.Tensor]=None,
-        cross_attn_head_mask: Optional[torch.Tensor]=None,
-        use_cache: Optional[bool]=None,
-        encoder_outputs: Optional[List[torch.FloatTensor]]=None,
+        past: Optional[List[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         **kwargs  # TODO: Check if this is needed. It is unused?
-    )-> Dict[str, Any]:
+    ) -> Dict[str, Any]:
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
