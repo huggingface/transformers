@@ -259,6 +259,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
             list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
 
+
     def create_and_check_causal_lm_model_past(
         self,
         config,
@@ -596,6 +597,10 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         """Test the base model"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="Template classes interact badly with this test.")
+    def test_keras_fit(self):
+        pass
 
     def test_causal_lm_base_model(self):
         """Test the base model of the causal LM model
