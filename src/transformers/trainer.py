@@ -855,7 +855,7 @@ class Trainer:
                     for module in self.model.modules():
                         if isinstance(module, nn.Embedding):
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
-                            logger.info(f"Registering bitsandbytes override for {module}")
+                            logger.debug(f"bitsandbytes: will optimize {module} in fp32")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
