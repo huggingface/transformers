@@ -2514,7 +2514,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         hidden_states = inputs_embeds
 
         attention_mask, combined_attention_mask = self.compute_combined_attns_mask(
-            input_ids, inputs_embeds, input_shape, past_key_values_length
+            input_ids, input_shape, past_key_values_length
         )
 
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -2589,7 +2589,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             )
 
     @tf.function
-    def compute_combined_attns_mask(self, input_ids, input_embeds, input_shape, past_key_values_length):
+    def compute_combined_attns_mask(self, input_ids, input_shape, past_key_values_length):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
