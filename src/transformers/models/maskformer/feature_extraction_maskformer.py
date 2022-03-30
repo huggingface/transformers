@@ -69,7 +69,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
         ignore_index (`int`, *optional*):
-            Value of the index (label) to ignore in the loss function.
+            Value of the index (label) to be removed from the segmentation maps.
         reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
             used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
@@ -319,6 +319,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
         if self.reduce_labels:
+            if self.ignore_index is None:
+                raise ValueError("`ignore_index` must be set when `reduce_labels` is `True`.")
             segmentation_map[segmentation_map == 0] = self.ignore_index
             # instances ids start from 1!
             segmentation_map -= 1
