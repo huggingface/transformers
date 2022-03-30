@@ -618,7 +618,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         # Add arguments to decoder from `kwargs_decoder`
         decoder_inputs.update(kwargs_decoder)
 
-        breakpoint()
         decoder_outputs = self.decoder(**decoder_inputs)
 
         logits = decoder_outputs[0]
