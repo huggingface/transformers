@@ -14,8 +14,9 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -33,6 +34,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
@@ -40,6 +42,7 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
+    unpack_inputs
 )
 from ...tf_utils import shape_list
 from ...utils import logging
