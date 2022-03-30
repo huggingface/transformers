@@ -15,8 +15,7 @@
 """ LayoutLMv2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import is_detectron2_available
-from ...utils import logging
+from ...utils import is_detectron2_available, logging
 
 
 logger = logging.get_logger(__name__)

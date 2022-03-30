@@ -56,8 +56,8 @@ from transformers import (
     is_tensorboard_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
 from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
+from transformers.utils import get_full_repo_name
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -338,7 +338,7 @@ class FlaxDataCollatorForT5MLM:
                 f"`labels` are incorrectly preprocessed. `labels` length is {batch['labels'].shape[-1]}, but should be {self.target_length}."
             )
 
-        # to check that tokens are correctly proprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
+        # to check that tokens are correctly preprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )

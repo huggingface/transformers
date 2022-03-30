@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available
+from ...utils import _LazyModule, is_tokenizers_available
 
 
 _import_structure = {

@@ -7,4 +7,8 @@ INSTALL_CONTENT = """
 """
 
 notebook_first_cells = [{"type": "code", "content": INSTALL_CONTENT}]
-default_branch_name = "master"
+black_avoid_patterns = {
+    "{processor_class}": "FakeProcessorClass",
+    "{model_class}": "FakeModelClass",
+    "{object_class}": "FakeObjectClass",    
+}

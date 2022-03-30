@@ -28,7 +28,12 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("dpt", "DPTModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("glpn", "GLPNModel"),
         ("maskformer", "MaskFormerModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
         ("van", "VanModel"),
@@ -315,6 +320,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Semantic Segmentation mapping
         ("beit", "BeitForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("dpt", "DPTForSemanticSegmentation"),
     ]
 )
 

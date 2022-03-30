@@ -24,7 +24,6 @@ from parameterized import parameterized
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
-from transformers.file_utils import WEIGHTS_NAME, is_torch_bf16_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -40,6 +39,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
+from transformers.utils import WEIGHTS_NAME, is_torch_bf16_available
 
 
 if is_torch_available():

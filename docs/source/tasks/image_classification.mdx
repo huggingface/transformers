@@ -109,8 +109,10 @@ Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data col
 >>> data_collator = DefaultDataCollator()
 ```
 
-## Fine-tune with Trainer
+## Train
 
+<frameworkcontent>
+<pt>
 Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels, and pass the model the mapping between label number and label class:
 
 ```py
@@ -162,9 +164,11 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
+</pt>
+</frameworkcontent>
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/image_classification.ipynb).
+For a more in-depth example of how to fine-tune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 </Tip>

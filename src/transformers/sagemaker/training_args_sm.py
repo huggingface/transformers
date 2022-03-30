@@ -20,14 +20,13 @@ from dataclasses import dataclass, field
 
 import torch
 
-from transformers.file_utils import cached_property, is_sagemaker_dp_enabled
 from transformers.training_args import TrainingArguments
-from transformers.utils import logging
+from transformers.utils import cached_property, is_sagemaker_dp_enabled, logging
 
 
 logger = logging.get_logger(__name__)
 
-# TODO: should be moved to `file_utils` after refactoring of SageMakerTrainer
+# TODO: should be moved to `utils` after refactoring of SageMakerTrainer
 
 
 def is_sagemaker_model_parallel_available():
@@ -78,6 +77,11 @@ class SageMakerTrainingArguments(TrainingArguments):
     @cached_property
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
+        if torch.distributed.is_initialized() and self.local_rank == -1:
+            logger.warning(
+                "torch.distributed process group is initialized, but local_rank == -1. "
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+            )
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
@@ -106,7 +110,8 @@ class SageMakerTrainingArguments(TrainingArguments):
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            if not torch.distributed.is_initialized():
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 

@@ -20,8 +20,8 @@ import random
 import tempfile
 import unittest
 
-from transformers.file_utils import is_detectron2_available, is_torch_available
 from transformers.testing_utils import require_detectron2, require_torch, slow, torch_device
+from transformers.utils import is_detectron2_available, is_torch_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
