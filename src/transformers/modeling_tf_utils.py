@@ -402,7 +402,7 @@ def input_processing(func, config, input_ids, **kwargs):
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
     signature = dict(inspect.signature(func).parameters)
-    signature.pop("kwargs", None)
+    has_kwargs = bool(signature.pop("kwargs", None))
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
@@ -432,12 +432,12 @@ def input_processing(func, config, input_ids, **kwargs):
     elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
-    if len(kwargs["kwargs_call"]) > 0:
+    if has_kwargs:
+        output["kwargs"] = kwargs.pop("kwargs_call", {})
+    elif len(kwargs["kwargs_call"]) > 0:
         raise ValueError(
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
         )
-
-    kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
