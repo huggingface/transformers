@@ -952,6 +952,10 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
                                 models_equal = False
                     self.assertTrue(models_equal)
 
+    @unittest.skip(reason="Template classes interact badly with this test.")
+    def test_keras_fit(self):
+        pass
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
