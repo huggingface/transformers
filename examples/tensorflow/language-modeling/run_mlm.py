@@ -456,9 +456,11 @@ def main():
         train_dataset = train_dataset.select(train_indices)
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
     if data_args.max_eval_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+        max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
