@@ -32,7 +32,7 @@ class BaseModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -58,7 +58,7 @@ class BaseModelOutputWithNoAttention(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -82,7 +82,7 @@ class BaseModelOutputWithPooling(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -111,7 +111,7 @@ class BaseModelOutputWithPoolingAndNoAttention(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -143,7 +143,7 @@ class BaseModelOutputWithPast(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -170,7 +170,7 @@ class BaseModelOutputWithCrossAttentions(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -208,7 +208,7 @@ class BaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -264,7 +264,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -309,7 +309,7 @@ class Seq2SeqModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
         decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -328,7 +328,7 @@ class Seq2SeqModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -361,7 +361,7 @@ class CausalLMOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
