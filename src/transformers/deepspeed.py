@@ -261,13 +261,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         """
         This stage is run after we have the model and know num_training_steps.
 
-        Now we we can complete the configuration process.
+        Now we can complete the configuration process.
         """
         # zero
+        hidden_size = model.config.hidden_size
+        self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
-            hidden_size = model.config.hidden_size
-            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
