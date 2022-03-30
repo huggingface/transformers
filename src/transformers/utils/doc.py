@@ -794,6 +794,52 @@ TF_CAUSAL_LM_SAMPLE = r"""
     ```
 """
 
+TF_VISION_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+TF_VISION_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> logits = model(**inputs).logits
+
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
+    >>> print(model.config.id2label[predicted_label])
+    {expected_output}
+    ```
+"""
+
 TF_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": TF_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": TF_QUESTION_ANSWERING_SAMPLE,
@@ -802,6 +848,8 @@ TF_SAMPLE_DOCSTRINGS = {
     "MaskedLM": TF_MASKED_LM_SAMPLE,
     "LMHead": TF_CAUSAL_LM_SAMPLE,
     "BaseModel": TF_BASE_MODEL_SAMPLE,
+    "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
+    "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
