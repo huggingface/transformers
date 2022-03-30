@@ -2514,7 +2514,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         hidden_states = inputs_embeds
 
         attention_mask, combined_attention_mask = self.compute_combined_attns_mask(
-            inputs, input_shape, past_key_values_length
+            input_ids, inputs_embeds, input_shape, past_key_values_length
         )
 
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -2533,12 +2533,12 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
         # The tf.debugging asserts are not compliant with XLA then they
         # have to be disabled in other modes than eager.
-        for attn_mask in ["head_mask", "cross_attn_head_mask"]:
-            if inputs[attn_mask] is not None and tf.executing_eagerly():
+        for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
+            if attn_mask is not None and tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(inputs[attn_mask])[0],
+                    shape_list(attn_mask)[0],
                     len(self.layers),
-                    message=f"The {attn_mask} should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs[attn_mask])[0]}.",
+                    message=f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for {shape_list(attn_mask)[0]}.",
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -2589,7 +2589,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             )
 
     @tf.function
-    def compute_combined_attns_mask(self, inputs, input_shape, past_key_values_length):
+    def compute_combined_attns_mask(self, input_ids, input_embeds, input_shape, past_key_values_length):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
