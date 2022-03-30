@@ -61,7 +61,7 @@ from .configuration_gpt2 import GPT2Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "distilgpt2"
+_CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
@@ -1479,23 +1479,23 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
+        checkpoint="brad1141/gpt2-finetuned-comp2",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=0.0,
+        expected_loss=0.25,
         expected_output=[
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Position",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
         ],
     )
     def forward(
