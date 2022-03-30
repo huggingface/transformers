@@ -305,46 +305,46 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "regnet-y-320": ImageNetPreTrainedConfig(
             depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
         ),
-        # # models created by SEER -> https://arxiv.org/abs/2202.08360
-        # "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
-        # "regnet-y-640-seer": RegNetConfig(
-        #     depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
-        # ),
-        # "regnet-y-1280-seer": RegNetConfig(
-        #     depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
-        # ),
-        # "regnet-y-2560-seer": RegNetConfig(
-        #     depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
-        # ),
-        # #  models created by SEER finetuned in1k
-        #  "regnet-y-640-seer": RegNetConfig(
-        #     depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
-        # ),
-        # "regnet-y-1280-seer": RegNetConfig(
-        #     depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
-        # ),
-        # "regnet-y-2560-seer": RegNetConfig(
-        #     depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=848
-        # ),
-        # "regnet-y-10b-seer": ImageNetPreTrainedConfig(
-        #     depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
-        # ),
-        # # finetuned on imagenet
-        # "regnet-y-320-seer-in1k": ImageNetPreTrainedConfig(
-        #     depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
-        # ),
-        # "regnet-y-640-seer-in1k": ImageNetPreTrainedConfig(
-        #     depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
-        # ),
-        # "regnet-y-1280-seer-in1k": ImageNetPreTrainedConfig(
-        #     depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
-        # ),
-        # "regnet-y-2560-seer-in1k": ImageNetPreTrainedConfig(
-        #     depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
-        # ),
-        # "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
-        #     depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
-        # ),
+        # models created by SEER -> https://arxiv.org/abs/2202.08360
+        "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
+        "regnet-y-640-seer": RegNetConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
+        ),
+        "regnet-y-1280-seer": RegNetConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
+        ),
+        "regnet-y-2560-seer": RegNetConfig(
+            depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
+        ),
+        #  models created by SEER finetuned in1k
+         "regnet-y-640-seer": RegNetConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
+        ),
+        "regnet-y-1280-seer": RegNetConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
+        ),
+        "regnet-y-2560-seer": RegNetConfig(
+            depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=848
+        ),
+        "regnet-y-10b-seer": ImageNetPreTrainedConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+        ),
+        # finetuned on imagenet
+        "regnet-y-320-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
+        ),
+        "regnet-y-640-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
+        ),
+        "regnet-y-1280-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
+        ),
+        "regnet-y-2560-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
+        ),
+        "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+        ),
     }
 
     names_to_ours_model_map = NameToOurModelFuncMap()
@@ -361,23 +361,23 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         return model.eval(), model_state_dict["heads"]
 
     # pretrained
-    # names_to_from_model_map["regnet-y-320-seer"] = partial(
-    #     load_using_classy_vision,
-    #     "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet32d/seer_regnet32gf_model_iteration244000.torch",
-    #     lambda: FakeRegNetVisslWrapper(RegNetY32gf()),
-    # )
+    names_to_from_model_map["regnet-y-320-seer"] = partial(
+        load_using_classy_vision,
+        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet32d/seer_regnet32gf_model_iteration244000.torch",
+        lambda: FakeRegNetVisslWrapper(RegNetY32gf()),
+    )
 
-    # names_to_from_model_map["regnet-y-640-seer"] = partial(
-    #     load_using_classy_vision,
-    #     "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet64/seer_regnet64gf_model_final_checkpoint_phase0.torch",
-    #     lambda: FakeRegNetVisslWrapper(RegNetY64gf()),
-    # )
+    names_to_from_model_map["regnet-y-640-seer"] = partial(
+        load_using_classy_vision,
+        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet64/seer_regnet64gf_model_final_checkpoint_phase0.torch",
+        lambda: FakeRegNetVisslWrapper(RegNetY64gf()),
+    )
 
-    # names_to_from_model_map["regnet-y-1280-seer"] = partial(
-    #     load_using_classy_vision,
-    #     "https://dl.fbaipublicfiles.com/vissl/model_zoo/swav_ig1b_regnet128Gf_cnstant_bs32_node16_sinkhorn10_proto16k_syncBN64_warmup8k/model_final_checkpoint_phase0.torch",
-    #     lambda: FakeRegNetVisslWrapper(RegNetY128gf()),
-    # )
+    names_to_from_model_map["regnet-y-1280-seer"] = partial(
+        load_using_classy_vision,
+        "https://dl.fbaipublicfiles.com/vissl/model_zoo/swav_ig1b_regnet128Gf_cnstant_bs32_node16_sinkhorn10_proto16k_syncBN64_warmup8k/model_final_checkpoint_phase0.torch",
+        lambda: FakeRegNetVisslWrapper(RegNetY128gf()),
+    )
 
     # names_to_from_model_map["regnet-y-2560-seer"] = partial(
     #     load_using_classy_vision,
@@ -474,7 +474,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # pytorch_dump_folder_path = Path(" /home/zuppif/Desktop/models")
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
     convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
