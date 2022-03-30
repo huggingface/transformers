@@ -62,15 +62,15 @@ class MCTCModelTester:
         self,
         parent,
         batch_size=10,
-        seq_length=10,  # speech is longer
+        seq_length=40,  # speech is longer
         is_training=True,
         vocab_size=32,
-        hidden_size=16,
+        hidden_size=128 * 4,
         num_hidden_layers=4,
         intermediate_size=20,
-        num_attention_heads=2,
+        num_attention_heads=4,
 
-        attention_head_dim=384,
+        attention_head_dim=128,
         max_position_embeddings=920,
 
         layer_norm_eps=1e-12,
@@ -129,7 +129,7 @@ class MCTCModelTester:
         input_features = floats_tensor(
             [self.batch_size, self.seq_length, self.input_feat_per_channel], self.vocab_size
         )
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
 
         config = self.get_config()
 
@@ -376,13 +376,6 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_with_adapter_for_ctc(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
-
-    # def test_model_with_adapter_proj_dim(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
 
     # def test_ctc_loss_inference(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()

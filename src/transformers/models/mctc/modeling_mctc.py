@@ -182,9 +182,12 @@ class Conv1dSubsampler(nn.Module):
         self.in_channels = config.input_feat_per_channel * config.input_channels
         
         if self.num_layers > 1:
+            if config.conv_channels is None:
+                raise ValueError(f"Need to specify `conv_channels` configuration in `MCTCConfig` to use multiple convolution layers.")
+            
             self.mid_channels = config.conv_channels
         else:
-            self.mid_channels = -1
+            self.mid_channels = None
 
         self.out_channels = config.hidden_size
         self.kernel_size = config.conv_kernel
@@ -192,23 +195,24 @@ class Conv1dSubsampler(nn.Module):
 
         self.conv_layers = nn.ModuleList(
             nn.Conv1d(
-                self.in_channels if i == 0 else self.mid_channels // 2,
-                self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
+                self.in_channels if i == 0 else self.mid_channels[i],
+                self.mid_channels[i] if i < self.num_layers - 1 else self.out_channels,
                 kernel_size=k,
                 stride=self.stride[i],
-                padding=k // 2,
+                padding="valid",
             )
             for i, k in enumerate(self.kernel_size)
         )
 
     def forward(self, input_features):
-        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x (C x D) x T
+        # input_features == B x T x Features
+        hidden_states = input_features.transpose(1, 2).contiguous() # -> B x F x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
-            hidden_states = nn.functional.glu(hidden_states, dim=2)
+            hidden_states = nn.functional.glu(hidden_states, dim=self.glu_dim)
             hidden_states = self.dropout(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> T x B x (C x D)
+        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> B x T x F
         return hidden_states
 
 
@@ -437,11 +441,17 @@ class MCTCSelfAttention(nn.Module):
 class MCTCSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
+        print("SELFOUTPUT")
+        print("coinfig", self.config.hidden_size)
+        print("hidden_states", hidden_states.shape)
+        print("input_tensor", input_tensor.shape)
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -581,7 +591,11 @@ class MCTCEncoder(nn.Module):
         super().__init__()
 
         self.num_conv_layers = config.num_conv_layers
+        self.conv_kernel = config.conv_kernel
+        self.conv_stride = config.conv_stride
         self.conv_dropout = config.conv_dropout
+        self.conv_glu_dim = config.conv_glu_dim
+
         self.hidden_dropout_prob = config.hidden_dropout_prob
         self.layerdrop = config.layerdrop
 
@@ -605,28 +619,36 @@ class MCTCEncoder(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         inputs_embeds = self.conv(input_features)
         
         # inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
-        if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-            padding_mask = attention_mask.ne(1).long()
-        else:
-            padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
+        # if attention_mask is not None:
+        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+        #     padding_mask = attention_mask.ne(1).long()
+        # else:
+        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
 
-        # review whether there's no position embeddings here. For now going with:
+        # # review whether there's no position embeddings here. For now going with:
+        # print("inputs_embeds", inputs_embeds.size())
+        # print("padding_mask", padding_mask.size())
+
+
         hidden_states = inputs_embeds
         # embed_pos = self.embed_positions(padding_mask)
         # hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
 
         # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+        # if attention_mask is not None:
+        #     print("inputs_embeds", inputs_embeds.dtype)
+        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        #     attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
+        # print("attention_mask", attention_mask.size())
+        # print("hidden_states", hidden_states.size())
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -637,6 +659,8 @@ class MCTCEncoder(nn.Module):
             ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
+            print("ENCODER", encoder_layer)
+            print("hidden_states", hidden_states.shape)
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -655,8 +679,8 @@ class MCTCEncoder(nn.Module):
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
+                        # attention_mask,
+                        # (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -684,18 +708,20 @@ class MCTCEncoder(nn.Module):
         """
         Computes the output length of the convolutional layers
         """
-        for i in range(self.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
-
+        padding = 0
+        dilation = 1
+        for i, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
+            input_lengths = ((input_lengths + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
+            input_lengths = input_lengths // self.conv_glu_dim
         return input_lengths
         
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
-        print("attention_mask", attention_mask.shape)
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
+        # subsampled_lengths = attention_mask.sum(-1)
         subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
@@ -707,53 +733,6 @@ class MCTCEncoder(nn.Module):
         attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
-
-
-class MCTCPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class MCTCLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = MCTCPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class MCTCOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = MCTCLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
 
 
 class MCTCPreTrainedModel(PreTrainedModel):
@@ -783,49 +762,6 @@ class MCTCPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, MCTCEncoder):
@@ -898,31 +834,11 @@ MCTC_INPUTS_DOCSTRING = r"""
     MCTC_START_DOCSTRING,
 )
 class MCTCModel(MCTCPreTrainedModel):
-    """
-    
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        # self.embeddings = MCTCEmbeddings(config)
         self.encoder = MCTCEncoder(config)
-
-
-    # def get_input_embeddings(self):
-    #     return self.embeddings.word_embeddings
-
-    # def set_input_embeddings(self, value):
-    #     self.embeddings.word_embeddings = value
-
-    # def _prune_heads(self, heads_to_prune):
-    #     """Prunes heads of the model.
-    #     heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-    #     See base class PreTrainedModel
-    #     """
-    #     for layer, heads in heads_to_prune.items():
-    #         self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -941,16 +857,13 @@ class MCTCModel(MCTCPreTrainedModel):
         output_hidden_states=None,
         return_dict=None
     ):
-        r"""
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # shouldn't this just be use_cache=True if we know this model is
+        # shouldn't this just be use_cache=False if we know this model is
         # an encoder only model?
         # if so, modeling_bert.py line 936 also needs a similar adjustment.
         if self.config.is_decoder:
