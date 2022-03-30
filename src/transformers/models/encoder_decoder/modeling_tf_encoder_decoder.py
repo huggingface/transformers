@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -491,6 +491,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
