@@ -12,6 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+server {
+    listen 8444;
+    listen [::]:8444;
+
+    server_name 210.106.99.226;
+
+    location / {
+      proxy_pass http://localhost:8443/;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection upgrade;
+      proxy_set_header Accept-Encoding gzip;
+    }
+}
+
+
+
 import os
 import sys
 

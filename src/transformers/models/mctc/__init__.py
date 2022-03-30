@@ -28,21 +28,20 @@ _import_structure = {
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_mctc_fast"] = ["MCTCTokenizerFast"]
+    _import_structure["tokenization_mctc"] = ["MCTCTokenizer"]
 
 if is_speech_available():
     _import_structure["feature_extraction_mctc"] = ["MCTCFeatureExtractor"]
+    _import_structure["processing_mctc"] = ["MCTCProcessor"]
 
 
 if is_torch_available():
     _import_structure["modeling_mctc"] = [
         "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MCTCLayer",
+        "MCTCForCTC",
         "MCTCModel",
         "MCTCPreTrainedModel",
-        "load_tf_weights_in_mctc",
     ]
-
 
 
 
@@ -55,17 +54,12 @@ if TYPE_CHECKING:
 
     if is_speech_available():
         from .feature_extraction_mctc import MCTCFeatureExtractor
+        from .processing_mctc import MCTCProcessor
 
     if is_torch_available():
         from .modeling_mctc import (
             MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MCTCForMaskedLM,
-            MCTCForCausalLM,
-            MCTCForMultipleChoice,
-            MCTCForQuestionAnswering,
-            MCTCForSequenceClassification,
-            MCTCForTokenClassification,
-            MCTCLayer,
+            MCTCForCTC,
             MCTCModel,
             MCTCPreTrainedModel,
             load_tf_weights_in_mctc,

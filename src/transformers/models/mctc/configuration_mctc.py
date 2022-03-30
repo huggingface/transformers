@@ -88,106 +88,6 @@ class MCTCConfig(PretrainedConfig):
 """
     model_type = "mctc"
     
-    '''
-    From Flashlight docs:
-
-    Transformer::Transformer(
-        int32_t modelDim,
-        int32_t headDim,
-        int32_t mlpDim,
-        int32_t nHeads,
-        int32_t bptt,
-        float pDropout,
-        float pLayerdrop,
-        bool useMask,
-        bool preLN
-    )
-    
-    wq_(std::make_shared<Linear>(
-          transformerInitLinear(modelDim, headDim * nHeads))),
-    wk_(std::make_shared<Linear>(
-        transformerInitLinear(modelDim, headDim * nHeads))),
-    wv_(std::make_shared<Linear>(
-        transformerInitLinear(modelDim, headDim * nHeads))),
-    wf_(std::make_shared<Linear>(
-        transformerInitLinear(headDim * nHeads, modelDim))),),
-
-    fl::Variable transformerInitLinear(int32_t inDim, int32_t outDim) {
-        float std = std::sqrt(1.0 / float(inDim));
-        return fl::uniform(outDim, inDim, -std, std, af::dtype::f32, true);
-    }
-
-    So for HF naming:
-    
-    hf.hidden_size == modelDim == headDim * nHeads == 768 (base) or 1536 (large)
-
-    from original mCTC code:
-    auto layer = std::make_shared<fl::Transformer>(
-          // 768, 192, 3072, 4, 920, 0.3, 0.3, false, false); <- base model (same as slimIPL), whose weights aren't released.
-          1536,
-          384,
-          6144,
-          4,
-          920,
-          0.3,
-          0.3,
-          false,
-          false);
-
-
-    From Flashlight code:
-    Conv2D::Conv2D(
-        int nin,
-        int nout,
-        int wx,
-        int wy,
-        int sx,
-        int sy,
-        IntOrPadMode px,
-        IntOrPadMode py,
-        int dx,
-        int dy,
-        bool bias,
-        int groups)
-        : nIn_(nin),
-        nOut_(nout),
-        xFilter_(wx),
-        yFilter_(wy),
-        xStride_(sx),
-        yStride_(sy),
-        xPad_(px.padVal),
-        yPad_(py.padVal),
-        xDilation_(dx),
-        yDilation_(dy),
-        bias_(bias),
-        groups_(groups) {
-    initialize();
-    }
-
-    from mCTC original code:
-    
-    convFrontend_->add(
-        std::make_shared<fl::View>(af::dim4(-1, 1, nFeature, 0)));
-    // Time x 1 x nFeature x Batch
-    std::vector<int> lnDims = {0, 1, 2};
-    convFrontend_->add(std::make_shared<fl::LayerNorm>(lnDims));
-    convFrontend_->add(
-        // std::make_shared<fl::Conv2D>(nFeature, 1536, 7, 1, 3, 1, -1, 0, 1,
-        // 1));
-        std::make_shared<fl::Conv2D>(nFeature, 3072, 7, 1, 3, 1, -1, 0, 1, 1));
-    convFrontend_->add(std::make_shared<fl::GatedLinearUnit>(2));
-    convFrontend_->add(std::make_shared<fl::Dropout>(0.3));
-    convFrontend_->add(std::make_shared<fl::Reorder>(2, 0, 3, 1));
-
-    I0221 16:16:15.735110 10328 Test.cpp:90] [Network] Model myModel: Sequential [input -> (0) -> (1) -> (2) -> (3) -> (4) -> (5) -> output]
-	(0): View (-1 1 80 0)
-	(1): LayerNorm ( axis : { 0 1 2 } , size : -1)
-	(2): Conv2D (80->3072, 7x1, 3,1, SAME,0, 1, 1) (with bias)
-	(3): GatedLinearUnit (2)
-	(4): Dropout (0.300000)
-	(5): Reorder (2,0,3,1)
-
-    '''
 
     def __init__(
         self,
@@ -197,9 +97,12 @@ class MCTCConfig(PretrainedConfig):
         intermediate_size=6144,
         num_attention_heads=4,
         attention_head_dim=384,
-        max_position_embeddings=920,
+        position_embedding_type="relative_key",
+        max_position_embeddings=512,
+        layer_norm_eps=1e-12,
         layerdrop=0.3,
         hidden_act="relu",
+        initializer_range=0.02,
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
         
@@ -212,8 +115,8 @@ class MCTCConfig(PretrainedConfig):
         conv_glu_dim=2,
         conv_dropout=0.3,
         num_conv_layers=1,
-        conv_kernel_sizes=(7),
-        conv_strides=(3),
+        conv_kernel=(7,),
+        conv_stride=(3,),
         input_feat_per_channel=80,
         input_channels=1,
         conv_channels=None,
@@ -227,9 +130,10 @@ class MCTCConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
-        self.bptt = bptt
+        self.layer_norm_eps = layer_norm_eps
         self.layerdrop = layerdrop
         self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.use_cache = use_cache
@@ -237,18 +141,22 @@ class MCTCConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+        self.conv_glu_dim = conv_glu_dim
+        self.conv_dropout = conv_dropout
+
         self.num_conv_layers = num_conv_layers
-        self.conv_kernel_size = conv_kernel_size)
-        self.conv_stride = conv_stride)
+        self.conv_kernel = conv_kernel
+        self.conv_stride = conv_stride
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
         self.conv_channels = conv_channels
 
-        if len(self.conv_kernel_sizes) != self.num_conv_layers:
+        if len(self.conv_kernel) != self.num_conv_layers:
             raise ValueError(
                 "Configuration for convolutional module is incorrect. "
-                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers` "
-                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`, "
+                "It is required that `len(config.conv_kernel)` == `config.num_conv_layers` "
+                f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 

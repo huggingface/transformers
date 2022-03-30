@@ -148,7 +148,11 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig", "MCTCTokenizer"],
+    "models.mctc": [
+        "MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", 
+        "MCTCConfig", 
+        "MCTCProcessor",
+        "MCTCTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -435,7 +439,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.mctc"].append("MCTCTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -640,13 +643,7 @@ if is_torch_available():
     _import_structure["models.mctc"].extend(
         [
             "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MCTCForMaskedLM",
-            "MCTCForCausalLM",
-            "MCTCForMultipleChoice",
-            "MCTCForQuestionAnswering",
-            "MCTCForSequenceClassification",
-            "MCTCForTokenClassification",
-            "MCTCLayer",
+            "MCTCForCTC",
             "MCTCModel",
             "MCTCPreTrainedModel",
             "load_tf_weights_in_mctc",

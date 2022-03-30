@@ -18,7 +18,9 @@
 
 
 import math
+import random
 import os
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -36,6 +38,7 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
+    CausalLMOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -55,12 +58,21 @@ from .configuration_mctc import MCTCConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "mctc-base"
 _CONFIG_FOR_DOC = "MCTCConfig"
 _TOKENIZER_FOR_DOC = "MCTCTokenizer"
+_PROCESSOR_FOR_DOC = "MCTCProcessor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "mctc-large"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 53.48
+
 
 MCTC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mctc-base",
+    "mctc-large",
     # See all mCTC models at https://huggingface.co/models?filter=mctc
 ]
 
@@ -138,6 +150,19 @@ def load_tf_weights_in_mctc(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
 class Conv1dSubsampler(nn.Module):
@@ -149,31 +174,31 @@ class Conv1dSubsampler(nn.Module):
     def __init__(self, config):
         super(Conv1dSubsampler, self).__init__()
         self.config = config
-        self.glu_dim = config.glu_dim
+        self.glu_dim = config.conv_glu_dim
 
         self.dropout = nn.Dropout(config.conv_dropout)
         
         self.num_layers = config.num_conv_layers
         self.in_channels = config.input_feat_per_channel * config.input_channels
         
-        if self.num_layeres > 1:
+        if self.num_layers > 1:
             self.mid_channels = config.conv_channels
         else:
             self.mid_channels = -1
 
         self.out_channels = config.hidden_size
-        self.kernel_sizes = config.conv_kernel_sizes
-        self.strides = config.conv_strides
+        self.kernel_size = config.conv_kernel
+        self.stride = config.conv_stride
 
         self.conv_layers = nn.ModuleList(
             nn.Conv1d(
                 self.in_channels if i == 0 else self.mid_channels // 2,
                 self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
-                stride=self.strides[i],
+                stride=self.stride[i],
                 padding=k // 2,
             )
-            for i, k in enumerate(self.kernel_sizes)
+            for i, k in enumerate(self.kernel_size)
         )
 
     def forward(self, input_features):
@@ -360,16 +385,6 @@ class MCTCSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -561,21 +576,20 @@ class MCTCLayer(nn.Module):
         return layer_output
 
 
-class MCTCEncoder(MCTCPreTrainedModel):
+class MCTCEncoder(nn.Module):
     def __init__(self, config: MCTCConfig):
-        super().__init__(config)
-        
-        self.dropout = config.dropout
+        super().__init__()
+
+        self.num_conv_layers = config.num_conv_layers
+        self.conv_dropout = config.conv_dropout
+        self.hidden_dropout_prob = config.hidden_dropout_prob
         self.layerdrop = config.layerdrop
-        self.bptt = config.bptt
 
         self.conv = Conv1dSubsampler(config)
-
         self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.attention_head_dim)
 
         self.gradient_checkpointing = False
-        self.post_init()
 
     def forward(
         self,
@@ -592,7 +606,8 @@ class MCTCEncoder(MCTCPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         inputs_embeds = self.conv(input_features)
-        inputs_embeds = self.embed_scale * inputs_embeds
+        
+        # inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
         if attention_mask is not None:
@@ -601,10 +616,11 @@ class MCTCEncoder(MCTCPreTrainedModel):
         else:
             padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
 
-        embed_pos = self.embed_positions(padding_mask)
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        # review whether there's no position embeddings here. For now going with:
+        hidden_states = inputs_embeds
+        # embed_pos = self.embed_positions(padding_mask)
+        # hidden_states = inputs_embeds + embed_pos
+        hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -644,9 +660,8 @@ class MCTCEncoder(MCTCPreTrainedModel):
                     )
                 else:
                     layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        hidden_states=hidden_states,
+                        attention_mask=attention_mask,
                         output_attentions=output_attentions,
                     )
 
@@ -664,6 +679,33 @@ class MCTCEncoder(MCTCPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+   
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for i in range(self.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+        
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
+        # generate creates 3D attention mask, because of the shape of input_features
+        # convert it to 2D if thats the case
+        if len(attention_mask.shape) > 2:
+            attention_mask = attention_mask[:, :, -1]
+
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+        bsz = attention_mask.size()[0]
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+
+        # these two operations makes sure that all values
+        # before the output lengths indices are attended to
+        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
+        return attention_mask
 
 
 class MCTCPredictionHeadTransform(nn.Module):
@@ -740,6 +782,49 @@ class MCTCPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch_int_div(input_length - kernel_size, stride) + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
+
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, MCTCEncoder):
@@ -823,8 +908,6 @@ class MCTCModel(MCTCPreTrainedModel):
         # self.embeddings = MCTCEmbeddings(config)
         self.encoder = MCTCEncoder(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
 
     # def get_input_embeddings(self):
     #     return self.embeddings.word_embeddings
@@ -900,8 +983,8 @@ class MCTCModel(MCTCPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV_2_VEC_2_START_DOCSTRING,
+    """MCTC Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    MCTC_START_DOCSTRING,
 )
 class MCTCForCTC(MCTCPreTrainedModel):
     def __init__(self, config):
@@ -917,12 +1000,10 @@ class MCTCForCTC(MCTCPreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = config.hidden_size
-        )
+        
 
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
-        # Initialize weights and apply final processing
-        self.post_init()
 
 
     @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING)
