@@ -575,7 +575,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
 
             # Handle the case where the inputs are passed as a single dict which contains `labels`.
             # The `labels` shouldn't be passed to `self.encoder` below, because it is a based model without this
-            # parameter (otherwise, an error occurs when `input_processing` is called inside `self.encoder.call()`).
+            # parameter (otherwise, an error occurs when `_input_processing` is called inside `self.encoder.call()`).
             if "labels" in encoder_inputs:
                 labels = encoder_inputs.pop("labels")
 

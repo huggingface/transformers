@@ -710,7 +710,6 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         """
         Args:
@@ -872,7 +871,6 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1305,7 +1303,6 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         """
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):

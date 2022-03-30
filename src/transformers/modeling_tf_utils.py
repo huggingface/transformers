@@ -373,7 +373,7 @@ def unpack_inputs(func):
         # process the inputs and call the wrapped function
         main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
         main_input = fn_args_and_kwargs.pop(main_input_name, None)
-        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        unpacked_inputs = _input_processing(func, self.config, main_input, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -384,7 +384,7 @@ def unpack_inputs(func):
     return run_call_with_unpacked_inputs
 
 
-def input_processing(func, config, input_ids, **kwargs):
+def _input_processing(func, config, input_ids, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
