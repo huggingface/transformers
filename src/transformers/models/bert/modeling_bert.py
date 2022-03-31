@@ -1087,9 +1087,6 @@ class BertForPreTraining(BertPreTrainedModel):
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1214,9 +1211,6 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> model = BertLMHeadModel.from_pretrained("bert-base-cased", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1315,6 +1309,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'paris'",
+        expected_loss=0.88,
     )
     def forward(
         self,
@@ -1443,9 +1439,6 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
 
-        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
 
@@ -1517,9 +1510,11 @@ class BertForSequenceClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="textattack/bert-base-uncased-yelp-polarity",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_1'",
+        expected_loss=0.01,
     )
     def forward(
         self,
@@ -1716,9 +1711,11 @@ class BertForTokenClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="dbmdz/bert-large-cased-finetuned-conll03-english",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']",
+        expected_loss=0.01,
     )
     def forward(
         self,
@@ -1797,9 +1794,11 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="deepset/bert-base-cased-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'a nice puppet'",
+        expected_loss=7.41,
     )
     def forward(
         self,

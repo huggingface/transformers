@@ -1201,10 +1201,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[
-        ...     None, :
-        >>> ]  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1288,6 +1284,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'P a r i s'",
+        expected_loss=0.81,
     )
     def call(
         self,
@@ -1536,10 +1534,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
-
-        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
-        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1611,9 +1605,11 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="nlptown/bert-base-multilingual-uncased-sentiment",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'5 stars'",
+        expected_loss=3.81,
     )
     def call(
         self,
@@ -1840,9 +1836,11 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="dbmdz/bert-large-cased-finetuned-conll03-english",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']",
+        expected_loss=0.01,
     )
     def call(
         self,
@@ -1931,9 +1929,11 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="huggingface-course/bert-finetuned-squad",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'nice puppet'",
+        expected_loss=8.03,
     )
     def call(
         self,
