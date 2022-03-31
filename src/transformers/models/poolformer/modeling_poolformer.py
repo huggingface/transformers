@@ -16,7 +16,6 @@
 
 
 import collections.abc
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -25,14 +24,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -61,47 +55,6 @@ def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
-
-
-@dataclass
-class PoolFormerModelOutput(ModelOutput):
-    """
-    Class for PoolFormerModel's outputs, with potential hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class PoolFormerClassifierOutput(ModelOutput):
-    """
-    Class for PoolformerForImageClassification's outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
@@ -295,7 +248,7 @@ class PoolFormerEncoder(nn.Module):
             # Get patch embeddings from hidden_states
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
-            for i, blk in enumerate(block_layer):
+            for _, blk in enumerate(block_layer):
                 layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
 
@@ -305,7 +258,7 @@ class PoolFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return PoolFormerModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 class PoolFormerPreTrainedModel(PreTrainedModel):
@@ -374,7 +327,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=PoolFormerModelOutput,
+        output_type=BaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -384,7 +337,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PoolFormerModelOutput]:
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -403,7 +356,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         if not return_dict:
             return (sequence_output, None) + encoder_outputs[1:]
 
-        return PoolFormerModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
         )
@@ -445,7 +398,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=PoolFormerClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -455,7 +408,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PoolFormerClassifierOutput]:
+    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -501,4 +454,4 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoolFormerClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
