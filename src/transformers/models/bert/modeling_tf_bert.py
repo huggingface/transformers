@@ -1203,7 +1203,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[:None, :]
         >>> # Batch size 1
         >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_score = outputs[:2]
+        >>> prediction_scores, seq_relationship_scores = outputs[:2]
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1537,6 +1537,10 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
+
+        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
+        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
