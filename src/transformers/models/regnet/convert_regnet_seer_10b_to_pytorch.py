@@ -190,7 +190,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         src_key = re.sub(regex, "", key)
         dest_key = from_to_ours_keys[src_key]
         converted_state_dict[dest_key] = from_state_dict[key]
-        not_used_keys.pop(key)
+        not_used_keys.remove(key)
 
     print('not_used_keys', not_used_keys)
     # torch.save(converted_state_dict, str(save_directory))
