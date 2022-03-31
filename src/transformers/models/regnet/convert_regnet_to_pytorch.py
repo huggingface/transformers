@@ -307,24 +307,12 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         ),
         # models created by SEER -> https://arxiv.org/abs/2202.08360
         "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
-        "regnet-y-640-seer": RegNetConfig(
-            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
-        ),
+        "regnet-y-640-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328),
         "regnet-y-1280-seer": RegNetConfig(
             depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
         ),
         "regnet-y-2560-seer": RegNetConfig(
             depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
-        ),
-        #  models created by SEER finetuned in1k
-         "regnet-y-640-seer": RegNetConfig(
-            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
-        ),
-        "regnet-y-1280-seer": RegNetConfig(
-            depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
-        ),
-        "regnet-y-2560-seer": RegNetConfig(
-            depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=848
         ),
         "regnet-y-10b-seer": ImageNetPreTrainedConfig(
             depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
