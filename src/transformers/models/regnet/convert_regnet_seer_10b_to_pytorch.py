@@ -177,21 +177,22 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
     print("loaded the state_dict")
 
-    diff = set(from_state_dict.keys()).difference(set(from_to_ours_keys.keys()))
-    print('***********', diff)
     converted_state_dict = {}
 
-    assert len(from_state_dict.keys()) == from_to_ours_keys.keys()
-    for name, param in from_state_dict.items():
-        print(name, param.shape)
+    # assert len(from_state_dict.keys()) == from_to_ours_keys.keys()
+    # for name, param in from_state_dict.items():
+    #     print(name, param.shape)
     
+    not_used_keys = list(from_state_dict.keys())
     regex = r"\.block.-part."
 
     for key in from_state_dict.keys():
         src_key = re.sub(regex, "", key)
         dest_key = from_to_ours_keys[src_key]
         converted_state_dict[dest_key] = from_state_dict[key]
-    
+        not_used_keys.pop(key)
+
+    print('not_used_keys', not_used_keys)
     # torch.save(converted_state_dict, str(save_directory))
 
 if __name__ == "__main__":
