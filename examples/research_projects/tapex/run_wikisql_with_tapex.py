@@ -529,32 +529,32 @@ def main():
         delimiter = ", "
 
         # define example evaluation
-        def evaluate_example(_predict_str: str, _ground_str: str):
-            _predict_spans = _predict_str.split(delimiter)
-            _ground_spans = _ground_str.split(delimiter)
-            _predict_values = defaultdict(lambda: 0)
-            _ground_values = defaultdict(lambda: 0)
-            for span in _predict_spans:
+        def evaluate_example(predict_str: str, ground_str: str):
+            predict_spans = predict_str.split(delimiter)
+            ground_spans = ground_str.split(delimiter)
+            predict_values = defaultdict(lambda: 0)
+            ground_values = defaultdict(lambda: 0)
+            for span in predict_spans:
                 try:
-                    _predict_values[float(span)] += 1
+                    predict_values[float(span)] += 1
                 except ValueError:
-                    _predict_values[span.strip()] += 1
-            for span in _ground_spans:
+                    predict_values[span.strip()] += 1
+            for span in ground_spans:
                 try:
-                    _ground_values[float(span)] += 1
+                    ground_values[float(span)] += 1
                 except ValueError:
-                    _ground_values[span.strip()] += 1
-            _is_correct = _predict_values == _ground_values
-            return _is_correct
+                    ground_values[span.strip()] += 1
+            is_correct = predict_values == ground_values
+            return is_correct
 
-        def get_denotation_accuracy(_predictions: List[str], _references: List[str]):
-            assert len(_predictions) == len(_references)
+        def get_denotation_accuracy(predictions: List[str], references: List[str]):
+            assert len(predictions) == len(references)
             correct_num = 0
-            for _predict_str, _ground_str in zip(_predictions, _references):
-                is_correct = evaluate_example(_predict_str.lower(), _ground_str.lower())
+            for predict_str, ground_str in zip(predictions, references):
+                is_correct = evaluate_example(predict_str.lower(), ground_str.lower())
                 if is_correct:
                     correct_num += 1
-            return correct_num / len(_predictions)
+            return correct_num / len(predictions)
 
         accuracy = get_denotation_accuracy(decoded_preds, decoded_labels)
         result = {"denotation_accuracy": accuracy}

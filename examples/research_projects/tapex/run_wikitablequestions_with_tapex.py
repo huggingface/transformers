@@ -47,7 +47,6 @@ from transformers import (
 from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
-from wikisql_utils import _TYPE_CONVERTER, retrieve_wikisql_query_answer_tapas
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

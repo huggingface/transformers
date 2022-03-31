@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for TAPEX."""
 
-import abc
 import json
 import os
 import random
@@ -160,33 +159,7 @@ def get_pairs(word):
     return pairs
 
 
-class TableLinearize(abc.ABC):
-
-    PROMPT_MESSAGE = """
-        Please check that your table must follow the following format: {"header": ["col1", "col2", "col3"], "rows":
-        [["row11", "row12", "row13"], ["row21", "row22", "row23"]]}
-    """
-
-    def process_table(self, table_content: Dict) -> str:
-        """
-        Given a table, TableLinearize aims at converting it into a flatten sequence with special symbols.
-        """
-        pass
-
-    def process_header(self, headers: List):
-        """
-        Given a list of headers, TableLinearize aims at converting it into a flatten sequence with special symbols.
-        """
-        pass
-
-    def process_row(self, row: List, row_index: int):
-        """
-        Given a row, TableLinearize aims at converting it into a flatten sequence with special symbols.
-        """
-        pass
-
-
-class IndexedRowTableLinearize(TableLinearize):
+class IndexedRowTableLinearize:
     """
     FORMAT: col: col1 | col2 | col 3 row 1 : val1 | val2 | val3 row 2 : ...
     """
