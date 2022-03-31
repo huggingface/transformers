@@ -957,8 +957,8 @@ def main():
     logger.info(f"  Num examples = {len(vectorized_datasets['train'])}")
     logger.info(f"  Num Epochs = {num_epochs}")
     logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
     logger.info(f"  Num gradient accumulation steps = {gradient_accumulation_steps}")
+    logger.info(f"  Total train batch size (w. parallel & distributed) = {batch_size_per_update}")
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
     train_time = 0
@@ -996,7 +996,6 @@ def main():
                     f"Step... ({cur_step} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']}, Gradient Norm: {train_metric['grad_norm']})"
                 )
 
-        continue
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
