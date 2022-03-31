@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
@@ -202,7 +202,7 @@ class AlbertEmbeddings(nn.Module):
     Construct the embeddings from word, position and token_type embeddings.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
@@ -267,7 +267,7 @@ class AlbertEmbeddings(nn.Module):
 
 
 class AlbertAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -296,12 +296,12 @@ class AlbertAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.transpose_for_scores
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: List[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -324,8 +324,8 @@ class AlbertAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions=False,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        output_attentions: bool = False,
+    ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -379,7 +379,7 @@ class AlbertAttention(nn.Module):
 
 
 class AlbertLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
 
         self.config = config
@@ -397,9 +397,9 @@ class AlbertLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions=False,
-        output_hidden_states=False,
-    ) -> Tuple[torch.Tensor, ...]:
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> Tuple:
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         ffn_output = apply_chunking_to_forward(
@@ -420,7 +420,7 @@ class AlbertLayer(nn.Module):
 
 
 class AlbertLayerGroup(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
 
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
@@ -430,13 +430,9 @@ class AlbertLayerGroup(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions=False,
-        output_hidden_states=False,
-    ) -> Union[
-        torch.Tensor,
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]],
-    ]:
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> Tuple:
         layer_hidden_states = ()
         layer_attentions = ()
 
@@ -459,7 +455,7 @@ class AlbertLayerGroup(nn.Module):
 
 
 class AlbertTransformer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
 
         self.config = config
@@ -471,10 +467,10 @@ class AlbertTransformer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ) -> Union[Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]], BaseModelOutput]:
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
@@ -648,7 +644,7 @@ class AlbertModel(AlbertPreTrainedModel):
     config_class = AlbertConfig
     base_model_prefix = "albert"
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: AlbertConfig, add_pooling_layer: bool = True):
         super().__init__(config)
 
         self.config = config
@@ -664,13 +660,13 @@ class AlbertModel(AlbertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} ALBERT has
         a different architecture in that its layers are shared across groups, which then has inner groups. If an ALBERT
@@ -705,7 +701,7 @@ class AlbertModel(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -774,7 +770,7 @@ class AlbertModel(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
         self.albert = AlbertModel(config)
@@ -784,13 +780,13 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.predictions.decoder = new_embeddings
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -808,7 +804,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], AlbertForPreTrainingOutput]:
+    ) -> Union[Tuple, AlbertForPreTrainingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -878,7 +874,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
 
 class AlbertMLMHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
 
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
@@ -898,13 +894,13 @@ class AlbertMLMHead(nn.Module):
 
         return prediction_scores
 
-    def _tie_weights(self):
+    def _tie_weights(self) -> None:
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
         self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__()
 
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
@@ -924,7 +920,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
         self.albert = AlbertModel(config, add_pooling_layer=False)
@@ -933,13 +929,13 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.predictions.decoder = new_embeddings
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -961,7 +957,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Optional[torch.Tensor], ...], MaskedLMOutput]:
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1010,7 +1006,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForSequenceClassification(AlbertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1041,7 +1037,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Optional[torch.Tensor], ...], SequenceClassifierOutput]:
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1113,7 +1109,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1148,7 +1144,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Optional[torch.Tensor], ...], TokenClassifierOutput]:
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1200,7 +1196,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1230,7 +1226,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Optional[torch.Tensor], ...], QuestionAnsweringModelOutput]:
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1300,7 +1296,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForMultipleChoice(AlbertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
         self.albert = AlbertModel(config)
@@ -1329,7 +1325,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Optional[torch.Tensor], ...], MultipleChoiceModelOutput]:
+    ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,

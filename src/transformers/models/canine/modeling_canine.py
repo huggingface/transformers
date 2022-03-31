@@ -435,7 +435,7 @@ class CanineSelfAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         mixed_query_layer = self.query(from_tensor)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -589,7 +589,7 @@ class CanineAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         if not self.local:
             self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
             attention_output = self_outputs[0]
@@ -721,7 +721,7 @@ class CanineLayer(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,

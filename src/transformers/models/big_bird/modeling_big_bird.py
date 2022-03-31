@@ -244,7 +244,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
+    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__ with Bert->BigBird
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -348,9 +348,9 @@ class BigBirdSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -455,10 +455,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         band_mask: Optional[torch.Tensor] = None,
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
-        from_blocked_mask=None,
-        to_blocked_mask=None,
+        from_blocked_mask: Optional[torch.Tensor] = None,
+        to_blocked_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         # Currently this `class` can't be used in decoder.
 
         batch_size, seqlen, _ = hidden_states.size()
@@ -524,8 +524,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         band_mask: Optional[torch.Tensor],
         from_mask: Optional[torch.Tensor],
         to_mask: Optional[torch.Tensor],
-        from_blocked_mask,
-        to_blocked_mask,
+        from_blocked_mask: Optional[torch.Tensor],
+        to_blocked_mask: Optional[torch.Tensor],
         n_heads: int,
         n_rand_blocks: int,
         attention_head_size: int,
@@ -1378,15 +1378,15 @@ class BigBirdAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
         # block_sparse config
         band_mask: Optional[torch.Tensor] = None,
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
-        from_blocked_mask=None,
-        to_blocked_mask=None,
-    ) -> Tuple[torch.Tensor, ...]:
+        from_blocked_mask: Optional[torch.Tensor] = None,
+        to_blocked_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple:
         # fp16 compatibility
         if band_mask is not None:
             band_mask = band_mask.to(hidden_states.dtype)
@@ -1490,9 +1490,9 @@ class BigBirdLayer(nn.Module):
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
         blocked_encoder_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -1592,7 +1592,7 @@ class BigBirdEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1969,10 +1969,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
     def set_attention_type(self, value: str):
@@ -2003,7 +2003,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2283,10 +2283,10 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2393,10 +2393,10 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2498,10 +2498,10 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2516,7 +2516,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2609,7 +2609,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past=None,
+        past: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         **model_kwargs
     ) -> Dict[str, torch.Tensor]:
@@ -2625,7 +2625,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         reordered_past = ()
         for layer_past in past:
             reordered_past += (

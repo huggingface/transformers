@@ -546,7 +546,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         value: torch.Tensor,
         attention_inputs: Tuple[torch.Tensor],
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         # query has shape batch_size x seq_len x d_model
         # key and value have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs

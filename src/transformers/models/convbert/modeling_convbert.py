@@ -358,7 +358,7 @@ class ConvBertSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
         batch_size = hidden_states.size(0)
         # If this is instantiated as a cross-attention module, the keys
@@ -477,7 +477,7 @@ class ConvBertAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -573,7 +573,7 @@ class ConvBertLayer(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,

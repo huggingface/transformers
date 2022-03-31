@@ -140,7 +140,7 @@ class MultiHeadAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -198,7 +198,7 @@ class EncoderLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
             normed,

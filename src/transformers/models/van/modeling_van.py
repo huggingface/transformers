@@ -16,6 +16,7 @@
 
 import math
 from collections import OrderedDict
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint

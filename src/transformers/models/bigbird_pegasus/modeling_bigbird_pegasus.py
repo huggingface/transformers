@@ -168,9 +168,9 @@ class BigBirdPegasusSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -276,10 +276,10 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         band_mask: Optional[torch.Tensor] = None,
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
-        from_blocked_mask=None,
-        to_blocked_mask=None,
+        from_blocked_mask: Optional[torch.Tensor] = None,
+        to_blocked_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         # Currently this `class` can't be used in decoder.
 
         batch_size, seqlen, _ = hidden_states.size()
@@ -345,8 +345,8 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         band_mask: Optional[torch.Tensor],
         from_mask: Optional[torch.Tensor],
         to_mask: Optional[torch.Tensor],
-        from_blocked_mask,
-        to_blocked_mask,
+        from_blocked_mask: Optional[torch.Tensor],
+        to_blocked_mask: Optional[torch.Tensor],
         n_heads: int,
         n_rand_blocks: int,
         attention_head_size: int,
@@ -1183,14 +1183,14 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor, ...]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
         band_mask: Optional[torch.Tensor] = None,
         from_mask: Optional[torch.Tensor] = None,
         to_mask: Optional[torch.Tensor] = None,
-        from_blocked_mask=None,
-        to_blocked_mask=None,
-    ) -> Tuple[torch.Tensor, ...]:
+        from_blocked_mask: Optional[torch.Tensor] = None,
+        to_blocked_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple:
         # Expand dims to enable multiplication in the self-attention module
         head_mask = head_mask.reshape(1, -1, 1, 1) if head_mask is not None else None
 
@@ -1382,7 +1382,7 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -1484,7 +1484,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> Tuple:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -2134,7 +2134,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2390,8 +2390,8 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2479,6 +2479,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
 
+    # Typing
+    final_logits_bias: torch.Tensor
+
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
         self.model = BigBirdPegasusModel(config)
@@ -2526,8 +2529,8 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2598,13 +2601,13 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids: Optional[torch.LongTensor],
-        past=None,
+        past: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         **kwargs
     ) -> dict:
         # cut decoder_input_ids if past is used
@@ -2623,11 +2626,11 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor) -> torch.Tensor:
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         reordered_past = ()
         for layer_past in past:
             # cached cross_attention states don't have to be reordered -> they are always the same
@@ -2675,7 +2678,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2802,7 +2805,7 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2943,7 +2946,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -3080,7 +3083,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past=None,
+        past: Optional[Tuple[Tuple[torch.FloatTensor, ...], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         **kwargs
@@ -3100,7 +3103,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         reordered_past = ()
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
