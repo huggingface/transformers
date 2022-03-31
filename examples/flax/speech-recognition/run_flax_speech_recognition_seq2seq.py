@@ -328,7 +328,6 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
-        labels_length = [feature["labels_length"] for feature in features]
 
         # reformat list to dict and set to pytorch format
         batch = self.processor.feature_extractor.pad(
@@ -363,7 +362,6 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         batch["inputs"] = batch.pop("input_values")
         batch["labels"] = labels
         batch["decoder_input_ids"] = decoder_input_ids
-        batch["labels_length"] = np.array(labels_length)
 
         return batch
 
@@ -848,7 +846,6 @@ def main():
 
         def compute_loss(params, minibatch):
             labels = minibatch.pop("labels")
-            labels_size = minibatch.pop("labels_length").sum()
             logits = state.apply_fn(
                 **minibatch,
                 params=params,
@@ -857,12 +854,12 @@ def main():
                 train=True,
             )[0]
             loss = loss_fn(logits, labels)
-            return loss, labels_size
+            return loss
 
-        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        grad_fn = jax.value_and_grad(compute_loss)
 
         if gradient_accumulation_steps == 1:
-            (loss, labels_size), grad = grad_fn(state.params, batch)
+            loss, grad = grad_fn(state.params, batch)
 
         # Custom gradient accumulation
         else:
@@ -871,34 +868,30 @@ def main():
                 lambda x: x.reshape(gradient_accumulation_steps, training_args.per_device_train_batch_size, -1), batch
             )
 
-            def accum_minibatch_step(grad_idx, accum_loss_labels_grad):
-                accum_loss, accum_labels_size, accum_grad = accum_loss_labels_grad
+            def accum_minibatch_step(grad_idx, accum_loss_grad):
+                accum_loss, accum_grad = accum_loss_grad
                 # get a minibatch (one gradient accumulation slice)
                 minibatch = jax.tree_map(
                     lambda x: jax.lax.dynamic_index_in_dim(x, grad_idx, keepdims=False),
                     batch,
                 )
-                # compute the loss, labels size and grad over the minibatch and accumulate
-                (loss, labels_size), grad = grad_fn(state.params, minibatch)
-                return jax.tree_map(jnp.add, (accum_loss, accum_labels_size, accum_grad), (loss, labels_size, grad))
+                # compute loss and grad over minibatch and accumulate
+                loss, grad = grad_fn(state.params, minibatch)
+                return jax.tree_map(jnp.add, (accum_loss, accum_grad), (loss, grad))
 
             # create an initial state for accumulating losses and gradients
-            init_loss_labels_grad = (0, 0, jax.tree_map(jnp.zeros_like, state.params))
+            init_loss_grad = (0, jax.tree_map(jnp.zeros_like, state.params))
             # loop accum minibatch step over the number of gradient accumulation steps
-            loss, labels_size, grad = jax.lax.fori_loop(
+            loss, grad = jax.lax.fori_loop(
                 0,
                 gradient_accumulation_steps,
                 accum_minibatch_step,
-                init_loss_labels_grad,
+                init_loss_grad,
             )
             # normalise losses and gradients over the number of gradient accumulation steps
-            loss, labels_size, grad = jax.tree_map(
-                lambda x: x / gradient_accumulation_steps, (loss, labels_size, grad)
-            )
+            loss, grad = jax.tree_map(lambda x: x / gradient_accumulation_steps, (loss, grad))
 
-        # weighted sum over pmapped axis
-        grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_map(lambda g: g / labels_size, grad)
+        grad = jax.lax.pmean(grad, "batch")
 
         # update state
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
