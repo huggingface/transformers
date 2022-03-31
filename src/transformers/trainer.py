@@ -836,16 +836,20 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through `optimizers`, or subclass and override this method in a subclass.
         """
+        if is_sagemaker_mp_enabled():
+            opt_model = self.model_wrapped
+        else:
+            opt_model = self.model
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
+            decay_parameters = get_parameter_names(opt_model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
+                    "params": [p for n, p in opt_model.named_parameters() if n in decay_parameters],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
+                    "params": [p for n, p in opt_model.named_parameters() if n not in decay_parameters],
                     "weight_decay": 0.0,
                 },
             ]
@@ -1032,6 +1036,8 @@ class Trainer:
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
                 return self.model_wrapped
+            if self.args.smp_tensor_parallel_full_model:
+                smp.set_tensor_parallelism(model)
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
         # already initialized its own DDP and AMP
@@ -1193,7 +1199,7 @@ class Trainer:
                 # will be resumed in deepspeed_init
                 pass
             else:
-                if not (is_sagemaker_mp_enabled() and self.args.smp_load_partial):
+                if not is_sagemaker_mp_enabled():
                     state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                     self._load_state_dict_in_model(state_dict)
 
@@ -1280,8 +1286,11 @@ class Trainer:
         model = self._wrap_model(self.model_wrapped)
 
         if resume_from_checkpoint is not None:
-            if is_sagemaker_mp_enabled() and self.args.smp_load_partial:
-                state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
+            if is_sagemaker_mp_enabled():
+                if self.args.smp_load_partial:
+                    state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
+                else:
+                    state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                 model.load_state_dict(state_dict)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -2630,7 +2639,10 @@ class Trainer:
                 name = "nested_gather"
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
-            tensors = smp_gather(tensors)
+            if smp.state.cfg.ddp:
+                tensors = distributed_concat(tensors.cuda())
+            else:
+                tensors = smp_gather(tensors)
         elif self.args.local_rank != -1:
             tensors = distributed_concat(tensors)
         return tensors

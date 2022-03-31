@@ -425,6 +425,8 @@ class TrainingArguments:
             If True, saves checkpoints partially. `"smp_save_partial"` can only be used with Sagemaker Model Parallel library.
         smp_load_partial (`bool`, *optional*, defaults to `False`):
             If True, loads partial checkpoints. `"smp_load_partial"` can only be used with Sagemaker Model Parallel library.
+        smp_tensor_parallel_full_model (`bool`, *optional*, defaults to `False`):
+            If True, apply tensor paralellism for the full model. `"smp_tensor_parallel_full_model"` can only be used with Sagemaker Model Parallel library.
     """
 
     output_dir: str = field(
@@ -753,6 +755,7 @@ class TrainingArguments:
     )
     smp_save_partial: bool = field(default=False, metadata={"help": "Save checkpoints partially for SMP."})
     smp_load_partial: bool = field(default=False, metadata={"help": "Load partial checkpoints for SMP."})
+    smp_tensor_parallel_full_model: bool = field(default=False, metadata={"help": "Enables tensor parallelism for full model in SMP."})
 
     # Deprecated arguments
     fp16_backend: str = field(
