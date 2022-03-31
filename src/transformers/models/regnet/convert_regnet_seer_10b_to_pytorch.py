@@ -174,6 +174,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     print("loaded the state_dict")
     converted_state_dict = {}
 
+    for name, param in from_state_dict.items():
+        print(name, param.shape)
+        
     for src_key, dest_key in from_to_ours_keys.items():
         converted_state_dict[dest_key] = from_state_dict.pop(src_key)
 
