@@ -188,7 +188,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     for key in from_state_dict.keys():
         src_key = re.sub(regex, "", key)
         dest_key = from_to_ours_keys[src_key]
-        converted_state_dict[dest_key] = from_state_dict.pop(src_key)
+        converted_state_dict[dest_key] = from_state_dict[src_key]
     # torch.save(converted_state_dict, str(save_directory))
 
 if __name__ == "__main__":
