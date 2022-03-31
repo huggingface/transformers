@@ -173,8 +173,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
     print("going to load the state_dict")
-    from_state_dict_trunk, from_state_dict_head = names_to_from_model
-    [model_name]()
+    from_state_dict_trunk, from_state_dict_head = names_to_from_model[model_name]()
     from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
     print("loaded the state_dict")
     converted_state_dict = {}
