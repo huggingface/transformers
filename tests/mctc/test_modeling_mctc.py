@@ -63,7 +63,7 @@ class MCTCModelTester:
         parent,
         batch_size=10,
         seq_length=40,  # speech is longer
-        is_training=True,
+        is_training=False,
         vocab_size=32,
         hidden_size=128 * 4,
         num_hidden_layers=4,
@@ -89,6 +89,7 @@ class MCTCModelTester:
         input_channels=1,
         conv_channels=None,        
     ):
+        self.parent = parent
         self.batch_size=batch_size
         self.seq_length=seq_length  # speech is longer
         self.is_training=is_training
@@ -119,8 +120,12 @@ class MCTCModelTester:
         self.conv_channels=conv_channels
 
         output_seq_length = self.seq_length
-        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
-            output_seq_length = (output_seq_length - (kernel - 1)) / stride
+        padding = 0
+        dilation = 1
+        for i, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
+            output_seq_length = ((output_seq_length + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
+            output_seq_length = output_seq_length // self.conv_glu_dim
+
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
 

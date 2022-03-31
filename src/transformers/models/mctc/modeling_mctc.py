@@ -52,6 +52,8 @@ from .configuration_mctc import MCTCConfig
 
 logger = logging.get_logger(__name__)
 
+_HIDDEN_STATES_START_POSITION = 2
+
 _CONFIG_FOR_DOC = "MCTCConfig"
 _TOKENIZER_FOR_DOC = "MCTCTokenizer"
 _PROCESSOR_FOR_DOC = "MCTCProcessor"
@@ -236,10 +238,10 @@ class MCTCEmbeddings(nn.Module):
             )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+        self, input_features=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
-        if input_ids is not None:
-            input_shape = input_ids.size()
+        if input_features is not None:
+            input_shape = input_features.size()
         else:
             input_shape = inputs_embeds.size()[:-1]
 
@@ -260,7 +262,7 @@ class MCTCEmbeddings(nn.Module):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
                 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            inputs_embeds = self.word_embeddings(input_features)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -732,27 +734,34 @@ class MCTCPreTrainedModel(PreTrainedModel):
     config_class = MCTCConfig
     load_tf_weights = load_tf_weights_in_mctc
     base_model_prefix = "mctc"
-    supports_gradient_checkpointing = True
+    main_input_name = "input_features"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """ Initialize the weights """
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MCTCEncoder):
+        if isinstance(module, (MCTCEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -769,7 +778,7 @@ MCTC_START_DOCSTRING = r"""
 
 MCTC_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input_features (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`MCTCTokenizer`].
@@ -803,8 +812,8 @@ MCTC_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
+            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert *input_features* indices into associated vectors
             than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -828,6 +837,9 @@ class MCTCModel(MCTCPreTrainedModel):
 
         self.encoder = MCTCEncoder(config)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -837,7 +849,7 @@ class MCTCModel(MCTCPreTrainedModel):
     )
     def forward(
         self,
-        input_features=None,
+        input_features,
         attention_mask=None,
         head_mask=None,
         use_cache=None,
@@ -904,6 +916,8 @@ class MCTCForCTC(MCTCPreTrainedModel):
 
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
     @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING)
@@ -977,6 +991,7 @@ class MCTCForCTC(MCTCPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
+                print("loss", loss)
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]

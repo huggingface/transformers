@@ -88,7 +88,6 @@ class MCTCConfig(PretrainedConfig):
 """
     model_type = "mctc"
     
-
     def __init__(
         self,
         vocab_size=8065,
@@ -105,13 +104,11 @@ class MCTCConfig(PretrainedConfig):
         initializer_range=0.02,
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
-        
         use_cache=True,
         is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-
         conv_glu_dim=2,
         conv_dropout=0.3,
         num_conv_layers=1,
@@ -124,6 +121,7 @@ class MCTCConfig(PretrainedConfig):
         ctc_zero_infinity=False,
         **kwargs
     ):
+        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -141,16 +139,16 @@ class MCTCConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
         self.conv_glu_dim = conv_glu_dim
         self.conv_dropout = conv_dropout
-
         self.num_conv_layers = num_conv_layers
         self.conv_kernel = conv_kernel
         self.conv_stride = conv_stride
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
         self.conv_channels = conv_channels
+        self.ctc_loss_reduction = ctc_loss_reduction
+        self.ctc_zero_infinity = ctc_zero_infinity
 
         if len(self.conv_kernel) != self.num_conv_layers:
             raise ValueError(
@@ -160,11 +158,5 @@ class MCTCConfig(PretrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
 
     

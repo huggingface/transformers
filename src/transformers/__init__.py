@@ -2860,15 +2860,8 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
-
         from .models.mctc import (
             MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MCTCForMaskedLM,
-            MCTCForCausalLM,
-            MCTCForMultipleChoice,
-            MCTCForQuestionAnswering,
-            MCTCForSequenceClassification,
-            MCTCForTokenClassification,
             MCTCLayer,
             MCTCModel,
             MCTCPreTrainedModel,
