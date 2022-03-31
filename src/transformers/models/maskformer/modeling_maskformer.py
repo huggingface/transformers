@@ -269,7 +269,7 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
             A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
             query.
         masks_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, num_classes + 1)` representing the proposed classes for each
+            A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
             query. Note the `+ 1` is needed because we incorporate the null class.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone).
@@ -424,7 +424,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     inputs = inputs.sigmoid().flatten(1)
     numerator = 2 * torch.einsum("nc,mc->nm", inputs, labels)
-    # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
+    # using broadcasting to get a [num_queries, NUM_CLASSES] matrix
     denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
     return loss
@@ -918,7 +918,9 @@ class MaskFormerSwinBlock(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)  # B H' W' C
+        shifted_windows = window_reverse(
+            attention_windows, self.window_size, height_pad, width_pad
+        )  # B height' width' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
@@ -1621,7 +1623,7 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         Params:
             masks_queries_logits (`torch.Tensor`):
-                A tensor` of dim `batch_size, num_queries, num_classes` with the
+                A tensor` of dim `batch_size, num_queries, num_labels` with the
                   classification logits.
             class_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, height, width` with the
@@ -1644,24 +1646,23 @@ class MaskFormerHungarianMatcher(nn.Module):
         indices: List[Tuple[np.array]] = []
 
         preds_masks = masks_queries_logits
-        preds_probs = class_queries_logits.softmax(dim=-1)
-        # downsample all masks in one go -> save memory
-        mask_labels = nn.functional.interpolate(mask_labels, size=preds_masks.shape[-2:], mode="nearest")
+        preds_probs = class_queries_logits
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
+            # downsample the target mask, save memory
+            target_mask = nn.functional.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
+            pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, labels]
             # flatten spatial dimension "q h w -> q (h w)"
-            num_queries, height, width = pred_mask.shape
-            pred_mask_flat = pred_mask.view(num_queries, height * width)  # [num_queries, H*W]
+            pred_mask_flat = pred_mask.flatten(1)  # [num_queries, height*width]
             # same for target_mask "c h w -> c (h w)"
-            num_channels, height, width = target_mask.shape
-            target_mask_flat = target_mask.view(num_channels, height * width)  # [num_total_labels, H*W]
-            # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
+            target_mask_flat = target_mask[:, 0].flatten(1)  # [num_total_labels, height*width]
+            # compute the focal loss between each mask pairs -> shape (num_queries, num_labels)
             cost_mask = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
-            # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
+            # Compute the dice loss betwen each mask pairs -> shape (num_queries, num_labels)
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
@@ -1691,7 +1692,7 @@ class MaskFormerHungarianMatcher(nn.Module):
 class MaskFormerLoss(nn.Module):
     def __init__(
         self,
-        num_classes: int,
+        num_labels: int,
         matcher: MaskFormerHungarianMatcher,
         weight_dict: Dict[str, float],
         eos_coef: float,
@@ -1702,7 +1703,7 @@ class MaskFormerLoss(nn.Module):
         matched ground-truth / prediction (supervise class and mask)
 
         Args:
-            num_classes (`int`):
+            num_labels (`int`):
                 The number of classes.
             matcher (`MaskFormerHungarianMatcher`):
                 A torch module that computes the assigments between the predictions and labels.
@@ -1714,24 +1715,50 @@ class MaskFormerLoss(nn.Module):
 
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.num_classes = num_classes
+        self.num_labels = num_labels
         self.matcher = matcher
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
-        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
+    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+
+    def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
+        # get the maximum size in the batch
+        max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
+        batch_size = len(tensors)
+        # compute finel size
+        batch_shape = [batch_size] + max_size
+        b, _, h, w = batch_shape
+        # get metadata
+        dtype = tensors[0].dtype
+        device = tensors[0].device
+        padded_tensors = torch.zeros(batch_shape, dtype=dtype, device=device)
+        padding_masks = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        # pad the tensors to the size of the biggest one
+        for tensor, padded_tensor, padding_mask in zip(tensors, padded_tensors, padding_masks):
+            padded_tensor[: tensor.shape[0], : tensor.shape[1], : tensor.shape[2]].copy_(tensor)
+            padding_mask[: tensor.shape[1], : tensor.shape[2]] = False
+
+        return padded_tensors, padding_masks
+
     def loss_labels(
-        self, class_queries_logits: Tensor, class_labels: Tensor, indices: Tuple[np.array]
+        self, class_queries_logits: Tensor, class_labels: List[Tensor], indices: Tuple[np.array]
     ) -> Dict[str, Tensor]:
         """Compute the losses related to the labels using cross entropy.
 
         Args:
             class_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, num_classes`
-            class_labels (`Dict[str, Tensor]`):
-                A tensor of shape `batch_size, num_classes`
+                A tensor of shape `batch_size, num_queries, num_labels`
+            class_labels (`List[torch.Tensor]`):
+                List of class labels of shape `(labels)`.
             indices (`Tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
 
@@ -1744,21 +1771,21 @@ class MaskFormerLoss(nn.Module):
         batch_size, num_queries, _ = pred_logits.shape
         criterion = nn.CrossEntropyLoss(weight=self.empty_weight)
         idx = self._get_predictions_permutation_indices(indices)
-        # shape = [BATCH, N_QUERIES]
+        # shape = (batch_size, num_queries)
         target_classes_o = torch.cat([target[j] for target, (_, j) in zip(class_labels, indices)])
-        # shape = [BATCH, N_QUERIES]
+        # shape = (batch_size, num_queries)
         target_classes = torch.full(
-            (batch_size, num_queries), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
+            (batch_size, num_queries), fill_value=self.num_labels, dtype=torch.int64, device=pred_logits.device
         )
         target_classes[idx] = target_classes_o
-        # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
-        pred_logits_permuted = pred_logits.permute(0, 2, 1)
-        loss_ce = criterion(pred_logits_permuted, target_classes)
+        # target_classes is a (batch_size, num_labels, num_queries), we need to permute pred_logits "b q c -> b c q"
+        pred_logits_transposed = pred_logits.transpose(1, 2)
+        loss_ce = criterion(pred_logits_transposed, target_classes)
         losses = {"loss_cross_entropy": loss_ce}
         return losses
 
     def loss_masks(
-        self, masks_queries_logits: Tensor, mask_labels: Tensor, indices: Tuple[np.array], num_masks: int
+        self, masks_queries_logits: Tensor, mask_labels: List[Tensor], indices: Tuple[np.array], num_masks: int
     ) -> Dict[str, Tensor]:
         """Compute the losses related to the masks using focal and dice loss.
 
@@ -1766,7 +1793,7 @@ class MaskFormerLoss(nn.Module):
             masks_queries_logits (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, height, width`
             mask_labels (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, height, width`
+                List of mask labels of shape `(labels, height, width)`.
             indices (`Tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
             num_masks (`int)`:
@@ -1780,10 +1807,12 @@ class MaskFormerLoss(nn.Module):
         """
         src_idx = self._get_predictions_permutation_indices(indices)
         tgt_idx = self._get_targets_permutation_indices(indices)
-        pred_masks = masks_queries_logits  # shape [BATCH, NUM_QUERIES, H, W]
-        pred_masks = pred_masks[src_idx]  # shape [BATCH * NUM_QUERIES, H, W]
-        target_masks = mask_labels  # shape [BATCH, NUM_QUERIES, H, W]
-        target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
+        # shape (batch_size * num_queries, height, width)
+        pred_masks = masks_queries_logits[src_idx]
+        # shape (batch_size, num_queries, height, width)
+        # pad all and stack the targets to the num_labels dimension
+        target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
+        target_masks = target_masks[tgt_idx]
         # upsample predictions to the target size, we have to add one dim to use interpolate
         pred_masks = nn.functional.interpolate(
             pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
@@ -1791,7 +1820,6 @@ class MaskFormerLoss(nn.Module):
         pred_masks = pred_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(pred_masks.shape)
         losses = {
             "loss_mask": sigmoid_focal_loss(pred_masks, target_masks, num_masks),
             "loss_dice": dice_loss(pred_masks, target_masks, num_masks),
@@ -1810,19 +1838,13 @@ class MaskFormerLoss(nn.Module):
         target_indices = torch.cat([tgt for (_, tgt) in indices])
         return batch_indices, target_indices
 
-    def get_loss(self, loss, outputs, labels, indices, num_masks):
-        loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
-        if loss not in loss_map:
-            raise KeyError(f"{loss} not in loss_map")
-        return loss_map[loss](outputs, labels, indices, num_masks)
-
     def forward(
         self,
-        masks_queries_logits: torch.Tensor,
-        class_queries_logits: torch.Tensor,
-        mask_labels: torch.Tensor,
-        class_labels: torch.Tensor,
-        auxiliary_predictions: Optional[Dict[str, torch.Tensor]] = None,
+        masks_queries_logits: Tensor,
+        class_queries_logits: Tensor,
+        mask_labels: List[Tensor],
+        class_labels: List[Tensor],
+        auxiliary_predictions: Optional[Dict[str, Tensor]] = None,
     ) -> Dict[str, Tensor]:
         """
         This performs the loss computation.
@@ -1831,11 +1853,11 @@ class MaskFormerLoss(nn.Module):
             masks_queries_logits (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, height, width`
             class_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, num_classes`
+                A tensor of shape `batch_size, num_queries, num_labels`
             mask_labels (`torch.Tensor`):
-                A tensor of shape `batch_size, num_classes, height, width`
-            class_labels (`torch.Tensor`):
-                A tensor of shape `batch_size, num_classes`
+                List of mask labels of shape `(labels, height, width)`.
+            class_labels (`List[torch.Tensor]`):
+                List of class labels of shape `(labels)`.
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
@@ -1850,19 +1872,16 @@ class MaskFormerLoss(nn.Module):
             for each auxiliary predictions.
         """
 
-        # Retrieve the matching between the outputs of the last layer and the labels
+        # retrieve the matching between the outputs of the last layer and the labels
         indices = self.matcher(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
-
-        # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: Number = self.get_num_masks(class_labels, device=class_labels.device)
-
-        # Compute all the requested losses
+        # compute the average number of target masks for normalization purposes
+        num_masks: Number = self.get_num_masks(class_labels, device=class_labels[0].device)
+        # get all the losses
         losses: Dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
-
-        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        # in case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if auxiliary_predictions is not None:
             for idx, aux_outputs in enumerate(auxiliary_predictions):
                 masks_queries_logits = aux_outputs["masks_queries_logits"]
@@ -1874,8 +1893,10 @@ class MaskFormerLoss(nn.Module):
         return losses
 
     def get_num_masks(self, class_labels: torch.Tensor, device: torch.device) -> torch.Tensor:
-        # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks = class_labels.shape[0]
+        """
+        Computes the average number of target masks accross the batch, for normalization purposes.
+        """
+        num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         return num_masks_pt
 
@@ -2380,11 +2401,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
         )
-        # weight each loss by `self.weight_dict[<LOSS_NAME>]`
-        weighted_loss_dict: Dict[str, Tensor] = {
-            k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
-        }
-        return weighted_loss_dict
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
+        for key, weight in self.weight_dict.items():
+            for loss_key, loss in loss_dict.items():
+                if key in loss_key:
+                    loss *= weight
+
+        return loss_dict
 
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
@@ -2425,8 +2448,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[Tensor] = None,
-        class_labels: Optional[Tensor] = None,
+        mask_labels: Optional[List[Tensor]] = None,
+        class_labels: Optional[List[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2434,10 +2457,11 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
-        mask_labels (`torch.FloatTensor`, *optional*):
-            The target mask of shape `(num_classes, height, width)`.
-        class_labels (`torch.LongTensor`, *optional*):
-            The target labels of shape `(num_classes)`.
+        mask_labels (`List[torch.Tensor]`, *optional*):
+            List of mask labels of shape `(num_labels, height, width)` to be fed to a model
+        class_labels (`List[torch.LongTensor]`, *optional*):
+            list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
+            labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
 
         Returns:
 

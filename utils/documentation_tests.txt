@@ -16,6 +16,7 @@ src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/deit/modeling_deit.py
+src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/marian/modeling_marian.py
@@ -38,6 +39,7 @@ src/transformers/models/speech_encoder_decoder/modeling_speech_encoder_decoder.p
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
 src/transformers/models/swin/modeling_swin.py
+src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/van/modeling_van.py

@@ -108,6 +108,7 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
+    "hf-doc-builder>=0.2.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -283,12 +284,13 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -304,7 +306,7 @@ extras["all"] = (
 )
 
 # Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = []
+extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]

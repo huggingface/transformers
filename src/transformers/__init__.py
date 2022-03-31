@@ -187,6 +187,7 @@ _import_structure = {
         "DPRReaderOutput",
         "DPRReaderTokenizer",
     ],
+    "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
@@ -528,6 +529,7 @@ if is_vision_available():
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
@@ -945,6 +947,15 @@ if is_torch_available():
             "DPRPretrainedReader",
             "DPRQuestionEncoder",
             "DPRReader",
+        ]
+    )
+    _import_structure["models.dpt"].extend(
+        [
+            "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DPTForDepthEstimation",
+            "DPTForSemanticSegmentation",
+            "DPTModel",
+            "DPTPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -2124,6 +2135,13 @@ if is_tf_available():
             "TFViTPreTrainedModel",
         ]
     )
+    _import_structure["models.vit_mae"].extend(
+        [
+            "TFViTMAEForPreTraining",
+            "TFViTMAEModel",
+            "TFViTMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2543,6 +2561,7 @@ if TYPE_CHECKING:
         DPRReaderOutput,
         DPRReaderTokenizer,
     )
+    from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
@@ -2838,6 +2857,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.dpt import DPTFeatureExtractor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
@@ -2877,7 +2897,6 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
-
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3187,6 +3206,13 @@ if TYPE_CHECKING:
             DPRPretrainedReader,
             DPRQuestionEncoder,
             DPRReader,
+        )
+        from .models.dpt import (
+            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DPTForDepthEstimation,
+            DPTForSemanticSegmentation,
+            DPTModel,
+            DPTPreTrainedModel,
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4151,6 +4177,7 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
+        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
