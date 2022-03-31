@@ -104,14 +104,14 @@ class ResNetBasicLayer(nn.Module):
             ResNetConvLayer(in_channels, out_channels, stride=stride),
             ResNetConvLayer(out_channels, out_channels, activation=None),
         )
-        self.act = ACT2FN[activation]
+        self.activation = ACT2FN[activation]
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
         hidden_state += residual
-        hidden_state = self.act(hidden_state)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
@@ -137,14 +137,14 @@ class ResNetBottleNeckLayer(nn.Module):
             ResNetConvLayer(reduces_channels, reduces_channels, stride=stride),
             ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.act = ACT2FN[activation]
+        self.activation = ACT2FN[activation]
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
         hidden_state += residual
-        hidden_state = self.act(hidden_state)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
