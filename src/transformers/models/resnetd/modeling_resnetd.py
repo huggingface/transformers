@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch ResNetD model."""
-
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
@@ -24,7 +22,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import ImageClassifierOutput, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
+    ImageClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_resnetd import ResNetDConfig
@@ -45,53 +47,9 @@ _IMAGE_CLASS_CHECKPOINT = "zuppif/resnetd-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 RESNETD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "zuppif/resnetd-50",
+    "zuppif/resnet-d-50",
     # See all resnetd models at https://huggingface.co/models?filter=resnetd
 ]
-
-
-@dataclass
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoderOutput with ResNet->ResNetD
-class ResNetDEncoderOutput(ModelOutput):
-    """
-    ResNetD encoder's output, with potential hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-# Copied from transformers.models.resnet.modeling_resnet.ResNetModelOutput with ResNet->ResNetD
-class ResNetDModelOutput(ModelOutput):
-    """
-    ResNetD model's output, with potential hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.hidden_sizes[-1])`):
-           The pooled last hidden state.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer with ResNet->ResNetD
 class ResNetDConvLayer(nn.Sequential):
@@ -243,7 +201,7 @@ class ResNetDEncoder(nn.Module):
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> ResNetDEncoderOutput:
+    ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
         for stage_module in self.stages:
@@ -258,7 +216,7 @@ class ResNetDEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return ResNetDEncoderOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_state,
             hidden_states=hidden_states,
         )
@@ -332,14 +290,14 @@ class ResNetDModel(ResNetDPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ResNetDModelOutput,
+        output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> ResNetDModelOutput:
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -358,7 +316,7 @@ class ResNetDModel(ResNetDPreTrainedModel):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return ResNetDModelOutput(
+        return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
