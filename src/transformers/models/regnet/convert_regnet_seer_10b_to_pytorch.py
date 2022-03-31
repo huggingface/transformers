@@ -126,10 +126,7 @@ def get_from_to_our_keys(model_name: str):
 
 
     for name, param in src_state_dict.items():
-        print(name, param.shape)
-
-    print("[HERE]")
-        
+        print(name, param.shape)        
 
     return from_to_ours_keys
 
@@ -176,10 +173,13 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
     print("going to load the state_dict")
-    from_state_dict, _ = names_to_from_model[model_name]()
+    from_state_dict_trunk, from_state_dict_head = names_to_from_model
+    [model_name]()
+    from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
     print("loaded the state_dict")
     converted_state_dict = {}
 
+    assert len(from_state_dict.keys()) == from_to_ours_keys.keys()
     for name, param in from_state_dict.items():
         print(name, param.shape)
     
@@ -189,6 +189,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         src_key = re.sub(regex, "", key)
         dest_key = from_to_ours_keys[src_key]
         converted_state_dict[dest_key] = from_state_dict[key]
+    
     # torch.save(converted_state_dict, str(save_directory))
 
 if __name__ == "__main__":
