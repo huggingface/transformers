@@ -15,7 +15,6 @@
 """
 Callbacks to use with the Trainer class and customize the training loop.
 """
-import collections
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -24,7 +23,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy
+from .trainer_utils import IntervalStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -417,7 +416,11 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
+        if (
+            args.evaluation_strategy == IntervalStrategy.STEPS
+            and state.global_step % args.eval_steps == 0
+            and args.eval_delay <= state.global_step
+        ):
             control.should_evaluate = True
 
         # Save
@@ -440,7 +443,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == IntervalStrategy.EPOCH:
+        if args.evaluation_strategy == IntervalStrategy.EPOCH and args.eval_delay <= state.epoch:
             control.should_evaluate = True
 
         # Save
@@ -470,7 +473,7 @@ class ProgressCallback(TrainerCallback):
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero and isinstance(eval_dataloader.dataset, collections.abc.Sized):
+        if state.is_local_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
                 self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
             self.prediction_bar.update(1)

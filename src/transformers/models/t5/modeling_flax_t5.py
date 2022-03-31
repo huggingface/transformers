@@ -28,7 +28,6 @@ from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -43,7 +42,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_t5 import T5Config
 
 
@@ -92,8 +91,8 @@ class FlaxT5DenseReluDense(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
         self.wi = nn.Dense(
             self.config.d_ff,
@@ -122,8 +121,8 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
         self.wi_0 = nn.Dense(
             self.config.d_ff,
@@ -187,6 +186,7 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -194,8 +194,8 @@ class FlaxT5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
-        kv_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
-        o_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
+        o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
         self.q = nn.Dense(
             self.inner_dim,
@@ -275,6 +275,7 @@ class FlaxT5Attention(nn.Module):
             relative_position,
             bidirectional=(not self.causal),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
 
         values = self.relative_attention_bias(relative_position_bucket)
@@ -709,18 +710,11 @@ class FlaxT5BlockCollection(nn.Module):
 
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: Optional[nn.Embed] = None
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.causal = self.config.causal
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxT5LayerNorm(
@@ -806,7 +800,7 @@ T5_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 T5_DECODE_INPUTS_DOCSTRING = r"""
@@ -847,7 +841,7 @@ T5_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -905,7 +899,7 @@ T5_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1434,7 +1428,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.shared.variables["params"]["embedding"]
@@ -1542,7 +1536,7 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
             if self.config.tie_word_embeddings:
                 # Rescale output before projecting on vocab
                 # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-                sequence_output = sequence_output * (self.config.d_model ** -0.5)
+                sequence_output = sequence_output * (self.config.d_model**-0.5)
 
             if self.config.tie_word_embeddings:
                 shared_embedding = module.shared.variables["params"]["embedding"]

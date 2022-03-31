@@ -28,20 +28,6 @@ import yaml
 from huggingface_hub import model_info
 
 from . import __version__
-from .file_utils import (
-    CONFIG_NAME,
-    MODEL_CARD_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    cached_path,
-    hf_bucket_url,
-    is_datasets_available,
-    is_offline_mode,
-    is_remote_url,
-    is_tf_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
 from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
@@ -56,7 +42,21 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
 )
 from .training_args import ParallelMode
-from .utils import logging
+from .utils import (
+    CONFIG_NAME,
+    MODEL_CARD_NAME,
+    TF2_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_datasets_available,
+    is_offline_mode,
+    is_remote_url,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+    logging,
+)
 
 
 TASK_MAPPING = {
@@ -672,7 +672,7 @@ class TrainingSummary:
             tags = ["generated_from_keras_callback"]
         elif isinstance(tags, str) and tags != "generated_from_keras_callback":
             tags = [tags, "generated_from_keras_callback"]
-        elif "generated_from_trainer" not in tags:
+        elif "generated_from_keras_callback" not in tags:
             tags.append("generated_from_keras_callback")
 
         if keras_history is not None:
@@ -706,6 +706,9 @@ def parse_keras_history(logs):
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
+        if not hasattr(logs, "epoch"):
+            # This history looks empty, return empty results
+            return None, [], dict()
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:

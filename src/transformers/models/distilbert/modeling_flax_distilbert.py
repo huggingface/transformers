@@ -24,7 +24,6 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxMaskedLMOutput,
@@ -34,7 +33,7 @@ from ...modeling_flax_outputs import (
     FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -90,7 +89,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -261,10 +260,7 @@ class FlaxFFN(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
-        assert self.config.activation in [
-            "relu",
-            "gelu",
-        ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
+
         self.activation = ACT2FN[self.config.activation]
 
     def __call__(self, hidden_states, deterministic: bool = True):
@@ -576,7 +572,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
         hidden_states = dlbrt_output[0]
         prediction_logits = self.vocab_transform(hidden_states)
-        prediction_logits = ACT2FN["gelu"](prediction_logits)
+        prediction_logits = ACT2FN[self.config.activation](prediction_logits)
         prediction_logits = self.vocab_layer_norm(prediction_logits)
 
         if self.config.tie_word_embeddings:

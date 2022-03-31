@@ -1,11 +1,11 @@
+**NOTE**: This example is outdated and is not longer actively maintained. Please 
+follow the new instructions of fine-tuning Wav2Vec2 [here](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/README.md)
+
 ## Fine-tuning Wav2Vec2
 
 The `run_asr.py` script allows one to fine-tune pretrained Wav2Vec2 models that can be found [here](https://huggingface.co/models?search=facebook/wav2vec2).
 
 This finetuning script can also be run as a google colab [TODO: here]( ).
-
-The script is actively maintained by [Patrick von Platen](https://github.com/patrickvonplaten).
-Feel free to ask a question on the [Forum](https://discuss.huggingface.co/) or post an issue on [GitHub](https://github.com/huggingface/transformers/issues/new/choose) and adding `@patrickvonplaten` as a tag.
 
 ### Fine-Tuning with TIMIT
 Let's take a look at the [script](./finetune_base_timit_asr.sh) used to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)
@@ -131,7 +131,7 @@ which helps with capping GPU memory usage.
 
 ### DeepSpeed Integration
 
-To learn how to deploy Deepspeed Integration please refer to [this guide](https://huggingface.co/transformers/master/main_classes/deepspeed.html#deepspeed-trainer-integration).
+To learn how to deploy Deepspeed Integration please refer to [this guide](https://huggingface.co/transformers/main/main_classes/deepspeed.html#deepspeed-trainer-integration).
 
 But to get started quickly all you need is to install:
 ```
@@ -188,7 +188,7 @@ run_asr.py \
 ### Pretraining Wav2Vec2
 
 The `run_pretrain.py` script allows one to pretrain a Wav2Vec2 model from scratch using Wav2Vec2's contrastive loss objective (see official [paper](https://arxiv.org/abs/2006.11477) for more information). 
-It is recommended to pre-train Wav2Vec2 with Trainer + Deepspeed (please refer to [this guide](https://huggingface.co/transformers/master/main_classes/deepspeed.html#deepspeed-trainer-integration) for more information).
+It is recommended to pre-train Wav2Vec2 with Trainer + Deepspeed (please refer to [this guide](https://huggingface.co/transformers/main/main_classes/deepspeed.html#deepspeed-trainer-integration) for more information).
 
 Here is an example of how you can use DeepSpeed ZeRO-2 to pretrain a small Wav2Vec2 model:
 

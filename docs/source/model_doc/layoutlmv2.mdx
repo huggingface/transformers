@@ -85,7 +85,9 @@ follows:
 ```python
 from PIL import Image
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+)
 
 width, height = image.size
 ```
@@ -157,7 +159,9 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+).convert("RGB")
 encoding = processor(
     image, return_tensors="pt"
 )  # you can also add all tokenizer parameters here such as padding, truncation
@@ -177,7 +181,9 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+).convert("RGB")
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 encoding = processor(image, words, boxes=boxes, return_tensors="pt")
@@ -199,7 +205,9 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+).convert("RGB")
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 word_labels = [1, 2]
@@ -219,7 +227,9 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+).convert("RGB")
 question = "What's his name?"
 encoding = processor(image, question, return_tensors="pt")
 print(encoding.keys())
@@ -237,7 +247,9 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+image = Image.open(
+    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+).convert("RGB")
 question = "What's his name?"
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes

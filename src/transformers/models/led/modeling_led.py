@@ -26,14 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
@@ -42,7 +34,15 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_led import LEDConfig
 
 
@@ -766,7 +766,7 @@ class LEDDecoderAttention(nn.Module):
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1454,36 +1454,41 @@ LED_START_DOCSTRING = r"""
 """
 
 LED_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> import torch >>> from transformers import LEDTokenizer, LEDForConditionalGeneration
+    ```python
+    >>> import torch
+    >>> from transformers import LEDTokenizer, LEDForConditionalGeneration
 
-        >>> model = LEDForConditionalGeneration.from_pretrained('allenai/led-large-16384-arxiv') >>> tokenizer =
-        LEDTokenizer.from_pretrained('allenai/led-large-16384-arxiv')
+    >>> model = LEDForConditionalGeneration.from_pretrained("allenai/led-large-16384-arxiv")
+    >>> tokenizer = LEDTokenizer.from_pretrained("allenai/led-large-16384-arxiv")
 
-        >>> ARTICLE_TO_SUMMARIZE = '''Transformers (Vaswani et al., 2017) have achieved state-of-the-art ... results in
-        a wide range of natural language tasks including generative ... language modeling (Dai et al., 2019; Radford et
-        al., 2019) and discriminative ... language understanding (Devlin et al., 2019). This success is partly due to
-        ... the self-attention component which enables the network to capture contextual ... information from the
-        entire sequence. While powerful, the memory and computational ... requirements of self-attention grow
-        quadratically with sequence length, making ... it infeasible (or very expensive) to process long sequences. ...
-        ... To address this limitation, we present Longformer, a modified Transformer ... architecture with a
-        self-attention operation that scales linearly with the ... sequence length, making it versatile for processing
-        long documents (Fig 1). This ... is an advantage for natural language tasks such as long document
-        classification, ... question answering (QA), and coreference resolution, where existing approaches ...
-        partition or shorten the long context into smaller sequences that fall within the ... typical 512 token limit
-        of BERT-style pretrained models. Such partitioning could ... potentially result in loss of important
-        cross-partition information, and to ... mitigate this problem, existing methods often rely on complex
-        architectures to ... address such interactions. On the other hand, our proposed Longformer is able to ... build
-        contextual representations of the entire context using multiple layers of ... attention, reducing the need for
-        task-specific architectures.''' >>> inputs = tokenizer.encode(ARTICLE_TO_SUMMARIZE, return_tensors='pt')
+    >>> ARTICLE_TO_SUMMARIZE = '''Transformers (Vaswani et al., 2017) have achieved state-of-the-art
+    ...     results in a wide range of natural language tasks including generative language modeling
+    ...     (Dai et al., 2019; Radford et al., 2019) and discriminative ... language understanding (Devlin et al., 2019).
+    ...     This success is partly due to the self-attention component which enables the network to capture contextual
+    ...     information from the entire sequence. While powerful, the memory and computational requirements of
+    ...     self-attention grow quadratically with sequence length, making it infeasible (or very expensive) to
+    ...     process long sequences. To address this limitation, we present Longformer, a modified Transformer
+    ...     architecture with a self-attention operation that scales linearly with the sequence length, making it
+    ...     versatile for processing long documents (Fig 1). This is an advantage for natural language tasks such as
+    ...     long document classification, question answering (QA), and coreference resolution, where existing approaches
+    ...     partition or shorten the long context into smaller sequences that fall within the typical 512 token limit
+    ...     of BERT-style pretrained models. Such partitioning could potentially result in loss of important
+    ...     cross-partition information, and to mitigate this problem, existing methods often rely on complex
+    ...     architectures to address such interactions. On the other hand, our proposed Longformer is able to build
+    ...     contextual representations of the entire context using multiple layers of attention, reducing the need for
+    ...     task-specific architectures.'''
+    >>> inputs = tokenizer.encode(ARTICLE_TO_SUMMARIZE, return_tensors="pt")
 
-        >>> # Global attention on the first token (cf. Beltagy et al. 2020) >>> global_attention_mask =
-        torch.zeros_like(inputs) >>> global_attention_mask[:, 0] = 1
+    >>> # Global attention on the first token (cf. Beltagy et al. 2020)
+    >>> global_attention_mask = torch.zeros_like(inputs)
+    >>> global_attention_mask[:, 0] = 1
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs, global_attention_mask=global_attention_mask,
-        ... num_beams=3, max_length=32, early_stopping=True) >>> print(tokenizer.decode(summary_ids[0],
-        skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs, global_attention_mask=global_attention_mask, num_beams=3, max_length=32)
+    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    ```
 """
 
 LED_INPUTS_DOCSTRING = r"""
@@ -1585,7 +1590,7 @@ LED_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1743,7 +1748,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1998,7 +2003,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2361,6 +2366,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id

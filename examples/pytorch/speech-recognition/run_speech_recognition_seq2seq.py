@@ -47,9 +47,9 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.16.0.dev0")
+check_min_version("4.18.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
+require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +359,7 @@ def main():
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
     if data_args.max_eval_samples is not None:
-        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_train_samples))
+        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
 
     def prepare_dataset(batch):
         # process audio

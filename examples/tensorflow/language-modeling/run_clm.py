@@ -29,13 +29,11 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Optional
 
 import datasets
-import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
@@ -48,6 +46,7 @@ from transformers import (
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
+    DefaultDataCollator,
     HfArgumentParser,
     TFAutoModelForCausalLM,
     TFTrainingArguments,
@@ -148,30 +147,21 @@ class DataTrainingArguments:
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
     )
-    max_seq_length: Optional[int] = field(
+    block_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated."
+            "help": "Optional input sequence length after tokenization. "
+            "The training dataset will be truncated in block of this size for training. "
+            "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    mlm_probability: float = field(
-        default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
-    )
     line_by_line: bool = field(
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
-    )
-    pad_to_max_length: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
-        },
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -220,20 +210,6 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 # endregion
 
-# region Data generator
-def sample_generator(dataset, tokenizer):
-    # Trim off the last partial batch if present
-    sample_ordering = np.random.permutation(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = {key: tf.convert_to_tensor(arr, dtype_hint=tf.int64) for key, arr in example.items()}
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-# endregion
-
 
 def main():
     # region Argument Parsing
@@ -259,10 +235,6 @@ def main():
     if training_args.output_dir is not None:
         training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
-
-    if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_max_length:
-        logger.warning("We are training on TPU - forcing pad_to_max_length")
-        data_args.pad_to_max_length = True
     # endregion
 
     # region Checkpoints
@@ -364,22 +336,6 @@ def main():
     column_names = raw_datasets["train"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
-    if data_args.max_seq_length is None:
-        max_seq_length = tokenizer.model_max_length
-        if max_seq_length > 1024:
-            logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
-            )
-            max_seq_length = 1024
-    else:
-        if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warning(
-                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-            )
-        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
-
     # First we tokenize all the texts.
     column_names = raw_datasets["train"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
@@ -396,13 +352,21 @@ def main():
         desc="Running tokenizer on dataset",
     )
 
-    block_size = tokenizer.model_max_length
-    if block_size > 1024:
-        logger.warning(
-            f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-            "Picking 1024 instead. You can reduce that value by passing --block_size xxx."
-        )
-        block_size = 1024
+    if data_args.block_size is None:
+        block_size = tokenizer.model_max_length
+        if block_size > 1024:
+            logger.warning(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+            )
+            block_size = 1024
+    else:
+        if data_args.block_size > tokenizer.model_max_length:
+            logger.warning(
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+            )
+        block_size = min(data_args.block_size, tokenizer.model_max_length)
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
@@ -451,9 +415,11 @@ def main():
         train_dataset = train_dataset.select(train_indices)
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
     if data_args.max_eval_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+        max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -475,34 +441,27 @@ def main():
 
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
-        train_generator = partial(sample_generator, train_dataset, tokenizer)
-        train_signature = {
-            feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-            for feature in train_dataset.features
-            if feature != "special_tokens_mask"
-        }
-        train_sig = (train_signature, train_signature["labels"])
+        data_collator = DefaultDataCollator(return_tensors="tf")
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-        tf_train_dataset = (
-            tf.data.Dataset.from_generator(train_generator, output_signature=train_sig)
-            .with_options(options)
-            .batch(batch_size=num_replicas * training_args.per_device_train_batch_size, drop_remainder=True)
-            .repeat(int(training_args.num_train_epochs))
-        )
-        eval_generator = partial(sample_generator, eval_dataset, tokenizer)
-        eval_signature = {
-            feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-            for feature in eval_dataset.features
-            if feature != "special_tokens_mask"
-        }
-        eval_sig = (eval_signature, eval_signature["labels"])
-        tf_eval_dataset = (
-            tf.data.Dataset.from_generator(eval_generator, output_signature=eval_sig)
-            .with_options(options)
-            .batch(batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True)
-            .repeat(int(training_args.num_train_epochs))
-        )
+
+        tf_train_dataset = train_dataset.to_tf_dataset(
+            # labels are passed as input, as we will use the model's internal loss
+            columns=[col for col in train_dataset.features if col != "special_tokens_mask"],
+            shuffle=True,
+            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            collate_fn=data_collator,
+            drop_remainder=True,
+        ).with_options(options)
+
+        tf_eval_dataset = eval_dataset.to_tf_dataset(
+            # labels are passed as input, as we will use the model's internal loss
+            columns=[col for col in eval_dataset.features if col != "special_tokens_mask"],
+            shuffle=False,
+            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            collate_fn=data_collator,
+            drop_remainder=True,
+        ).with_options(options)
         # endregion
 
         # region Optimizer and loss
@@ -518,10 +477,8 @@ def main():
             weight_decay_rate=training_args.weight_decay,
         )
 
-        def dummy_loss(y_true, y_pred):
-            return tf.reduce_mean(y_pred)
-
-        model.compile(optimizer=optimizer, loss={"loss": dummy_loss})
+        # no user-specified loss = will use the model internal loss
+        model.compile(optimizer=optimizer)
         # endregion
 
         # region Training and validation

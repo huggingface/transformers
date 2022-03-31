@@ -19,7 +19,7 @@ independently. Thus, for some new models that the community wants to be added to
 model to 🤗 Transformers.
 
 If this sounds like something you would be interested in, feel free to check out the currently open
-“calls-for-model-addition” [here](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model/open_model_proposals/README.md)
+“calls-for-model-addition” [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model/open_model_proposals/README.md)
 and to contact us.
 
 If selected, you will then work closely with one member of the Hugging Face team to integrate the model into 🤗
@@ -94,6 +94,24 @@ different formats - the model to a *pytorch_model.bin* file and the configuratio
 [`~PreTrainedModel.save_pretrained`] will automatically call
 [`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
 
+
+### Code style
+
+When coding your new model, keep in mind that Transformers is an opinionated library and we have a few quirks of our
+own regarding how code should be written :-)
+
+1. The forward pass of your model should be fully written in the modeling file while being fully independent of other
+   models in the library. If you want to reuse a block from another model, copy the code and paste it with a
+   `# Copied from` comment on top (see [here](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
+   for a good example).
+2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
+   descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
+   One-letter variable names are strongly discouraged unless it's an index in a for loop. 
+3. More generally we prefer longer explicit code to short magical one.
+4. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
+   using your code can quickly debug it by adding print statements or breaking points.
+5. Your function signature should be type-annotated. For the rest, good variable names are way more readable and
+   understandable than type annotations.
 
 ### Overview of tokenizers
 
@@ -363,7 +381,7 @@ important. Here is some advice is to make your debugging environment as efficien
   original code so that you can directly input the ids instead of an input string.
 - Make sure that the model in your debugging setup is **not** in training mode, which often causes the model to yield
   random outputs due to multiple dropout layers in the model. Make sure that the forward pass in your debugging
-  environment is **deterministic** so that the dropout layers are not used. Or use *transformers.file_utils.set_seed*
+  environment is **deterministic** so that the dropout layers are not used. Or use *transformers.utils.set_seed*
   if the old and new implementations are in the same framework.
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
@@ -380,15 +398,12 @@ In the special case that you are adding a model whose architecture exactly match
 existing model you only have to add a conversion script as described in [this section](#write-a-conversion-script).
 In this case, you can just re-use the whole model architecture of the already existing model.
 
-Otherwise, let's start generating a new model with the amazing Cookiecutter!
+Otherwise, let's start generating a new model. You have two choices here:
 
-**Use the Cookiecutter to automatically generate the model's code**
+- `transformers-cli add-new-model-like` to add a new model like an existing one
+- `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
 
-To begin with head over to the [🤗 Transformers templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model) to make use of our
-`cookiecutter` implementation to automatically generate all the relevant files for your model. Again, we recommend
-only adding the PyTorch version of the model at first. Make sure you follow the instructions of the `README.md` on
-the [🤗 Transformers templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
-carefully.
+In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
@@ -398,7 +413,7 @@ side-by-side on integrating the model into 🤗 Transformers.
 
 You should do the following:
 
-1. Create a branch with a descriptive name from your master branch
+1. Create a branch with a descriptive name from your main branch
 
 ```bash
 git checkout -b add_brand_new_bert
@@ -411,11 +426,11 @@ git add .
 git commit
 ```
 
-3. Fetch and rebase to current master
+3. Fetch and rebase to current main
 
 ```bash
 git fetch upstream
-git rebase upstream/master
+git rebase upstream/main
 ```
 
 4. Push the changes to your account using:
@@ -431,12 +446,12 @@ git push -u origin a-descriptive-name-for-my-changes
 6. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
 
 In the following, whenever you have done some progress, don't forget to commit your work and push it to your account so
-that it shows in the pull request. Additionally, you should make sure to update your work with the current master from
+that it shows in the pull request. Additionally, you should make sure to update your work with the current main from
 time to time by doing:
 
 ```bash
 git fetch upstream
-git merge upstream/master
+git merge upstream/main
 ```
 
 In general, all questions you might have regarding the model or your implementation should be asked in your PR and
@@ -494,7 +509,7 @@ slightly adapt it for your use case. Don't hesitate to ask the Hugging Face team
 existing conversion script for your model.
 
 - If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT's conversion script [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
-- If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+- If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 In the following, we'll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
 name of a layer is defined by the name of the class attribute you give the layer. Let's define a dummy model in
@@ -762,7 +777,7 @@ the community to add some *Tips* to show how the model should be used. Don't hes
 regarding the docstrings.
 
 Next, make sure that the docstring added to `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` is
-correct and included all necessary inputs and outputs. It is always to good to remind oneself that documentation should
+correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always to good to remind oneself that documentation should
 be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first contact
 point of the community with the model.
 
@@ -793,9 +808,19 @@ You have now finished the coding part, congratulation! 🎉 You are Awesome! �
 **12. Upload the models to the model hub**
 
 In this final part, you should convert and upload all checkpoints to the model hub and add a model card for each
-uploaded model checkpoint. You should work alongside the Hugging Face team here to decide on a fitting name for each
+uploaded model checkpoint. You can get familiar with the hub functionalities by reading our [Model sharing and uploading Page](model_sharing). You should work alongside the Hugging Face team here to decide on a fitting name for each
 checkpoint and to get the required access rights to be able to upload the model under the author's organization of
-*brand_new_bert*.
+*brand_new_bert*. The `push_to_hub` method, present in all models in `transformers`, is a quick and efficient way to push your checkpoint to the hub. A little snippet is pasted below:
+
+```python
+brand_new_bert.push_to_hub(
+    repo_path_or_name="brand_new_bert",
+    # Uncomment the following line to push to an organization
+    # organization="<ORGANIZATION>",
+    commit_message="Add model",
+    use_temp_dir=True,
+)
+```
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
 specific characteristics of this particular checkpoint, *e.g.* On which dataset was the checkpoint
@@ -809,7 +834,7 @@ fine-tuned on a downstream task. This is not mandatory to merge your PR, but ver
 
 **14. Submit your finished PR**
 
-You're done programming now and can move to the last step, which is getting your PR merged into master. Usually, the
+You're done programming now and can move to the last step, which is getting your PR merged into main. Usually, the
 Hugging Face team should have helped you already at this point, but it is worth taking some time to give your finished
 PR a nice description and eventually add comments to your code, if you want to point out certain design choices to your
 reviewer.

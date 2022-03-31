@@ -2,7 +2,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from arguments import TokenizerTrainingArguments
-from transformers import GPT2Tokenizer, HfArgumentParser
+from transformers import AutoTokenizer, HfArgumentParser
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 
 
@@ -17,7 +17,7 @@ parser = HfArgumentParser(TokenizerTrainingArguments)
 args = parser.parse_args()
 
 # Base tokenizer
-tokenizer = GPT2Tokenizer.from_pretrained(args.base_tokenizer)
+tokenizer = AutoTokenizer.from_pretrained(args.base_tokenizer)
 base_vocab = list(bytes_to_unicode().values())
 
 # Load dataset

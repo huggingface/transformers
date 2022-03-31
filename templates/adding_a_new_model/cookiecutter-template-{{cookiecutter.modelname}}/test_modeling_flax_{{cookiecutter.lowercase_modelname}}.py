@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import unittest
 from transformers import is_flax_available, {{cookiecutter.camelcase_modelname}}Config
 from transformers.testing_utils import require_flax, slow
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+from ..test_configuration_common import ConfigTester
+from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import numpy as np
@@ -345,8 +345,8 @@ from transformers import (
 )
 from transformers.testing_utils import require_sentencepiece, require_flax, require_tokenizers, slow
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+from ..test_configuration_common import ConfigTester
+from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():

@@ -17,9 +17,9 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-from ..file_utils import PaddingStrategy
 from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
+from ..utils import PaddingStrategy
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -145,26 +145,27 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     # Ensure that tensor is created with the correct type
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
-        if isinstance(first["label"], tf.Tensor):
-            dtype = tf.int64 if first["label"].dtype.is_integer() else tf.float32
-        elif isinstance(first["label"], np.ndarray):
-            dtype = tf.int64 if np.issubdtype(first["label"].dtype, np.integer) else tf.float32
-        elif isinstance(first["label"], (tuple, list)):
-            dtype = tf.int64 if isinstance(first["label"][0], int) else tf.float32
-        else:
-            dtype = tf.int64 if isinstance(first["label"], int) else tf.float32
-        batch["labels"] = tf.convert_to_tensor([f["label"] for f in features], dtype=dtype)
+        label_col_name = "label"
     elif "label_ids" in first and first["label_ids"] is not None:
-        if isinstance(first["label_ids"], tf.Tensor):
-            batch["labels"] = tf.stack([f["label_ids"] for f in features])
+        label_col_name = "label_ids"
+    elif "labels" in first and first["labels"] is not None:
+        label_col_name = "labels"
+    else:
+        label_col_name = None
+    if label_col_name is not None:
+        if isinstance(first[label_col_name], tf.Tensor):
+            dtype = tf.int64 if first[label_col_name].dtype.is_integer() else tf.float32
+        elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
+            dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
+        elif isinstance(first[label_col_name], (tuple, list)):
+            dtype = tf.int64 if isinstance(first[label_col_name][0], int) else tf.float32
         else:
-            dtype = tf.int64 if type(first["label_ids"][0]) is int else tf.float32
-            batch["labels"] = tf.convert_to_tensor([f["label_ids"] for f in features], dtype=dtype)
-
+            dtype = tf.int64 if isinstance(first[label_col_name], int) else tf.float32
+        batch["labels"] = tf.convert_to_tensor([f[label_col_name] for f in features], dtype=dtype)
     # Handling of all other possible keys.
     # Again, we will use the first element to figure out which key/values are not None for this model.
     for k, v in first.items():
-        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+        if k not in ("label", "label_ids", "labels") and v is not None and not isinstance(v, str):
             if isinstance(v, (tf.Tensor, np.ndarray)):
                 batch[k] = tf.stack([f[k] for f in features])
             else:
@@ -215,12 +216,12 @@ class DataCollatorWithPadding:
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              if provided).
+              is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
@@ -267,12 +268,12 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              if provided).
+              is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
@@ -522,7 +523,7 @@ class DataCollatorForSeq2Seq:
             prepare the *decoder_input_ids*
 
             This is useful when using *label_smoothing* to avoid calculating loss twice.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 

@@ -18,8 +18,9 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
     _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -64,6 +65,15 @@ if is_tf_available():
         "TFXLMRobertaModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_xlm_roberta"] = [
+        "FlaxXLMRobertaForMaskedLM",
+        "FlaxXLMRobertaForMultipleChoice",
+        "FlaxXLMRobertaForQuestionAnswering",
+        "FlaxXLMRobertaForSequenceClassification",
+        "FlaxXLMRobertaForTokenClassification",
+        "FlaxXLMRobertaModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_xlm_roberta import (
@@ -101,7 +111,17 @@ if TYPE_CHECKING:
             TFXLMRobertaModel,
         )
 
+    if is_flax_available():
+        from .modeling_flax_xlm_roberta import (
+            FlaxXLMRobertaForMaskedLM,
+            FlaxXLMRobertaForMultipleChoice,
+            FlaxXLMRobertaForQuestionAnswering,
+            FlaxXLMRobertaForSequenceClassification,
+            FlaxXLMRobertaForTokenClassification,
+            FlaxXLMRobertaModel,
+        )
+
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

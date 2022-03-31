@@ -30,11 +30,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -49,6 +48,9 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..models.auto.modeling_auto import AutoModel
+
+    # Re-export for backward compatibility
+    from .pt_utils import KeyDataset
 else:
     Dataset = None
     KeyDataset = None
@@ -102,7 +104,10 @@ def _pad(items, key, padding_value, padding_side):
 
 
 def pad_collate_fn(tokenizer, feature_extractor):
-    padding_side = "right"
+    # Tokenizer
+    t_padding_side = None
+    # Feature extractor
+    f_padding_side = None
     if tokenizer is None and feature_extractor is None:
         raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
     if tokenizer is not None:
@@ -112,12 +117,22 @@ def pad_collate_fn(tokenizer, feature_extractor):
                 "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
             )
         else:
-            padding_value = tokenizer.pad_token_id
-            padding_side = tokenizer.padding_side
+            t_padding_value = tokenizer.pad_token_id
+            t_padding_side = tokenizer.padding_side
     if feature_extractor is not None:
         # Feature extractor can be images, where no padding is expected
-        padding_value = getattr(feature_extractor, "padding_value", None)
-        padding_side = getattr(feature_extractor, "padding_side", None)
+        f_padding_value = getattr(feature_extractor, "padding_value", None)
+        f_padding_side = getattr(feature_extractor, "padding_side", None)
+
+    if t_padding_side is not None and f_padding_side is not None and t_padding_side != f_padding_side:
+        raise ValueError(
+            f"The feature extractor, and tokenizer don't agree on padding side {t_padding_side} != {f_padding_side}"
+        )
+    padding_side = "right"
+    if t_padding_side is not None:
+        padding_side = t_padding_side
+    if f_padding_side is not None:
+        padding_side = f_padding_side
 
     def inner(items):
         keys = set(items[0].keys())
@@ -129,11 +144,16 @@ def pad_collate_fn(tokenizer, feature_extractor):
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
-            if key.startswith("input_"):
-                _padding_value = padding_value
-            elif key == "p_mask":
+            if key in {"input_ids"}:
+                _padding_value = t_padding_value
+            elif key in {"input_values", "pixel_values", "input_features"}:
+                _padding_value = f_padding_value
+            elif key in {"p_mask", "special_tokens_mask"}:
                 _padding_value = 1
+            elif key in {"attention_mask", "token_type_ids"}:
+                _padding_value = 0
             else:
+                # This is likely another random key maybe even user provided
                 _padding_value = 0
             padded[key] = _pad(items, key, _padding_value, padding_side)
         return padded
@@ -742,6 +762,8 @@ class Pipeline(_ScikitCompat):
             self.model.config.update(task_specific_params.get(task))
 
         self.call_count = 0
+        self._batch_size = kwargs.pop("batch_size", None)
+        self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
     def save_pretrained(self, save_directory: str):
@@ -947,9 +969,21 @@ class Pipeline(_ScikitCompat):
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=0, batch_size=1, **kwargs):
+    def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        if num_workers is None:
+            if self._num_workers is None:
+                num_workers = 0
+            else:
+                num_workers = self._num_workers
+        if batch_size is None:
+            if self._batch_size is None:
+                batch_size = 1
+            else:
+                batch_size = self._batch_size
+
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.

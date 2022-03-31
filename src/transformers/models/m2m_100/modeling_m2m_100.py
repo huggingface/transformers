@@ -24,13 +24,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,7 +31,14 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_m2m_100 import M2M100Config
 
 
@@ -167,16 +167,16 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
             )
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
-            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length)
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
@@ -191,7 +191,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         position_ids = torch.arange(
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
-        return position_ids.unsqueeze(0).expand(input_shape).contiguous()
+        return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->M2M100
@@ -217,7 +217,7 @@ class M2M100Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -566,17 +566,19 @@ M2M_100_START_DOCSTRING = r"""
 M2M_100_GENERATION_EXAMPLE = r"""
     Translation example::
 
-        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+    ```python
+    >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
 
-        >>> model = M2M100ForConditionalGeneration.from_pretrained('facebook/m2m100_418M') >>> tokenizer =
-        M2M100Tokenizer.from_pretrained('facebook/m2m100_418M')
+    >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
+    >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
 
-        >>> text_to_translate = "Life is like a box of chocolates" >>> model_inputs = tokenizer(text_to_translate,
-        return_tensors='pt')
+    >>> text_to_translate = "Life is like a box of chocolates"
+    >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
 
-        >>> # translate to French >>> gen_tokens = model.generate( **model_inputs,
-        forced_bos_token_id=tokenizer.get_lang_id("fr")) >>> print(tokenizer.batch_decode(gen_tokens,
-        skip_special_tokens=True))
+    >>> # translate to French
+    >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
+    >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
+    ```
 """
 
 M2M_100_INPUTS_DOCSTRING = r"""
@@ -665,7 +667,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -751,7 +753,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -950,7 +952,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

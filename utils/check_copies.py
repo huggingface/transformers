@@ -19,6 +19,7 @@ import os
 import re
 
 import black
+from doc_builder.style_doc import style_docstrings_in_code
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -87,7 +88,7 @@ def find_code_in_transformers(object_name):
     line_index = 0
     for name in parts[i + 1 :]:
         while (
-            line_index < len(lines) and re.search(fr"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
+            line_index < len(lines) and re.search(rf"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
         ):
             line_index += 1
         indent += "    "
@@ -129,7 +130,9 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+    result = black.format_str(code, mode=mode)
+    result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
 
 
@@ -329,7 +332,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
 
 def convert_readme_to_index(model_list):
-    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
     return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
 
@@ -361,6 +364,22 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+    # Fix potential doc links in the README
+    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
+        readme = f.read()
+    new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
+    new_readme = readme.replace(
+        "https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main"
+    )
+    if new_readme != readme:
+        if overwrite:
+            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(new_readme)
+        else:
+            raise ValueError(
+                "The main README contains wrong links to the documentation of Transformers. Run `make fix-copies` to "
+                "automatically fix them."
+            )
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     index_list, start_index, end_index, lines = _find_text_in_file(

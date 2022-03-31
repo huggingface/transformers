@@ -34,6 +34,8 @@ By default a [`Trainer`] will use the following callbacks:
 - [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
 - [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
   installed.
+- [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
+  installed.
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
@@ -65,6 +67,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
     - setup
 
 [[autodoc]] integrations.AzureMLCallback
+
+[[autodoc]] integrations.CodeCarbonCallback
 
 ## TrainerCallback
 

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
@@ -76,4 +76,5 @@ else:
         globals()["__file__"],
         _import_structure,
         extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+        module_spec=__spec__,
     )
