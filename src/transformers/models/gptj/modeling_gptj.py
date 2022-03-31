@@ -883,6 +883,8 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        expected_output= "",
+        expected_loss= "",
     )
     def forward(
         self,
@@ -1009,6 +1011,8 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output = "",
+        expected_loss = "",
     )
     def forward(
         self,
