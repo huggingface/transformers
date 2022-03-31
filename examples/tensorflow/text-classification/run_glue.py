@@ -236,7 +236,12 @@ def main():
 
     # Downloading and loading a dataset from the hub. In distributed training, the load_dataset function guarantee
     # that only one local process can concurrently download the dataset.
-    datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        "glue",
+        data_args.task_name,
+        cache_dir=model_args.cache_dir,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
