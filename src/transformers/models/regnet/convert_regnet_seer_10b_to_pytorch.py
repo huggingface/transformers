@@ -178,14 +178,14 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
-    print("going to load the model")
-    from_model = names_to_from_model[model_name]()
-    print("loaded the model")
-    converted_state_dict = {}
+    # print("going to load the model")
+    # from_model = names_to_from_model[model_name]()
+    # print("loaded the model")
+    # converted_state_dict = {}
 
-    from_state_dict = from_model.state_dict()
-    for src_key, dest_key in from_to_ours_keys.items():
-        converted_state_dict[dest_key] = from_state_dict.pop(src_key)
+    # from_state_dict = from_model.state_dict()
+    # for src_key, dest_key in from_to_ours_keys.items():
+    #     converted_state_dict[dest_key] = from_state_dict.pop(src_key)
 
     # torch.save(converted_state_dict, str(save_directory))
 
