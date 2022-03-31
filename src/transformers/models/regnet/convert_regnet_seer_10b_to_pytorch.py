@@ -16,7 +16,7 @@ from transformers.utils import logging
 from vissl.models.model_helpers import get_trunk_forward_outputs
 from functools import partial
 from collections import OrderedDict
-
+import re
 from pprint import pprint
 logging.set_verbosity_info()
 logger = logging.get_logger()
@@ -182,10 +182,13 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     for name, param in from_state_dict.items():
         print(name, param.shape)
+    
+    regex = r"\.block.-part."
 
-    for src_key, dest_key in from_to_ours_keys.items():
+    for key in from_state_dict.keys():
+        src_key = re.sub(regex, "", key)
+        dest_key = from_to_ours_keys[src_key]
         converted_state_dict[dest_key] = from_state_dict.pop(src_key)
-
     # torch.save(converted_state_dict, str(save_directory))
 
 if __name__ == "__main__":
