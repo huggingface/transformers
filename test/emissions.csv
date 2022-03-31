@@ -1,5 +1,0 @@
-timestamp,experiment_id,project_name,duration,emissions,energy_consumed,country_name,country_iso_code,region,on_cloud,cloud_provider,cloud_region
-2022-03-28T16:44:06,6f91385e-10ad-46d5-a007-3dc290ad7779,codecarbon,3.4152050018310547,5.096715867918946e-07,8.364639450471574e-07,Denmark,DNK,north denmark,N,,
-2022-03-28T16:44:10,deb1d3fa-0538-4ae2-bd04-7de1c0739829,codecarbon,3.3652255535125732,4.3282434582637574e-07,7.10343619704686e-07,Denmark,DNK,north denmark,N,,
-2022-03-29T18:56:30,9b6b87a3-d1f5-4b28-95c2-00b3438483e9,codecarbon,3.37162446975708,5.007159625876499e-07,8.21766133855848e-07,Denmark,DNK,north denmark,N,,
-2022-03-29T18:56:34,40234f47-4fb4-4e2f-9945-052bd09504a3,codecarbon,3.3688435554504395,4.526105805420201e-07,7.42816436272808e-07,Denmark,DNK,north denmark,N,,
