@@ -970,7 +970,7 @@ We get the same translation as with the pipeline example.
 
 ## Audio classification
 
-Audio classification assigns a class to an audio signal. The Keyword Spotting dataset from the [SUPERB](https://huggingface.co/datasets/superb) benchmark is an example dataset that can be used for audio classification fine-tuning. This dataset contains ten classes of keywords for classification. If you'd like to fine-tune a model for audio classification, take a look at the [run_audio_classification.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/audio-classification/run_audio_classification.py) script or the how-to guide [here](/tasks/audio_classification).
+Audio classification assigns a class to an audio signal. The Keyword Spotting dataset from the [SUPERB](https://huggingface.co/datasets/superb) benchmark is an example dataset that can be used for audio classification fine-tuning. This dataset contains ten classes of keywords for classification. If you'd like to fine-tune a model for audio classification, take a look at the [run_audio_classification.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/audio-classification/run_audio_classification.py) script or the how-to guide [here](./tasks/audio_classification).
 
 The following examples demonstrate how to use a [`pipeline`] and a model and tokenizer for audio classification inference:
 
@@ -1006,8 +1006,8 @@ The general process for using a model and tokenizer for audio classification is:
 >>> dataset = dataset.sort("id")
 >>> sampling_rate = dataset.features["audio"].sampling_rate
 
->>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
->>> model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
+>>> model = AutoModelForAudioClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
 
 >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 
@@ -1023,7 +1023,7 @@ The general process for using a model and tokenizer for audio classification is:
 
 ## Automatic speech recognition
 
-Automatic speech recognition transcribes an audio signal to text. The [Common Voice](https://huggingface.co/datasets/common_voice) dataset is an example dataset that can be used for automatic speech recognition fine-tuning. It contains an audio file of a speaker and the corresponding sentence. If you'd like to fine-tune a model for automatic speech recognition, take a look at the [run_speech_recognition_ctc.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) or [run_speech_recognition_seq2seq.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_seq2seq.py )scripts or the how-to guide [here](/tasks/asr).
+Automatic speech recognition transcribes an audio signal to text. The [Common Voice](https://huggingface.co/datasets/common_voice) dataset is an example dataset that can be used for automatic speech recognition fine-tuning. It contains an audio file of a speaker and the corresponding sentence. If you'd like to fine-tune a model for automatic speech recognition, take a look at the [run_speech_recognition_ctc.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) or [run_speech_recognition_seq2seq.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_seq2seq.py) scripts or the how-to guide [here](./tasks/asr).
 
 The following examples demonstrate how to use a [`pipeline`] and a model and tokenizer for automatic speech recognition inference:
 
@@ -1031,8 +1031,8 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> from transformers import pipeline
 
 >>> speech_recognizer = pipeline(
-   task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h"
-)
+...     task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h"
+... )
 >>> speech_recognizer("jfk_moon_speech.wav")
 {'text': "PRESENTETE MISTER VICE PRESIDENT GOVERNOR CONGRESSMEN THOMAS SAN O TE WILAN CONGRESSMAN MILLA MISTER WEBB MSTBELL SCIENIS DISTINGUISHED GUESS AT LADIES AND GENTLEMAN I APPRECIATE TO YOUR PRESIDENT HAVING MADE ME AN HONORARY VISITING PROFESSOR AND I WILL ASSURE YOU THAT MY FIRST LECTURE WILL BE A VERY BRIEF I AM DELIGHTED TO BE HERE AND I'M PARTICULARLY DELIGHTED TO BE HERE ON THIS OCCASION WE MEED AT A COLLEGE NOTED FOR KNOWLEGE IN A CITY NOTED FOR PROGRESS IN A STATE NOTED FOR STRAINTH AN WE STAND IN NEED OF ALL THREE"}
 ```
@@ -1071,7 +1071,7 @@ The general process for using a model and tokenizer for automatic speech recogni
 
 ## Image classification
 
-Like text and audio classification, image classification assigns a class to an image. The [CIFAR-100](https://huggingface.co/datasets/cifar100) dataset is an example dataset that can be used for image classification fine-tuning. It contains an image and the corresponding class. If you'd like to fine-tune a model for image classification, take a look at the [run_image_classification.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification.py) script or the how-to guide [here](/tasks/image_classification).
+Like text and audio classification, image classification assigns a class to an image. The [CIFAR-100](https://huggingface.co/datasets/cifar100) dataset is an example dataset that can be used for image classification fine-tuning. It contains an image and the corresponding class. If you'd like to fine-tune a model for image classification, take a look at the [run_image_classification.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification.py) script or the how-to guide [here](./tasks/image_classification).
 
 The following examples demonstrate how to use a [`pipeline`] and a model and tokenizer for image classification inference:
 
