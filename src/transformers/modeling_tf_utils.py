@@ -434,10 +434,12 @@ def _input_processing(func, config, input_ids, **kwargs):
 
     if has_kwargs:
         output["kwargs"] = kwargs.pop("kwargs_call", {})
-    elif len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
+    else:
+        if len(kwargs["kwargs_call"]) > 0:
+            raise ValueError(
+                f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+            )
+        kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
