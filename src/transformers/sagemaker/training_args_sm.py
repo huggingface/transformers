@@ -90,10 +90,10 @@ class SageMakerTrainingArguments(TrainingArguments):
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
-            import smdistributed.dataparallel.torch.distributed as dist
+            import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
 
-            dist.init_process_group()
-            self.local_rank = dist.get_local_rank()
+            torch.distributed.init_process_group(backend="smddp")
+            self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.local_rank == -1:
