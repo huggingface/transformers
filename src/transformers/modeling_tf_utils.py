@@ -316,7 +316,7 @@ def booleans_processing(config, **kwargs):
             final_booleans["output_attentions"] = (
                 kwargs["output_attentions"]
                 if kwargs["output_attentions"] is not None
-                else config.output_hidden_states
+                else config.output_attentions
             )
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
