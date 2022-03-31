@@ -2081,10 +2081,12 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="saibo/legal-longformer-base-4096",
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
+        expected_output="' no'",
+        expected_loss=4.5,
     )
     def call(
         self,
@@ -2178,6 +2180,8 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         checkpoint="allenai/longformer-large-4096-finetuned-triviaqa",
         output_type=TFLongformerQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="' puppet'",
+        expected_loss=0.96,
     )
     def call(
         self,
@@ -2325,6 +2329,8 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="LABEL_0",
+        expected_loss=0.58,
     )
     def call(
         self,
@@ -2565,6 +2571,8 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0']",
+        expected_loss=0.62,
     )
     def call(
         self,
