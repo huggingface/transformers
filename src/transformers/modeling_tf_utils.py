@@ -312,9 +312,12 @@ def booleans_processing(config, **kwargs):
 
     if tf.executing_eagerly():
         # Pure conv models (such as ConvNext) do not have `output_attentions`
-        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
-        if final_booleans["output_attentions"] is None:
-            final_booleans["output_attentions"] = config.output_attentions
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = (
+                kwargs["output_attentions"]
+                if kwargs["output_attentions"] is not None
+                else config.output_hidden_states
+            )
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -329,7 +332,9 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
-        final_booleans["output_attentions"] = config.output_attentions
+        # Pure conv models (such as ConvNext) do not have `output_attentions`
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs.get("return_dict", None) not in (None, True):
