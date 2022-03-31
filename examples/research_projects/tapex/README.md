@@ -18,7 +18,7 @@ limitations under the License.
 
 TAPEX is a table pre-training approach for table-related tasks. By learning a neural SQL executor over a synthetic corpus based on generative language models (e.g., BART), it achieves state-of-the-art performance on several table-based question answering benchmarks and table-based fact verification benchmark. More details can be found in the original paper [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/pdf/2107.07653.pdf).
 
-> If you are also familiar with fairseq, you may also find useful [the official implementation in fairseq](https://github.com/microsoft/Table-Pretraining).
+> If you are also familiar with [fairseq](https://github.com/pytorch/fairseq), you may also find [the official implementation](https://github.com/microsoft/Table-Pretraining) useful, which leverages the framework.
 
 ## Table Question Answering Tasks
 

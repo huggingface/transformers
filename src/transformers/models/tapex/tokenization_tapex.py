@@ -170,12 +170,12 @@ class IndexedRowTableLinearize:
         """
         assert "header" in table_content and "rows" in table_content, self.PROMPT_MESSAGE
         # process header
-        _table_str = self.process_header(table_content["header"]) + " "
+        table_str = self.process_header(table_content["header"]) + " "
         # process rows
         for i, row_example in enumerate(table_content["rows"]):
             # NOTE: the row should start from row 1 instead of 0
-            _table_str += self.process_row(row_example, row_index=i + 1) + " "
-        return _table_str.strip()
+            table_str += self.process_row(row_example, row_index=i + 1) + " "
+        return table_str.strip()
 
     def process_header(self, headers: List):
         """

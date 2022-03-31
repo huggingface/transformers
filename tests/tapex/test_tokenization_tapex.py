@@ -36,34 +36,14 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
     test_seq2seq = False
-    maxDiff = None
 
     def setUp(self):
         super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "<unk>",
-        ]
+        # fmt: off
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "\u0120", "\u0120l", "\u0120n", "\u0120lo", "\u0120low", "er", "\u0120lowest", "\u0120newer", "\u0120wider", "<unk>"]  # noqa: E231
+        # fmt: on
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}
@@ -87,11 +67,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return table
 
-    def get_table_and_query(
-        self,
-        tokenizer: TapexTokenizer,
-        length=5,
-    ):
+    def get_table_and_query(self, tokenizer, length=5):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
         table = self.get_table(tokenizer, length=length - 3)
         query = " ".join(toks[:3])
