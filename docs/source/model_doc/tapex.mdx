@@ -41,13 +41,13 @@ Tips:
 - TAPEX is a generative (seq2seq) model. One can directly plug in the weights of TAPEX into a BART model. 
 - TAPEX has checkpoints on the hub that are either pre-trained only, or fine-tuned on WTQ, SQA, WikiSQL and TabFact.
 - Sentences + tables are presented to the model as `sentence + " " + linearized table`. The linearized table has the following format: 
-`col: col1 | col2 | col 3 row 1 : val1 | val2 | val3 row 2 : ...`.
+  `col: col1 | col2 | col 3 row 1 : val1 | val2 | val3 row 2 : ...`.
 - TAPEX has its own tokenizer, that allows to prepare all data for the model easily. One can pass Pandas DataFrames and strings to the tokenizer,
-and it will automatically create the `input_ids` and `attention_mask` (as shown in the usage examples below). 
+  and it will automatically create the `input_ids` and `attention_mask` (as shown in the usage examples below). 
 
 ## Usage: inference
 
-Below, we illustrate how to use TAPEX for TableQA. As one can see, one can directly plug in the weights of TAPEX into a BART model.
+Below, we illustrate how to use TAPEX for table question answering. As one can see, one can directly plug in the weights of TAPEX into a BART model.
 
 ```python
 from transformers import TapexTokenizer, BartForConditionalGeneration

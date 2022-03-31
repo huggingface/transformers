@@ -75,11 +75,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_table(
-        self,
-        tokenizer: TapexTokenizer,
-        length=5,
-    ):
+    def get_table(self, tokenizer, length=5):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
 
         if length == 0:
@@ -104,7 +100,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_clean_sequence(
         self,
-        tokenizer: TapexTokenizer,
+        tokenizer,
         with_prefix_space=False,
         max_length=20,
         min_length=5,
