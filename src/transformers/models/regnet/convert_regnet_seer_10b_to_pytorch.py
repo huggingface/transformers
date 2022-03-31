@@ -152,40 +152,30 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         ),
     }
     # add seer weights logic
-    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> Tuple[nn.Module, Dict]:
+    def load_using_classy_vision(checkpoint_url: str) -> Tuple[Dict, Dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
-        model = model_func()
         # check if we have a head, if yes add it
         model_state_dict = files["classy_state_dict"]["base_model"]["model"]
-        state_dict = model_state_dict["trunk"]
-        model.load_state_dict(state_dict)
-        return model.eval(), model_state_dict["heads"]
+        return model_state_dict["trunk"], model_state_dict["heads"]
 
     names_to_from_model = {
         "regnet-y-10b-seer" : partial(
         load_using_classy_vision,
-        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch",
-        lambda: FakeRegNetVisslWrapper(
-            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
-        )),
+        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch"),
         "regnet-y-10b-seer-in1k" : partial(
         load_using_classy_vision,
-        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch",
-        lambda: FakeRegNetVisslWrapper(
-            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
-        ))
+        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch")
     }
 
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
-    # print("going to load the model")
-    # from_model = names_to_from_model[model_name]()
-    # print("loaded the model")
-    # converted_state_dict = {}
+    print("going to load the state_dict")
+    from_state_dict, _ = names_to_from_model[model_name]()
+    print("loaded the state_dict")
+    converted_state_dict = {}
 
-    # from_state_dict = from_model.state_dict()
-    # for src_key, dest_key in from_to_ours_keys.items():
-    #     converted_state_dict[dest_key] = from_state_dict.pop(src_key)
+    for src_key, dest_key in from_to_ours_keys.items():
+        converted_state_dict[dest_key] = from_state_dict.pop(src_key)
 
     # torch.save(converted_state_dict, str(save_directory))
 
