@@ -125,6 +125,12 @@ def get_from_to_our_keys(model_name: str):
         from_to_ours_keys["0.clf.0.bias"] = "classifier.1.bias"
 
 
+    for name, param in src_state_dict.items():
+        print(name, param.shape)
+
+    print("[HERE]")
+        
+
     return from_to_ours_keys
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
@@ -176,7 +182,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     for name, param in from_state_dict.items():
         print(name, param.shape)
-        
+
     for src_key, dest_key in from_to_ours_keys.items():
         converted_state_dict[dest_key] = from_state_dict.pop(src_key)
 
