@@ -702,6 +702,9 @@ def main():
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
     num_train_steps = len(tokenized_datasets["train"]) // train_batch_size * num_epochs
+    
+    num_of_hosts = jax.process_count()
+    current_host_idx = jax.process_index()
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -817,9 +820,16 @@ def main():
         for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
-
+            
+            local_host_model_inputs = {
+                key: np.split(model_inputs.data[key], num_of_hosts, axis=0)[
+                    current_host_idx
+                ]
+                for key, value in model_inputs.data.items()
+            }
+            
             # Model forward
-            model_inputs = shard(model_inputs.data)
+            model_inputs = shard(local_host_model_inputs)
             state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(train_metric)
 
