@@ -1572,7 +1572,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 import math
 import copy
 import random
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
