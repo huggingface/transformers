@@ -269,7 +269,7 @@ class BertSelfAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -403,7 +403,7 @@ class BertAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -471,7 +471,7 @@ class BertLayer(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -551,7 +551,7 @@ class BertEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -911,7 +911,7 @@ class BertModel(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1064,7 +1064,7 @@ class BertForPreTraining(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BertForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.Tensor], BertForPreTrainingOutput]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1178,7 +1178,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
             encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
@@ -1341,7 +1341,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1432,7 +1432,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, NextSentencePredictorOutput]:
+    ) -> Union[Tuple[torch.Tensor], NextSentencePredictorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
@@ -1546,7 +1546,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1646,7 +1646,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -1745,7 +1745,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1827,7 +1827,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
