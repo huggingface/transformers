@@ -244,9 +244,9 @@ class FlaxSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
         default=None,
         metadata={
             "help": "Floating-point format in which to store the model parameters. Can be used on TPU to explicitly "
-                    "convert the model parameters to bfloat16 precision to do full half-precision training "
-                    "or to save weights in bfloat16 for inference in order to save memory and improve speed. "
-                    "One of `[to_fp32, to_fp16, to_bf16]`"
+            "convert the model parameters to bfloat16 precision to do full half-precision training "
+            "or to save weights in bfloat16 for inference in order to save memory and improve speed. "
+            "One of `[to_fp32, to_fp16, to_bf16]`"
         },
     )
     matmul_precision: str = field(
@@ -892,7 +892,9 @@ def main():
                 init_loss_labels_grad,
             )
             # normalise losses and gradients over the number of gradient accumulation steps
-            loss, labels_size, grad = jax.tree_map(lambda x: x / gradient_accumulation_steps, (loss, labels_size, grad))
+            loss, labels_size, grad = jax.tree_map(
+                lambda x: x / gradient_accumulation_steps, (loss, labels_size, grad)
+            )
 
         # weighted sum over pmapped axis
         grad = jax.lax.psum(grad, "batch")
