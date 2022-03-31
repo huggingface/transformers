@@ -307,6 +307,6 @@ def find_labels(model_class):
     else:
         signature = inspect.signature(model_class.forward)
     if "QuestionAnswering" in model_name:
-        return [p for p in signature.parameters if "label" in p or p == "start_positions" or p == "end_positions"]
+        return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:
         return [p for p in signature.parameters if "label" in p]
