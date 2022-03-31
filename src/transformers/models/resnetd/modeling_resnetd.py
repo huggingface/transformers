@@ -25,7 +25,7 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutput,
+    ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -50,6 +50,7 @@ RESNETD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "zuppif/resnet-d-50",
     # See all resnetd models at https://huggingface.co/models?filter=resnetd
 ]
+
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer with ResNet->ResNetD
 class ResNetDConvLayer(nn.Sequential):
@@ -348,7 +349,7 @@ class ResNetDForImageClassification(ResNetDPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -358,7 +359,7 @@ class ResNetDForImageClassification(ResNetDPreTrainedModel):
         labels: Tensor = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
-    ) -> ImageClassifierOutput:
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -399,4 +400,4 @@ class ResNetDForImageClassification(ResNetDPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
