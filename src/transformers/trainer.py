@@ -489,6 +489,11 @@ class Trainer:
             self.label_smoother = None
 
         self.state = TrainerState()
+        
+        # initialize the default rank set on TrainerState
+        self.state.is_local_process_zero = self.is_local_process_zero()
+        self.state.is_world_process_zero = self.is_world_process_zero()
+        
         self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
