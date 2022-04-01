@@ -29,6 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -52,7 +53,7 @@ from .configuration_mctc import MCTCConfig
 
 logger = logging.get_logger(__name__)
 
-_HIDDEN_STATES_START_POSITION = 2
+_HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "MCTCConfig"
 _TOKENIZER_FOR_DOC = "MCTCTokenizer"
@@ -577,153 +578,6 @@ class MCTCLayer(nn.Module):
         return layer_output
 
 
-class MCTCEncoder(nn.Module):
-    def __init__(self, config: MCTCConfig):
-        super().__init__()
-
-        self.num_conv_layers = config.num_conv_layers
-        self.conv_kernel = config.conv_kernel
-        self.conv_stride = config.conv_stride
-        self.conv_dropout = config.conv_dropout
-        self.conv_glu_dim = config.conv_glu_dim
-
-        self.hidden_dropout_prob = config.hidden_dropout_prob
-        self.layerdrop = config.layerdrop
-
-        self.conv = Conv1dSubsampler(config)
-        self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(config.hidden_size)
-
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        input_features,
-        attention_mask,
-        head_mask,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        inputs_embeds = self.conv(input_features)
-        
-        # inputs_embeds = self.embed_scale * inputs_embeds
-
-        # subsample attention mask if necessary
-        # if attention_mask is not None:
-        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-        #     padding_mask = attention_mask.ne(1).long()
-        # else:
-        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
-
-        # # review whether there's no position embeddings here. For now going with:
-        # print("inputs_embeds", inputs_embeds.size())
-        # print("padding_mask", padding_mask.size())
-
-
-        hidden_states = inputs_embeds
-        # embed_pos = self.embed_positions(padding_mask)
-        # hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
-
-        # expand attention_mask
-        # if attention_mask is not None:
-        #     print("inputs_embeds", inputs_embeds.dtype)
-        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        #     attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-
-        # print("attention_mask", attention_mask.size())
-        # print("hidden_states", hidden_states.size())
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        # attention_mask,
-                        # (head_mask[idx] if head_mask is not None else None),
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states=hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                    )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        
-        hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-   
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers
-        """
-        padding = 0
-        dilation = 1
-        for i, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
-            input_lengths = ((input_lengths + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
-            input_lengths = input_lengths // self.conv_glu_dim
-        return input_lengths
-        
-    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
-        # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
-        if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, :, -1]
-
-        # subsampled_lengths = attention_mask.sum(-1)
-        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
-        bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros(
-            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-
-        # these two operations makes sure that all values
-        # before the output lengths indices are attended to
-        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
-        return attention_mask
-
 
 class MCTCPreTrainedModel(PreTrainedModel):
     """
@@ -758,6 +612,36 @@ class MCTCPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        padding = 0
+        dilation = 1
+        for i, kernel_sz, stride in zip(range(self.config.num_conv_layers), self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = ((input_lengths + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
+            input_lengths = input_lengths // self.config.conv_glu_dim
+        return input_lengths
+        
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
+        # generate creates 3D attention mask, because of the shape of input_features
+        # convert it to 2D if thats the case
+        if len(attention_mask.shape) > 2:
+            attention_mask = attention_mask[:, :, -1]
+
+        # subsampled_lengths = attention_mask.sum(-1)
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+        bsz = attention_mask.size()[0]
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+
+        # these two operations makes sure that all values
+        # before the output lengths indices are attended to
+        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
+        return attention_mask
 
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -825,6 +709,129 @@ MCTC_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
+
+
+class MCTCEncoder(MCTCPreTrainedModel):
+    def __init__(self, config: MCTCConfig):
+        super().__init__(config)
+
+        # self.num_conv_layers = config.num_conv_layers
+        # self.conv_kernel = config.conv_kernel
+        # self.conv_stride = config.conv_stride
+        # self.conv_dropout = config.conv_dropout
+        # self.conv_glu_dim = config.conv_glu_dim
+
+        self.hidden_dropout_prob = config.hidden_dropout_prob
+
+        self.conv = Conv1dSubsampler(config)
+        self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        input_features,
+        attention_mask,
+        head_mask,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        inputs_embeds = self.conv(input_features)
+        
+        # inputs_embeds = self.embed_scale * inputs_embeds
+
+        # subsample attention mask if necessary
+        # if attention_mask is not None:
+        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+        #     padding_mask = attention_mask.ne(1).long()
+        # else:
+        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
+
+        # # review whether there's no position embeddings here. For now going with:
+        # print("inputs_embeds", inputs_embeds.size())
+        # print("padding_mask", padding_mask.size())
+
+
+        hidden_states = inputs_embeds
+        # embed_pos = self.embed_positions(padding_mask)
+        # hidden_states = inputs_embeds + embed_pos
+        hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
+
+        # expand attention_mask
+        # if attention_mask is not None:
+        #     print("inputs_embeds", inputs_embeds.dtype)
+        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        #     attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+
+        # print("attention_mask", attention_mask.size())
+        # print("hidden_states", hidden_states.size())
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        for idx, encoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                if self.gradient_checkpointing and self.training:
+
+                    def create_custom_forward(module):
+                        def custom_forward(*inputs):
+                            return module(*inputs, output_attentions)
+
+                        return custom_forward
+         
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        # attention_mask,
+                        # (head_mask[idx] if head_mask is not None else None),
+                    )
+                else:
+                    layer_outputs = encoder_layer(
+                        hidden_states=hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
+                    )
+
+                hidden_states = layer_outputs[0]
+
+            
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+        # hidden_states = self.layer_norm(hidden_states)
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
+   
+    
 
 @add_start_docstrings(
     "The bare mCTC Model transformer outputting raw hidden-states without any specific head on top.",
@@ -970,8 +977,8 @@ class MCTCForCTC(MCTCPreTrainedModel):
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
             )
-            # input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-            input_lengths = attention_mask.sum(-1)
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            # input_lengths = attention_mask.sum(-1)
             # assuming that padded tokens are filled with -100
             # when not being attended to
             labels_mask = labels >= 0

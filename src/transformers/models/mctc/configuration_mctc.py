@@ -84,8 +84,7 @@ class MCTCConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "mctc"
     
     def __init__(

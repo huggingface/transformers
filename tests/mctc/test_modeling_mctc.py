@@ -433,45 +433,45 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
     # def test_equivalence_pt_to_flax(self):
     #     pass
 
-    # def test_retain_grad_hidden_states_attentions(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.output_hidden_states = True
-    #     config.output_attentions = True
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+        config.layerdrop = 0.0
 
-    #     # no need to test all models as different heads yield the same functionality
-    #     model_class = self.all_model_classes[0]
-    #     model = model_class(config)
-    #     model.to(torch_device)
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
 
-    #     # set layer drop to 0
-    #     model.config.layerdrop = 0.0
+        
 
-    #     input_features = inputs_dict["input_features"]
+        input_features = inputs_dict["input_features"]
 
-    #     input_lengths = torch.tensor(
-    #         [input_features.shape[1] for _ in range(input_features.shape[0])], dtype=torch.long, device=torch_device
-    #     )
-    #     output_lengths = model._get_feat_extract_output_lengths(input_lengths)
+        input_lengths = torch.tensor(
+            [input_features.shape[1] for _ in range(input_features.shape[0])], dtype=torch.long, device=torch_device
+        )
+        output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-    #     labels = ids_tensor((input_features.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
-    #     inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
-    #     inputs_dict["labels"] = labels
+        labels = ids_tensor((input_features.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+        inputs_dict["labels"] = labels
 
-    #     outputs = model(**inputs_dict)
+        outputs = model(**inputs_dict)
 
-    #     output = outputs[0]
+        output = outputs[0]
 
-    #     # Encoder-/Decoder-only models
-    #     hidden_states = outputs.hidden_states[0]
-    #     attentions = outputs.attentions[0]
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0]
+        attentions = outputs.attentions[0]
 
-    #     hidden_states.retain_grad()
-    #     attentions.retain_grad()
+        hidden_states.retain_grad()
+        attentions.retain_grad()
 
-    #     output.flatten()[0].backward(retain_graph=True)
+        output.flatten()[0].backward(retain_graph=True)
 
-    #     self.assertIsNotNone(hidden_states.grad)
-    #     self.assertIsNotNone(attentions.grad)
+        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(attentions.grad)
 
     # def test_initialization(self):
     #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
