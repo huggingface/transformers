@@ -976,7 +976,7 @@ class GenerationMixin:
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
                 at a particular time. Note that `diversity_penalty` is only effective if `group beam search` is
                 enabled.
-            prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned

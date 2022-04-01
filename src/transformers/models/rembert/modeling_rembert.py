@@ -370,7 +370,7 @@ class RemBertAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -441,7 +441,7 @@ class RemBertLayer(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
