@@ -4,6 +4,7 @@ from typing import Callable, Dict, Optional, Tuple, Type, Union
 from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
+from ..models.beit import BeitOnnxConfig
 from ..models.bert import BertOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
@@ -270,6 +271,7 @@ class FeaturesManager:
             onnx_config_cls=ElectraOnnxConfig,
         ),
         "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
+        "beit": supported_features_mapping("default", "image-classification", onnx_config_cls=BeitOnnxConfig),
         "blenderbot": supported_features_mapping(
             "default",
             "default-with-past",
