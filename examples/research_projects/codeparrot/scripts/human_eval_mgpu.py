@@ -3,14 +3,14 @@ import multiprocessing
 import os
 import re
 
-from datasets import load_dataset, load_metric
-from tqdm import tqdm
 import torch
+from datasets import load_dataset, load_metric
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
+from tqdm import tqdm
 
-from accelerate import Accelerator
 import transformers
+from accelerate import Accelerator
 from arguments import HumanEvalArguments
 from transformers import (
     AutoModelForCausalLM,
@@ -30,6 +30,7 @@ class TokenizeDataset(IterableDataset):
     Multiple copies of the same prompt are sent sequentially.
     See compute_code for more details.
     """
+
     def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1):
         self.tokenizer = tokenizer
         self.dataset = dataset
@@ -39,9 +40,9 @@ class TokenizeDataset(IterableDataset):
     def __iter__(self):
         for task in range(self.n_tasks):
             # without strip, the model generate commented codes ...
-            prompt = self.tokenizer.eos_token + self.dataset[task]['prompt'].strip()
+            prompt = self.tokenizer.eos_token + self.dataset[task]["prompt"].strip()
             # codeparrot model is not robust to padding
-            input_ids = self.tokenizer(prompt)['input_ids']
+            input_ids = self.tokenizer(prompt)["input_ids"]
             for _ in range(self.n_copies):
                 yield {"ids": torch.tensor(input_ids)}
 
@@ -56,7 +57,7 @@ class EndOfFunctionCriteria(StoppingCriteria):
 
     def __call__(self, input_ids, scores, **kwargs):
         """Returns true if all generated sequences contain any of the end-of-function strings."""
-        decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length:])
+        decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length :])
         done = []
         for decoded_generation in decoded_generations:
             done.append(any([stop_string in decoded_generation for stop_string in self.eof_strings]))
@@ -64,8 +65,7 @@ class EndOfFunctionCriteria(StoppingCriteria):
 
 
 def remove_last_block(string):
-    """Remove the last block of the code containing EOF_STRINGS
-    """
+    """Remove the last block of the code containing EOF_STRINGS"""
     string_list = re.split("(%s)" % "|".join(EOF_STRINGS), string)
     # last string should be ""
     return "".join(string_list[:-2])
@@ -74,7 +74,7 @@ def remove_last_block(string):
 def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size=20, **gen_kwargs):
     """Generate multiple codes for each task in the dataset. This function leverage accelerator to distribute
     the processing to multiple GPUs.
-    dataloader, a wrapper around a TokenizeDataset objectm is supposed to send all the prompts from 
+    dataloader, a wrapper around a TokenizeDataset objectm is supposed to send all the prompts from
     the evalution dataset to the modelm as the following:
     [p_0_0, p_0_1, ..., p_0_nc-1, p_1_0, ..., p_nt-1_nc-1]
     where nc is the number of copies of the prompt, and nt is the number of tasks.
@@ -88,10 +88,10 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
 
     model: transformers.PreTrainedModel
         Code generation model. AutoTokenizer.from_pretrained(model_ckpt), ex model_ckpt = "lvwerra/codeparrot"
-    
+
     tokenizer: transformers.AutoTokenizer
         The tokenizer used to train model
-    
+
     dataloader: DataLoader
         The dataloader is a wrapper around a TokenizeDataset object. It is designed to be used with multiple GPUs.
 
@@ -100,10 +100,10 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
 
     batch_size: int
         num_return_sequences per copy of the prompt such that num_sample = batch_size * n_copies
-    
+
     gen_kwargs: dict
         Keyword arguments for the generation function of the model.
-    
+
     Returns
     -------
     code_gens: list, len = n_tasks
@@ -115,8 +115,11 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
         with torch.no_grad():
             gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
             generated_tokens = accelerator.unwrap_model(model).generate(
-                input_ids=batch["ids"], num_return_sequences=batch_size, **gen_kwargs)
-            generated_tokens = accelerator.pad_across_processes(generated_tokens, dim=1, pad_index=tokenizer.pad_token_id)
+                input_ids=batch["ids"], num_return_sequences=batch_size, **gen_kwargs
+            )
+            generated_tokens = accelerator.pad_across_processes(
+                generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
+            )
             generated_tokens = accelerator.gather(generated_tokens).cpu().numpy()
             # generated_tokens of shape (n_processes*batch_size, n_tokens)
             gen_dataset_tokens.append(generated_tokens)
@@ -126,7 +129,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
     task_size = len(gen_dataset_tokens) // n_tasks
     for task in range(n_tasks):
         task_gens = []
-        for generated_tokens in gen_dataset_tokens[task * task_size: (task + 1) * task_size]:
+        for generated_tokens in gen_dataset_tokens[task * task_size : (task + 1) * task_size]:
             for s in generated_tokens:
                 gen_code = tokenizer.decode(s, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                 task_gens.append(remove_last_block(gen_code))
@@ -174,7 +177,9 @@ def main():
     n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
     n_copies = args.n_samples // args.batch_size
     if n_copies % accelerator.num_processes != 0:
-        raise ValueError(f'n_samples({args.n_samples}) should be a mulitple of batch_size({args.batch_size}) x num_processes({accelerator.num_processes})')
+        raise ValueError(
+            f"n_samples({args.n_samples}) should be a mulitple of batch_size({args.batch_size}) x num_processes({accelerator.num_processes})"
+        )
     human_eval_td = TokenizeDataset(tokenizer, human_eval["test"], n_copies=n_copies, n_tasks=n_tasks)
     # do not confuse args.batch_size, which is actually the num_return_sequences
     human_eval_loader = DataLoader(human_eval_td, batch_size=1)
