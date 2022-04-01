@@ -114,7 +114,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_samples, batch_si
             gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
             generated_tokens = []
             for _ in range(n_samples // batch_size):
-            # manually truncate the input_ids to avoid zero padding
+                # manually truncate the input_ids to avoid zero padding
                 generated = accelerator.unwrap_model(model).generate(
                     input_ids=batch["ids"][:, : batch["input_len"]], num_return_sequences=batch_size, **gen_kwargs
                 )
@@ -201,8 +201,13 @@ def main():
 
     generations = [[] for _ in range(n_tasks)]
     generation_dict = complete_code(
-        accelerator, model, tokenizer, human_eval_loader,
-        n_samples=args.n_samples, batch_size=args.batch_size, **gen_kwargs
+        accelerator,
+        model,
+        tokenizer,
+        human_eval_loader,
+        n_samples=args.n_samples,
+        batch_size=args.batch_size,
+        **gen_kwargs,
     )
     for task, gen_list in generation_dict.items():
         generations[task].extend(gen_list)
