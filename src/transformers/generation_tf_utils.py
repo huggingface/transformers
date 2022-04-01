@@ -587,6 +587,8 @@ class TFGenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
+                forced_bos_token_id=forced_bos_token_id,
+                forced_eos_token_id=forced_eos_token_id,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1607,6 +1609,8 @@ class TFGenerationMixin:
                 logits_processor=logits_processor,
                 return_dict_in_generate=return_dict_in_generate,
                 num_return_sequences=num_return_sequences,
+                forced_bos_token_id=forced_bos_token_id,
+                forced_eos_token_id=forced_eos_token_id,
                 **model_kwargs,
             )
 
@@ -2320,6 +2324,8 @@ class TFGenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        forced_bos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[int] = None,
         **model_kwargs,
     ) -> Union[TFBeamSearchOutput, tf.Tensor]:
         r"""
@@ -2352,6 +2358,12 @@ class TFGenerationMixin:
                 for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            forced_bos_token_id (`int`, *optional*):
+                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
+                for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
+                the target language token.
+            forced_eos_token_id (`int`, *optional*):
+                The id of the token to force as the last generated token when `max_length` is reached.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model. If model is an
                 encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2481,6 +2493,13 @@ class TFGenerationMixin:
 
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
 
         use_xla = not tf.executing_eagerly()
         # GPT2 has a slightly different cache structure, with a different batch axis
@@ -2633,6 +2652,15 @@ class TFGenerationMixin:
             )
             logits = unflatten_beam_dim(logits, batch_size, num_beams)
 
+            if self.config.is_encoder_decoder:
+                logits = self.adjust_logits_during_generation(
+                    logits,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    forced_bos_token_id=forced_bos_token_id,
+                    forced_eos_token_id=forced_eos_token_id,
+                )
+
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(
                 flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len=cur_len
@@ -2669,12 +2697,15 @@ class TFGenerationMixin:
             # Update current sequences: Did the top `num_beams` sequences reach an end marker?
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large negative value.
-            did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
-            did_topk_just_finished = did_topk_just_finished & tf.broadcast_to(
+            eos_in_next_token = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
+            did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
-                did_topk_just_finished.shape,
+                eos_in_next_token.shape,
             )
-            running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e9
+
+            # non-top `num_beams` eos tokens can't be used to finish a beam, but they can't be used in the next
+            # running sentences either
+            running_topk_log_probs = topk_log_probs + tf.cast(eos_in_next_token, tf.float32) * -1.0e9
 
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs and gather top k beams
