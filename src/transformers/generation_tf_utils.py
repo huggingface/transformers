@@ -2580,7 +2580,7 @@ class TFGenerationMixin:
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)
 
-            return not_max_length_yet & still_open_beam & improvement_still_possible
+            return not_max_length_yet & (still_open_beam | improvement_still_possible)
 
         def beam_search_body_fn(
             cur_len,
@@ -2703,7 +2703,7 @@ class TFGenerationMixin:
                 eos_in_next_token.shape,
             )
 
-            # non-top `num_beams` eos tokens can't be used to finish a beam, but they can't be used in the next
+            # non-top `num_beams` eos tokens can't be used to finish a beam, but the others can't be used in the next
             # running sentences either
             running_topk_log_probs = topk_log_probs + tf.cast(eos_in_next_token, tf.float32) * -1.0e9
 
@@ -3040,7 +3040,6 @@ class BeamHypotheses(object):
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.
         """
-
         if len(self) < self.num_beams:
             return False
         elif self.early_stopping:
