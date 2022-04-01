@@ -1575,9 +1575,16 @@ class Trainer:
                     )
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
-                    state_dict = torch.load(best_model_path, map_location="cpu")
-                    # If the model is on the GPU, it still works!
-                    self._load_state_dict_in_model(state_dict)
+                    if is_sagemaker_mp_enabled():
+                        if self.args.smp_load_partial:
+                            state_dict = smp.load(best_model_path, partial=self.args.smp_load_partial)
+                        else:
+                            state_dict = torch.load(best_model_path, map_location="cpu")
+                        model.load_state_dict(state_dict)
+                    else:
+                        state_dict = torch.load(best_model_path, map_location="cpu")
+                         # If the model is on the GPU, it still works!
+                        self._load_state_dict_in_model(state_dict)
             else:
                 logger.warning(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
