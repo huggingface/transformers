@@ -257,6 +257,9 @@ class Trainer:
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
             by this function will be reflected in the predictions received by `compute_metrics`.
+        include_inputs_for_metrics: bool = None:
+            A flag (True|False) determining if inputs will be passed to the EvalPrediction class. This is intended for
+            metrics that need inputs, predictions and references for scoring calculation in Metric class.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
 
@@ -293,6 +296,8 @@ class Trainer:
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
+        include_inputs_for_metrics: bool = None
+
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -304,6 +309,11 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
+
+        if include_inputs_for_metrics:
+            self.include_inputs_for_metrics = True
+        else:
+            self.include_inputs_for_metrics = False
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -2541,7 +2551,11 @@ class Trainer:
 
         # Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
-            metrics = self.compute_metrics(EvalPrediction(inputs=all_inputs, predictions=all_preds, label_ids=all_labels))
+            if self.include_inputs_for_metrics:
+                metrics = self.compute_metrics(EvalPrediction(inputs=all_inputs, predictions=all_preds,
+                                                              label_ids=all_labels))
+            else:
+                metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
         else:
             metrics = {}
 
@@ -3020,7 +3034,12 @@ class Trainer:
         inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(inputs=inputs_ids, predictions=preds, label_ids=label_ids))
+            if self.include_inputs_for_metrics:
+                metrics = self.compute_metrics(EvalPrediction(inputs=inputs_ids, predictions=preds,
+                                                              label_ids=label_ids))
+            else:
+                metrics = self.compute_metrics(EvalPrediction(predictions=preds,
+                                                              label_ids=label_ids))
         else:
             metrics = {}
 
