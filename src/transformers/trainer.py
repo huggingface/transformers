@@ -991,6 +991,7 @@ class Trainer:
 
             trial.report(self.objective, epoch)
             if trial.should_prune():
+                self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
