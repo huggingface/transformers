@@ -795,15 +795,16 @@ class BartEncoder(BartPretrainedModel):
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        
         if input_ids is not None:
             position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids)
         elif inputs_embeds is not None:
             position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds)
         embed_pos = self.embed_positions(position_ids)
-
+            
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1040,14 +1041,15 @@ class BartDecoder(BartPretrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         if input_ids is not None:
             position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids,past_key_values_length)
         elif inputs_embeds is not None:
             position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds,past_key_values_length)
         embed_pos = self.embed_positions(position_ids)
 
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
