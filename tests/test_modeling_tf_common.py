@@ -367,7 +367,7 @@ class TFModelTesterMixin:
         """
 
         # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
-        if names == "past_key_values":
+        if type(names) == str and "past_key_values" in names:
             return
 
         # Allow `ModelOutput` because TODO.
