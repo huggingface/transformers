@@ -989,6 +989,10 @@ class TrainingArguments:
         if (self.smp_save_partial or self.smp_load_partial) and not is_sagemaker_mp_enabled():
             raise ValueError(f"smp_save_partial and smp_load_partial can only be used with Sagemaker Model Parallel library.")
 
+        if (is_sagemaker_mp_enabled() and self.smp_save_partial and self.load_best_model_at_end ):
+            self.smp_load_partial = True
+
+
     def __str__(self):
         self_as_dict = asdict(self)
 
