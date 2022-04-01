@@ -542,6 +542,19 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+        """
+        Main method to tokenize and prepare for the model one or several table-sequence pair(s).
+
+        Args:
+            table (`pd.DataFrame`, `List[pd.DataFrame]`):
+                Table(s) containing tabular data.
+            query (`str` or `List[str]`, *optional*):
+                Sentence or batch of sentences related to one or more table(s) to be encoded. Note that the number of
+                sentences must match the number of tables.
+            answer (`str` or `List[str]`, *optional*):
+                Optionally, the corresponding answer to the questions as supervision.
+        """
+
         if self.current_tokenizer == TokenizerStrategy.TOKENIZE_SOURCE:
             if table is None:
                 raise ValueError("Please ensure that the table is not empty if you use TAPEX to encode source.")
@@ -608,17 +621,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        """
-        Main method to tokenize and prepare for the model one or several sequence(s) related to a table.
-
-        Args:
-            table (`pd.DataFrame` or `List[pd.DataFrame]`):
-                Table or batch of tables containing tabular data.
-            query (`str` or `List[str]`):
-                Sentence or batch of sentences related to a table to be encoded.
-            answer (`str` or `List[str]`):
-                Optionally, corresponding answers to the queries for precise truncating.
-        """
         # Input type checking for clearer error
         valid_table = False
         valid_query = False
@@ -707,19 +709,11 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepare a table or batch of tables and corresponding strings for the model.
-
         <Tip warning={true}>
 
         This method is deprecated, `__call__` should be used instead.
 
         </Tip>
-
-        Args:
-            table (`pd.DataFrame` or `List[pd.DataFrame]`):
-                Table or batch of tables containing tabular data.
-            query (`str` or `List[str]`):
-                Sentence or batch of sentences related to a table to be encoded.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -895,15 +889,9 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> List[int]:
         """
-        Prepare a table and a string for the model. This method does not return token type IDs, attention masks, etc.
-        which are necessary for the model to work correctly. Use this method if you want to build your processing on
-        your own, otherwise refer to `__call__`.
-
-        Args:
-            table (`pd.DataFrame`):
-                Table containing tabular data.
-            query (`str` or `List[str]`):
-                Sentence related to a table to be encoded.
+        Prepare a table, a string and possible answer for the model. This method does not return token type IDs,
+        attention masks, etc. which are necessary for the model to work correctly. Use this method if you want to build
+        your processing on your own, otherwise refer to `__call__`.
         """
         encoded_inputs = self.encode_plus(
             table,
@@ -939,15 +927,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        """
-        Prepare a table and a string for the model.
-
-        Args:
-            table (`pd.DataFrame`):
-                Table containing tabular data.
-            query (`str` or `List[str]`):
-                Sentence related to a table to be encoded.
-        """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -1055,11 +1034,11 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        The method to tokenize and prepare for the answer label for the model
+        The method tokenizes and prepares the answer label for the model.
 
         Args:
             answer (`str` or `List[str]`):
-                Corresponding answer supervision to the queries for training the model
+                Corresponding answer supervision to the queries for training the model.
         """
         is_batched = isinstance(answer, (list, tuple))
 
@@ -1121,15 +1100,9 @@ class TapexTokenizer(PreTrainedTokenizer):
         """
         Prepare answer strings for the model.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
-
         Args:
             answer `List[str]`:
-                Corresponding answer supervision to the queries for training the model
+                Corresponding answer supervision to the queries for training the model.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -1270,11 +1243,11 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepare a answer for the model.
+        Prepare a answer string for the model.
 
         Args:
             answer `str`:
-                Corresponding answer supervision to the queries for training the model
+                Corresponding answer supervision to the queries for training the model.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(

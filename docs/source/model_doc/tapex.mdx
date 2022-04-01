@@ -48,13 +48,15 @@ Tips:
 ## Usage: inference
 
 Below, we illustrate how to use TAPEX for table question answering. As one can see, one can directly plug in the weights of TAPEX into a BART model.
+We use the [Auto API](auto), which will automatically instantiate the appropriate tokenizer ([`TapexTokenizer`]) and model ([`BartForConditionalGeneration`]) for us,
+based on the configuration file of the checkpoint on the hub.
 
 ```python
-from transformers import TapexTokenizer, BartForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import pandas as pd
 
-tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-large-finetuned-wtq")
-model = BartForConditionalGeneration.from_pretrained("microsoft/tapex-large-finetuned-wtq")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/tapex-large-finetuned-wtq")
+model = AutoModelForSeq2SeqLM.from_pretrained("microsoft/tapex-large-finetuned-wtq")
 
 # prepare table + question
 data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
@@ -95,13 +97,13 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 In case one wants to do table verification (i.e. the task of determining whether a given sentence is supported or refuted by the contents
 of a table), one can instantiate a [`BartForSequenceClassification`] model. TAPEX has checkpoints on the hub fine-tuned on TabFact, an important
-benchmark for table fact checking (it achieves 84% accuracy).
+benchmark for table fact checking (it achieves 84% accuracy). The code example below again leverages the [Auto API](auto).
 
 ```python
-from transformers import TapexTokenizer, BartForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-large-finetuned-tabfact")
-model = BartForSequenceClassification.from_pretrained("microsoft/tapex-large-finetuned-tabfact")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/tapex-large-finetuned-tabfact")
+model = AutoModelForSequenceClassification.from_pretrained("microsoft/tapex-large-finetuned-tabfact")
 
 # prepare table + sentence
 data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
@@ -114,9 +116,10 @@ encoding = tokenizer(table, sentence, return_tensors="pt")
 outputs = model(**encoding)
 
 # print prediction
-print(outputs.logits.argmax(-1).item())
-# should print '0' (which means, refuted)
+predicted_class_idx = outputs.logits[0].argmax(dim=0).item()
+print(model.config.id2label[predicted_class_idx])
 ```
+Refused
 
 ## TapexTokenizer
 
