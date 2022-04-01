@@ -711,6 +711,7 @@ class BartEncoder(BartPretrainedModel):
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
+            self.padding_idx
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -790,8 +791,11 @@ class BartEncoder(BartPretrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(input_shape)
+        if input_ids in not None:
+            position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids)
+        elif inputs_embeds is not None:
+            position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds)
+        embed_pos = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -882,6 +886,7 @@ class BartDecoder(BartPretrainedModel):
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
+            config.pad_token_id
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1028,7 +1033,13 @@ class BartDecoder(BartPretrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        if input_ids in not None:
+            position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids,past_key_values_length)
+        elif inputs_embeds is not None:
+            position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds,past_key_values_length)
+        embed_pos = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
