@@ -836,8 +836,9 @@ def main():
         # ignore padded tokens from loss, i.e. where labels are not set to -100
         padding = labels >= 0
         loss = loss * padding
-        loss = loss.sum() / padding.sum()
-        return loss
+        loss = loss.sum()
+        num_labels = padding.sum()
+        return loss, num_labels
 
     # Define gradient update step fn
     def train_step(state, batch):
@@ -853,13 +854,13 @@ def main():
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
                 train=True,
             )[0]
-            loss = loss_fn(logits, labels)
-            return loss
+            loss, num_labels = loss_fn(logits, labels)
+            return loss, num_labels
 
-        grad_fn = jax.value_and_grad(compute_loss)
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
         if gradient_accumulation_steps == 1:
-            loss, grad = grad_fn(state.params, batch)
+            (loss, num_labels), grad = grad_fn(state.params, batch)
 
         # Custom gradient accumulation
         else:
@@ -868,30 +869,32 @@ def main():
                 lambda x: x.reshape(gradient_accumulation_steps, training_args.per_device_train_batch_size, -1), batch
             )
 
-            def accum_minibatch_step(grad_idx, accum_loss_grad):
-                accum_loss, accum_grad = accum_loss_grad
+            def accum_minibatch_step(grad_idx, accum_loss_labels_grad):
+                accum_loss, accum_labels, accum_grad = accum_loss_labels_grad
                 # get a minibatch (one gradient accumulation slice)
                 minibatch = jax.tree_map(
                     lambda x: jax.lax.dynamic_index_in_dim(x, grad_idx, keepdims=False),
                     batch,
                 )
-                # compute loss and grad over minibatch and accumulate
-                loss, grad = grad_fn(state.params, minibatch)
-                return jax.tree_map(jnp.add, (accum_loss, accum_grad), (loss, grad))
+                # compute loss, num labels and grad over minibatch and accumulate
+                (loss, num_labels), grad = grad_fn(state.params, minibatch)
+                return jax.tree_map(jnp.add, (accum_loss, accum_labels, accum_grad), (loss, num_labels, grad))
 
-            # create an initial state for accumulating losses and gradients
-            init_loss_grad = (0, jax.tree_map(jnp.zeros_like, state.params))
+            # create an initial state for accumulating losses, num labels and gradients
+            init_loss_labels_grad = (0, 0, jax.tree_map(jnp.zeros_like, state.params))
             # loop accum minibatch step over the number of gradient accumulation steps
-            loss, grad = jax.lax.fori_loop(
+            loss, num_labels, grad = jax.lax.fori_loop(
                 0,
                 gradient_accumulation_steps,
                 accum_minibatch_step,
-                init_loss_grad,
+                init_loss_labels_grad,
             )
-            # normalise losses and gradients over the number of gradient accumulation steps
-            loss, grad = jax.tree_map(lambda x: x / gradient_accumulation_steps, (loss, grad))
 
-        grad = jax.lax.pmean(grad, "batch")
+        grad = jax.lax.psum(grad, "batch")
+        loss = jax.lax.psum(loss, "batch")
+        total_samples = jax.lax.psum(num_labels, "batch")
+        grad = jax.tree_map(lambda g: g / total_samples, grad)
+        loss = jax.tree_map(lambda l: l / total_samples, loss)
 
         # update state
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
@@ -923,7 +926,11 @@ def main():
     def eval_step(params, batch):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels)
+        loss, num_labels = loss_fn(logits, labels)
+
+        total_samples = jax.lax.psum(num_labels, "batch")
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_map(lambda l: l / total_samples, loss)
 
         # summarize metrics
         metrics = {"loss": loss}
