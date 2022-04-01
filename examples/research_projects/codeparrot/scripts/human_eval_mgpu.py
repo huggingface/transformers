@@ -32,20 +32,22 @@ class TokenizeDataset(IterableDataset):
     See compute_code for more details.
     """
 
-    def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1):
+    def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1, max_length=400):
         self.tokenizer = tokenizer
         self.dataset = dataset
         self.n_tasks = len(dataset) if n_tasks is None else n_tasks
         self.n_copies = n_copies
+        self.max_length = max_length
 
     def __iter__(self):
         for task in range(self.n_tasks):
             # without strip, the model generate commented codes ...
             prompt = self.tokenizer.eos_token + self.dataset[task]["prompt"].strip()
             # codeparrot model is not robust to padding
-            input_ids = self.tokenizer(prompt)["input_ids"]
+            input_len = len(self.tokenizer(prompt)["input_ids"])
+            input_ids = self.tokenizer(prompt, max_length=self.max_length, padding="max_length")["input_ids"]
             for _ in range(self.n_copies):
-                yield {"ids": torch.tensor(input_ids), "task_id": task}
+                yield {"ids": torch.tensor(input_ids), "task_id": task, "input_len": input_len}
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -116,8 +118,9 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
     for step, batch in tqdm(enumerate(dataloader)):
         with torch.no_grad():
             gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
+            # manually truncate the input_ids to avoid zero padding
             generated_tokens = accelerator.unwrap_model(model).generate(
-                input_ids=batch["ids"], num_return_sequences=batch_size, **gen_kwargs
+                input_ids=batch["ids"][:, : batch["input_len"]], num_return_sequences=batch_size, **gen_kwargs
             )
             generated_tokens = accelerator.pad_across_processes(
                 generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
@@ -156,6 +159,7 @@ def main():
 
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(args.model_ckpt)
 
     # Generation settings
