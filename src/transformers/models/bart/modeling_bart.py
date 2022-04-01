@@ -125,13 +125,11 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions + self.offset)
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+        """`input_ids` is expected to be [bsz x seqlen x embedding_dim]."""
+        mask = input_ids.ne(self.offset).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        return super().forward(incremental_indices.long() + self.offset)
 
 
 class BartAttention(nn.Module):
