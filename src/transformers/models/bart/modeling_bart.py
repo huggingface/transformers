@@ -119,17 +119,18 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
+        self.padding_idx = padding_idx
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
         """`input_ids` is expected to be [bsz x seqlen x embedding_dim]."""
-        mask = input_ids.ne(self.offset).int()
+        mask = input_ids.ne(self.padding_idx).int()
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-        return super().forward(incremental_indices.long() + self.offset)
+        return super().forward(incremental_indices.long() + self.padding_idx)
 
 
 class BartAttention(nn.Module):
