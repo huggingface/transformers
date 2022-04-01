@@ -21,6 +21,9 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from packaging import version
+
+import tokenizers
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
@@ -531,7 +534,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return batched_output
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        return self.backend_tokenizer.decoder.decode(tokens)
+        if version.parse(tokenizers.__version__) < version.parse("0.12.0"):
+            return self.backend_tokenizer.decoder.decode(tokens)
+        else:
+            return "".join(self.backend_tokenizer.decoder.decode(tokens))
 
     def _decode(
         self,
