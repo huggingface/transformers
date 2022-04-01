@@ -156,7 +156,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetLMHeadModel"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("ctrl", "TFCTRLLMHeadModel"),
-        ("xglm", "XGLMForCausalLM"),
+        ("xglm", "TFXGLMForCausalLM"),
     ]
 )
 

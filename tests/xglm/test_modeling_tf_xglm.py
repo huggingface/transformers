@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import unittest
 
 from transformers import XGLMConfig, XGLMTokenizer, is_tf_available
@@ -114,6 +115,7 @@ class TFXGLMModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -237,8 +239,7 @@ class TFXGLMModelTester:
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
         model = TFXGLMForCausalLM(config)
 
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
+        result = model(input_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -295,6 +296,24 @@ class TFXGLMModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
     @slow
     def test_batch_generation(self):
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
@@ -338,3 +357,71 @@ class TFXGLMModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         for model_name in TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFXGLMModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
+
+
+@require_tf
+class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xglm(self, verify_outputs=True):
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+        input_ids = tf.convert_to_tensor([2, 268, 9865], dtype=tf.int32)  # The dog
+        # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
+        # fmt: off
+        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]
+        # fmt: on
+        output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
+        if verify_outputs:
+            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+
+    @slow
+    def test_xglm_sample(self):
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+
+        tf.random.set_seed(0)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="tf")
+        input_ids = tokenized.input_ids
+        output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
+        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_STR = "Today is a nice day and the sun is shining. A nice day with warm rainy"
+        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+
+    @slow
+    def test_xglm_sample_max_time(self):
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+
+        tf.random.set_seed(0)
+        input_ids = tokenizer("Today is a nice day and", return_tensors="tf").input_ids
+
+        MAX_TIME = 0.15
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=1.25 * MAX_TIME))

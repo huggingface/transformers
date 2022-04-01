@@ -30,6 +30,7 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutputWithPastAndCrossAttentions, TFCausalLMOutputWithCrossAttentions
 from ...modeling_tf_utils import (
@@ -62,9 +63,7 @@ TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-def create_sinusiodal_positions(
-    num_positions: int, embedding_dim: int, padding_idx: Optional[int], name: str
-) -> tf.Tensor:
+def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
     half_dim = embedding_dim // 2
     emb = math.log(10000) / (half_dim - 1)
     emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
@@ -408,7 +407,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
     config_class = XGLMConfig
 
     def __init__(
-        self, config: XGLMConfig, *inputs, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs: Any
+        self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs, **kwargs: Any
     ) -> None:
         super().__init__(*inputs, **kwargs)
 
@@ -429,7 +428,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             num_positions=config.max_position_embeddings,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,
-            name="embed_posistions",
         )
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -594,18 +592,19 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
 
 
 class TFXGLMPreTrainedModel(TFPreTrainedModel):
-    config_class: XGLMConfig
+    config_class = XGLMConfig
     base_model_prefix = "model"
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights", r"lm_head.weight"]
+    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
 
     @property
     def dummy_inputs(self):
         pad_token = 1
         input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
             "input_ids": input_ids,
+            "attention_mask": tf.math.not_equal(input_ids, pad_token),
         }
         return dummy_inputs
 
@@ -614,8 +613,6 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
             {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -742,6 +739,9 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
         embed_tokens: [TFSharedEmbeddings]: output embedding
     """
 
+    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights"]
+    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
+
     def __init__(
         self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
     ) -> None:
@@ -816,6 +816,10 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
     XGLM_START_DOCSTRING,
 )
 class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
+    base_model_prefix = "model"
+    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights", r"lm_head.weight"]
+    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
+
     def __init__(
         self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
     ) -> None:
@@ -825,7 +829,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = tf.keras.layers.Dense(
             config.vocab_size,
             use_bias=False,
-            kernel_initializer=get_initializer(config.initializer_range),
+            kernel_initializer=get_initializer(config.init_std),
             name="lm_head",
         )
 
@@ -846,24 +850,20 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
         # for a future PR to not change too many things for now.
         # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
-        position_ids = None
         attention_mask = None
         if use_xla:
             attention_mask = kwargs.get("attention_mask", None)
-            if past is not None and attention_mask is not None:
-                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
-            elif attention_mask is not None:
-                position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "position_ids": position_ids,
             "past": past,
             "use_cache": use_cache,
         }
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XGLM_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFCausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -910,8 +910,8 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             return_dict=return_dict,
             training=training,
         )
-
-        lm_logits = self.lm_head(outputs[0])
+        hidden_states = outputs[0]
+        lm_logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
