@@ -178,10 +178,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     print("loaded the state_dict")
 
     converted_state_dict = {}
-
-    # assert len(from_state_dict.keys()) == from_to_ours_keys.keys()
-    # for name, param in from_state_dict.items():
-    #     print(name, param.shape)
     
     not_used_keys = list(from_state_dict.keys())
     regex = r"\.block.-part."
@@ -192,7 +188,42 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         converted_state_dict[dest_key] = from_state_dict[key]
         not_used_keys.remove(key)
 
+    assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
+
     print('not_used_keys', not_used_keys)
+
+    # save our state dict to disk
+    torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
+
+    del converted_state_dict
+
+    if push_to_hub:
+        # create our model
+        our_config = names_to_config[model_name]
+        our_model_func = RegNetModel
+        if "in1k" in model_name:
+            our_model_func = RegNetForImageClassification
+        our_model = our_model_func(our_config)
+        # place our model to the meta device (so remove all the weights)
+        our_model.to(torch.device("meta"))
+        # load state dict
+        state_dict = torch.load(save_directory / f"{model_name}.pth")
+        our_model.load_state_dict(state_dict)
+        # push it to hub
+        our_model.push_to_hub(
+            repo_path_or_name=save_directory / model_name,
+            commit_message="Add model",
+            use_temp_dir=True
+        )
+        size = 384
+        # we can use the convnext one
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        feature_extractor.push_to_hub(
+            repo_path_or_name=save_directory / model_name,
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
+        )
+        
     # torch.save(converted_state_dict, str(save_directory))
 
 if __name__ == "__main__":
