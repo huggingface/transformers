@@ -80,7 +80,12 @@ if TYPE_CHECKING:
         from .modeling_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
 
     if is_tf_available():
-        from .modeling_tf_xglm import TFXGLMForCausalLM, TFXGLMModel, TFXGLMPreTrainedModel
+        from .modeling_tf_xglm import (
+            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXGLMForCausalLM,
+            TFXGLMModel,
+            TFXGLMPreTrainedModel,
+        )
 
 
 else:

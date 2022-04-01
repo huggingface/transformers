@@ -86,6 +86,19 @@ def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_
     return tf.Variable(emb, trainable=False, name="embed_positions.weights")
 
 
+def _create_position_ids_from_input_ids(
+    input_ids: tf.Tensor, past_key_values_length: int, padding_idx: Optional[int]
+) -> tf.Tensor:
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
+    """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = tf.where(input_ids != padding_idx, 1, 0)
+    incremental_indices = (tf.cast(tf.cumsum(mask, axis=1), dtype=mask.dtype) + past_key_values_length) * mask
+    return tf.cast(incremental_indices, dtype=tf.int64) + padding_idx
+
+
 def _create_position_ids_from_inputs_embeds(
     inputs_embeds: tf.Tensor, past_key_values_length: int, padding_idx: Optional[int]
 ) -> tf.Tensor:
@@ -308,7 +321,7 @@ class TFXGLMDecoderLayer(tf.keras.layers.Layer):
                 embed_dim=self.embed_dim,
                 num_heads=config.attention_heads,
                 dropout=config.attention_dropout,
-                is_decoder=False,
+                is_decoder=True,
                 name="encoder_attn",
             )
             self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(
@@ -503,7 +516,12 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
+            position_ids = _create_position_ids_from_input_ids(input_ids, past_key_values_length, self.padding_idx)
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        else:
+            position_ids = _create_position_ids_from_inputs_embeds(
+                inputs_embeds, past_key_values_length, self.padding_idx
+            )
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
@@ -513,10 +531,10 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
 
         # embed positions
-        position_ids = _create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length, self.padding_idx)
         positions = tf.gather(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
+        print("tf.hs", hidden_states.numpy().sum())
 
         hidden_states = self.dropout(hidden_states, training=training)
 
@@ -543,7 +561,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 all_hidden_states += (hidden_states,)
 
             dropout_probability = random.uniform(0, 1)
-
             if training and (dropout_probability < self.layerdrop):
                 continue
 
@@ -558,6 +575,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_value,
             )
+            print(f"tf.hs.{idx}", hidden_states.numpy().sum())
 
             if use_cache:
                 next_decoder_cache += (present_key_value,)
@@ -568,6 +586,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_cross_attn,)
 
+        print("tf.hs.end", hidden_states.numpy().sum())
         hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
