@@ -83,7 +83,7 @@ def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_
         )
         emb *= _padding_mask
 
-    return emb
+    return tf.Variable(emb, trainable=False, name="embed_positions.weights")
 
 
 def _create_position_ids_from_inputs_embeds(
@@ -425,14 +425,14 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
 
         self.offset = 2
         self.embed_positions = create_sinusiodal_positions(
-            num_positions=config.max_position_embeddings,
+            num_positions=config.max_position_embeddings + self.offset,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,
         )
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layers = [TFXGLMDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_layers)]
-        self.layerdrop = tf.keras.layers.Dropout(config.layerdrop)
+        self.layerdrop = config.layerdrop
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def get_input_embeddings(self) -> TFSharedEmbeddings:
@@ -514,7 +514,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
 
         # embed positions
         position_ids = _create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length, self.padding_idx)
-        position_ids = position_ids + self.offset
         positions = tf.gather(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
