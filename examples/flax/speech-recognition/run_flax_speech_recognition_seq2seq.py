@@ -527,12 +527,6 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
-    logger.info("Training/evaluation parameters %s", training_args)
-
-    # Set the default TPU matmul precision and display the number of devices
-    jax.config.update("jax_default_matmul_precision", training_args.matmul_precision)
-    logger.info(f"JAX devices: {jax.device_count()}, matmul precision: {training_args.matmul_precision}")
-
     # Set up wandb run
     if jax.process_index() == 0:
         wandb.init(project=data_args.wandb_project, job_type=data_args.wandb_job_type)
@@ -545,6 +539,12 @@ def main():
             "dtype": training_args.dtype,
             "matmul_precision": training_args.matmul_precision,
         }
+
+    logger.info("Training/evaluation parameters %s", training_args)
+
+    # Set the default TPU matmul precision and display the number of devices
+    jax.config.update("jax_default_matmul_precision", training_args.matmul_precision)
+    logger.info(f"JAX devices: {jax.device_count()}, matmul precision: {training_args.matmul_precision}")
 
     # TODO: 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
@@ -1039,7 +1039,6 @@ def main():
         epochs.desc = desc
 
         # Save metrics
-        cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
         write_wandb_log(eval_metrics, cur_step, prefix="eval")
         write_wandb_pred(pred_str, label_str, epoch)
         # if has_tensorboard and jax.process_index() == 0:
