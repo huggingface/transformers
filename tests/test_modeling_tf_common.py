@@ -373,9 +373,14 @@ class TFModelTesterMixin:
         # Allow `ModelOutput` because TODO.
         if isinstance(tf_outputs, ModelOutput):
             self.assertEqual(
-                type(names), str, "When `tf_outputs` is an instance of `ModelOutput`, the argument `names` should be a string"
+                type(names),
+                str,
+                "When `tf_outputs` is an instance of `ModelOutput`, the argument `names` should be a string",
             )
-            self.assertTrue(isinstance(pt_outputs, ModelOutput), f"{names}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is")
+            self.assertTrue(
+                isinstance(pt_outputs, ModelOutput),
+                f"{names}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
+            )
 
             tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
             pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
@@ -389,8 +394,12 @@ class TFModelTesterMixin:
         # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
         elif type(tf_outputs) in [tuple, list]:
 
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{names}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{names}: Output lengths differ between TF and PyTorch")
+            self.assertEqual(
+                type(tf_outputs), type(pt_outputs), f"{names}: Output types differ between TF and PyTorch"
+            )
+            self.assertEqual(
+                len(tf_outputs), len(pt_outputs), f"{names}: Output lengths differ between TF and PyTorch"
+            )
 
             if type(names) == tuple:
                 # case 1: TODO
@@ -549,7 +558,9 @@ class TFModelTesterMixin:
 
                     # check anything else than `loss`
                     names = tuple([f"outputs.{k}" for k in tf_keys])
-                    self.check_pt_tf_outputs(tf_outputs[1:index], pt_outputs[1:index], model_class, names=names[1:index])
+                    self.check_pt_tf_outputs(
+                        tf_outputs[1:index], pt_outputs[1:index], model_class, names=names[1:index]
+                    )
 
                     # check `loss`
 
