@@ -37,9 +37,8 @@ import jax.numpy as jnp
 import optax
 import transformers
 import wandb as wandb
-from flax import jax_utils, traverse_util
+from flax import core, jax_utils, struct, traverse_util
 from flax.jax_utils import unreplicate
-from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository
 from transformers import (
@@ -231,22 +230,11 @@ class DataTrainingArguments:
 # @flax.struct.dataclass
 @dataclass
 class FlaxSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
-    dtype: str = field(
-        default="float32",
+    mixed_precision: bool = field(
+        default=False,
         metadata={
-            "help": "Floating-point format in which the computations will be performed (not the model parameters). "
-            "This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. "
-            "**Note that this only specifies the dtype of the computation and does not influence the dtype of model parameters.**"
-            "One of `[float32, float16, bfloat16]`."
-        },
-    )
-    dtype_params: str = field(
-        default=None,
-        metadata={
-            "help": "Floating-point format in which to store the model parameters. Can be used on TPU to explicitly "
-            "convert the model parameters to bfloat16 precision to do full half-precision training "
-            "or to save weights in bfloat16 for inference in order to save memory and improve speed. "
-            "One of `[to_fp32, to_fp16, to_bf16]`"
+            "help": "Whether to enable mixed-precision training. If true, the optimizer is stored in half-precision (bfloat16) and computations are executed in half-precision"
+            "**Note that this only specifies the dtype of the computation and optimizer state. It does not influence the dtype of model parameters.**"
         },
     )
     matmul_precision: str = field(
@@ -261,8 +249,89 @@ class FlaxSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
     )
 
 
-class TrainState(train_state.TrainState):
+def to_fp32(t):
+    return jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, t)
+
+
+def to_bf16(t):
+    return jax.tree_map(lambda x: x.astype(jnp.bfloat16) if x.dtype == jnp.float32 else x, t)
+
+
+class MixedPrecisionTrainState(struct.PyTreeNode):
+    """Train state for use with a single Optax optimizer.
+    Adapted from flax train_state https://github.com/google/flax/blob/main/flax/training/train_state.py
+
+    Synopsis::
+
+        state = TrainState.create(
+            apply_fn=model.apply,
+            params=variables['params'],
+            tx=tx)
+        grad_fn = jax.grad(make_loss_fn(state.apply_fn))
+        for batch in data:
+          grads = grad_fn(state.params, batch)
+          state = state.apply_gradients(grads=grads)
+
+    Args:
+      step: Counter starts at 0 and is incremented by every call to
+        `.apply_gradients()`.
+      apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
+        convenience to have a shorter params list for the `train_step()` function
+        in your training loop.
+      params: The parameters to be updated by `tx` and used by `apply_fn`.
+      tx: An Optax gradient transformation.
+      opt_state: The state for `tx`.
+      dropout_rng: PRNG key for stochastic operations.
+      bf16: Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training.
+    """
+
+    step: int
+    apply_fn: Callable = struct.field(pytree_node=False)
+    params: core.FrozenDict[str, Any]
+    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+    opt_state: optax.OptState
     dropout_rng: jnp.ndarray
+
+    def apply_gradients(self, *, grads, to_dtype, **kwargs):
+        """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
+
+        Note that internally this function calls `.tx.update()` followed by a call
+        to `optax.apply_updates()` to update `params` and `opt_state`.
+
+        Args:
+          grads: Gradients that have the same pytree structure as `.params`.
+          **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
+
+        Returns:
+          An updated instance of `self` with `step` incremented by one, `params`
+          and `opt_state` updated by applying `grads`, and additional attributes
+          replaced as specified by `kwargs`.
+        """
+        # downcast params to bf16 to match dtype of grads and optimizer state if mixed-precision training
+        updates, new_opt_state = self.tx.update(grads, self.opt_state, to_dtype(self.params))
+
+        # upcast all to fp32 for updates
+        new_params = optax.apply_updates(to_fp32(self.params), to_fp32(updates))
+        return self.replace(
+            step=self.step + 1,
+            params=new_params,
+            opt_state=new_opt_state,
+            **kwargs,
+        )
+
+    @classmethod
+    def create(cls, *, apply_fn, params, tx, to_dtype, **kwargs):
+        """Creates a new instance with `step=0` and initialized `opt_state`."""
+        # downcast optimizer state to bf16 if mixed-precision training
+        opt_state = tx.init(to_dtype(params))
+        return cls(
+            step=0,
+            apply_fn=apply_fn,
+            params=params,
+            tx=tx,
+            opt_state=opt_state,
+            **kwargs,
+        )
 
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
@@ -536,7 +605,7 @@ def main():
             "batch_size": training_args.per_device_train_batch_size,
             "gradient_accumulation_steps": training_args.gradient_accumulation_steps,
             "num_epochs": training_args.num_train_epochs,
-            "dtype": training_args.dtype,
+            "dtype": "bfloat16" if training_args.mixed_precision else "float32",
             "matmul_precision": training_args.matmul_precision,
         }
 
@@ -621,15 +690,11 @@ def main():
     model = FlaxAutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
-        dtype=getattr(jnp, training_args.dtype),
+        dtype=jnp.bfloat16 if training_args.mixed_precision else jnp.float32,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-
-    if training_args.dtype_params is not None:
-        # Cast floating-point values of given parameter `PyTree` to given `dtype` using the [`~FlaxPreTrainedModel.to_fp16`] or [`~FlaxPreTrainedModel.to_bf16`] methods
-        model.params = getattr(model, training_args.dtype_params)(model.params)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -787,6 +852,7 @@ def main():
     num_train_samples = len(vectorized_datasets["train"])
     steps_per_epoch = num_train_samples // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
+    to_dtype = to_bf16 if training_args.mixed_precision else to_fp32
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -827,7 +893,13 @@ def main():
     optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
 
     # Setup train state
-    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
+    state = MixedPrecisionTrainState.create(
+        apply_fn=model.__call__,
+        params=model.params,
+        tx=optim,
+        to_dtype=to_dtype,
+        dropout_rng=dropout_rng,
+    )
 
     # Cross entropy loss
     def loss_fn(logits, labels):
@@ -860,7 +932,7 @@ def main():
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
         if gradient_accumulation_steps == 1:
-            (loss, num_labels), grad = grad_fn(state.params, batch)
+            (loss, num_labels), grad = grad_fn(to_dtype(state.params), batch)
 
         # Custom gradient accumulation
         else:
@@ -877,7 +949,7 @@ def main():
                     batch,
                 )
                 # compute loss, num labels and grad over minibatch and accumulate
-                (loss, num_labels), grad = grad_fn(state.params, minibatch)
+                (loss, num_labels), grad = grad_fn(to_dtype(state.params), minibatch)
                 return jax.tree_map(jnp.add, (accum_loss, accum_labels, accum_grad), (loss, num_labels, grad))
 
             # create an initial state for accumulating losses, num labels and gradients
@@ -897,7 +969,11 @@ def main():
         loss = jax.tree_map(lambda l: l / total_samples, loss)
 
         # update state
-        new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
+        new_state = state.apply_gradients(
+            grads=grad,
+            dropout_rng=new_dropout_rng,
+            to_dtype=to_dtype,
+        )
 
         # compute gradient norms over all layers, total encoder, total decoder and global for detailed monitoring
         layer_grad_norm = jax.tree_map(jnp.linalg.norm, grad)
