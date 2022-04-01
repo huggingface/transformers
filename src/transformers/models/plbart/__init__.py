@@ -27,6 +27,9 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["tokenization_plbart"] = ["PLBartTokenizer"]
 
+if is_tokenizers_available():
+    _import_structure["tokenization_plbart_fast"] = ["PLBartTokenizerFast"]
+
 if is_torch_available():
     _import_structure["modeling_plbart"] = [
         "PLBART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -43,6 +46,9 @@ if TYPE_CHECKING:
 
     if is_sentencepiece_available():
         from .tokenization_plbart import PLBartTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_plbart_fast import PLBartTokenizerFast
 
     if is_torch_available():
         from .modeling_plbart import (

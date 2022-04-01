@@ -1,0 +1,336 @@
+# coding=utf-8
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
+from contextlib import contextmanager
+from shutil import copyfile
+from typing import List, Optional, Tuple
+
+from tokenizers import processors
+
+from ...tokenization_utils import AddedToken, BatchEncoding
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import is_sentencepiece_available, logging
+
+
+if is_sentencepiece_available():
+    from .tokenization_plbart import PLBartTokenizer
+else:
+    PLBartTokenizer = None
+
+
+logger = logging.get_logger(__name__)
+
+
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-c-cpp-defect-detection": "https://huggingface.co/uclanlp/plbart-c-cpp-defect-detection/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-cs-java": "https://huggingface.co/uclanlp/plbart-cs-java/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-en_XX-java": "https://huggingface.co/uclanlp/plbart-en_XX-java/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-go-en_XX": "https://huggingface.co/uclanlp/plbart-go-en_XX/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-java-clone-detection": "https://huggingface.co/uclanlp/plbart-java-clone-detection/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-java-cs": "https://huggingface.co/uclanlp/plbart-java-cs/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-java-en_XX": "https://huggingface.co/uclanlp/plbart-java-en_XX/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-javascript-en_XX": "https://huggingface.co/uclanlp/plbart-javascript-en_XX/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-php-en_XX": "https://huggingface.co/uclanlp/plbart-php-en_XX/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-python-en_XX": "https://huggingface.co/uclanlp/plbart-python-en_XX/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-refine-java-medium": "https://huggingface.co/uclanlp/plbart-refine-java-medium/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-refine-java-small": "https://huggingface.co/uclanlp/plbart-refine-java-small/resolve/main/sentencepiece.bpe.model",
+        "uclanlp/plbart-ruby-en_XX": "https://huggingface.co/uclanlp/plbart-ruby-en_XX/resolve/main/sentencepiece.bpe.model",
+    },
+    "tokenizer_file": {
+        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/tokenizer.json",
+        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/tokenizer.json",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "uclanlp/plbart-base": 1024,
+    "uclanlp/plbart-c-cpp-defect-detection": 1024,
+    "uclanlp/plbart-cs-java": 1024,
+    "uclanlp/plbart-en_XX-java": 1024,
+    "uclanlp/plbart-go-en_XX": 1024,
+    "uclanlp/plbart-java-clone-detection": 1024,
+    "uclanlp/plbart-java-cs": 1024,
+    "uclanlp/plbart-java-en_XX": 1024,
+    "uclanlp/plbart-javascript-en_XX": 1024,
+    "uclanlp/plbart-php-en_XX": 1024,
+    "uclanlp/plbart-python-en_XX": 1024,
+    "uclanlp/plbart-refine-java-medium": 1024,
+    "uclanlp/plbart-refine-java-small": 1024,
+    "uclanlp/plbart-ruby-en_XX": 1024,
+}
+
+FAIRSEQ_LANGUAGE_CODES = {
+    "base": ["java", "python", "en_XX"],
+    "multi": ["java", "python", "en_XX", "javascript", "php", "ruby", "go"],
+}
+
+
+class PLBartTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Construct a "fast" PLBart tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
+
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
+
+    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
+    <tokens> <eos>``` for target language documents.
+
+    Examples:
+
+    ```python
+    >>> from transformers import PLBartTokenizerFast
+
+    >>> tokenizer = PLBartTokenizerFast.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
+    >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
+    >>> expected_translation_english = "Returns the maximum value of a b c."
+    >>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
+    >>> with tokenizer.as_target_tokenizer():
+    ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
+    >>> inputs["labels"] = labels["input_ids"]
+    ```"""
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    model_input_names = ["input_ids", "attention_mask"]
+    slow_tokenizer_class = PLBartTokenizer
+
+    prefix_tokens: List[int] = []
+    suffix_tokens: List[int] = []
+
+    def __init__(
+        self,
+        vocab_file=None,
+        tokenizer_file=None,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        language_codes="base",
+        src_lang=None,
+        tgt_lang=None,
+        additional_special_tokens=None,
+        **kwargs
+    ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        super().__init__(
+            vocab_file=vocab_file,
+            tokenizer_file=tokenizer_file,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            language_codes=language_codes,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+        fairseq_language_codes = FAIRSEQ_LANGUAGE_CODES[self.language_codes]
+
+        _additional_special_tokens = fairseq_language_codes.copy()
+
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
+
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
+        self.lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in fairseq_language_codes
+        }
+
+        if self.language_codes == "base":
+            self._src_lang = src_lang
+            self.cur_lang_code_id = (
+                self.lang_code_to_id[self._src_lang] if self._src_lang is not None else self._src_lang
+            )
+        else:
+            self._src_lang = src_lang if src_lang is not None else "en_XX"
+            self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
+
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
+
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. The special tokens depend on calling set_lang.
+
+        An MBART sequence has the following format, where `X` represents the sequence:
+
+        - `input_ids` (for encoder) `X [eos, src_lang_code]`
+        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
+
+        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
+        separator.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
+        make use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of zeros.
+
+        """
+
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+    def _build_translation_inputs(
+        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+    ):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None: # TODO: Check how to deal with this. We allow src_lang and tgt_lang to be None in general. Should this also be done for translation inputs?
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
+
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        src_lang: str = "en_XX",
+        tgt_texts: Optional[List[str]] = None,
+        tgt_lang: str = "ro_RO",
+        **kwargs,
+    ) -> BatchEncoding:
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
+
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
+        self.set_tgt_lang_special_tokens(self.tgt_lang)
+        yield
+        self.set_src_lang_special_tokens(self.src_lang)
+
+    def set_src_lang_special_tokens(self, src_lang) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[src_lang] if src_lang is not None else None
+        self.prefix_tokens = []
+        if self.cur_lang_code is not None:
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.suffix_tokens = [self.eos_token_id]
+
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
+    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[lang] if lang is not None else None
+        self.prefix_tokens = []
+        if self.cur_lang_code is not None:
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.suffix_tokens = [self.eos_token_id]
+
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
