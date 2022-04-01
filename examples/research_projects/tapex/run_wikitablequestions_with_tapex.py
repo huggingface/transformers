@@ -273,8 +273,7 @@ def main():
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
     #
-    # For CSV/JSON files this script will use the first column for the full texts and the second column for the
-    # summaries (unless you specify column names for this with the `text_column` and `summary_column` arguments).
+    # For JSON files, this script will use the `question` column for the input question and `table` column for the corresponding table.
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
