@@ -62,8 +62,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" MBART tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    [`MBartTokenizerFast`] is a subclass of [`XLMRobertaTokenizerFast`]. Refer to superclass
-    [`XLMRobertaTokenizerFast`] for usage examples and documentation concerning the initialization parameters and other
+    [`MBartTokenizerFast`] is a subclass of ['PreTrainedTokenizerFast'] and is adapted from [`XLMRobertaTokenizerFast`]. Refer to superclass
+    [`PreTrainedTokenizerFast`] for usage examples and documentation concerning the initialization parameters and other
     methods.
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
