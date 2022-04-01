@@ -314,9 +314,7 @@ def booleans_processing(config, **kwargs):
         # Pure conv models (such as ConvNext) do not have `output_attentions`
         if "output_attentions" in kwargs:
             final_booleans["output_attentions"] = (
-                kwargs["output_attentions"]
-                if kwargs["output_attentions"] is not None
-                else config.output_attentions
+                kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
             )
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
