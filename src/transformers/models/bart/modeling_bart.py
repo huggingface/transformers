@@ -798,7 +798,7 @@ class BartEncoder(BartPretrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        if input_ids in not None:
+        if input_ids is not None:
             position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids)
         elif inputs_embeds is not None:
             position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds)
@@ -1042,7 +1042,7 @@ class BartDecoder(BartPretrainedModel):
         # embed positions
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        if input_ids in not None:
+        if input_ids is not None:
             position_ids = self.embed_positions.create_position_ids_from_input_ids(input_ids,past_key_values_length)
         elif inputs_embeds is not None:
             position_ids = self.embed_positions.create_position_ids_from_inputs_embeds(inputs_embeds,past_key_values_length)
