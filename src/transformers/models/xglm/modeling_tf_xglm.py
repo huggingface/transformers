@@ -53,13 +53,55 @@ _CONFIG_FOR_DOC = "XGLMConfig"
 _TOKENIZER_FOR_DOC = "XGLMTokenizer"
 
 
-XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/xglm-564M",
     # See all XGLM models at https://huggingface.co/models?filter=xglm
 ]
 
 
 LARGE_NEGATIVE = -1e8
+
+
+def create_sinusiodal_positions(
+    num_positions: int, embedding_dim: int, padding_idx: Optional[int], name: str
+) -> tf.Tensor:
+    half_dim = embedding_dim // 2
+    emb = math.log(10000) / (half_dim - 1)
+    emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
+    emb = tf.expand_dims(tf.range(num_positions, dtype=tf.float32), axis=1) * tf.expand_dims(emb, axis=0)
+    emb = tf.reshape(tf.concat([tf.sin(emb), tf.cos(emb)], axis=1), (num_positions, -1))
+    if embedding_dim % 2 == 1:
+        # zero pad
+        emb = tf.concat([emb, tf.zeros((num_positions, 1))], axis=1)
+    if padding_idx is not None:
+        _padding_mask = tf.concat(
+            [
+                tf.ones((padding_idx, shape_list(emb)[1])),
+                tf.zeros((1, shape_list(emb)[1])),
+                tf.ones((shape_list(emb)[0] - padding_idx - 1, shape_list(emb)[1])),
+            ],
+            axis=0,
+        )
+        emb *= _padding_mask
+
+    return emb
+
+
+def _create_position_ids_from_inputs_embeds(
+    inputs_embeds: tf.Tensor, past_key_values_length: int, padding_idx: Optional[int]
+) -> tf.Tensor:
+    """
+    Args:
+    We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+        inputs_embeds: tf.Tensor
+    Returns: tf.Tensor
+    """
+    input_shape = shape_list(inputs_embeds)[:-1]
+    sequence_length = input_shape[1]
+
+    position_ids = tf.range(padding_idx + 1, sequence_length + padding_idx + 1, dtype=tf.int64)
+
+    return tf.broadcast_to(tf.expand_dims(position_ids, axis=0), input_shape) + past_key_values_length
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
@@ -91,95 +133,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
-
-
-class TFXGLMSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
-    def __init__(
-        self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs: Any
-    ) -> None:
-        super().__init__(**kwargs)
-        self.offset = 2
-        self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
-
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
-        if hasattr(self, "weights"):
-            emb_weights = tf.cast(emb_weights, dtype=self.weights.dtype)
-
-        self.weights = tf.Variable(emb_weights, trainable=False, name="weights")
-
-    @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
-        """
-        Build sinusoidal embeddings.
-
-        This matches the implementation in tensor2tensor, but differs slightly from the description in Section 3.5 of
-        "Attention Is All You Need".
-        """
-        half_dim = embedding_dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
-        emb = tf.expand_dims(tf.range(num_embeddings, dtype=tf.float32), axis=1) * tf.expand_dims(emb, axis=0)
-        emb = tf.reshape(tf.concat([tf.sin(emb), tf.cos(emb)], axis=1), (num_embeddings, -1))
-        if embedding_dim % 2 == 1:
-            # zero pad
-            emb = tf.concat([emb, tf.zeros((num_embeddings, 1))], axis=1)
-        if padding_idx is not None:
-            _padding_mask = tf.concat(
-                [
-                    tf.ones((padding_idx, shape_list(emb)[1])),
-                    tf.zeros((1, shape_list(emb)[1])),
-                    tf.ones((shape_list(emb)[0] - padding_idx - 1, shape_list(emb)[1])),
-                ],
-                axis=0,
-            )
-            emb *= _padding_mask
-
-        return emb
-
-    def __call__(
-        self,
-        input_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        past_key_values_length: int = 0,
-    ):
-        if input_ids is not None:
-            bsz, seq_len = shape_list(input_ids)
-            position_ids = self.create_position_ids_from_input_ids(input_ids, past_key_values_length)
-        else:
-            bsz, seq_len = shape_list(inputs_embeds)[:-1]
-            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length)
-
-        # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > shape_list(self.weights)[0]:
-            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-
-        return tf.reshape(tf.gather(self.weights, tf.reshape(position_ids, -1), axis=0), (bsz, seq_len, -1))
-
-    def create_position_ids_from_input_ids(self, input_ids: tf.Tensor, past_key_values_length: int = 0):
-        mask = tf.where(input_ids != self.padding_idx, 1, 0)
-        incremental_indices = (tf.cast(tf.cumsum(mask, axis=1), mask.dtype) + past_key_values_length) * mask
-        incremental_indices = tf.cast(incremental_indices, dtype=tf.int64) + self.padding_idx
-        return incremental_indices
-
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds: tf.Tensor, past_key_values_length: int):
-        """
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
-
-        Args:
-            inputs_embeds: tf.Tensor
-
-        Returns: tf.Tensor
-        """
-        input_shape = shape_list(inputs_embeds)[:-1]
-        sequence_length = input_shape[1]
-
-        position_ids = tf.range(self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=tf.int64)
-
-        return tf.broadcast_to(tf.expand_dims(position_ids, axis=0), input_shape) + past_key_values_length
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->XGLM
@@ -339,6 +292,7 @@ class TFXGLMAttention(tf.keras.layers.Layer):
 class TFXGLMDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: XGLMConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.embed_dim = config.d_model
         self.self_attn = TFXGLMAttention(
             embed_dim=self.embed_dim,
             num_heads=config.attention_heads,
@@ -470,14 +424,16 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 config.vocab_size, config.d_model, self.padding_idx, name="embed_tokens"
             )
 
-        self.embed_positions = TFXGLMSinusoidalPositionalEmbedding(
+        self.offset = 2
+        self.embed_positions = create_sinusiodal_positions(
             num_positions=config.max_position_embeddings,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,
             name="embed_posistions",
         )
+
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layers = [TFXGLMDecoderLayer(config, name=f"layers.{i}") for i in range(config.n_layer)]
+        self.layers = [TFXGLMDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_layers)]
         self.layerdrop = tf.keras.layers.Dropout(config.layerdrop)
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
@@ -551,7 +507,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values)
+        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -559,7 +515,9 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
+        position_ids = _create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length, self.padding_idx)
+        position_ids = position_ids + self.offset
+        positions = tf.gather(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
 
@@ -602,8 +560,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
             )
 
             if use_cache:
@@ -744,7 +700,7 @@ XGLM_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.num_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -779,7 +735,7 @@ XGLM_INPUTS_DOCSTRING = r"""
 )
 class TFXGLMModel(TFXGLMPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`XGLMDecoderLayer`]
+    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`TFXGLMDecoderLayer`]
 
     Args:
         config: XGLMConfig
