@@ -142,7 +142,7 @@ class ViltEmbeddings(nn.Module):
         pos_embed = pos_embed.flatten(2).transpose(1, 2)
         x = x.flatten(2).transpose(1, 2)
         patch_index = torch.stack(
-            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
+            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1])), dim=-1
         )
         patch_index = patch_index[None, None, :, :, :]
         patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
