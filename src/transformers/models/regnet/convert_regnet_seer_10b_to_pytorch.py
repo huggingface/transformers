@@ -173,34 +173,37 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
-    print("going to load the state_dict")
-    from_state_dict_trunk, from_state_dict_head = names_to_from_model[model_name]()
-    from_state_dict = from_state_dict_trunk
-    if "in1k" in model_name:
-        # add the head
-        from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
-    print("loaded the state_dict")
+    if not (save_directory / f"{model_name}.pth").exists():        
+        print("going to load the state_dict")
+        from_state_dict_trunk, from_state_dict_head = names_to_from_model[model_name]()
+        from_state_dict = from_state_dict_trunk
+        if "in1k" in model_name:
+            # add the head
+            from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
+        print("loaded the state_dict")
 
-    converted_state_dict = {}
-    
-    not_used_keys = list(from_state_dict.keys())
-    regex = r"\.block.-part."
+        converted_state_dict = {}
+        
+        not_used_keys = list(from_state_dict.keys())
+        regex = r"\.block.-part."
 
-    for key in from_state_dict.keys():
-        src_key = re.sub(regex, "", key)
-        dest_key = from_to_ours_keys[src_key]
-        converted_state_dict[dest_key] = from_state_dict[key]
-        not_used_keys.remove(key)
+        for key in from_state_dict.keys():
+            src_key = re.sub(regex, "", key)
+            dest_key = from_to_ours_keys[src_key]
+            converted_state_dict[dest_key] = from_state_dict[key]
+            not_used_keys.remove(key)
 
-    assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
+        assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
 
-    print('not_used_keys', not_used_keys)
+        print('not_used_keys', not_used_keys)
 
-    # save our state dict to disk
-    torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
+        # save our state dict to disk
+        torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
 
-    del converted_state_dict
-    print("removed dict")
+        del converted_state_dict
+        print("removed dict")
+    else:
+        print('model was already saved')
     if push_to_hub:
         # create our model
         our_config = names_to_config[model_name]
@@ -250,7 +253,7 @@ if __name__ == "__main__":
         "--push_to_hub",
         default=True,
         type=bool,
-        required=False,
+        required=True,
         help="If True, push model and feature extractor to the hub.",
     )
 
