@@ -1,10 +1,30 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert RegNet 10B checkpoints vissl."""
+# You need to install a specific version of classy vision
+# pip install git+https://github.com/FrancescoSaverioZuppichini/ClassyVision.git@convert_weights
+
 import argparse
 import json
+import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from pyexpat import model
-from typing import Callable, Dict, List, Tuple
+from pprint import pprint
+from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -13,17 +33,14 @@ from torch import Tensor
 from classy_vision.models.regnet import RegNet, RegNetParams
 from huggingface_hub import cached_download, hf_hub_url
 from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from vissl.models.model_helpers import get_trunk_forward_outputs
-from functools import partial
-from collections import OrderedDict
-import re
-from pprint import pprint
-from transformers.modeling_utils import PreTrainedModel
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
-#  pip install git+https://github.com/FrancescoSaverioZuppichini/ClassyVision.git@convert_weights
+
 
 @dataclass
 class Tracker:
@@ -48,7 +65,7 @@ class Tracker:
     @property
     def parametrized(self):
         # check the len of the state_dict keys to see if we have learnable params
-        return {k : v for k, v in self.name2module.items() if len(list(v.state_dict().keys())) > 0}
+        return {k: v for k, v in self.name2module.items() if len(list(v.state_dict().keys())) > 0}
 
 
 class FakeRegNetVisslWrapper(nn.Module):
@@ -77,30 +94,39 @@ class FakeRegNetVisslWrapper(nn.Module):
             feature_blocks=self._feature_blocks,
         )
 
+
 class FakeRegNetParams(RegNetParams):
+    """
+    Used to instantiace a RegNet model from classy vision with the same depth as the 10B one but with super small
+    parameters, so we can trace it in memory.
+    """
+
     def get_expanded_params(self):
-        return [(8, 2, 2, 8, 1.0),
-                 (8, 2, 7, 8, 1.0),
-                 (8, 2, 17, 8, 1.0),
-                 (8, 2, 1, 8, 1.0)]
+        return [(8, 2, 2, 8, 1.0), (8, 2, 7, 8, 1.0), (8, 2, 17, 8, 1.0), (8, 2, 1, 8, 1.0)]
 
 
-def get_from_to_our_keys(model_name: str):
-    # create a very small model
+def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
+    """
+    Returns a dictionary that maps from original model's key -> our implementation's keys
+    """
+
+    # create our model (with small weights)
     our_config = RegNetConfig(depths=[2, 7, 17, 1], hidden_sizes=[8, 8, 8, 8], groups_width=8)
     our_model = RegNetModel(our_config)
-
-    from_model = FakeRegNetVisslWrapper(RegNet(FakeRegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52)))
+    # create from model (with small weights)
+    from_model = FakeRegNetVisslWrapper(
+        RegNet(FakeRegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+    )
 
     with torch.no_grad():
         from_model = from_model.eval()
         our_model = our_model.eval()
-        
-        x = torch.randn((1, 3, 32, 32))
 
+        x = torch.randn((1, 3, 32, 32))
+        # trace both
         dest_tracker = Tracker(our_model)
         dest_traced = dest_tracker(x).parametrized
-            
+
         pprint(dest_tracker.name2module)
         src_tracker = Tracker(from_model)
         src_traced = src_tracker(x).parametrized
@@ -110,7 +136,7 @@ def get_from_to_our_keys(model_name: str):
         params_dict = OrderedDict()
         for name, module in dict_with_modules.items():
             for param_name, param in module.state_dict().items():
-                params_dict[f"{name}.{param_name}"] = param    
+                params_dict[f"{name}.{param_name}"] = param
         return params_dict
 
     from_to_ours_keys = {}
@@ -120,23 +146,19 @@ def get_from_to_our_keys(model_name: str):
 
     for (src_key, src_param), (dest_key, dest_param) in zip(src_state_dict.items(), dst_state_dict.items()):
         from_to_ours_keys[src_key] = dest_key
-        print(src_key, src_param.shape, "--->", dest_key, dest_param.shape)
-
-
+        logger.info(f"{src_key} -> {dest_key}")
+        logger.info(f"\t{src_param.shape} -> {dest_param.shape}")
+    # if "in1k" was in the model_name it means it must have a classification head (was finetuned)
     if "in1k" in model_name:
         from_to_ours_keys["0.clf.0.weight"] = "classifier.1.weight"
         from_to_ours_keys["0.clf.0.bias"] = "classifier.1.bias"
 
-
-    for name, param in src_state_dict.items():
-        print(name, param.shape)        
-
     return from_to_ours_keys
+
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
-    expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
@@ -157,6 +179,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
         ),
     }
+    
     # add seer weights logic
     def load_using_classy_vision(checkpoint_url: str) -> Tuple[Dict, Dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
@@ -165,49 +188,53 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         return model_state_dict["trunk"], model_state_dict["heads"]
 
     names_to_from_model = {
-        "regnet-y-10b-seer" : partial(
-        load_using_classy_vision,
-        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch"),
-        "regnet-y-10b-seer-in1k" : partial(
-        load_using_classy_vision,
-        "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch")
+        "regnet-y-10b-seer": partial(
+            load_using_classy_vision,
+            "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch",
+        ),
+        "regnet-y-10b-seer-in1k": partial(
+            load_using_classy_vision,
+            "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch",
+        ),
     }
 
     from_to_ours_keys = get_from_to_our_keys(model_name)
 
-    if not (save_directory / f"{model_name}.pth").exists():        
-        print("going to load the state_dict")
+    if not (save_directory / f"{model_name}.pth").exists():
+        logger.info("Loading original state_dict.")
         from_state_dict_trunk, from_state_dict_head = names_to_from_model[model_name]()
         from_state_dict = from_state_dict_trunk
         if "in1k" in model_name:
             # add the head
-            from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
-        print("loaded the state_dict")
+            from_state_dict = {**from_state_dict_trunk, **from_state_dict_head}
+        logger.info("Done!")
 
         converted_state_dict = {}
-        
+
         not_used_keys = list(from_state_dict.keys())
         regex = r"\.block.-part."
-
+        # this is "interesting", so the original checkpoints have `block[0,1]-part` in each key name, we remove it
         for key in from_state_dict.keys():
+            # remove the weird "block[0,1]-part" from the key
             src_key = re.sub(regex, "", key)
+            # now src_key from the model checkpoints is the one we got from the original model after tracing, so use it to get the correct destination key
             dest_key = from_to_ours_keys[src_key]
+            # store the parameter with our key
             converted_state_dict[dest_key] = from_state_dict[key]
             not_used_keys.remove(key)
-
+        # check that all keys have been updated
         assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
 
-        print('not_used_keys', not_used_keys)
+        logger.info(f"The following keys were not used: {','.join(not_used_keys)}")
 
         # save our state dict to disk
         torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
 
-        del converted_state_dict
-        print("removed dict")
+        del converted_state_dict    
     else:
-        print('model was already saved')
+        logger.info("The state_dict was already stored on disk.")
     if push_to_hub:
-        print('Pushing')
+        logger.info("Loading our model.")
         # create our model
         our_config = names_to_config[model_name]
         our_model_func = RegNetModel
@@ -216,17 +243,17 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         our_model = our_model_func(our_config)
         # place our model to the meta device (so remove all the weights)
         our_model.to(torch.device("meta"))
-        print("placing on meta device")
+        logger.info("Loading state_dict in our model.")
         # load state dict
         state_dict_keys = our_model.state_dict().keys()
         # state_dict = torch.load(save_directory / f"{model_name}.pth")
-        PreTrainedModel._load_pretrained_model_low_mem(our_model, state_dict_keys, [save_directory / f"{model_name}.pth"])
-        # our_model.load_state_dict(state_dict)
+        PreTrainedModel._load_pretrained_model_low_mem(
+            our_model, state_dict_keys, [save_directory / f"{model_name}.pth"]
+        )
+        logger.info("Finally, pushing!")
         # push it to hub
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            use_temp_dir=True
+            repo_path_or_name=save_directory / model_name, commit_message="Add model", use_temp_dir=True
         )
         size = 384
         # we can use the convnext one
@@ -236,8 +263,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             commit_message="Add feature extractor",
             use_temp_dir=True,
         )
-        
+
     # torch.save(converted_state_dict, str(save_directory))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
