@@ -27,7 +27,7 @@ from typing import List, Tuple
 
 from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import is_tf_available
+from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
@@ -98,6 +98,9 @@ if is_tf_available():
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
                 print(e)
+
+if is_torch_available():
+    import torch
 
 
 def _config_zero_init(config):
@@ -351,10 +354,90 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, names="outputs"):
+        """
+        Args:
+            model_class: The class of the model that is currently testing. For example, `TFBertModel`,
+                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
+                debugging easier and faster.
+
+            names: A string, or a tuple of strings. These specify what tf_outputs/pt_outputs represent in the model outputs.
+                Currently unused, but in the future, we could use this information to make the error message clearer
+                by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
+        """
+
+        # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
+        if names == "past_key_values":
+            return
+
+        # Allow `ModelOutput` because TODO.
+        if isinstance(tf_outputs, ModelOutput):
+            self.assertEqual(
+                type(names), str, "When `tf_outputs` is an instance of `ModelOutput`, the argument `names` should be a string"
+            )
+            self.assertTrue(isinstance(pt_outputs, ModelOutput), f"{names}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is")
+
+            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
+            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+            self.assertEqual(tf_keys, pt_keys, f"{names}: Output keys differ between TF and PyTorch")
+
+            # convert to the case of `tuple`
+            names = tuple([f"{names}.{k}" for k in tf_keys])
+            self.check_pt_tf_outputs(tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=names)
+
+        # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
+        elif type(tf_outputs) in [tuple, list]:
+
+            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{names}: Output types differ between TF and PyTorch")
+            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{names}: Output lengths differ between TF and PyTorch")
+
+            if type(names) == tuple:
+                # case 1: TODO
+                pass
+            elif type(names) == str:
+                # case 2: TODO
+                names = [f"{names}_{idx}" for idx in range(len(tf_outputs))]
+            else:
+                raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
+
+            for tf_output, pt_output, name in zip(tf_outputs, pt_outputs, names):
+                self.check_pt_tf_outputs(tf_output, pt_output, model_class, names=name)
+
+        elif isinstance(tf_outputs, tf.Tensor):
+            self.assertEqual(
+                type(names), str, "When `tf_outputs` is a tensor, the argument `names` should be a string"
+            )
+            self.assertTrue(
+                isinstance(pt_outputs, torch.Tensor), f"{names}: `pt_outputs` should a tensor when `tf_outputs` is"
+            )
+
+            tf_outputs = tf_outputs.numpy()
+            pt_outputs = pt_outputs.detach().to("cpu").numpy()
+
+            self.assertEqual(
+                tf_outputs.shape, pt_outputs.shape, f"{names}: Output shapes differ between TF and PyTorch"
+            )
+
+            tf_nans = np.isnan(tf_outputs)
+            pt_nans = np.isnan(pt_outputs)
+
+            pt_outputs[tf_nans] = 0
+            tf_outputs[tf_nans] = 0
+            pt_outputs[pt_nans] = 0
+            tf_outputs[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
+            self.assertLessEqual(
+                max_diff, 1e-5, f"{names}: Difference between torch and tf is {max_diff} (>= {1e-5})."
+            )
+        else:
+            raise ValueError(
+                f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+            )
+
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-        import torch
-
         import transformers
 
         def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
@@ -373,88 +456,6 @@ class TFModelTesterMixin:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
             return pt_inputs_dict
-
-        def check_outputs(tf_outputs, pt_outputs, model_class, names="outputs"):
-            """
-            Args:
-                model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                    TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
-                    debugging easier and faster.
-
-                names: A string, or a tuple of strings. These specify what tf_outputs/pt_outputs represent in the model outputs.
-                    Currently unused, but in the future, we could use this information to make the error message clearer
-                    by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
-            """
-
-            # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
-            if names == "past_key_values":
-                return
-
-            # Allow `ModelOutput` because TODO.
-            if isinstance(tf_outputs, ModelOutput):
-                self.assertEqual(
-                    type(names), str, "When `tf_outputs` is an instance of `ModelOutput`, the argument `names` should be a string"
-                )
-                self.assertTrue(isinstance(pt_outputs, ModelOutput), f"{names}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is")
-
-                tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(tf_keys, pt_keys, f"{names}: Output keys differ between TF and PyTorch")
-
-                # convert to the case of `tuple`
-                names = tuple([f"{names}.{k}" for k in tf_keys])
-                check_outputs(tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=names)
-
-            # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
-            elif type(tf_outputs) in [tuple, list]:
-
-                self.assertEqual(type(tf_outputs), type(pt_outputs), f"{names}: Output types differ between TF and PyTorch")
-                self.assertEqual(len(tf_outputs), len(pt_outputs), f"{names}: Output lengths differ between TF and PyTorch")
-
-                if type(names) == tuple:
-                    # case 1: TODO
-                    pass
-                elif type(names) == str:
-                    # case 2: TODO
-                    names = [f"{names}_{idx}" for idx in range(len(tf_outputs))]
-                else:
-                    raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
-
-                for tf_output, pt_output, name in zip(tf_outputs, pt_outputs, names):
-                    check_outputs(tf_output, pt_output, model_class, names=name)
-
-            elif isinstance(tf_outputs, tf.Tensor):
-                self.assertEqual(
-                    type(names), str, "When `tf_outputs` is a tensor, the argument `names` should be a string"
-                )
-                self.assertTrue(
-                    isinstance(pt_outputs, torch.Tensor), f"{names}: `pt_outputs` should a tensor when `tf_outputs` is"
-                )
-
-                tf_outputs = tf_outputs.numpy()
-                pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-                self.assertEqual(
-                    tf_outputs.shape, pt_outputs.shape, f"{names}: Output shapes differ between TF and PyTorch"
-                )
-
-                tf_nans = np.isnan(tf_outputs)
-                pt_nans = np.isnan(pt_outputs)
-
-                pt_outputs[tf_nans] = 0
-                tf_outputs[tf_nans] = 0
-                pt_outputs[pt_nans] = 0
-                tf_outputs[pt_nans] = 0
-
-                max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-                self.assertLessEqual(
-                    max_diff, 1e-5, f"{names}: Difference between torch and tf is {max_diff} (>= {1e-5})."
-                )
-            else:
-                raise ValueError(
-                    f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
-                )
 
         def check_pt_tf_models(tf_model, pt_model):
 
@@ -481,7 +482,7 @@ class TFModelTesterMixin:
                 pt_outputs = pt_model(**pt_inputs_dict)
             tf_outputs = tf_model(tf_inputs_dict)
 
-            check_outputs(tf_outputs, pt_outputs, model_class)
+            self.check_pt_tf_outputs(tf_outputs, pt_outputs, model_class)
 
             # check the case where `labels` is passed
             has_labels = any(
@@ -548,7 +549,7 @@ class TFModelTesterMixin:
 
                     # check anything else than `loss`
                     names = tuple([f"outputs.{k}" for k in tf_keys])
-                    check_outputs(tf_outputs[1:index], pt_outputs[1:index], model_class, names=names[1:index])
+                    self.check_pt_tf_outputs(tf_outputs[1:index], pt_outputs[1:index], model_class, names=names[1:index])
 
                     # check `loss`
 
