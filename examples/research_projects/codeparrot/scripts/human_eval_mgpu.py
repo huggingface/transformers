@@ -2,6 +2,7 @@ import json
 import multiprocessing
 import os
 import re
+from collections import defaultdict
 
 import torch
 from datasets import load_dataset, load_metric
@@ -44,7 +45,7 @@ class TokenizeDataset(IterableDataset):
             # codeparrot model is not robust to padding
             input_ids = self.tokenizer(prompt)["input_ids"]
             for _ in range(self.n_copies):
-                yield {"ids": torch.tensor(input_ids)}
+                yield {"ids": torch.tensor(input_ids), "task_id": task}
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -71,7 +72,11 @@ def remove_last_block(string):
     return "".join(string_list[:-2])
 
 
-def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size=20, **gen_kwargs):
+def repeat_elements(x, k):
+    return [e for e in x for i in range(k)]
+
+
+def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **gen_kwargs):
     """Generate multiple codes for each task in the dataset. This function leverage accelerator to distribute
     the processing to multiple GPUs.
     dataloader, a wrapper around a TokenizeDataset objectm is supposed to send all the prompts from
@@ -95,9 +100,6 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
     dataloader: DataLoader
         The dataloader is a wrapper around a TokenizeDataset object. It is designed to be used with multiple GPUs.
 
-    n_tasks: int
-        Number of tasks to generate codes for. Must be equal to the number of tasks in the TokenizeDataset.n_tasks.
-
     batch_size: int
         num_return_sequences per copy of the prompt such that num_sample = batch_size * n_copies
 
@@ -106,11 +108,11 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
 
     Returns
     -------
-    code_gens: list, len = n_tasks
-        List of generated codes for each task.
+    code_gens_dict: dict of task_num -> list
+        Dict of generated codes for each task.
         Each element is a list of generated codes for each task, with length num_samples
     """
-    gen_dataset_tokens = []  # list of shape n_steps
+    gen_token_dict = defaultdict(list)  # dict of list of generated tokens
     for step, batch in tqdm(enumerate(dataloader)):
         with torch.no_grad():
             gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
@@ -121,20 +123,19 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
                 generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
             )
             generated_tokens = accelerator.gather(generated_tokens).cpu().numpy()
-            # generated_tokens of shape (n_processes*batch_size, n_tokens)
-            gen_dataset_tokens.append(generated_tokens)
+            generated_tasks = accelerator.gather(batch["task_id"]).cpu().numpy()
+            # each task is generated batch_size times
+            generated_tasks = repeat_elements(generated_tasks, batch_size)
 
-    code_gens = []
-    # gen_dataset_tokens is of len n_tasks * (n_copies // num_processes)
-    task_size = len(gen_dataset_tokens) // n_tasks
-    for task in range(n_tasks):
-        task_gens = []
-        for generated_tokens in gen_dataset_tokens[task * task_size : (task + 1) * task_size]:
-            for s in generated_tokens:
-                gen_code = tokenizer.decode(s, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                task_gens.append(remove_last_block(gen_code))
-        code_gens.append(task_gens)
-    return code_gens
+            for task, generated_tokens in zip(generated_tasks, generated_tokens):
+                gen_token_dict[task].append(generated_tokens)
+
+    code_gens_dict = defaultdict(list)
+    for task, generated_tokens in gen_token_dict.items():
+        for s in generated_tokens:
+            gen_code = tokenizer.decode(s, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            code_gens_dict[task].append(remove_last_block(gen_code))
+    return code_gens_dict
 
 
 def main():
@@ -194,9 +195,13 @@ def main():
         raise exception
 
     model, human_eval_loader = accelerator.prepare(model, human_eval_loader)
-    generations = complete_code(
-        accelerator, model, tokenizer, human_eval_loader, n_tasks=n_tasks, batch_size=args.batch_size, **gen_kwargs
+
+    generations = [[] for _ in range(n_tasks)]
+    generation_dict = complete_code(
+        accelerator, model, tokenizer, human_eval_loader, batch_size=args.batch_size, **gen_kwargs
     )
+    for task, gen_list in generation_dict.items():
+        generations[task].extend(gen_list)
 
     if accelerator.is_main_process:
         references = []
