@@ -2618,12 +2618,7 @@ class TFGenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
-            cache = tf.nest.map_structure(
-                lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=cache_batch_axis),
-                model_outputs.past_key_values,
-            )
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
@@ -2698,6 +2693,8 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large negative value.
             eos_in_next_token = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
+            if eos_token_id is None:
+                eos_in_next_token = tf.broadcast_to(eos_in_next_token, topk_sequences_seq_last[:, :, cur_len].shape)
             did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
                 eos_in_next_token.shape,
@@ -2742,14 +2739,20 @@ class TFGenerationMixin:
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices
             )
 
-            # 8. Update model kwargs.
+            # 8. Prepare data for the next iteration
             # Determine the top k beam indices from the original set of all beams. With these, gather the top k
             # beam-associated caches.
-            next_running_indices = gather_beams(topk_beam_indices, next_topk_indices)
-            next_cache = gather_beams(cache, next_running_indices, batch_axis=cache_batch_axis)
-            model_outputs["past_key_values"] = tf.nest.map_structure(
-                lambda tensor: flatten_beam_dim(tensor, batch_axis=cache_batch_axis), next_cache
-            )
+            if "past_key_values" in model_outputs:
+                cache = tf.nest.map_structure(
+                    lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=cache_batch_axis),
+                    model_outputs.past_key_values,
+                )
+                next_running_indices = gather_beams(topk_beam_indices, next_topk_indices)
+                next_cache = gather_beams(cache, next_running_indices, batch_axis=cache_batch_axis)
+                model_outputs["past_key_values"] = tf.nest.map_structure(
+                    lambda tensor: flatten_beam_dim(tensor, batch_axis=cache_batch_axis), next_cache
+                )
+
             if use_xla:
                 next_model_kwargs = self._update_model_kwargs_for_xla_generation(
                     model_outputs, model_kwargs, cur_len, max_length
@@ -2758,6 +2761,12 @@ class TFGenerationMixin:
                 next_model_kwargs = self._update_model_kwargs_for_generation(
                     model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
+
+                # if we don't cache past key values we need the whole input
+                if model_kwargs.get("past", None) is None:
+                    input_ids_length = cur_len + 1
+                    # let's throw out `past` since we don't want `None` tensors
+                    model_kwargs.pop("past", None)
 
             # 9. Prepare the `tf.TensorArray` for the next iteration
             next_sequences = sequences.unstack(tf.transpose(next_sequences_seq_last, perm=[2, 0, 1]))
@@ -2782,7 +2791,7 @@ class TFGenerationMixin:
         )
 
         # 1st generation step has to be run before to initialize `past`
-        beam_search_body_fn_first_iter = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])
+        beam_search_body_fn_first_iter = partial(beam_search_body_fn, input_ids_length=cur_len)
         (
             cur_len,
             running_sequences,
