@@ -22,7 +22,7 @@ from transformers import XLNetConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -75,7 +75,7 @@ class TFXLNetModelTester:
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         segment_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2, dtype=tf.float32)
+        input_mask = random_attention_mask([self.batch_size, self.seq_length], dtype=tf.float32)
 
         input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
         perm_mask = tf.zeros((self.batch_size, self.seq_length + 1, self.seq_length), dtype=tf.float32)

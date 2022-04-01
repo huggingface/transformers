@@ -175,7 +175,7 @@ Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for Tenso
 ...     "Don't think he knows about second breakfast, Pip.",
 ...     "What about elevensies?",
 ... ]
->>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors="tf")
+>>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="tf")
 >>> print(encoded_input)
 {'input_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
