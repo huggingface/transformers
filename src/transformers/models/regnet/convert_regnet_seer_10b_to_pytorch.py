@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
+from pyexpat import model
 from typing import Callable, Dict, List, Tuple
 
 import torch
@@ -174,7 +175,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     print("going to load the state_dict")
     from_state_dict_trunk, from_state_dict_head = names_to_from_model[model_name]()
-    from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
+    from_state_dict = from_state_dict_trunk
+    if "in1k" in model_name:
+        # add the head
+        from_state_dict = { **from_state_dict_trunk, **from_state_dict_head}
     print("loaded the state_dict")
 
     converted_state_dict = {}
@@ -196,7 +200,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
 
     del converted_state_dict
-
+    print("removed dict")
     if push_to_hub:
         # create our model
         our_config = names_to_config[model_name]
