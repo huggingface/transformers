@@ -29,25 +29,15 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .tokenization_utils_base import BatchEncoding
-from .utils import (
-    is_sagemaker_dp_enabled,
-    is_sagemaker_mp_enabled,
-    is_torch_tpu_available,
-    is_training_run_on_sagemaker,
-    logging,
-)
+from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
-
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-else:
-    import torch.distributed as dist
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))

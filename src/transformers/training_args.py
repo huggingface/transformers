@@ -41,12 +41,11 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as sm_dist
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1040,10 +1039,15 @@ class TrainingArguments:
     @torch_required
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
+        if torch.distributed.is_initialized() and self.local_rank == -1:
+            logger.warning(
+                "torch.distributed process group is initialized, but local_rank == -1. "
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+            )
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
-            if self.local_rank != -1:
+            if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
                     raise ValueError(
@@ -1059,8 +1063,8 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
-            sm_dist.init_process_group()
-            self.local_rank = sm_dist.get_local_rank()
+            dist.init_process_group(backend="smddp")
+            self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
@@ -1094,7 +1098,8 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            if not torch.distributed.is_initialized():
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
@@ -1161,7 +1166,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_world_size()
+            return dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
         return 1
@@ -1177,7 +1182,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
         return 0
@@ -1193,7 +1198,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return self.local_rank
         return 0
@@ -1296,7 +1301,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1307,7 +1312,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
         else:
