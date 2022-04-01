@@ -19,6 +19,8 @@ from functools import partial
 from collections import OrderedDict
 import re
 from pprint import pprint
+from transformers.modeling_utils import PreTrainedModel
+
 logging.set_verbosity_info()
 logger = logging.get_logger()
 #  pip install git+https://github.com/FrancescoSaverioZuppichini/ClassyVision.git@convert_weights
@@ -216,8 +218,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         our_model.to(torch.device("meta"))
         print("placing on meta device")
         # load state dict
-        state_dict = torch.load(save_directory / f"{model_name}.pth")
-        our_model.load_state_dict(state_dict)
+        state_dict_keys = our_model.state_dict().keys()
+        # state_dict = torch.load(save_directory / f"{model_name}.pth")
+        PreTrainedModel._load_pretrained_model_low_mem(our_model, state_dict_keys, [save_directory / f"{model_name}.pth"])
+        # our_model.load_state_dict(state_dict)
         # push it to hub
         our_model.push_to_hub(
             repo_path_or_name=save_directory / model_name,
