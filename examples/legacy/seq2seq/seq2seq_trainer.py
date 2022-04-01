@@ -115,7 +115,7 @@ class Seq2SeqTrainer(Trainer):
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            if self.sharded_dpp:
+            if self.sharded_ddp:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
                     optim=optimizer_cls,
