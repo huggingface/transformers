@@ -2150,6 +2150,14 @@ if is_tf_available():
             "TFWav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.xglm"].extend(
+        [
+            "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXGLMForCausalLM",
+            "TFXGLMModel",
+            "TFXGLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4183,6 +4191,12 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+        from .models.xglm import (
+            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXGLMForCausalLM,
+            TFXGLMModel,
+            TFXGLMPreTrainedModel,
         )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,

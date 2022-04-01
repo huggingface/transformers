@@ -22,6 +22,7 @@ from ...utils import (
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
 )
@@ -54,6 +55,15 @@ if is_flax_available():
     ]
 
 
+if is_tf_available():
+    _import_structure["modeling_tf_xglm"] = [
+        "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFXGLMForCausalLM",
+        "TFXGLMModel",
+        "TFXGLMPreTrainedModel",
+    ]
+
+
 if TYPE_CHECKING:
     from .configuration_xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
 
@@ -68,6 +78,9 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+
+    if is_tf_available():
+        from .modeling_tf_xglm import TFXGLMForCausalLM, TFXGLMModel, TFXGLMPreTrainedModel
 
 
 else:
