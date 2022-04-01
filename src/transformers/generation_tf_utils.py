@@ -1493,7 +1493,8 @@ class TFGenerationMixin:
             model_kwargs["output_hidden_states"] = output_hidden_states
         if use_cache is not None:
             model_kwargs["use_cache"] = use_cache
-        model_kwargs["attention_mask"] = attention_mask
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -2502,8 +2503,8 @@ class TFGenerationMixin:
         )
 
         use_xla = not tf.executing_eagerly()
-        # GPT2 has a slightly different cache structure, with a different batch axis
-        cache_batch_axis = 1 if "TFGPT2" in str(self) else 0
+        # GPT2 and other models has a slightly different cache structure, with a different batch axis
+        cache_batch_axis = 1 if any([model_name in str(self) for model_name in ("TFGPT2", "TFCTRL")]) else 0
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
         scores = [] if (return_dict_in_generate and output_scores) else None
