@@ -708,18 +708,36 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
 
         ```python
         >>> from transformers import GLPNFeatureExtractor, GLPNForDepthEstimation
+        >>> import torch
+        >>> import numpy as np
         >>> from PIL import Image
         >>> import requests
-
-        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
-        >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
+        >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
+
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> predicted_depth = outputs.predicted_depth  # shape (batch_size, height, width)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     predicted_depth = outputs.predicted_depth
+
+        >>> # interpolate to original size
+        >>> prediction = torch.nn.functional.interpolate(
+        ...     predicted_depth.unsqueeze(1),
+        ...     size=image.size[::-1],
+        ...     mode="bicubic",
+        ...     align_corners=False,
+        ... )
+
+        >>> # visualize the prediction
+        >>> output = prediction.squeeze().cpu().numpy()
+        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
+        >>> depth = Image.fromarray(formatted)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
