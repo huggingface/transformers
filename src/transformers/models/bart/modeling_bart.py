@@ -127,7 +127,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-        """`input_ids` is expected to be [bsz x seqlen x embedding_dim]."""
+        """`input_ids` is expected to be [bsz,seqlen]."""
         mask = input_ids.ne(self.padding_idx).int()
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
         return super().forward(incremental_indices.long() + self.padding_idx)
