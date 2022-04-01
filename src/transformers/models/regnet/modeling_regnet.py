@@ -179,7 +179,7 @@ class RegNetYLayer(nn.Module):
         self.layer = nn.Sequential(
             RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
             RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
-            RegNetSELayer(out_channels, reduced_channels=in_channels // 4),
+            RegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4))),
             RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
         self.activation = ACT2FN[config.hidden_act]

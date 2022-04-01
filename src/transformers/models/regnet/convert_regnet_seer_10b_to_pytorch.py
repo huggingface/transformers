@@ -205,6 +205,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     else:
         print('model was already saved')
     if push_to_hub:
+        print('Pushing')
         # create our model
         our_config = names_to_config[model_name]
         our_model_func = RegNetModel
@@ -213,6 +214,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         our_model = our_model_func(our_config)
         # place our model to the meta device (so remove all the weights)
         our_model.to(torch.device("meta"))
+        print("placing on meta device")
         # load state dict
         state_dict = torch.load(save_directory / f"{model_name}.pth")
         our_model.load_state_dict(state_dict)
@@ -253,7 +255,7 @@ if __name__ == "__main__":
         "--push_to_hub",
         default=True,
         type=bool,
-        required=True,
+        required=False,
         help="If True, push model and feature extractor to the hub.",
     )
 
