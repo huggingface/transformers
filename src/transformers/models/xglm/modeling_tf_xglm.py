@@ -534,7 +534,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         positions = tf.gather(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
-        print("tf.hs", hidden_states.numpy().sum())
 
         hidden_states = self.dropout(hidden_states, training=training)
 
@@ -575,7 +574,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_value,
             )
-            print(f"tf.hs.{idx}", hidden_states.numpy().sum())
 
             if use_cache:
                 next_decoder_cache += (present_key_value,)
@@ -586,7 +584,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_cross_attn,)
 
-        print("tf.hs.end", hidden_states.numpy().sum())
         hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
