@@ -51,6 +51,7 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -64,17 +65,6 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
-from .file_utils import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    get_full_repo_name,
-    is_apex_available,
-    is_datasets_available,
-    is_in_notebook,
-    is_sagemaker_dp_enabled,
-    is_sagemaker_mp_enabled,
-    is_torch_tpu_available,
-)
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
@@ -131,7 +121,18 @@ from .trainer_utils import (
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
-from .utils import logging
+from .utils import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    get_full_repo_name,
+    is_apex_available,
+    is_datasets_available,
+    is_in_notebook,
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
+    is_torch_tpu_available,
+    logging,
+)
 
 
 _is_torch_generator_available = False
@@ -170,11 +171,6 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
-else:
-    import torch.distributed as dist
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -585,13 +581,22 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not has_length(self.train_dataset):
+        if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
         generator = None
         if self.args.world_size <= 1 and _is_torch_generator_available:
             generator = torch.Generator()
-            generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+            # for backwards compatibility, we generate a seed here (which is sampled from a generator seeded with
+            # `args.seed`) if data_seed isn't provided.
+            # Further on in this method, we default to `args.seed` instead.
+            if self.args.data_seed is None:
+                seed = int(torch.empty((), dtype=torch.int64).random_().item())
+            else:
+                seed = self.args.data_seed
+            generator.manual_seed(seed)
+
+        seed = self.args.data_seed if self.args.data_seed is not None else self.args.seed
 
         # Build the sampler.
         if self.args.group_by_length:
@@ -620,7 +625,7 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
-                    seed=self.args.seed,
+                    seed=seed,
                 )
 
         else:
@@ -638,22 +643,22 @@ class Trainer:
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
-                    seed=self.args.seed,
+                    seed=seed,
                 )
             else:
                 return DistributedSampler(
                     self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
-                    seed=self.args.seed,
+                    seed=seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
 
-        Will use no sampler if `self.train_dataset` does not implement `__len__`, a random sampler (adapted to
-        distributed training if necessary) otherwise.
+        Will use no sampler if `train_dataset` does not implement `__len__`, a random sampler (adapted to distributed
+        training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -928,11 +933,13 @@ class Trainer:
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
-        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset.
-
-        Will raise an exception if the underlying dataset does not implement method `__len__`
+        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset. When
+        dataloader.dataset does not exist or has no length, estimates as best it can
         """
-        return len(dataloader.dataset)
+        try:
+            return len(dataloader.dataset)
+        except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
+            return len(dataloader) * self.args.per_device_train_batch_size
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
@@ -984,6 +991,7 @@ class Trainer:
 
             trial.report(self.objective, epoch)
             if trial.should_prune():
+                self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
@@ -1067,7 +1075,9 @@ class Trainer:
                 ).to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+            model = nn.parallel.DistributedDataParallel(
+                model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
+            )
         elif self.args.local_rank != -1:
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
@@ -1189,9 +1199,6 @@ class Trainer:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
-        # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = has_length(self.train_dataset)
-
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
@@ -1200,28 +1207,36 @@ class Trainer:
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
         total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
-        if train_dataset_is_sized:
-            num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
+
+        len_dataloader = None
+        if has_length(train_dataloader):
+            len_dataloader = len(train_dataloader)
+            num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+            num_examples = self.num_examples(train_dataloader)
             if args.max_steps > 0:
                 max_steps = args.max_steps
                 num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
                     args.max_steps % num_update_steps_per_epoch > 0
                 )
-                # May be slightly incorrect if the last batch in the training datalaoder has a smaller size but it's
+                # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
                 # the best we can do.
                 num_train_samples = args.max_steps * total_train_batch_size
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
-                num_train_samples = len(self.train_dataset) * args.num_train_epochs
-        else:
-            # see __init__. max_steps is set when the dataset has no __len__
+                num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
+        elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
             num_update_steps_per_epoch = max_steps
+            num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
+        else:
+            raise ValueError(
+                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+            )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -1272,10 +1287,6 @@ class Trainer:
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
-        num_examples = (
-            self.num_examples(train_dataloader) if train_dataset_is_sized else total_train_batch_size * args.max_steps
-        )
-
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Num Epochs = {num_train_epochs}")
@@ -1345,14 +1356,23 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                # We just need to begin an iteration to create the randomization of the sampler.
-                for _ in train_dataloader:
-                    break
+                is_random_sampler = hasattr(train_dataloader, "sampler") and isinstance(
+                    train_dataloader.sampler, RandomSampler
+                )
+                if version.parse(torch.__version__) < version.parse("1.11") or not is_random_sampler:
+                    # We just need to begin an iteration to create the randomization of the sampler.
+                    # That was before PyTorch 1.11 however...
+                    for _ in train_dataloader:
+                        break
+                else:
+                    # Otherwise we need to call the whooooole sampler cause there is some random operation added
+                    # AT THE VERY END!
+                    _ = list(train_dataloader.sampler)
 
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
-            elif isinstance(train_dataloader.dataset, IterableDatasetShard):
+            elif hasattr(train_dataloader, "dataset") and isinstance(train_dataloader.dataset, IterableDatasetShard):
                 train_dataloader.dataset.set_epoch(epoch)
 
             if is_torch_tpu_available():
@@ -1366,7 +1386,9 @@ class Trainer:
                 self._past = None
 
             steps_in_epoch = (
-                len(epoch_iterator) if train_dataset_is_sized else args.max_steps * args.gradient_accumulation_steps
+                len(epoch_iterator)
+                if len_dataloader is not None
+                else args.max_steps * args.gradient_accumulation_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
@@ -1678,7 +1700,7 @@ class Trainer:
         self.save_model(output_dir, _internal_call=True)
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
-            # config `stage3_gather_fp16_weights_on_model_save` is True
+            # config `stage3_gather_16bit_weights_on_model_save` is True
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
@@ -1934,6 +1956,11 @@ class Trainer:
         handling potential state.
         """
         inputs = self._prepare_input(inputs)
+        if len(inputs) == 0:
+            raise ValueError(
+                "The batch received was empty, your model won't be able to train on it. Double-check that your "
+                f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
+            )
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
 
@@ -2087,12 +2114,12 @@ class Trainer:
                         # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
                         os.remove(file)
 
-                # now save the real model if stage3_gather_fp16_weights_on_model_save=True
+                # now save the real model if stage3_gather_16bit_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                if not self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME):
+                if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
-                        "deepspeed.save_fp16_model didn't save the model, since stage3_gather_fp16_weights_on_model_save=false. "
+                        "deepspeed.save_16bit_model didn't save the model, since stage3_gather_16bit_weights_on_model_save=false. "
                         "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
                     )
                     self.deepspeed.save_checkpoint(output_dir)
@@ -2384,10 +2411,10 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = dataloader.batch_size
+        batch_size = self.args.per_device_eval_batch_size
 
         logger.info(f"***** Running {description} *****")
-        if has_length(dataloader.dataset):
+        if has_length(dataloader):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
             logger.info("  Num examples: Unknown")
@@ -2397,7 +2424,7 @@ class Trainer:
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
-        eval_dataset = dataloader.dataset
+        eval_dataset = getattr(dataloader, "dataset", None)
 
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
@@ -2489,7 +2516,10 @@ class Trainer:
         elif isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
             num_samples = eval_dataset.num_examples
         else:
-            num_samples = observed_num_examples
+            if has_length(dataloader):
+                num_samples = self.num_examples(dataloader)
+            else:  # both len(dataloader.dataset) and len(dataloader) fail
+                num_samples = observed_num_examples
 
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
         # samplers has been rounded to a multiple of batch_size, so we truncate.
@@ -2876,8 +2906,9 @@ class Trainer:
         """
         args = self.args
 
-        if not has_length(dataloader.dataset):
-            raise ValueError("dataset must implement __len__")
+        if not has_length(dataloader):
+            raise ValueError("dataloader must implement a working __len__")
+
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here

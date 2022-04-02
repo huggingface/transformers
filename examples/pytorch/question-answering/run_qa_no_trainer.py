@@ -49,8 +49,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, get_full_repo_name
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
 
@@ -792,7 +791,7 @@ def main():
 
                 if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
                     start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
-                    end_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+                    end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
                 all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
                 all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())

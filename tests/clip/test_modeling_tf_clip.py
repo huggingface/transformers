@@ -23,8 +23,8 @@ from importlib import import_module
 
 import requests
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from transformers.file_utils import is_tf_available, is_vision_available
 from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.utils import is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -301,6 +301,12 @@ class TFCLIPTextModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            # make sure the first token has attention mask `1` to ensure that, after combining the causal mask, there
+            # is still at least one token being attended to for each batch.
+            # TODO: Change `random_attention_mask` in PT/TF/Flax common test file, after a discussion with the team.
+            input_mask = tf.concat(
+                [tf.ones_like(input_mask[:, :1], dtype=input_mask.dtype), input_mask[:, 1:]], axis=-1
+            )
 
         config = self.get_config()
 

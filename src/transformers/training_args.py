@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
-from .file_utils import (
+from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
@@ -33,20 +34,18 @@ from .file_utils import (
     is_torch_bf16_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    logging,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
-from .utils import logging
 
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as sm_dist
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -101,16 +100,16 @@ class TrainingArguments:
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -138,6 +137,9 @@ class TrainingArguments:
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
+        eval_delay (`float`, *optional*):
+            Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
+            evaluation_strategy.
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -220,6 +222,10 @@ class TrainingArguments:
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
+        data_seed (`int`, *optional*):
+            Random seed to be used with data samplers. If not set, random generators for data sampling will use the
+            same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
+            seed.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture. This is an experimental API and it may change.
@@ -381,7 +387,7 @@ class TrainingArguments:
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         hub_model_id (`str`, *optional*):
             The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
@@ -468,6 +474,13 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
+    eval_delay: Optional[float] = field(
+        default=0,
+        metadata={
+            "help": "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the evaluation_strategy."
+        },
+    )
+
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
     adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
@@ -516,7 +529,7 @@ class TrainingArguments:
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
-    logging_nan_inf_filter: str = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
+    logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
@@ -539,6 +552,7 @@ class TrainingArguments:
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
     bf16: bool = field(
         default=False,
         metadata={
@@ -1007,10 +1021,15 @@ class TrainingArguments:
     @torch_required
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
+        if torch.distributed.is_initialized() and self.local_rank == -1:
+            logger.warning(
+                "torch.distributed process group is initialized, but local_rank == -1. "
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+            )
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
-            if self.local_rank != -1:
+            if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
                     raise ValueError(
@@ -1026,8 +1045,8 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
-            sm_dist.init_process_group()
-            self.local_rank = sm_dist.get_local_rank()
+            dist.init_process_group(backend="smddp")
+            self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
@@ -1061,7 +1080,8 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            if not torch.distributed.is_initialized():
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
@@ -1128,7 +1148,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_world_size()
+            return dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
         return 1
@@ -1144,7 +1164,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
         return 0
@@ -1160,7 +1180,7 @@ class TrainingArguments:
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
-            return sm_dist.get_rank()
+            return dist.get_rank()
         elif self.local_rank != -1:
             return self.local_rank
         return 0
@@ -1260,7 +1280,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1271,7 +1291,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.barrier()
+                        dist.barrier()
                     else:
                         torch.distributed.barrier()
         else:

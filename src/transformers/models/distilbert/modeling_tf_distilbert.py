@@ -17,16 +17,12 @@
 """
 
 import warnings
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -37,17 +33,24 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    input_processing,
     keras_serializable,
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
-from ...utils import logging
+from ...utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -218,7 +221,6 @@ class TFFFN(tf.keras.layers.Layer):
         self.lin2 = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="lin2"
         )
-        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
         self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
@@ -359,6 +361,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
+    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -371,55 +374,39 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.ones(input_shape)  # (bs, seq_length)
+        if attention_mask is None:
+            attention_mask = tf.ones(input_shape)  # (bs, seq_length)
 
-        inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=tf.float32)
+        attention_mask = tf.cast(attention_mask, dtype=tf.float32)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if inputs["head_mask"] is not None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.num_hidden_layers
+            head_mask = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            inputs["input_ids"], inputs_embeds=inputs["inputs_embeds"]
-        )  # (bs, seq_length, dim)
+        embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
             embedding_output,
-            inputs["attention_mask"],
-            inputs["head_mask"],
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
-            inputs["return_dict"],
-            training=inputs["training"],
+            attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            training=training,
         )
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
@@ -521,8 +508,8 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -538,6 +525,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -547,19 +535,17 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        outputs = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -568,17 +554,6 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         return outputs
 
@@ -642,7 +617,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_transform = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
-        self.act = get_tf_activation("gelu")
+        self.act = get_tf_activation(config.activation)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
@@ -653,6 +628,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.vocab_projector.name
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -662,26 +638,24 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -689,19 +663,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        distilbert_output = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -709,9 +671,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)
 
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], prediction_logits)
+        loss = None if labels is None else self.hf_compute_loss(labels, prediction_logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (prediction_logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -754,6 +716,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         )
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -763,26 +726,24 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -790,29 +751,17 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        distilbert_output = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output, training=inputs["training"])  # (bs, dim)
+        pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -849,6 +798,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -858,24 +808,22 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -883,26 +831,14 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output, training=inputs["training"])
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -954,6 +890,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(
         DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
@@ -965,73 +902,56 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None:
-            num_choices = shape_list(inputs["input_ids"])[1]
-            seq_length = shape_list(inputs["input_ids"])[2]
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
         else:
-            num_choices = shape_list(inputs["inputs_embeds"])[1]
-            seq_length = shape_list(inputs["inputs_embeds"])[2]
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
 
-        flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = (
-            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
-        )
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_inputs_embeds = (
-            tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
-            if inputs["inputs_embeds"] is not None
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
             else None
         )
         distilbert_output = self.distilbert(
             flat_input_ids,
             flat_attention_mask,
-            inputs["head_mask"],
+            head_mask,
             flat_inputs_embeds,
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            output_attentions,
+            output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output, training=inputs["training"])  # (bs, dim)
+        pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], reshaped_logits)
+        loss = None if labels is None else self.hf_compute_loss(labels, reshaped_logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (reshaped_logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1081,6 +1001,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1090,18 +1011,18 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        start_positions=None,
-        end_positions=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1112,9 +1033,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1122,35 +1041,22 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            start_positions=start_positions,
-            end_positions=end_positions,
             training=training,
-            kwargs_call=kwargs,
-        )
-        distilbert_output = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
-        hidden_states = self.dropout(hidden_states, training=inputs["training"])  # (bs, max_query_len, dim)
+        hidden_states = self.dropout(hidden_states, training=training)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
         loss = None
-        if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
-            labels = {"start_position": inputs["start_positions"]}
-            labels["end_position"] = inputs["end_positions"]
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
             loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (start_logits, end_logits) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 

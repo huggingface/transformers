@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Exporting 🤗 Transformers Models
+# Export 🤗 Transformers Models
 
 If you need to deploy 🤗 Transformers models in production environments, we
 recommend exporting them to a serialized format that can be loaded and executed
@@ -47,12 +47,17 @@ Ready-made configurations include the following architectures:
 
 - ALBERT
 - BART
+- BEiT
 - BERT
+- Blenderbot
+- BlenderbotSmall
 - CamemBERT
 - Data2VecText
 - DistilBERT
 - ELECTRA
+- FlauBERT
 - GPT Neo
+- GPT-J
 - I-BERT
 - LayoutLM
 - M2M100
@@ -62,6 +67,7 @@ Ready-made configurations include the following architectures:
 - PLBart
 - RoBERTa
 - T5
+- ViT
 - XLM-RoBERTa
 - XLM-RoBERTa-XL
 
@@ -161,20 +167,32 @@ To export a model that's stored locally, you'll need to have the model's weights
 and tokenizer files stored in a directory. For example, we can load and save a
 checkpoint as follows:
 
+<frameworkcontent>
+<pt>
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 >>> # Load tokenizer and PyTorch weights form the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-pt-checkpoint")
 >>> pt_model.save_pretrained("local-pt-checkpoint")
-===PT-TF-SPLIT===
+```
+
+Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
+argument of the `transformers.onnx` package to the desired directory:
+
+```bash
+python -m transformers.onnx --model=local-pt-checkpoint onnx/
+```
+</pt>
+<tf>
+```python
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-tf-checkpoint")
@@ -185,10 +203,10 @@ Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
 argument of the `transformers.onnx` package to the desired directory:
 
 ```bash
-python -m transformers.onnx --model=local-pt-checkpoint onnx/
-===PT-TF-SPLIT===
 python -m transformers.onnx --model=local-tf-checkpoint onnx/
 ```
+</tf>
+</frameworkcontent>
 
 ### Selecting features for different model topologies
 
@@ -601,9 +619,9 @@ deployment on Inf1. The Neuron SDK provides:
 
 #### Implications
 
-Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/master/model_doc/bert)
-architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/master/model_doc/distilbert)
- and [roBERTa](https://huggingface.co/docs/transformers/master/model_doc/roberta)
+Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
+architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert)
+ and [roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)
  will run best on Inf1 for non-generative tasks such as Extractive Question Answering,
  Sequence Classification, Token Classification. Alternatively, text generation
 tasks can be adapted to run on Inf1, according to this [AWS Neuron MarianMT tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
@@ -619,7 +637,7 @@ Using AWS Neuron to convert models requires the following dependencies and envir
 
 #### Converting a Model for AWS Neuron
 
-Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/master/en/serialization#using-torchscript-in-python)
+Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/main/en/serialization#using-torchscript-in-python)
 to trace a "BertModel", you import `torch.neuron` framework extension to access
 the components of the Neuron SDK through a Python API.
 

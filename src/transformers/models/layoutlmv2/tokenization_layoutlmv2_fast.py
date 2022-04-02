@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from tokenizers import normalizers
 
-from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
@@ -33,7 +32,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, LayoutLMv2Tokenizer
 
 

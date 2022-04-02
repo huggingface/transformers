@@ -16,11 +16,11 @@
 import unittest
 
 from transformers import T5Config, is_tf_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -58,7 +58,7 @@ class TFT5ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_labels = None
         if self.use_labels:
@@ -98,13 +98,10 @@ class TFT5ModelTester:
         encoder_output = result.encoder_last_hidden_state
         self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
-        self.parent.assertEqual(len(decoder_past), 2)
-        # decoder_past[0] should correspond to encoder output
-        self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
         # There should be `num_layers` key value embeddings stored in decoder_past[1]
-        self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-        self.parent.assertEqual(len(decoder_past[1][0]), 4)
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
         model = TFT5ForConditionalGeneration(config=config)
@@ -230,6 +227,23 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+    def create_and_check_t5_xla_generate(self, config, input_ids, *args):
+        config.eos_token_id = None
+        config.max_length = 10
+        config.do_sample = False
+        config.num_beams = 1
+        model = TFT5ForConditionalGeneration(config=config)
+
+        # make sure there are no pad tokens in prompt
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id + 5)
+
+        generated = model.generate(input_ids)
+
+        generate_xla = tf.function(model.generate, jit_compile=True)
+        generated_xla = generate_xla(input_ids)
+
+        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
@@ -282,6 +296,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_t5_model_xla_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_xla_generate(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -458,6 +476,27 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 @require_tokenizers
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
+    def test_greedy_xla_generate_simple(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        sentence = "Translate English to German: Today is a beautiful day."
+        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        output_ids = model.generate(input_ids)
+        output_ids_xla = xla_generate(input_ids)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+
+        expected_output_string = ["Heute ist ein schöner Tag."]
+
+        self.assertListEqual(expected_output_string, output_strings)
+        self.assertListEqual(expected_output_string, output_strings_xla)
+
+    @slow
     def test_greedy_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -507,6 +546,29 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         expected_output_string = ["i love her I really love my heart", "die Transformatoren sind wirklich erstaunlich"]
 
+        self.assertListEqual(expected_output_string, output_strings)
+
+    @slow
+    def test_beam_search_generate(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        sentences = ["I really love my", "Translate English to German: the transformers are truly amazing"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "bad_words_ids": [tokenizer("my").input_ids, tokenizer("ein schöner").input_ids],
+            "no_repeat_ngram_size": 3,
+            "do_sample": False,
+            "repetition_penalty": 2.2,
+            "num_beams": 4,
+        }
+
+        output_ids = model.generate(input_ids, **generation_kwargs)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        expected_output_string = ["Ich liebe es so sehr!", "die Transformatoren sind wirklich erstaunlich"]
         self.assertListEqual(expected_output_string, output_strings)
 
 

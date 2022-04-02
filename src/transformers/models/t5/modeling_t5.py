@@ -19,6 +19,7 @@ import copy
 import math
 import os
 import warnings
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -26,14 +27,6 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -41,7 +34,15 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
+from ...utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
+    logging,
+    replace_return_docstrings,
+)
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 
@@ -275,7 +276,7 @@ except Exception:
 
 
 class T5DenseReluDense(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: T5Config):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
@@ -290,7 +291,7 @@ class T5DenseReluDense(nn.Module):
 
 
 class T5DenseGatedGeluDense(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: T5Config):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -308,7 +309,7 @@ class T5DenseGatedGeluDense(nn.Module):
 
 
 class T5LayerFF(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: T5Config):
         super().__init__()
         if config.feed_forward_proj == "relu":
             self.DenseReluDense = T5DenseReluDense(config)
@@ -334,8 +335,8 @@ class T5Attention(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
-
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads
@@ -430,6 +431,7 @@ class T5Attention(nn.Module):
             relative_position,  # shape (query_length, key_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
@@ -647,7 +649,8 @@ class T5Block(nn.Module):
     ):
 
         if past_key_value is not None:
-            assert self.is_decoder, "Only decoder can use `past_key_values`"
+            if not self.is_decoder:
+                logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
@@ -1208,7 +1211,7 @@ T5_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 T5_ENCODER_INPUTS_DOCSTRING = r"""
@@ -1245,7 +1248,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 # Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
@@ -1341,22 +1344,22 @@ class T5Model(T5PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1460,7 +1463,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
-    def __init__(self, config):
+    def __init__(self, config: T5Config):
         super().__init__(config)
         self.model_dim = config.d_model
 
@@ -1535,23 +1538,23 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -1806,14 +1809,14 @@ class T5EncoderModel(T5PreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Returns:
 

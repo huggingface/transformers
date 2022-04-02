@@ -34,7 +34,7 @@ Begin by loading the [Yelp Reviews](https://huggingface.co/datasets/yelp_review_
 >>> from datasets import load_dataset
 
 >>> dataset = load_dataset("yelp_review_full")
->>> dataset[100]
+>>> dataset["train"][100]
 {'label': 0,
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
@@ -63,8 +63,10 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 
 <a id='trainer'></a>
 
-## Fine-tune with `Trainer`
+## Train
 
+<frameworkcontent>
+<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
@@ -119,7 +121,7 @@ Call `compute` on `metric` to calculate the accuracy of your predictions. Before
 If you'd like to monitor your evaluation metrics during fine-tuning, specify the `evaluation_strategy` parameter in your training arguments to report the evaluation metric at the end of each epoch:
 
 ```py
->>> from transformers import TrainingArguments
+>>> from transformers import TrainingArguments, Trainer
 
 >>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
 ```
@@ -143,14 +145,13 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 ```py
 >>> trainer.train()
 ```
-
+</pt>
+<tf>
 <a id='keras'></a>
-
-## Fine-tune with Keras
 
 <Youtube id="rnTGBy2ax1c"/>
 
-🤗 Transformers models also supports training in TensorFlow with the Keras API. You only need to make a few changes before you can fine-tune.
+🤗 Transformers models also supports training in TensorFlow with the Keras API.
 
 ### Convert dataset to TensorFlow format
 
@@ -210,11 +211,15 @@ Then compile and fine-tune your model with [`fit`](https://keras.io/api/models/m
 
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
 ```
+</tf>
+</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
-## Fine-tune in native PyTorch
+## Train in native PyTorch
 
+<frameworkcontent>
+<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] takes care of the training loop and allows you to fine-tune a model in a single line of code. For users who prefer to write their own training loop, you can also fine-tune a 🤗 Transformers model in native PyTorch.
@@ -354,6 +359,8 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 
 >>> metric.compute()
 ```
+</pt>
+</frameworkcontent>
 
 <a id='additional-resources'></a>
 
@@ -361,7 +368,7 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 
 For more fine-tuning examples, refer to:
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/master/examples) includes scripts
+- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) includes scripts
   to train common NLP tasks in PyTorch and TensorFlow.
 
 - [🤗 Transformers Notebooks](notebooks) contains various notebooks on how to fine-tune a model for specific tasks in PyTorch and TensorFlow.

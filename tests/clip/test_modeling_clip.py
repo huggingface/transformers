@@ -25,7 +25,6 @@ import numpy as np
 import requests
 import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import (
@@ -587,6 +587,21 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    def test_load_vision_text_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Save CLIPConfig and check if we can load CLIPVisionConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            vision_config = CLIPVisionConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+
+        # Save CLIPConfig and check if we can load CLIPTextConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            text_config = CLIPTextConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     # overwrite from common since CLIPModel/TFCLIPModel return CLIPOutput/TFCLIPOutput
     @is_pt_tf_cross_test

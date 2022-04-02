@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .file_utils import requires_backends
+from .utils import requires_backends
 
 
 class SentencePieceExtractor:

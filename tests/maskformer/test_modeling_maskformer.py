@@ -21,8 +21,8 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin
@@ -66,7 +66,9 @@ class MaskFormerModelTester:
         self.mask_feature_size = mask_feature_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
+            torch_device
+        )
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
@@ -139,7 +141,7 @@ class MaskFormerModelTester:
 
         def comm_check_on_output(result):
             # let's still check that all the required stuff is there
-            self.parent.assertTrue(result.transformer_decoder_hidden_states is not None)
+            self.parent.assertTrue(result.transformer_decoder_last_hidden_state is not None)
             self.parent.assertTrue(result.pixel_decoder_last_hidden_state is not None)
             self.parent.assertTrue(result.encoder_last_hidden_state is not None)
             # okay, now we need to check the logits shape
@@ -232,12 +234,12 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_with_labels(self):
         size = (self.model_tester.min_size,) * 2
         inputs = {
-            "pixel_values": torch.randn((2, 3, *size)),
-            "mask_labels": torch.randn((2, 10, *size)),
-            "class_labels": torch.zeros(2, 10).long(),
+            "pixel_values": torch.randn((2, 3, *size), device=torch_device),
+            "mask_labels": torch.randn((2, 10, *size), device=torch_device),
+            "class_labels": torch.zeros(2, 10, device=torch_device).long(),
         }
 
-        model = MaskFormerForInstanceSegmentation(MaskFormerConfig())
+        model = MaskFormerForInstanceSegmentation(MaskFormerConfig()).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -249,7 +251,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             outputs = model(**inputs, output_attentions=True)
             self.assertTrue(outputs.attentions is not None)
 
@@ -381,7 +383,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         )
         expected_slice = torch.tensor(
             [[-1.3738, -1.7725, -1.9365], [-1.5978, -1.9869, -2.1524], [-1.5796, -1.9271, -2.0940]]
-        )
+        ).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
@@ -392,21 +394,22 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
                 [3.6169e-02, -5.9025e00, -2.9313e00],
                 [1.0766e-04, -7.7630e00, -5.1263e00],
             ]
-        )
+        ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    def test_with_annotations_and_loss(self):
+    def test_with_segmentation_maps_and_loss(self):
         model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
 
         inputs = feature_extractor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
-            annotations=[
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-            ],
+            segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
         )
+
+        inputs["pixel_values"] = inputs["pixel_values"].to(torch_device)
+        inputs["mask_labels"] = [el.to(torch_device) for el in inputs["mask_labels"]]
+        inputs["class_labels"] = [el.to(torch_device) for el in inputs["class_labels"]]
 
         with torch.no_grad():
             outputs = model(**inputs)

@@ -18,8 +18,8 @@ limitations under the License.
 
 This directory contains examples for finetuning and evaluating transformers on summarization  tasks.
 Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertabs/README.md).
-For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq).
+For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/main/examples/legacy/seq2seq).
 
 ### Supported Architectures
 
@@ -137,7 +137,7 @@ And as with the CSV files, you can specify which values to select from the file,
 
 ## With Accelerate
 
-Based on the script [`run_summarization_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/summarization/run_summarization_no_trainer.py).
+Based on the script [`run_summarization_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/summarization/run_summarization_no_trainer.py).
 
 Like `run_summarization.py`, this script allows you to fine-tune any of the models supported on a
 summarization task, the main difference is that this

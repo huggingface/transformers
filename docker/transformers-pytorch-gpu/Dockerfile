@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -7,7 +7,7 @@ RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
-ARG REF=master
+ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing]
 

@@ -22,6 +22,7 @@ import numpy as np
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
 
+from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 from ..test_modeling_flax_common import ids_tensor
@@ -31,6 +32,7 @@ if is_flax_available():
     from transformers import (
         AutoTokenizer,
         EncoderDecoderConfig,
+        FlaxBartForCausalLM,
         FlaxBertModel,
         FlaxEncoderDecoderModel,
         FlaxGPT2LMHeadModel,
@@ -157,6 +159,51 @@ class FlaxEncoderDecoderMixin:
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
+
+    def check_encoder_decoder_model_from_encoder_decoder_pretrained(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        # assert that model attributes match those of configs
+        self.assertEqual(config.use_cache, encoder_model.config.use_cache)
+        self.assertEqual(decoder_config.use_cache, decoder_model.config.use_cache)
+
+        with tempfile.TemporaryDirectory() as enc_tmpdir:
+            with tempfile.TemporaryDirectory() as dec_tmpdir:
+                encoder_model.save_pretrained(enc_tmpdir)
+                decoder_model.save_pretrained(dec_tmpdir)
+                # load a model from pretrained encoder and decoder checkpoints, setting one encoder and one decoder kwarg opposite to that specified in their respective configs
+                enc_dec_model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_pretrained_model_name_or_path=enc_tmpdir,
+                    decoder_pretrained_model_name_or_path=dec_tmpdir,
+                    encoder_use_cache=not config.use_cache,
+                    decoder_use_cache=not decoder_config.use_cache,
+                )
+
+        # assert that setting encoder and decoder kwargs opposite to those in the configs has correctly been applied
+        self.assertNotEqual(config.use_cache, enc_dec_model.config.encoder.use_cache)
+        self.assertNotEqual(decoder_config.use_cache, enc_dec_model.config.decoder.use_cache)
+
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
 
     def check_encoder_decoder_model_output_attentions(
         self,
@@ -324,6 +371,10 @@ class FlaxEncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_save_and_load(**input_ids_dict)
 
+    def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_encoder_decoder_pretrained(**input_ids_dict)
+
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_output_attentions(**input_ids_dict)
@@ -360,6 +411,7 @@ class FlaxEncoderDecoderMixin:
         self.assertTrue(decoder_config.cross_attention_hidden_size is None)
 
         # check without `enc_to_dec_proj` projection
+        decoder_config.hidden_size = config.hidden_size
         self.assertTrue(config.hidden_size == decoder_config.hidden_size)
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
@@ -454,6 +506,43 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         summary = tokenizer_out.batch_decode(output_ids, skip_special_tokens=True)
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
+
+
+@require_flax
+class FlaxBartEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = FlaxBertModel(config)
+        decoder_model = FlaxBartForCausalLM(decoder_config)
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
+        model_tester_decoder = FlaxBartStandaloneDecoderModelTester(self, batch_size=13)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    def get_pretrained_model(self):
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "facebook/bart-base")
 
 
 @require_flax
