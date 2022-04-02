@@ -470,6 +470,10 @@ class TFModelTesterMixin:
                 if k in ["loss", "losses"]:
                     tf_keys.discard(k)
                     pt_keys.discard(k)
+        elif model_class.__name__.startswith("TFGPT2"):
+            # `TFGPT2` has `past_key_values` as a tensor while `GPT2` has it as a tuple.
+            tf_keys.discard("past_key_values")
+            pt_keys.discard("past_key_values")
 
         # create new outputs from the remaining fields
         new_tf_outputs = type(tf_outputs)(**{k: tf_outputs[k] for k in tf_keys})
@@ -523,6 +527,10 @@ class TFModelTesterMixin:
                 pt_outputs = pt_model(**pt_inputs_dict)
             tf_outputs = tf_model(tf_inputs_dict)
 
+            # Don't copy this block to model specific test file!
+            # TODO: remove this method and this line after issues are fixed
+            tf_outputs, pt_outputs = self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
+
             self.check_pt_tf_outputs(tf_outputs, pt_outputs, model_class)
 
             # check the case where `labels` is passed
@@ -536,7 +544,7 @@ class TFModelTesterMixin:
                 tf_outputs = tf_model(tf_inputs_dict_maybe_with_labels)
 
                 # Don't copy this block to model specific test file!
-                # TODO: remove this method and this line
+                # TODO: remove this method and this line after issues are fixed
                 tf_outputs, pt_outputs = self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
 
                 # tf models returned loss is usually a tensor rather than a scalar.
