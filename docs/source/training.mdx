@@ -230,6 +230,7 @@ At this point, you may need to restart your notebook or execute the following co
 del model
 del pytorch_model
 del trainer
+import torch
 torch.cuda.empty_cache()
 ```
 
@@ -304,8 +305,6 @@ Create the default learning rate scheduler from [`Trainer`]:
 Lastly, specify `device` to use a GPU if you have access to one. Otherwise, training on a CPU may take several hours instead of a couple of minutes.
 
 ```py
->>> import torch
-
 >>> device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 >>> model.to(device)
 ```
