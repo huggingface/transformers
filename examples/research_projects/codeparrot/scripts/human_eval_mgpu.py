@@ -187,7 +187,9 @@ def main():
         input_len = len(tokenizer(prompt)["input_ids"])
         max_len = max(max_len, input_len)
 
-    human_eval_td = TokenizeDataset(tokenizer, human_eval["test"], max_length=max_len, n_copies=n_copies, n_tasks=n_tasks)
+    human_eval_td = TokenizeDataset(
+        tokenizer, human_eval["test"], max_length=max_len, n_copies=n_copies, n_tasks=n_tasks
+    )
     # do not confuse args.batch_size, which is actually the num_return_sequences
     human_eval_loader = DataLoader(human_eval_td, batch_size=1)
 
