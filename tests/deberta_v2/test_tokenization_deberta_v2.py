@@ -68,7 +68,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer().vocab_size, 30_000)
 
     def test_do_lower_case(self):
-        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=True)
 
         sequence = " \tHeLLo!how  \n Are yoU?  "
 
@@ -77,7 +77,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁hello", "!", "how", "▁are", "▁you", "?"])
 
         if self.test_rust_tokenizer:
-            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=True)
 
             rust_tokens = rust_tokenizer.tokenize(sequence)
 
@@ -182,25 +182,25 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertListEqual(tokens, rust_tokens)
 
     def test_do_lower_case_false_split_by_punct_false(self):
-        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=False)
 
-        sequence = "I was born in 92000, and this is falsé."
+        sequence = " \tHeLLo!how  \n Are yoU?  "
 
         tokens = tokenizer.tokenize(sequence)
         # fmt: off
         self.assertListEqual(
             tokens,
-            ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+            ['▁', 'H', 'e', 'LL', 'o', '!', 'how', '▁', 'A', 're', '▁yo', 'U', '?']
         )
         # fmt: on
 
         if self.test_rust_tokenizer:
-            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=False)
             rust_tokens = rust_tokenizer.tokenize(sequence)
             # fmt: off
             self.assertListEqual(
                 rust_tokens,
-                ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+                ['▁', 'H', 'e', 'LL', 'o', '!', 'how', '▁', 'A', 're', '▁yo', 'U', '?']
             )
             # fmt: on
             self.assertListEqual(tokens, rust_tokens)

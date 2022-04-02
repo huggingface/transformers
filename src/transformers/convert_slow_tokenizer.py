@@ -583,7 +583,7 @@ class DebertaV2Converter(SpmConverter):
         list_normalizers = []
         if self.original_tokenizer.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-            list_normalizers.append(normalizers.Strip())
+        list_normalizers.append(normalizers.Strip())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         if precompiled_charsmap:
