@@ -1090,6 +1090,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
+
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1156,7 +1157,12 @@ class BertLMHeadModel(BertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1199,25 +1205,6 @@ class BertLMHeadModel(BertPreTrainedModel):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import BertTokenizer, BertLMHeadModel, BertConfig
-        >>> import torch
-
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-        >>> config = BertConfig.from_pretrained("bert-base-cased")
-        >>> config.is_decoder = True
-        >>> model = BertLMHeadModel.from_pretrained("bert-base-cased", config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -1448,6 +1435,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
+
         ```
         """
 

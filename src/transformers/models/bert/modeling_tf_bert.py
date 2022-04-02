@@ -1200,10 +1200,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[:None, :]
-        >>> # Batch size 1
+        >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf") # Batch size 1
+
         >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
+        >>> prediction_logits, seq_relationship_logits = outputs[:2]
+
+
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1541,6 +1543,10 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
         >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
+
+
+
+
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1612,11 +1618,11 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="nlptown/bert-base-multilingual-uncased-sentiment",
+        checkpoint="ydshieh/bert-base-uncased-yelp-polarity",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'5 stars'",
-        expected_loss=3.81,
+        expected_output="'LABEL_1'",
+        expected_loss=0.01,
     )
     def call(
         self,
