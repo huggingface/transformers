@@ -366,11 +366,11 @@ class TFModelTesterMixin:
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
         """
 
-        # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
+        # TODO: Fix `past_key_values` format/issues in some models (e.g. `PegasusForConditionalGeneration`).
         if type(names) == str and "past_key_values" in names:
             return
 
-        # Allow `ModelOutput` because TODO.
+        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
         if isinstance(tf_outputs, ModelOutput):
             self.assertEqual(
                 type(names),
@@ -388,10 +388,11 @@ class TFModelTesterMixin:
             self.assertEqual(tf_keys, pt_keys, f"{names}: Output keys differ between TF and PyTorch")
 
             # convert to the case of `tuple`
+            # appending each key to the current (string) `names`
             names = tuple([f"{names}.{k}" for k in tf_keys])
             self.check_pt_tf_outputs(tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=names)
 
-        # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
+        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
         elif type(tf_outputs) in [tuple, list]:
 
             self.assertEqual(
@@ -402,10 +403,10 @@ class TFModelTesterMixin:
             )
 
             if type(names) == tuple:
-                # case 1: TODO
-                pass
+                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
+                self.assertEqual(len(names), len(tf_outputs), f"{names}: The tuple `names` should have the same length as `tf_outputs`")
             elif type(names) == str:
-                # case 2: TODO
+                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `names`
                 names = [f"{names}_{idx}" for idx in range(len(tf_outputs))]
             else:
                 raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
