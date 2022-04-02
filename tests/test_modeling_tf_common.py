@@ -365,11 +365,6 @@ class TFModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
         """
-
-        # TODO: Fix `past_key_values` format/issues in some models (e.g. `PegasusForConditionalGeneration`).
-        if type(names) == str and "past_key_values" in names:
-            return
-
         # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
         if isinstance(tf_outputs, ModelOutput):
             self.assertEqual(
@@ -455,6 +450,27 @@ class TFModelTesterMixin:
                 f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
             )
 
+    # Don't copy this method to model specific test file!
+    # TODO: remove this method once the issues are all fixed!
+    def _postprocessing_to_ignore(self, tf_outputs, pt_outputs, model_class):
+
+        tf_keys = set([k for k, v in tf_outputs.items() if v is not None])
+        pt_keys = set([k for k, v in pt_outputs.items() if v is not None])
+
+        key_differences = tf_keys.symmetric_difference(pt_keys)
+
+        if model_class.__name__ in [
+            "TFFlaubertWithLMHeadModel",
+            "TFFunnelForPreTraining",
+            "TFElectraForPreTraining",
+            "TFXLMWithLMHeadModel",
+            "TFTransfoXLLMHeadModel",
+        ]:
+            for k in key_differences:
+                if k in ["loss", "losses"]:
+                    setattr(tf_outputs, k, None)
+                    setattr(pt_outputs, k, None)
+
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
         import transformers
@@ -513,59 +529,18 @@ class TFModelTesterMixin:
                     pt_outputs = pt_model(**pt_inputs_dict_maybe_with_labels)
                 tf_outputs = tf_model(tf_inputs_dict_maybe_with_labels)
 
-                # Some models' output class don't have `loss` attribute despite `labels` is used.
-                # For example,`(TF)BertForPreTraining` require both `labels` and `next_sentence_label` to return loss.
-                # TODO: identify which models
-                tf_loss = getattr(tf_outputs, "loss", None)
-                pt_loss = getattr(pt_outputs, "loss", None)
-
-                # Some PT models return loss while the corresponding TF models don't (i.e. `None` for `loss`).
-                #   - TFFlaubertWithLMHeadModel
-                #   - TFFunnelForPreTraining
-                #   - TFElectraForPreTraining
-                #   - TFXLMWithLMHeadModel
-                # TODO: Fix PT/TF diff -> remove this condition to fail the test if a diff occurs
-                if not ((tf_loss is None and pt_loss is None) or (tf_loss is not None and pt_loss is not None)):
-                    if model_class.__name__ not in [
-                        "TFFlaubertWithLMHeadModel",
-                        "TFFunnelForPreTraining",
-                        "TFElectraForPreTraining",
-                        "TFXLMWithLMHeadModel",
-                        "TFTransfoXLLMHeadModel",
-                    ]:
-                        self.assertEqual(tf_loss is None, pt_loss is None)
-
-                tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                # TODO: remove these 2 conditions once the above TODOs (regarding loss) are implemented
-                # (Also, `TFTransfoXLLMHeadModel` has no `loss` while `TransfoXLLMHeadModel` return `losses`)
-                if tf_keys != pt_keys:
-                    if model_class.__name__ not in [
-                        "TFFlaubertWithLMHeadModel",
-                        "TFFunnelForPreTraining",
-                        "TFElectraForPreTraining",
-                        "TFXLMWithLMHeadModel",
-                        "TFTransfoXLLMHeadModel",
-                    ]:
-                        self.assertEqual(tf_keys, pt_keys)
-
-                # Since we deliberately make some tests pass above (regarding the `loss`), let's still try to test
-                # some remaining attributes in the outputs.
-                # TODO: remove this block of once the above TODOs (regarding loss) are implemented
-                common_keys = set(tf_keys).intersection(pt_keys)
+                # Don't copy this block to model specific test file!
+                # TODO: remove this method and this line
+                self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
 
                 # tf models returned loss is usually a tensor rather than a scalar.
                 # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
                 # Change it here to a scalar to match PyTorch models' loss
+                tf_loss = getattr(tf_outputs, "loss", None)
                 if tf_loss is not None:
-                    tf_loss = tf.math.reduce_mean(tf_loss)
-                    tf_outputs.loss = tf_loss
+                    tf_outputs.loss = tf.math.reduce_mean(tf_loss)
 
-                tf_outputs_selected = tuple(tf_outputs[k] for k in common_keys)
-                pt_outputs_selected = tuple(pt_outputs[k] for k in common_keys)
-                names = tuple([f"outputs.{k}" for k in common_keys])
-                self.check_pt_tf_outputs(tf_outputs_selected, pt_outputs_selected, model_class, names=names)
+                self.check_pt_tf_outputs(tf_outputs, pt_outputs, model_class)
 
         for model_class in self.all_model_classes:
 
