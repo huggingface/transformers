@@ -404,7 +404,11 @@ class TFModelTesterMixin:
 
             if type(names) == tuple:
                 # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(len(names), len(tf_outputs), f"{names}: The tuple `names` should have the same length as `tf_outputs`")
+                self.assertEqual(
+                    len(names),
+                    len(tf_outputs),
+                    f"{names}: The tuple `names` should have the same length as `tf_outputs`",
+                )
             elif type(names) == str:
                 # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `names`
                 names = [f"{names}_{idx}" for idx in range(len(tf_outputs))]
@@ -428,6 +432,11 @@ class TFModelTesterMixin:
             self.assertEqual(
                 tf_outputs.shape, pt_outputs.shape, f"{names}: Output shapes differ between TF and PyTorch"
             )
+
+            # deal with NumPy's scalars to make replacing nan values by 0 work.
+            if np.isscalar(tf_outputs):
+                tf_outputs = np.array([tf_outputs])
+                pt_outputs = np.array([pt_outputs])
 
             tf_nans = np.isnan(tf_outputs)
             pt_nans = np.isnan(pt_outputs)
@@ -505,6 +514,7 @@ class TFModelTesterMixin:
                 tf_outputs = tf_model(tf_inputs_dict_maybe_with_labels)
 
                 # Some models' output class don't have `loss` attribute despite `labels` is used.
+                # For example,`(TF)BertForPreTraining` require both `labels` and `next_sentence_label` to return loss.
                 # TODO: identify which models
                 tf_loss = getattr(tf_outputs, "loss", None)
                 pt_loss = getattr(pt_outputs, "loss", None)
@@ -528,7 +538,7 @@ class TFModelTesterMixin:
                 tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
                 pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
-                # TODO: remove these 2 conditions once the above TODOs (above loss) are implemented
+                # TODO: remove these 2 conditions once the above TODOs (regarding loss) are implemented
                 # (Also, `TFTransfoXLLMHeadModel` has no `loss` while `TransfoXLLMHeadModel` return `losses`)
                 if tf_keys != pt_keys:
                     if model_class.__name__ not in [
@@ -542,43 +552,20 @@ class TFModelTesterMixin:
 
                 # Since we deliberately make some tests pass above (regarding the `loss`), let's still try to test
                 # some remaining attributes in the outputs.
-                # TODO: remove this block of `index` computing once the above TODOs (above loss) are implemented
-                # compute the 1st `index` where `tf_keys` and `pt_keys` is different
-                index = 0
-                for _ in range(min(len(tf_keys), len(pt_keys))):
-                    if tf_keys[index] == pt_keys[index]:
-                        index += 1
-                    else:
-                        break
-                if tf_keys[:index] != pt_keys[:index]:
-                    self.assertEqual(tf_keys, pt_keys)
+                # TODO: remove this block of once the above TODOs (regarding loss) are implemented
+                common_keys = set(tf_keys).intersection(pt_keys)
 
-                # Some models require extra condition to return loss. For example, `(TF)BertForPreTraining` requires
-                # both`labels` and `next_sentence_label`.
-                if tf_loss is not None and pt_loss is not None:
+                # tf models returned loss is usually a tensor rather than a scalar.
+                # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+                # Change it here to a scalar to match PyTorch models' loss
+                if tf_loss is not None:
+                    tf_loss = tf.math.reduce_mean(tf_loss)
+                    tf_outputs.loss = tf_loss
 
-                    # check anything else than `loss`
-                    names = tuple([f"outputs.{k}" for k in tf_keys])
-                    self.check_pt_tf_outputs(
-                        tf_outputs[1:index], pt_outputs[1:index], model_class, names=names[1:index]
-                    )
-
-                    # check `loss`
-
-                    # tf models returned loss is usually a tensor rather than a scalar.
-                    # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
-                    # Change it here to a scalar to match PyTorch models' loss
-                    tf_loss = tf.math.reduce_mean(tf_loss).numpy()
-                    pt_loss = pt_loss.detach().to("cpu").numpy()
-
-                    tf_nans = np.isnan(tf_loss)
-                    pt_nans = np.isnan(pt_loss)
-                    # the 2 losses need to be both nan or both not nan
-                    self.assertEqual(tf_nans, pt_nans)
-
-                    if not tf_nans:
-                        max_diff = np.amax(np.abs(tf_loss - pt_loss))
-                        self.assertLessEqual(max_diff, 1e-5)
+                tf_outputs_selected = tuple(tf_outputs[k] for k in common_keys)
+                pt_outputs_selected = tuple(pt_outputs[k] for k in common_keys)
+                names = tuple([f"outputs.{k}" for k in common_keys])
+                self.check_pt_tf_outputs(tf_outputs_selected, pt_outputs_selected, model_class, names=names)
 
         for model_class in self.all_model_classes:
 
