@@ -275,12 +275,17 @@ class FeaturesManager:
             onnx_config_cls="models.ibert.IBertOnnxConfig",
         ),
         "layoutlm": supported_features_mapping(
-            "default",
+                "default",
             "masked-lm",
             "sequence-classification",
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "luke": supported_features_mapping(
+            "default",
+            onnx_config_cls=LukeOnnxConfig,
+        ),
+        
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
