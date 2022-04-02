@@ -468,8 +468,14 @@ class TFModelTesterMixin:
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:
-                    tf_outputs[k] = None
-                    pt_outputs[k] = None
+                    tf_keys.discard(k)
+                    pt_keys.discard(k)
+
+        # create new outputs from the remaining fields
+        new_tf_outputs = type(tf_outputs)(**{k: tf_outputs[k] for k in tf_keys})
+        new_pt_outputs = type(pt_outputs)(**{k: pt_outputs[k] for k in pt_keys})
+
+        return new_tf_outputs, new_pt_outputs
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
@@ -531,7 +537,7 @@ class TFModelTesterMixin:
 
                 # Don't copy this block to model specific test file!
                 # TODO: remove this method and this line
-                self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
+                tf_outputs, pt_outputs = self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
 
                 # tf models returned loss is usually a tensor rather than a scalar.
                 # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
