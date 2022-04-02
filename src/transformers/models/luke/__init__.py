@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig"],
+    "configuration_luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeOnnxConfig"],
     "tokenization_luke": ["LukeTokenizer"],
 }
 
@@ -44,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
+    from .configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeOnnxConfig
     from .tokenization_luke import LukeTokenizer
 
     try:
