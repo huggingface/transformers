@@ -69,6 +69,10 @@ class FSMTConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_pre_layernorm (`bool`, *optional*, defaults to False):
+            Use Pre-LayerNorm in the Transformer encoder.
+        decoder_pre_layernorm (`bool`, *optional*. defaults to False):
+            Use Pre-LayerNorm in the Transformer decoder.
         activation_function (`str` or `Callable`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -140,10 +144,12 @@ class FSMTConfig(PretrainedConfig):
         encoder_layers=12,
         encoder_attention_heads=16,
         encoder_layerdrop=0.0,
+        encoder_pre_layernorm=False,
         decoder_ffn_dim=4096,
         decoder_layers=12,
         decoder_attention_heads=16,
         decoder_layerdrop=0.0,
+        decoder_pre_layernorm=False,
         attention_dropout=0.0,
         dropout=0.1,
         activation_dropout=0.0,
@@ -171,10 +177,12 @@ class FSMTConfig(PretrainedConfig):
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
+        self.encoder_pre_layernorm = encoder_pre_layernorm
         self.decoder_layerdrop = decoder_layerdrop
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_pre_layernorm = decoder_pre_layernorm
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
