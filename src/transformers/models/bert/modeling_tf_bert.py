@@ -1200,12 +1200,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
-        >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf") # Batch size 1
+        >>> input_ids = tokenizer(
+        ...     "Hello, my dog is cute", add_special_tokens=True, return_tensors="tf"
+        >>> )  # Batch size 1
 
         >>> outputs = model(input_ids)
         >>> prediction_logits, seq_relationship_logits = outputs[:2]
-
-
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
@@ -1543,10 +1543,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
         >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
-
-
-
-
         ```"""
         outputs = self.bert(
             input_ids=input_ids,
