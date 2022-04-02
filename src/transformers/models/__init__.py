@@ -53,6 +53,7 @@ from . import (
     dpt,
     electra,
     encoder_decoder,
+    fid,
     flaubert,
     fnet,
     fsmt,

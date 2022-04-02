@@ -190,6 +190,7 @@ _import_structure = {
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
+    "models.fid": ["FiDConfig", "FiDRetriever"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
@@ -974,6 +975,9 @@ if is_torch_available():
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
+    _import_structure["models.fid"].extend(
+        ["FiDModel", "FiDPreTrainedModel", "FiDSequenceForGeneration", "FiDTokenForGeneration"]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1903,6 +1907,14 @@ if is_tf_available():
         ]
     )
     _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
+    _import_structure["models.fid"].extend(
+        [
+            "TFFiDModel",
+            "TFFiDPreTrainedModel",
+            "TFFiDSequenceForGeneration",
+            "TFFiDTokenForGeneration",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2564,6 +2576,7 @@ if TYPE_CHECKING:
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
+    from .models.fid import FiDConfig, FiDRetriever
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
@@ -3228,6 +3241,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encoder_decoder import EncoderDecoderModel
+        from .models.fid import FiDModel, FiDPreTrainedModel, FiDSequenceForGeneration, FiDTokenForGeneration
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
