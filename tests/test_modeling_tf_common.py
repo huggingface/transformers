@@ -468,8 +468,8 @@ class TFModelTesterMixin:
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:
-                    setattr(tf_outputs, k, None)
-                    setattr(pt_outputs, k, None)
+                    tf_outputs[k] = None
+                    pt_outputs[k] = None
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
