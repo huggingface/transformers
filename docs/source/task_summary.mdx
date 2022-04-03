@@ -923,9 +923,9 @@ arguments of `PreTrainedModel.generate()` directly in the pipeline as is shown f
 
 Here is an example of doing translation using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder
+1. Instantiate a tokenizer and a model from the checkpoint name. Translation is usually done using an encoder-decoder
    model, such as `Bart` or `T5`.
-2. Define the article that should be summarized.
+2. Define the article that should be translated.
 3. Add the T5 specific prefix "translate English to German: "
 4. Use the `PreTrainedModel.generate()` method to perform the translation.
 
