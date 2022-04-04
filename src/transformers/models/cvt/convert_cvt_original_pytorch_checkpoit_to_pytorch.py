@@ -42,13 +42,22 @@ def embeddings(idx):
         )
     )
     embed.append(
-        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.projection.bias", f"stage{idx}.patch_embed.proj.bias")
+        (
+            f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.projection.bias",
+            f"stage{idx}.patch_embed.proj.bias",
+        )
     )
     embed.append(
-        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.weight", f"stage{idx}.patch_embed.norm.weight")
+        (
+            f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.weight",
+            f"stage{idx}.patch_embed.norm.weight",
+        )
     )
     embed.append(
-        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.bias", f"stage{idx}.patch_embed.norm.bias")
+        (
+            f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.bias",
+            f"stage{idx}.patch_embed.norm.bias",
+        )
     )
     return embed
 
@@ -207,10 +216,16 @@ def attention(idx, cnt):
         )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.weight", f"stage{idx}.blocks.{cnt}.attn.proj.weight")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.weight",
+            f"stage{idx}.blocks.{cnt}.attn.proj.weight",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.bias", f"stage{idx}.blocks.{cnt}.attn.proj.bias")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.bias",
+            f"stage{idx}.blocks.{cnt}.attn.proj.bias",
+        )
     )
     attention_weights.append(
         (f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
@@ -286,8 +301,8 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     elif cvt_file.rsplit("/", 1)[-1][4:6] == "21":
         config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 4, 16]
-    
-    # For wide cvt (similar to wide-resnet) depth size 24 (w24 = 2 + 2 20) 
+
+    # For wide cvt (similar to wide-resnet) depth size 24 (w24 = 2 + 2 20)
     else:
         config.image_size = 384
         config.depth = [2, 2, 20]
@@ -302,7 +317,7 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     list_of_state_dict = []
 
     for idx in range(config.num_stages):
-        if config.cls_token[idx] == True:
+        if config.cls_token[idx]:
             list_of_state_dict = list_of_state_dict + cls_token(idx)
         list_of_state_dict = list_of_state_dict + embeddings(idx)
         for cnt in range(config.depth[idx]):
@@ -310,9 +325,9 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
 
     list_of_state_dict = list_of_state_dict + final()
     for gg in list_of_state_dict:
-        print(gg) 
+        print(gg)
     for i in range(len(list_of_state_dict)):
-        huggingface_weights[list_of_state_dict[i][0]] =  original_weights[list_of_state_dict[i][1]]
+        huggingface_weights[list_of_state_dict[i][0]] = original_weights[list_of_state_dict[i][1]]
 
     model.load_state_dict(huggingface_weights)
     model.save_pretrained(pytorch_dump_folder)
