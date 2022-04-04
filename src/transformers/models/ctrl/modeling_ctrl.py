@@ -24,13 +24,19 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_ctrl import CTRLConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ctrl"
+_CHECKPOINT_FOR_DOC = "sshleifer/tiny-ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
 _TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
@@ -351,12 +357,7 @@ class CTRLModel(CTRLPreTrainedModel):
             self.h[layer].multi_head_attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -371,7 +372,23 @@ class CTRLModel(CTRLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+        r"""
+        Returns:
 
+        Example:
+
+        ```python
+        >>> from transformers import CTRLTokenizer, CTRLModel
+        >>> import torch
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
+        >>> model = CTRLModel.from_pretrained("sshleifer/tiny-ctrl")
+
+        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_hidden_states = (
@@ -513,12 +530,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return {"input_ids": input_ids, "past_key_values": past, "use_cache": use_cache}
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -539,7 +551,23 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        """
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLLMHeadModel
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
+        >>> model = CTRLLMHeadModel.from_pretrained("sshleifer/tiny-ctrl")
+
+        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -617,12 +645,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -643,7 +666,69 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+
+        Returns:
+
+        Example of single-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
+
+        >>> labels = torch.tensor(1)
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        1.0
+        ```
+
+        Example of multi-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", problem_type="multi_label_classification")
+        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
+
+        >>> num_labels = len(model.config.id2label)
+        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+        ...     torch.float
+        ... )
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> loss.backward()  # doctest: +IGNORE_RESULT
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
