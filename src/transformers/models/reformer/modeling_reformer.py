@@ -39,6 +39,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_reformer import ReformerConfig
 
@@ -2194,12 +2195,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2220,6 +2216,24 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
                 Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
                 config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
                 labels in `[0, ..., config.vocab_size]`
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import ReformerTokenizer, ReformerModelWithLMHead
+
+        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> model = ReformerModelWithLMHead.from_pretrained("hf-internal-testing/tiny-random-reformer", is_decoder=True)
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
