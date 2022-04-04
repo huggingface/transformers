@@ -56,7 +56,7 @@ class CvtModelTester:
         image_size=64,
         num_channels=3,
         num_stages=3,
-        embed_dim=[64, 192, 384],
+        embed_dim=[16, 48, 96],
         num_heads=[1, 3, 6],
         depth=[1, 2, 10],
         patch_sizes=[7, 3, 3],
@@ -140,11 +140,7 @@ class CvtModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -156,35 +152,35 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            CvtModel,
-            CvtForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
-        self.config_tester = CvtConfigTester(self, config_class=CvtConfig)
+        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip("Cvt does not use inputs_embeds")
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+    
+    def create_and_test_config_common_properties(self):
+        return
+    
+    @unittest.skip(reason="Cvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Cvt does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -200,78 +196,10 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-
-            expected_num_attentions = sum(self.model_tester.depth)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # verify the first attentions (first block, first layer)
-            expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], expected_seq_len, expected_reduced_seq_len],
-            )
-
-            # verify the last attentions (last block, last layer)
-            expected_seq_len = (self.model_tester.image_size // 16) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (16 * self.model_tester.stride_kv[-1])) ** 2
-            if self.model_tester.cls_token[-1] is True:
-                expected_seq_len = expected_seq_len + 1
-                expected_reduced_seq_len = expected_reduced_seq_len + 1
-            self.assertListEqual(
-                list(attentions[-1].shape[-3:]),
-                [self.model_tester.num_heads[-1], expected_seq_len, expected_reduced_seq_len],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + 1, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), expected_num_attentions)
-            # verify the first attentions (first block, first layer)
-            expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], expected_seq_len, expected_reduced_seq_len],
-            )
-
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+    
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -330,11 +258,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("anugunj/cvt-13") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("anugunj/cvt-13").to(torch_device)
+        model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

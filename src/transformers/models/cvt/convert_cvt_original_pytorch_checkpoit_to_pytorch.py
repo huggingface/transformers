@@ -37,18 +37,18 @@ def embeddings(idx):
     embed = []
     embed.append(
         (
-            f"cvt.encoder.patch_embeddings.{idx}.conv_embeddings.projection.weight",
+            f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.projection.weight",
             f"stage{idx}.patch_embed.proj.weight",
         )
     )
     embed.append(
-        (f"cvt.encoder.patch_embeddings.{idx}.conv_embeddings.projection.bias", f"stage{idx}.patch_embed.proj.bias")
+        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.projection.bias", f"stage{idx}.patch_embed.proj.bias")
     )
     embed.append(
-        (f"cvt.encoder.patch_embeddings.{idx}.conv_embeddings.norm.weight", f"stage{idx}.patch_embed.norm.weight")
+        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.weight", f"stage{idx}.patch_embed.norm.weight")
     )
     embed.append(
-        (f"cvt.encoder.patch_embeddings.{idx}.conv_embeddings.norm.bias", f"stage{idx}.patch_embed.norm.bias")
+        (f"cvt.encoder.stages.{idx}.embedding.convolution_embeddings.normalization.bias", f"stage{idx}.patch_embed.norm.bias")
     )
     return embed
 
@@ -64,187 +64,187 @@ def attention(idx, cnt):
     attention_weights = []
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.conv.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.convolution.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.normalization.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.normalization.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.running_mean",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.normalization.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.running_var",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.normalization.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_query.convolution_projection.normalization.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.conv.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.convolution.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.normalization.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.normalization.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.running_mean",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.normalization.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.running_var",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.normalization.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_key.convolution_projection.normalization.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.conv.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.convolution.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.normalization.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.normalization.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.running_mean",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.normalization.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.running_var",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.normalization.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.convolution_projection_value.convolution_projection.normalization.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_query.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_query.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_q.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_query.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_query.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_q.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_key.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_key.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_k.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_key.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_key.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_k.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_value.weight",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_value.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_v.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_value.bias",
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.attention.projection_value.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_v.bias",
         )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.attention.output.dense.weight", f"stage{idx}.blocks.{cnt}.attn.proj.weight")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.weight", f"stage{idx}.blocks.{cnt}.attn.proj.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.attention.output.dense.bias", f"stage{idx}.blocks.{cnt}.attn.proj.bias")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.attention.output.dense.bias", f"stage{idx}.blocks.{cnt}.attn.proj.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.intermediate.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc1.bias")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc1.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.output.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc2.weight")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc2.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.output.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc2.bias")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc2.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_before.weight", f"stage{idx}.blocks.{cnt}.norm1.weight")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.weight", f"stage{idx}.blocks.{cnt}.norm1.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_before.bias", f"stage{idx}.blocks.{cnt}.norm1.bias")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.bias", f"stage{idx}.blocks.{cnt}.norm1.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_after.weight", f"stage{idx}.blocks.{cnt}.norm2.weight")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.weight", f"stage{idx}.blocks.{cnt}.norm2.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_after.bias", f"stage{idx}.blocks.{cnt}.norm2.bias")
+        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.bias", f"stage{idx}.blocks.{cnt}.norm2.bias")
     )
     return attention_weights
 
 
-def cls_token():
+def cls_token(idx):
     """
     Function helps in renaming cls_token weights
     """
     token = []
-    token.append(("cvt.encoder.cls_token", "stage2.cls_token"))
+    token.append((f"cvt.encoder.stages.{idx}.cls_token", "stage2.cls_token"))
     return token
 
 
@@ -277,13 +277,17 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
 
     config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
 
+    # For depth size 13 (13 = 1+2+10)
     if cvt_file.rsplit("/", 1)[-1][4:6] == "13":
         config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 2, 10]
 
-    if cvt_file.rsplit("/", 1)[-1][4:6] == "21":
+    # For depth size 21 (21 = 1+4+16)
+    elif cvt_file.rsplit("/", 1)[-1][4:6] == "21":
         config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 4, 16]
+    
+    # For wide cvt (similar to wide-resnet) depth size 24 (w24 = 2 + 2 20) 
     else:
         config.image_size = 384
         config.depth = [2, 2, 20]
@@ -295,18 +299,20 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     original_weights = torch.load(cvt_file, map_location=torch.device("cpu"))
 
     huggingface_weights = OrderedDict()
-    list_of_state_dict = cls_token()
+    list_of_state_dict = []
 
-    for i in range(config.num_stages):
-        list_of_state_dict = list_of_state_dict + embeddings(i)
-
-    for i in range(config.num_stages):
-        for j in range(config.depth[i]):
-            list_of_state_dict = list_of_state_dict + attention(i, j)
+    for idx in range(config.num_stages):
+        if config.cls_token[idx] == True:
+            list_of_state_dict = list_of_state_dict + cls_token(idx)
+        list_of_state_dict = list_of_state_dict + embeddings(idx)
+        for cnt in range(config.depth[idx]):
+            list_of_state_dict = list_of_state_dict + attention(idx, cnt)
 
     list_of_state_dict = list_of_state_dict + final()
+    for gg in list_of_state_dict:
+        print(gg) 
     for i in range(len(list_of_state_dict)):
-        huggingface_weights[list_of_state_dict[i][0]] = original_weights[list_of_state_dict[i][1]]
+        huggingface_weights[list_of_state_dict[i][0]] =  original_weights[list_of_state_dict[i][1]]
 
     model.load_state_dict(huggingface_weights)
     model.save_pretrained(pytorch_dump_folder)
