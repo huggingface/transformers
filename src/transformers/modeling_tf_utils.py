@@ -312,10 +312,12 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        # Pure conv models (such as ConvNext) do not have `output_attentions`
-        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
-        if final_booleans["output_attentions"] is None:
-            final_booleans["output_attentions"] = config.output_attentions
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = (
+                kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
+            )
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -330,7 +332,10 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
-        final_booleans["output_attentions"] = config.output_attentions
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs.get("return_dict", None) not in (None, True):
@@ -403,7 +408,7 @@ def input_processing(func, config, input_ids, **kwargs):
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
     signature = dict(inspect.signature(func).parameters)
-    signature.pop("kwargs", None)
+    has_kwargs = bool(signature.pop("kwargs", None))
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
@@ -433,12 +438,14 @@ def input_processing(func, config, input_ids, **kwargs):
     elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
-
-    kwargs.pop("kwargs_call")
+    if has_kwargs:
+        output["kwargs"] = kwargs.pop("kwargs_call", {})
+    else:
+        if len(kwargs["kwargs_call"]) > 0:
+            raise ValueError(
+                f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+            )
+        kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
