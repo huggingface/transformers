@@ -311,7 +311,8 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        # Pure conv models (such as ConvNext) do not have `output_attentions`
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
         if "output_attentions" in kwargs:
             final_booleans["output_attentions"] = (
                 kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
@@ -330,7 +331,8 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
-        # Pure conv models (such as ConvNext) do not have `output_attentions`
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
         if "output_attentions" in kwargs:
             final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
@@ -376,7 +378,7 @@ def unpack_inputs(func):
         # process the inputs and call the wrapped function
         main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
         main_input = fn_args_and_kwargs.pop(main_input_name, None)
-        unpacked_inputs = _input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -387,7 +389,7 @@ def unpack_inputs(func):
     return run_call_with_unpacked_inputs
 
 
-def _input_processing(func, config, input_ids, **kwargs):
+def input_processing(func, config, input_ids, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
