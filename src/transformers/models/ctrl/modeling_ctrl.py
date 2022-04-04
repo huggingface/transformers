@@ -689,6 +689,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         ```
 
         ```python
+        >>> import torch
+        >>> torch.manual_seed(42) # doctest: +IGNORE_RESULT
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
         >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
@@ -696,7 +698,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        1.0
+        1.21
         ```
 
         Example of multi-label classification:
