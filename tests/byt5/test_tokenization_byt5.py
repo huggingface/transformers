@@ -323,6 +323,8 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests uses invalid tokens for ByT5 that can only accept one-character strings
+        # and special added tokens as tokens
         tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):

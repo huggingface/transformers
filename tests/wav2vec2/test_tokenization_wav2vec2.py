@@ -755,6 +755,8 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests assumes that the output of `convert_tokens_to_string` is a string which
+        # is not the case for Wav2vec2.
         tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
