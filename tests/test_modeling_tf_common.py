@@ -475,10 +475,7 @@ class TFModelTesterMixin:
 
         return new_tf_outputs, new_pt_outputs
 
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import transformers
-
+    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
         def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
 
             pt_inputs_dict = {}
@@ -496,51 +493,36 @@ class TFModelTesterMixin:
 
             return pt_inputs_dict
 
-        def check_pt_tf_models(tf_model, pt_model):
+        # send pytorch model to the correct device
+        pt_model.to(torch_device)
 
-            # send pytorch model to the correct device
-            pt_model.to(torch_device)
+        # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
+        pt_model.eval()
 
-            # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-            pt_model.eval()
+        pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
+        # pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
 
-            pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
-            pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
+        # send pytorch inputs to the correct device
+        pt_inputs_dict = {
+            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
+        }
 
-            # send pytorch inputs to the correct device
-            pt_inputs_dict = {
-                k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-            }
-            pt_inputs_dict_maybe_with_labels = {
-                k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v
-                for k, v in pt_inputs_dict_maybe_with_labels.items()
-            }
+        with torch.no_grad():
+            pt_outputs = pt_model(**pt_inputs_dict)
+        tf_outputs = tf_model(tf_inputs_dict)
 
-            # Original test: check without `labels`
-            with torch.no_grad():
-                pt_outputs = pt_model(**pt_inputs_dict)
-            tf_outputs = tf_model(tf_inputs_dict)
+        # tf models returned loss is usually a tensor rather than a scalar.
+        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # Change it here to a scalar to match PyTorch models' loss
+        tf_loss = getattr(tf_outputs, "loss", None)
+        if tf_loss is not None:
+            tf_outputs.loss = tf.math.reduce_mean(tf_loss)
 
-            self.check_pt_tf_outputs(tf_outputs, pt_outputs, model_class)
+        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
 
-            # check the case where `labels` is passed
-            has_labels = any(
-                x in tf_inputs_dict_maybe_with_labels for x in ["labels", "next_sentence_label", "start_positions"]
-            )
-            if has_labels:
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs_dict_maybe_with_labels)
-                tf_outputs = tf_model(tf_inputs_dict_maybe_with_labels)
-
-                # tf models returned loss is usually a tensor rather than a scalar.
-                # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
-                # Change it here to a scalar to match PyTorch models' loss
-                tf_loss = getattr(tf_outputs, "loss", None)
-                if tf_loss is not None:
-                    tf_outputs.loss = tf.math.reduce_mean(tf_loss)
-
-                self.check_pt_tf_outputs(tf_outputs, pt_outputs, model_class)
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        import transformers
 
         for model_class in self.all_model_classes:
 
@@ -578,18 +560,27 @@ class TFModelTesterMixin:
             pt_model = pt_model_class(config)
 
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(
+            tf_inputs_dict_with_labels = self._prepare_for_class(
                 inputs_dict,
                 model_class,
                 # Not all models accept "labels" in the forward pass (yet :) )
                 return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
             )
 
+            # For some models (e.g. base models), there is no label returned.
+            # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
+            if set(tf_inputs_dict_with_labels.keys()).symmetric_difference(tf_inputs_dict.keys()):
+                tf_inputs_dict_with_labels = None
+
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
-            check_pt_tf_models(tf_model, pt_model)
+            # Original test: check without `labels`
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+            # check with `labels`
+            if tf_inputs_dict_with_labels:
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -601,7 +592,11 @@ class TFModelTesterMixin:
                 tf_model.save_weights(tf_checkpoint_path)
                 pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
 
-            check_pt_tf_models(tf_model, pt_model)
+            # Original test: check without `labels`
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+            # check with `labels`
+            if tf_inputs_dict_with_labels:
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
