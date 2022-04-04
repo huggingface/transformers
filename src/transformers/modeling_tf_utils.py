@@ -43,6 +43,7 @@ from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
     DUMMY_INPUTS,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
@@ -1685,7 +1686,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
