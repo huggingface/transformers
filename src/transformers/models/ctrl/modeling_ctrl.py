@@ -15,7 +15,8 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
+from matplotlib.pyplot import cool
 
 import numpy as np
 import torch
@@ -359,17 +360,17 @@ class CTRLModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: torch.LongTensor = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -521,18 +522,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: torch.LongTensor = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: torch.LongTensor = None,
+        head_mask: torch.FloatTensor = None,
+        inputs_embeds: torch.FloatTensor = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -625,18 +626,18 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: torch.LongTensor = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask=Optional[torch.FloatTensor],
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
