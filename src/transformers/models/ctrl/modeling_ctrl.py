@@ -25,7 +25,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -36,9 +35,7 @@ from .configuration_ctrl import CTRLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "sshleifer/tiny-ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
-_TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
