@@ -178,6 +178,13 @@ class ModelArguments:
             "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
         },
     )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
+    )
 
 
 @dataclass
@@ -418,6 +425,7 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -430,7 +438,12 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -439,12 +452,18 @@ def main():
         model_args.model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast_tokenizer,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
