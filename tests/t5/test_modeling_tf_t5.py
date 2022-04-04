@@ -346,6 +346,11 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
         self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
 
+    # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
+    @unittest.skip(reason="The inputs of the Main Layer are different.")
+    def test_keras_save_load(self):
+        pass
+
 
 class TFT5EncoderOnlyModelTester:
     def __init__(

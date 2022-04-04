@@ -1666,7 +1666,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         """
         Args:
@@ -1911,7 +1910,6 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         Args:
@@ -2333,7 +2331,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         """
         Returns:
@@ -2429,7 +2426,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         decoder_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
