@@ -257,9 +257,6 @@ class Trainer:
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
             by this function will be reflected in the predictions received by `compute_metrics`.
-        include_inputs_for_metrics: bool = None:
-            A flag (True|False) determining if inputs will be passed to the EvalPrediction class. This is intended for
-            metrics that need inputs, predictions and references for scoring calculation in Metric class.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
 
@@ -295,8 +292,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
-        include_inputs_for_metrics: bool = None
+        preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
 
     ):
         if args is None:
@@ -310,10 +306,10 @@ class Trainer:
         self.deepspeed = None
         self.is_in_train = False
 
-        if include_inputs_for_metrics:
-            self.include_inputs_for_metrics = True
+        if args.include_inputs_for_metrics:
+            args.include_inputs_for_metrics = True
         else:
-            self.include_inputs_for_metrics = False
+            args.include_inputs_for_metrics = False
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -2465,7 +2461,7 @@ class Trainer:
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs['input_ids']
+            inputs_decode = inputs['input_ids'] if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
                 xm.mark_step()
@@ -2481,7 +2477,8 @@ class Trainer:
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
-                inputs_host = inputs_decode if inputs_host is None else nested_concat(inputs_host, inputs_decode, padding_index=-100)
+                inputs_host = inputs_decode if inputs_host is None else nested_concat(inputs_host, inputs_decode,
+                                                                                      padding_index=-100)
             if logits is not None:
                 logits = self._pad_across_processes(logits)
                 logits = self._nested_gather(logits)
@@ -2500,15 +2497,15 @@ class Trainer:
                     all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
                 if inputs_host is not None:
                     inputs_decode = nested_numpify(inputs_host)
-                    all_inputs = inputs_decode if all_inputs is None else nested_concat(all_inputs, inputs_decode, padding_index=-100)
+                    all_inputs = inputs_decode if all_inputs is None else nested_concat(all_inputs, inputs_decode,
+                                                                                        padding_index=-100)
                 if labels_host is not None:
                     labels = nested_numpify(labels_host)
-                    all_labels = (
-                        labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
-                    )
+                    all_labels = (labels if all_labels is None else nested_concat(all_labels, labels,
+                                                                                  padding_index=-100))
 
                 # Set back to None to begin a new accumulation
-                losses_host, preds_host, inputs_host, labels_host = None, None, None
+                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -2551,7 +2548,7 @@ class Trainer:
 
         # Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
-            if self.include_inputs_for_metrics:
+            if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(EvalPrediction(inputs=all_inputs, predictions=all_preds,
                                                               label_ids=all_labels))
             else:
@@ -2993,7 +2990,7 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs['input_ids']
+            inputs_decode = inputs['input_ids'] if args.include_inputs_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
@@ -3034,7 +3031,7 @@ class Trainer:
         inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            if self.include_inputs_for_metrics:
+            if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(EvalPrediction(inputs=inputs_ids, predictions=preds,
                                                               label_ids=label_ids))
             else:
