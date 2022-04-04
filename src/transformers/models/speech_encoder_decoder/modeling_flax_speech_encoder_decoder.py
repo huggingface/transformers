@@ -310,7 +310,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
@@ -700,7 +700,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            inputs=jnp.array(inputs, dtype="i4"),
+            inputs=jnp.array(inputs, dtype="f4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
