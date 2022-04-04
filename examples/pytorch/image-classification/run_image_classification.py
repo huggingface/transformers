@@ -72,14 +72,11 @@ def pil_loader(path: str):
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
     """
 
-    dataset_name: Optional[str] = field(
-        default="nateraw/image-folder", metadata={"help": "Name of a dataset from the datasets package"}
-    )
+    dataset_name: Optional[str] = field(metadata={"help": "Name of a dataset from the hub."})
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
@@ -104,6 +101,11 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
+        if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
+            raise ValueError(
+                "You must specify either a dataset name from the hub or a train and/or validation directory."
+            )
+
         data_files = dict()
         if self.train_dir is not None:
             data_files["train"] = self.train_dir
@@ -201,14 +203,18 @@ def main():
             )
 
     # Initialize our dataset and prepare it for the 'image-classification' task.
-    ds = load_dataset(
-        data_args.dataset_name,
-        data_args.dataset_config_name,
-        data_files=data_args.data_files,
-        cache_dir=model_args.cache_dir,
-        task="image-classification",
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
+    if data_args.dataset_name is not None:
+        ds = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            task="image-classification",
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    else:
+        ds = load_dataset(
+            "imagefolder", data_files=data_args.data_files, cache_dir=model_args.cache_dir, task="image-classification"
+        )
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
