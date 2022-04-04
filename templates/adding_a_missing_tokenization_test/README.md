@@ -28,7 +28,7 @@ cd transformers
 pip install -e ".[dev]"
 ```
 
-Once the installation is done, you can generate the template by running the following command. Be careful, the template will be generated inside a new folder at the place you're executing the command.
+Once the installation is done, you can generate the template by running the following command. Be careful, the template will be generated inside a new folder in your current working directory.
 
 ```shell script
 cookiecutter path-to-the folder/adding_a_missing_tokenization_test/
