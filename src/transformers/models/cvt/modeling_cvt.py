@@ -17,6 +17,7 @@
 
 import collections.abc
 import math
+from turtle import forward
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -27,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import ModelOutput, SequenceClassifierOutput
+from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_cvt import CvtConfig
@@ -65,21 +66,14 @@ class BaseModelOutputWithCLSToken(ModelOutput):
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        cls_token (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+            Classification Token at the output of the last layer of the model.
     """
 
     last_hidden_state: torch.FloatTensor = None
     cls_token_value: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
 
 # Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
@@ -179,15 +173,15 @@ class CvtEmbeddings(nn.Module):
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding, dropout_rate):
         super().__init__()
-        self.conv_embeddings = ConvEmbeddings(
+        self.convolution_embeddings = ConvEmbeddings(
             patch_size=patch_size, num_channels=num_channels, embed_dim=embed_dim, stride=stride, padding=padding
         )
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, pixel_values):
-        embeddings = self.conv_embeddings(pixel_values)
-        embeddings = self.dropout(embeddings)
-        return embeddings
+        hidden_state = self.convolution_embeddings(pixel_values)
+        hidden_state = self.dropout(hidden_state)
+        return hidden_state
 
 
 class ConvEmbeddings(nn.Module):
@@ -201,7 +195,7 @@ class ConvEmbeddings(nn.Module):
         patch_size = to_2tuple(patch_size)
         self.patch_size = patch_size
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
-        self.norm = nn.LayerNorm(embed_dim)
+        self.normalization = nn.LayerNorm(embed_dim)
 
     def forward(self, pixel_values):
         pixel_values = self.projection(pixel_values)
@@ -209,17 +203,17 @@ class ConvEmbeddings(nn.Module):
         hidden_size = height * width
         # rearrange "b c h w -> b (h w) c"
         pixel_values = pixel_values.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
-        if self.norm:
-            pixel_values = self.norm(pixel_values)
+        if self.normalization:
+            pixel_values = self.normalization(pixel_values)
         # rearrange "b (h w) c" -> b c h w"
         pixel_values = pixel_values.permute(0, 2, 1).view(batch_size, num_channels, height, width)
         return pixel_values
 
 
-class CvtSelfAttentionConvProjection(nn.Sequential):
+class CvtSelfAttentionConvProjection(nn.Module):
     def __init__(self, embed_dim, kernel_size, padding, stride):
         super().__init__()
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             embed_dim,
             embed_dim,
             kernel_size=kernel_size,
@@ -228,27 +222,36 @@ class CvtSelfAttentionConvProjection(nn.Sequential):
             bias=False,
             groups=embed_dim,
         )
-        self.norm = nn.BatchNorm2d(embed_dim)
+        self.normalization = nn.BatchNorm2d(embed_dim)
+    
+    def forward(self, hidden_state):
+        hidden_state = self.convolution(hidden_state)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
+
 
 
 class CvtSelfAttentionLinearProjection(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, hidden_states):
-        batch_size, num_channels, height, width = hidden_states.shape
+    
+    def forward(self, hidden_state):
+        batch_size, num_channels, height, width = hidden_state.shape
         hidden_size = height * width
         # rearrange " b c h w -> b (h w) c"
-        hidden_states = hidden_states.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
-        return hidden_states
+        hidden_state = hidden_state.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
+        return hidden_state
 
 
-class CvtSelfAttentionProjection(nn.Sequential):
+class CvtSelfAttentionProjection(nn.Module):
     def __init__(self, embed_dim, kernel_size, padding, stride, projection_method="dw_bn"):
         super().__init__()
         if projection_method == "dw_bn":
-            self.conv_projection = CvtSelfAttentionConvProjection(embed_dim, kernel_size, padding, stride)
+            self.convolution_projection = CvtSelfAttentionConvProjection(embed_dim, kernel_size, padding, stride)
         self.linear_projection = CvtSelfAttentionLinearProjection()
+
+    def forward(self, hidden_state):
+        hidden_state = self.convolution_projection(hidden_state)
+        hidden_state = self.linear_projection(hidden_state)
+        return hidden_state
 
 
 class CvtSelfAttention(nn.Module):
@@ -273,17 +276,17 @@ class CvtSelfAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
 
-        self.conv_projection_query = CvtSelfAttentionProjection(
+        self.convolution_projection_query = CvtSelfAttentionProjection(
             embed_dim,
             kernel_size,
             padding_q,
             stride_q,
             projection_method="linear" if qkv_projection_method == "avg" else qkv_projection_method,
         )
-        self.conv_projection_key = CvtSelfAttentionProjection(
+        self.convolution_projection_key = CvtSelfAttentionProjection(
             embed_dim, kernel_size, padding_kv, stride_kv, projection_method=qkv_projection_method
         )
-        self.conv_projection_value = CvtSelfAttentionProjection(
+        self.convolution_projection_value = CvtSelfAttentionProjection(
             embed_dim, kernel_size, padding_kv, stride_kv, projection_method=qkv_projection_method
         )
 
@@ -293,26 +296,26 @@ class CvtSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(attention_drop_rate)
 
-    def rearrange_for_multi_head_attention(self, inputs):
+    def rearrange_for_multi_head_attention(self, hidden_state):
         (
             batch_size,
             hidden_size,
             _,
-        ) = inputs.shape
+        ) = hidden_state.shape
         head_dim = self.embed_dim // self.num_heads
         # rearrange 'b t (h d) -> b h t d'
-        return inputs.view(batch_size, hidden_size, self.num_heads, head_dim).permute(0, 2, 1, 3)
+        return hidden_state.view(batch_size, hidden_size, self.num_heads, head_dim).permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, height, width, head_mask=None, output_attentions=False):
+    def forward(self, hidden_state, height, width):
         if self.with_cls_token:
-            cls_token, hidden_states = torch.split(hidden_states, [1, height * width], 1)
-        batch_size, hidden_size, num_channels = hidden_states.shape
+            cls_token, hidden_state = torch.split(hidden_state, [1, height * width], 1)
+        batch_size, hidden_size, num_channels = hidden_state.shape
         # rearrange "b (h w) c -> b c h w"
-        hidden_states = hidden_states.permute(0, 2, 1).view(batch_size, num_channels, height, width)
+        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, num_channels, height, width)
 
-        key = self.conv_projection_key(hidden_states)
-        query = self.conv_projection_query(hidden_states)
-        value = self.conv_projection_value(hidden_states)
+        key = self.convolution_projection_key(hidden_state)
+        query = self.convolution_projection_query(hidden_state)
+        value = self.convolution_projection_value(hidden_state)
 
         if self.with_cls_token:
             query = torch.cat((cls_token, query), dim=1)
@@ -329,16 +332,11 @@ class CvtSelfAttention(nn.Module):
         attention_probs = torch.nn.functional.softmax(attention_score, dim=-1)
         attention_probs = self.dropout(attention_probs)
 
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context = torch.einsum("bhlt,bhtv->bhlv", [attention_probs, value])
         # rearrange"b h t d -> b t (h d)"
         _, _, hidden_size, _ = context.shape
         context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, hidden_size, self.num_heads * head_dim)
-
-        outputs = (context, attention_probs) if output_attentions else (context,)
-        return outputs
+        return context
 
 
 class CvtSelfOutput(nn.Module):
@@ -352,10 +350,10 @@ class CvtSelfOutput(nn.Module):
         self.dense = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
+    def forward(self, hidden_state, input_tensor):
+        hidden_state = self.dense(hidden_state)
+        hidden_state = self.dropout(hidden_state)
+        return hidden_state
 
 
 class CvtAttention(nn.Module):
@@ -409,45 +407,40 @@ class CvtAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, height, width, head_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, height, width, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-        # add attentions if we output them
-        outputs = (attention_output,) + self_outputs[1:]
-        return outputs
+    def forward(self, hidden_state, height, width):
+        self_output = self.attention(hidden_state, height, width)
+        attention_output = self.output(self_output, hidden_state)
+        return attention_output
 
 
 class CvtIntermediate(nn.Module):
     def __init__(self, embed_dim, mlp_ratio):
         super().__init__()
-        self.hidden_dim = int(embed_dim * mlp_ratio)
-        self.dense = nn.Linear(embed_dim, self.hidden_dim)
-        self.intermediate_act_fn = nn.GELU()
+        self.dense = nn.Linear(embed_dim, int(embed_dim * mlp_ratio))
+        self.activation = nn.GELU()
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
+    def forward(self, hidden_state):
+        hidden_state = self.dense(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
 class CvtOutput(nn.Module):
     def __init__(self, embed_dim, mlp_ratio, drop_rate):
         super().__init__()
-        self.hidden_dim = int(embed_dim * mlp_ratio)
-        self.dense = nn.Linear(self.hidden_dim, embed_dim)
+        self.dense = nn.Linear(int(embed_dim * mlp_ratio), embed_dim)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
-        return hidden_states
-
+    def forward(self, hidden_state, input_tensor):
+        hidden_state = self.dense(hidden_state)
+        hidden_state = self.dropout(hidden_state)
+        hidden_state = hidden_state + input_tensor
+        return hidden_state
 
 class CvtLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
+    """
+    CvtLayer composed by attention layers, normalization and mlps
+    """
     def __init__(
         self,
         num_heads,
@@ -487,138 +480,136 @@ class CvtLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(embed_dim)
         self.layernorm_after = nn.LayerNorm(embed_dim)
 
-    def forward(self, hidden_states, height, width, head_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in Cvt, layernorm is applied before self-attention
+    def forward(self, hidden_state, height, width):
+        self_attention_output = self.attention(
+            self.layernorm_before(hidden_state),  # in Cvt, layernorm is applied before self-attention
             height,
             width,
-            head_mask,
-            output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_output = self_attention_output
         attention_output = self.drop_path(attention_output)
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_state = attention_output + hidden_state
 
         # in Cvt, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.layernorm_after(hidden_state)
         layer_output = self.intermediate(layer_output)
 
         # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
+        layer_output = self.output(layer_output, hidden_state)
         layer_output = self.drop_path(layer_output)
-        outputs = (layer_output,) + outputs
-        return outputs
+        return layer_output
+
+
+class CvtStage(nn.Module):
+    """
+    CvtStage, consisting of multiple layers
+    """
+    def __init__(
+        self,
+        config,
+        stage,
+    ):
+        super().__init__()
+        self.config = config
+        self.stage = stage
+        if self.config.cls_token[self.stage]:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
+
+        self.embedding = CvtEmbeddings(
+                    patch_size=config.patch_sizes[self.stage],
+                    stride=config.patch_stride[self.stage],
+                    num_channels=config.num_channels if self.stage == 0 else config.embed_dim[self.stage - 1],
+                    embed_dim=config.embed_dim[self.stage],
+                    padding=config.patch_padding[self.stage],
+                    dropout_rate=config.drop_rate[self.stage],
+                )
+        
+        dpr = [
+                x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])
+            ] 
+
+        self.layers = nn.Sequential(
+            *[
+                CvtLayer(
+                    num_heads=config.num_heads[self.stage],
+                    embed_dim=config.embed_dim[self.stage],
+                    kernel_size=config.kernel_qkv[self.stage],
+                    padding_q=config.padding_q[self.stage],
+                    padding_kv=config.padding_kv[self.stage],
+                    stride_kv=config.stride_kv[self.stage],
+                    stride_q=config.stride_q[self.stage],
+                    qkv_projection_method=config.qkv_projection_method[self.stage],
+                    qkv_bias=config.qkv_bias[self.stage],
+                    attention_drop_rate=config.attention_drop_rate[self.stage],
+                    drop_rate=config.drop_rate[self.stage],
+                    drop_path_rate=dpr[self.stage],
+                    mlp_ratio=config.mlp_ratio[self.stage],
+                    with_cls_token=config.cls_token[self.stage],
+                )
+                for _ in range(config.depth[self.stage])
+            ]
+        )
+    
+    def forward(self, hidden_state):
+        cls_token = None
+        hidden_state = self.embedding(hidden_state)
+        batch_size, num_channels, height, width = hidden_state.shape
+        # rearrange b c h w -> b (h w) c"
+        hidden_state = hidden_state.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        if self.config.cls_token[self.stage]:
+            cls_token = self.cls_token.expand(batch_size, -1, -1)
+            hidden_state = torch.cat((cls_token, hidden_state), dim=1)
+
+        for layer in self.layers:
+            layer_outputs = layer(hidden_state, height, width)
+            hidden_state = layer_outputs
+            
+        if self.config.cls_token[self.stage]:
+            cls_token, hidden_state = torch.split(hidden_state, [1, height * width], 1)
+        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, num_channels, height, width)
+        return hidden_state, cls_token
+        
 
 
 class CvtEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-
-        embeddings = []
-        for i in range(config.num_stages):
-            embeddings.append(
-                CvtEmbeddings(
-                    patch_size=config.patch_sizes[i],
-                    stride=config.patch_stride[i],
-                    num_channels=config.num_channels if i == 0 else config.embed_dim[i - 1],
-                    embed_dim=config.embed_dim[i],
-                    padding=config.patch_padding[i],
-                    dropout_rate=config.drop_rate[i],
+        self.stages = nn.ModuleList([])
+        for stage_idx in range(config.num_stages):
+            self.stages.append(
+                CvtStage(
+                    config,
+                    stage_idx
                 )
             )
-
-        self.patch_embeddings = nn.ModuleList(embeddings)
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
-
-        stages = []
-        for i in range(config.num_stages):
-            dpr = [
-                x.item() for x in torch.linspace(0, config.drop_path_rate[i], config.depth[i])
-            ]  # stochastic depth decay rule
-            layers = []
-            for _ in range(config.depth[i]):
-                layers.append(
-                    CvtLayer(
-                        num_heads=config.num_heads[i],
-                        embed_dim=config.embed_dim[i],
-                        kernel_size=config.kernel_qkv[i],
-                        padding_q=config.padding_q[i],
-                        padding_kv=config.padding_kv[i],
-                        stride_kv=config.stride_kv[i],
-                        stride_q=config.stride_q[i],
-                        qkv_projection_method=config.qkv_projection_method[i],
-                        qkv_bias=config.qkv_bias[i],
-                        attention_drop_rate=config.attention_drop_rate[i],
-                        drop_rate=config.drop_rate[i],
-                        drop_path_rate=dpr[i],
-                        mlp_ratio=config.mlp_ratio[i],
-                        with_cls_token=config.cls_token[i],
-                    )
-                )
-            stages.append(nn.ModuleList(layers))
-
-        self.stages = nn.ModuleList(stages)
 
     def forward(
         self,
         pixel_values,
-        head_mask=None,
-        output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        hidden_states = pixel_values
+        hidden_state = pixel_values
 
         cls_token = None
-        for i, (embedding_layer, stage) in enumerate(zip(self.patch_embeddings, self.stages)):
-            if self.config.cls_token[i]:
-                cls_token = self.cls_token
-            else:
-                cls_token = None
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = embedding_layer(hidden_states)
-
-            batch_size, num_channels, height, width = hidden_states.shape
-            # rearrange b c h w -> b (h w) c"
-            hidden_states = hidden_states.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-
-            if cls_token is not None:
-                cls_token = cls_token.expand(batch_size, -1, -1)
-                hidden_states = torch.cat((cls_token, hidden_states), dim=1)
-
-            for layer in stage:
-                layer_outputs = layer(hidden_states, height, width, layer_head_mask, output_attentions)
-                hidden_states = layer_outputs[0]
-                if output_attentions:
-                    all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-            if cls_token is not None:
-                cls_token, hidden_states = torch.split(hidden_states, [1, height * width], 1)
-
-            # rearrange b (h w) c -> b c h w"
-            hidden_states = hidden_states.permute(0, 2, 1).view(batch_size, num_channels, height, width)
-
+        for _, (stage_module) in enumerate(self.stages):
+            hidden_state, cls_token = stage_module(hidden_state)
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, cls_token, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_state, cls_token, all_hidden_states] if v is not None
             )
 
         return BaseModelOutputWithCLSToken(
-            last_hidden_state=hidden_states,
+            last_hidden_state=hidden_state,
             cls_token_value=cls_token,
             hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -694,9 +685,6 @@ class CvtModel(CvtPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.encoder = CvtEncoder(config)
-        self.pooler = CvtPooler(config) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def _prune_heads(self, heads_to_prune):
@@ -719,12 +707,9 @@ class CvtModel(CvtPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -733,17 +718,8 @@ class CvtModel(CvtPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, sum(self.config.depth))
-
         encoder_outputs = self.encoder(
             pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -756,21 +732,7 @@ class CvtModel(CvtPreTrainedModel):
             last_hidden_state=sequence_output,
             cls_token_value=encoder_outputs.cls_token_value,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
-
-
-class CvtPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.embed_dim[-1], config.embed_dim[-1])
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        return pooled_output
 
 
 @add_start_docstrings(
@@ -799,16 +761,14 @@ class CvtForImageClassification(CvtPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
         pixel_values=None,
-        head_mask=None,
         labels=None,
-        output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -821,8 +781,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.cvt(
             pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -867,9 +825,8 @@ class CvtForImageClassification(CvtPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
