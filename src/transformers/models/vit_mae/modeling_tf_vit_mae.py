@@ -647,7 +647,6 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
         embedding_output, mask, ids_restore = self.embeddings(
             pixel_values=pixel_values, training=training, noise=noise
@@ -811,7 +810,6 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1028,7 +1026,6 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEForPreTrainingOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:

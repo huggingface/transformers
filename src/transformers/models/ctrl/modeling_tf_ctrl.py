@@ -268,7 +268,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         # If using past key value states, only the last tokens
@@ -541,7 +540,6 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.transformer(
             input_ids=input_ids,
@@ -653,7 +651,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -765,7 +762,6 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
