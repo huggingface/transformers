@@ -538,6 +538,8 @@ def write_wandb_log(metrics, step, prefix=None):
                 log_metrics[f"{k}/"] = v
             elif prefix is not None:
                 log_metrics[f"{prefix}/{k}"] = v
+            else:
+                log_metrics[k] = v
         wandb.log(log_metrics, step)
 
 
@@ -904,7 +906,9 @@ def main():
     # Cross entropy loss
     def loss_fn(logits, labels):
         vocab_size = logits.shape[-1]
-        loss = optax.softmax_cross_entropy(logits, onehot(labels, vocab_size))
+        # optax onehot always returns a float32 device array, need to downcast if performing mixed precision training
+        onehot_targets = to_dtype(onehot(labels, vocab_size))
+        loss = optax.softmax_cross_entropy(logits, onehot_targets)
         # ignore padded tokens from loss, i.e. where labels are not set to -100
         padding = labels >= 0
         loss = loss * padding
@@ -1063,7 +1067,8 @@ def main():
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                write_wandb_log(train_metric, cur_step, prefix="train")
+                # need to upcast all device arrays to fp32 for wandb logging (jnp.bfloat16 not supported)
+                write_wandb_log(to_fp32(train_metric), cur_step, prefix="train")
                 # we won't log to tensorboard for now (it is fiddly logging param and grad norms on a layer-by-layer basis)
                 # if has_tensorboard and jax.process_index() == 0:
                 # write_train_metric(summary_writer, train_metrics, train_time, cur_step)
@@ -1099,6 +1104,7 @@ def main():
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = to_fp32(eval_metrics)
 
         # compute WER metric and get predicted string (for debugging)
         wer_desc = ""
