@@ -50,8 +50,11 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "anugunj/cvt-13",
-    "anugunj/cvt-13-384-1k" "anugunj/cvt-13-384-22k" "anugunj/cvt-21",
-    "anugunj/cvt-21-384-1k" "anugunj/cvt-21-384-22k" "anugunj/cvt-w24-384-22k"
+    "anugunj/cvt-13-384-1k",
+    "anugunj/cvt-13-384-22k",
+    "anugunj/cvt-21",
+    "anugunj/cvt-21-384-1k",
+    "anugunj/cvt-21-384-22k",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
