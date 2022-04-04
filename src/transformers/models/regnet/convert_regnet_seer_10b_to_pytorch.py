@@ -253,7 +253,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         logger.info("Finally, pushing!")
         # push it to hub
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name, commit_message="Add model", use_temp_dir=True
+            repo_path_or_name=save_directory / model_name, commit_message="Add model", output_dir=save_directory / model_name
         )
         size = 384
         # we can use the convnext one
@@ -261,7 +261,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         feature_extractor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
             commit_message="Add feature extractor",
-            use_temp_dir=True,
+            output_dir=save_directory / model_name,
         )
 
     # torch.save(converted_state_dict, str(save_directory))
