@@ -15,8 +15,7 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-from typing import List, Optional, Tuple, Union
-from matplotlib.pyplot import cool
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
