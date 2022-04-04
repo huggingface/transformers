@@ -685,7 +685,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -946,7 +945,6 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.lxmert(
             input_ids,
@@ -1282,7 +1280,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         masked_lm_labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

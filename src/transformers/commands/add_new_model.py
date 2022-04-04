@@ -178,7 +178,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         shutil.move(
             f"{directory}/{lowercase_model_name}.mdx",
-            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.mdx",
+            f"{path_to_transformer_root}/docs/source/en/model_doc/{lowercase_model_name}.mdx",
         )
 
         shutil.move(
