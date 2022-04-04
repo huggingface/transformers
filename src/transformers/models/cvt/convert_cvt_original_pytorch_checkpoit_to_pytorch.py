@@ -17,9 +17,10 @@
 URL: https://github.com/microsoft/CvT"""
 
 
+import argparse
 import json
 from collections import OrderedDict
-import argparse
+
 import torch
 
 from huggingface_hub import cached_download, hf_hub_url
@@ -246,6 +247,7 @@ def cls_token():
     token.append(("cvt.encoder.cls_token", "stage2.cls_token"))
     return token
 
+
 def final():
     """
     Function helps in renaming final classification layer
@@ -257,13 +259,13 @@ def final():
     head.append(("classifier.bias", "head.bias"))
     return head
 
+
 def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     """
     Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
     """
     img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000
-    expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
@@ -274,13 +276,13 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     label2id = {v: k for k, v in id2label.items()}
 
     config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
-    
-    if cvt_file.rsplit('/', 1)[-1][4:6] == "13":
-        config.image_size = int(cvt_file.rsplit('/', 1)[-1][7:10])
+
+    if cvt_file.rsplit("/", 1)[-1][4:6] == "13":
+        config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 2, 10]
 
-    if cvt_file.rsplit('/', 1)[-1][4:6] == "21":
-        config.image_size = int(cvt_file.rsplit('/', 1)[-1][7:10])
+    if cvt_file.rsplit("/", 1)[-1][4:6] == "21":
+        config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 4, 16]
     else:
         config.image_size = 384
@@ -327,5 +329,3 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     convert_cvt_checkpoint(args.cvt_name, args.pytorch_dump_folder_path)
-
-    
