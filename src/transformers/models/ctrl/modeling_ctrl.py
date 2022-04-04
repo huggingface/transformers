@@ -24,12 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_ctrl import CTRLConfig
 
 
@@ -687,7 +682,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> torch.manual_seed(42) # doctest: +IGNORE_RESULT
+
+        >>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
         >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
@@ -705,7 +701,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
 
         >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", problem_type="multi_label_classification")
+        >>> model = CTRLForSequenceClassification.from_pretrained(
+        ...     "sshleifer/tiny-ctrl", problem_type="multi_label_classification"
+        ... )
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
 
         >>> with torch.no_grad():
