@@ -29,7 +29,6 @@ from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import CvtForImageClassification, CvtModel
     from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
@@ -40,12 +39,14 @@ if is_vision_available():
 
     from transformers import AutoFeatureExtractor
 
+
 class CvtConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "embed_dim"))
         self.parent.assertTrue(hasattr(config, "num_heads"))
         self.parent.assertTrue(hasattr(config, "num_stages"))
+
 
 class CvtModelTester:
     def __init__(

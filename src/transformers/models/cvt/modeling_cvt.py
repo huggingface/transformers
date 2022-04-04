@@ -21,14 +21,11 @@ import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import math
-import warnings
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import ModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
@@ -109,12 +106,6 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: 
         random_tensor.div_(keep_prob)
     return x * random_tensor
 
-def _no_grad_trunc_normal_(tensor, mean, std, a, b):
-    # Cut & paste from PyTorch official master until it's in a few official releases - RW
-    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
-    def norm_cdf(x):
-        # Computes standard normal cumulative distribution function
-        return (1. + math.erf(x / math.sqrt(2.))) / 2.
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -155,7 +146,6 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    ## type: (Tensor, float, float, float, float) -> Tensor
     r"""Fills the input Tensor with values drawn from a truncated
     Args:
     normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
@@ -205,6 +195,7 @@ class ConvEmbeddings(nn.Module):
     Image to Conv Embedding.
 
     """
+
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
         super().__init__()
         patch_size = to_2tuple(patch_size)
@@ -542,7 +533,6 @@ class CvtEncoder(nn.Module):
 
         self.patch_embeddings = nn.ModuleList(embeddings)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
-        
 
         stages = []
         for i in range(config.num_stages):

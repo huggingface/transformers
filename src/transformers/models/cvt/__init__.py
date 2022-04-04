@@ -25,9 +25,6 @@ _import_structure = {
     "configuration_cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
 }
 
-# if is_vision_available():
-#     _import_structure["feature_extraction_cvt"] = ["CvtFeatureExtractor"]
-
 if is_torch_available():
     _import_structure["modeling_cvt"] = [
         "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -38,9 +35,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
-
-    # if is_vision_available():
-    #     from .feature_extraction_cvt import CvtFeatureExtractor
 
     if is_torch_available():
         from .modeling_cvt import (
