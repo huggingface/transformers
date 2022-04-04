@@ -172,10 +172,10 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-    
+
     def create_and_test_config_common_properties(self):
         return
-    
+
     @unittest.skip(reason="Cvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -199,7 +199,7 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)

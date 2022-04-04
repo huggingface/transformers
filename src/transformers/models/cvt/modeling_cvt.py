@@ -17,7 +17,6 @@
 
 import collections.abc
 import math
-from turtle import forward
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -51,6 +50,12 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "anugunj/cvt-13",
+    "anugunj/cvt-13-384-1k"
+    "anugunj/cvt-13-384-22k"
+    "anugunj/cvt-21",
+    "anugunj/cvt-21-384-1k"
+    "anugunj/cvt-21-384-22k"
+    "anugunj/cvt-w24-384-22k"
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
@@ -65,8 +70,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
         cls_token (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
             Classification Token at the output of the last layer of the model.
     """
@@ -74,6 +79,7 @@ class BaseModelOutputWithCLSToken(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     cls_token_value: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 
 # Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
@@ -223,16 +229,14 @@ class CvtSelfAttentionConvProjection(nn.Module):
             groups=embed_dim,
         )
         self.normalization = nn.BatchNorm2d(embed_dim)
-    
+
     def forward(self, hidden_state):
         hidden_state = self.convolution(hidden_state)
         hidden_state = self.normalization(hidden_state)
         return hidden_state
 
 
-
 class CvtSelfAttentionLinearProjection(nn.Module):
-    
     def forward(self, hidden_state):
         batch_size, num_channels, height, width = hidden_state.shape
         hidden_size = height * width
@@ -437,10 +441,12 @@ class CvtOutput(nn.Module):
         hidden_state = hidden_state + input_tensor
         return hidden_state
 
+
 class CvtLayer(nn.Module):
     """
     CvtLayer composed by attention layers, normalization and mlps
     """
+
     def __init__(
         self,
         num_heads,
@@ -506,6 +512,7 @@ class CvtStage(nn.Module):
     """
     CvtStage, consisting of multiple layers
     """
+
     def __init__(
         self,
         config,
@@ -518,17 +525,15 @@ class CvtStage(nn.Module):
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
 
         self.embedding = CvtEmbeddings(
-                    patch_size=config.patch_sizes[self.stage],
-                    stride=config.patch_stride[self.stage],
-                    num_channels=config.num_channels if self.stage == 0 else config.embed_dim[self.stage - 1],
-                    embed_dim=config.embed_dim[self.stage],
-                    padding=config.patch_padding[self.stage],
-                    dropout_rate=config.drop_rate[self.stage],
-                )
-        
-        dpr = [
-                x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])
-            ] 
+            patch_size=config.patch_sizes[self.stage],
+            stride=config.patch_stride[self.stage],
+            num_channels=config.num_channels if self.stage == 0 else config.embed_dim[self.stage - 1],
+            embed_dim=config.embed_dim[self.stage],
+            padding=config.patch_padding[self.stage],
+            dropout_rate=config.drop_rate[self.stage],
+        )
+
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
 
         self.layers = nn.Sequential(
             *[
@@ -551,7 +556,7 @@ class CvtStage(nn.Module):
                 for _ in range(config.depth[self.stage])
             ]
         )
-    
+
     def forward(self, hidden_state):
         cls_token = None
         hidden_state = self.embedding(hidden_state)
@@ -565,12 +570,11 @@ class CvtStage(nn.Module):
         for layer in self.layers:
             layer_outputs = layer(hidden_state, height, width)
             hidden_state = layer_outputs
-            
+
         if self.config.cls_token[self.stage]:
             cls_token, hidden_state = torch.split(hidden_state, [1, height * width], 1)
         hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, num_channels, height, width)
         return hidden_state, cls_token
-        
 
 
 class CvtEncoder(nn.Module):
@@ -579,12 +583,7 @@ class CvtEncoder(nn.Module):
         self.config = config
         self.stages = nn.ModuleList([])
         for stage_idx in range(config.num_stages):
-            self.stages.append(
-                CvtStage(
-                    config,
-                    stage_idx
-                )
-            )
+            self.stages.append(CvtStage(config, stage_idx))
 
     def forward(
         self,
@@ -602,9 +601,7 @@ class CvtEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
-            return tuple(
-                v for v in [hidden_state, cls_token, all_hidden_states] if v is not None
-            )
+            return tuple(v for v in [hidden_state, cls_token, all_hidden_states] if v is not None)
 
         return BaseModelOutputWithCLSToken(
             last_hidden_state=hidden_state,

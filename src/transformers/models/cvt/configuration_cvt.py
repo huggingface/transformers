@@ -74,7 +74,8 @@ class CvtConfig(PretrainedConfig):
         cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
             The bool for cls_token
         qkv_projection_method (`List[string]`, *optional*, defaults to 'dw_bn', 'dw_bn', 'dw_bn']]):
-            The projection method for query, key and value
+            The projection method for query, key and value Default is depth-wise convolutions with batch norm. For
+            Linear projection use "avg".
         kernel_qkv (`List[int]`, *optional*, defaults to [3, 3, 3]):
             The kernel size for query, key and value in attention layer
         padding_kv (`List[int]`, *optional*, defaults to [1, 1, 1]):
