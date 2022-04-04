@@ -2165,7 +2165,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for k in loaded_state_dict_keys:
                 submodule, param_name = find_submodule_and_param_name(model, k)
                 if submodule is not None:
-                    new_val = state_dict[k]
+                    param_dtype = getattr(submodule, param_name).dtype
+                    new_val = state_dict[k].to(param_dtype)
                     if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
                         new_val = torch.nn.Parameter(new_val)
                     setattr(submodule, param_name, new_val)
