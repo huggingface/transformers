@@ -45,7 +45,7 @@ from .configuration_reformer import ReformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
+_CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-reformer"
 _CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
@@ -2516,6 +2516,8 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="''",
+        expected_loss=3.28,
     )
     def forward(
         self,
