@@ -36,7 +36,7 @@ from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClass
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from vissl.models.model_helpers import get_trunk_forward_outputs
-
+import os
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
@@ -234,6 +234,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     else:
         logger.info("The state_dict was already stored on disk.")
     if push_to_hub:
+        logger.info(f"Token is {os.environ['HF_TOKEN']}")
         logger.info("Loading our model.")
         # create our model
         our_config = names_to_config[model_name]
@@ -253,7 +254,8 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         logger.info("Finally, pushing!")
         # push it to hub
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name, commit_message="Add model", output_dir=save_directory / model_name
+            repo_path_or_name=save_directory / model_name, commit_message="Add model", output_dir=save_directory / model_name,
+            use_auth_token=os.environ["HF_TOKEN"]
         )
         size = 384
         # we can use the convnext one
@@ -262,6 +264,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             repo_path_or_name=save_directory / model_name,
             commit_message="Add feature extractor",
             output_dir=save_directory / model_name,
+            use_auth_token=os.environ["HF_TOKEN"]
         )
 
     # torch.save(converted_state_dict, str(save_directory))
