@@ -212,6 +212,8 @@
       title: ELECTRA
     - local: model_doc/encoder-decoder
       title: Encoder Decoder Models
+    - local: model_doc/fastspeech2
+      title: FastSpeech2
     - local: model_doc/flaubert
       title: FlauBERT
     - local: model_doc/fnet

@@ -136,9 +136,10 @@ class FastSpeech2PositionalEmbedding(nn.Module):
         self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
     ):
         """
-        Args:
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
             x: torch.Tensor x:
         Returns: torch.Tensor
         """
