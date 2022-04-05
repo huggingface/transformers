@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, input_processing
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -510,6 +510,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(
         VISION_ENCODER_DECODER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
@@ -585,21 +586,16 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         if encoder_outputs is None:
 
-            encoder_processing_inputs = {
-                "func": self.encoder.call,
-                "config": self.encoder.config,
+            encoder_inputs = {
                 "input_ids": pixel_values,
                 "output_attentions": output_attentions,
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": {},
             }
 
             # Add arguments to encoder from `kwargs_encoder`
-            encoder_processing_inputs.update(kwargs_encoder)
-
-            encoder_inputs = input_processing(**encoder_processing_inputs)
+            encoder_inputs.update(kwargs_encoder)
 
             if "input_ids" in encoder_inputs:
                 encoder_inputs["pixel_values"] = encoder_inputs.pop("input_ids")
@@ -639,9 +635,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
         encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
 
-        decoder_processing_inputs = {
-            "func": self.decoder.call,
-            "config": self.decoder.config,
+        decoder_inputs = {
             "input_ids": decoder_input_ids,
             "attention_mask": decoder_attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
@@ -653,13 +647,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             "past_key_values": past_key_values,
             "return_dict": return_dict,
             "training": training,
-            "kwargs_call": {},
         }
 
         # Add arguments to decoder from `kwargs_decoder`
-        decoder_processing_inputs.update(kwargs_decoder)
+        decoder_inputs.update(kwargs_decoder)
 
-        decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
 
         logits = decoder_outputs[0]

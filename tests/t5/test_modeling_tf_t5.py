@@ -346,6 +346,11 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
         self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
 
+    # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
+    @unittest.skip(reason="The inputs of the Main Layer are different.")
+    def test_keras_save_load(self):
+        pass
+
 
 class TFT5EncoderOnlyModelTester:
     def __init__(
@@ -799,33 +804,3 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
         self.assertEqual(translation, expected_translation)
-
-    def test_finetune_keras_trainer(self):
-        """Ensure that the model can be fine-tuned via the keras API and
-        that metrics work as expected.
-        """
-
-        # This metric expects to be called with the logits output
-        def _accuracy(y_true, y_pred):
-            return tf.keras.metrics.sparse_categorical_crossentropy(y_true[:, 0], y_pred[:, 0])
-
-        # measure the accuracy of the first token
-        class FirstTokenAccuracy(tf.keras.metrics.MeanMetricWrapper):
-            def __init__(self, name="accuracy", **kwargs):
-                super().__init__(_accuracy, name=name, **kwargs)
-
-        model = self.model
-        model.compile("adam", metrics=FirstTokenAccuracy())
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-
-        examples = [
-            ("sentiment: Everything is awesome!", "positive"),
-            ("sentiment: Tensorflow datasets are hard to use", "negative"),
-        ]
-
-        inputs = dict(tokenizer([x[0] for x in examples], padding=True, return_tensors="tf"))
-        inputs["labels"] = tokenizer([x[1] for x in examples], return_tensors="tf").input_ids
-
-        model.fit(inputs)
-        m = model.evaluate(inputs)
-        self.assertEqual(len(m), 2)

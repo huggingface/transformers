@@ -77,7 +77,7 @@ if TYPE_CHECKING:
         from .modeling_xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
 
     if is_flax_available():
-        from .modeling_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .modeling_flax_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
 
     if is_tf_available():
         from .modeling_tf_xglm import (

@@ -573,7 +573,12 @@ class TFModelTesterMixin:
             pt_model = pt_model_class(config)
 
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(
+                inputs_dict,
+                model_class,
+                # Not all models accept "labels" in the forward pass (yet :) )
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
@@ -722,7 +727,6 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
-            inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
@@ -944,10 +948,6 @@ class TFModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
@@ -956,19 +956,25 @@ class TFModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            # Not all models accept "labels" in the forward pass (yet :) )
+            if "labels" in inspect.signature(model.call).parameters.keys():
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-            )
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1295,6 +1301,56 @@ class TFModelTesterMixin:
                 loss = model(tuple_input[:-1])[0]
 
                 self.assertEqual(loss.shape, [loss_size])
+
+    def test_keras_fit(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", None):
+                # Test that model correctly compute the loss with kwargs
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                # Is there a better way to remove these decoder inputs?
+                prepared_for_class = {
+                    key: val
+                    for key, val in prepared_for_class.items()
+                    if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids")
+                }
+
+                possible_label_cols = {
+                    "labels",
+                    "label",
+                    "label_ids",
+                    "start_positions",
+                    "start_position",
+                    "end_positions",
+                    "end_position",
+                    "next_sentence_label",
+                }
+                label_names = possible_label_cols.intersection(set(prepared_for_class))
+                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+                self.assertGreater(len(inputs_minus_labels), 0)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                # Make sure the model fits without crashing regardless of where we pass the labels
+                history1 = model.fit(
+                    prepared_for_class,
+                    validation_data=prepared_for_class,
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss1 = history1.history["val_loss"][0]
+                history2 = model.fit(
+                    inputs_minus_labels,
+                    labels,
+                    validation_data=(inputs_minus_labels, labels),
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss2 = history2.history["val_loss"][0]
+                self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
