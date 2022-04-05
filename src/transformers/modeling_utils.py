@@ -1823,7 +1823,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if is_sharded:
                     loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
                 else:
-                    state_dict = load_state_dict(resolved_archive_file)
                     loaded_state_dict_keys = [k for k in state_dict.keys()]
                     del state_dict  # free CPU memory - will reload again later
 
