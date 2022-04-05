@@ -1361,32 +1361,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
 
-        # Shard the model if it is too big.
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
-
-        # Clean the folder from a previous save
-        for filename in os.listdir(save_directory):
-            full_filename = os.path.join(save_directory, filename)
-            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
-                os.remove(full_filename)
-
-        # Save the model
-        for shard_file, shard in shards.items():
-            save_function(shard, os.path.join(save_directory, shard_file))
-
-        if index is None:
-            logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
+        from .utils import is_sagemaker_mp_enabled
+        if is_sagemaker_mp_enabled():
+            # Do not shard checkpoints when sagemaker model parallel is enabled
+            output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+            save_function(state_dict, output_model_file)
+            logger.info(f"Model weights saved in {output_model_file}")
         else:
-            save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
+            # Shard the model if it is too big.
+            shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
+
+            # Clean the folder from a previous save
+            for filename in os.listdir(save_directory):
+                full_filename = os.path.join(save_directory, filename)
+                if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+                    os.remove(full_filename)
+
+            # Save the model
+            for shard_file, shard in shards.items():
+                save_function(shard, os.path.join(save_directory, shard_file))
+
+            if index is None:
+                logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
+            else:
+                save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
+                # Save the index as well
+                with open(save_index_file, "w", encoding="utf-8") as f:
+                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                    f.write(content)
+                logger.info(
+                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                    f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                    f"index located at {save_index_file}."
+                )
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
