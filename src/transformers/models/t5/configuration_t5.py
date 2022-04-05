@@ -12,15 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" T5 model configuration """
-from collections import OrderedDict
-from typing import Any, Dict, Iterable, Mapping, Optional
+""" T5 model configuration"""
+from typing import Mapping
 
-from transformers import PreTrainedTokenizer, TensorType
-
-from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -37,45 +33,46 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class T5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.T5Model` or a
-    :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the T5 `t5-small <https://huggingface.co/t5-small>`__ architecture.
+    This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
+    instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the T5
+    [t5-small](https://huggingface.co/t5-small) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (:obj:`int`, `optional`, defaults to 32128):
+        vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or :class:`~transformers.TFT5Model`.
-        d_model (:obj:`int`, `optional`, defaults to 512):
+            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+        d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
-        d_kv (:obj:`int`, `optional`, defaults to 64):
-            Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to :obj:`d_model
-            // num_heads`.
-        d_ff (:obj:`int`, `optional`, defaults to 2048):
-            Size of the intermediate feed forward layer in each :obj:`T5Block`.
-        num_layers (:obj:`int`, `optional`, defaults to 6):
+        d_kv (`int`, *optional*, defaults to 64):
+            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
+            num_heads`.
+        d_ff (`int`, *optional*, defaults to 2048):
+            Size of the intermediate feed forward layer in each `T5Block`.
+        num_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (:obj:`int`, `optional`):
-            Number of hidden layers in the Transformer decoder. Will use the same value as :obj:`num_layers` if not
-            set.
-        num_heads (:obj:`int`, `optional`, defaults to 8):
+        num_decoder_layers (`int`, *optional*):
+            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+        num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (:obj:`int`, `optional`, defaults to 32):
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
-        dropout_rate (:obj:`float`, `optional`, defaults to 0.1):
+        relative_attention_max_distance (`int`, *optional*, defaults to 128):
+            The maximum distance of the longer sequences for the bucket separation.
+        dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        initializer_factor (:obj:`float`, `optional`, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (:obj:`string`, `optional`, defaults to :obj:`"relu"`):
-            Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`. T5v1.1 uses
-            the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
+            `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "t5"
@@ -92,6 +89,7 @@ class T5Config(PretrainedConfig):
         num_decoder_layers=None,
         num_heads=8,
         relative_attention_num_buckets=32,
+        relative_attention_max_distance=128,
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
@@ -112,6 +110,7 @@ class T5Config(PretrainedConfig):
         )  # default = symmetry
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
@@ -125,101 +124,26 @@ class T5Config(PretrainedConfig):
         )
 
 
-class T5OnnxConfig(OnnxConfigWithPast):
+class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                ("decoder_input_ids", {0: "batch"}),
-                ("decoder_attention_mask", {0: "batch"}),
-            ]
-        )
+        common_inputs = {
+            "input_ids": {0: "batch", 1: "encoder_sequence"},
+            "attention_mask": {0: "batch", 1: "encoder_sequence"},
+        }
+        if self.use_past:
+            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
+            common_inputs["decoder_input_ids"] = {0: "batch"}
+            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+        else:
+            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
+            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
 
         if self.use_past:
-            for i in range(0, self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
+            self.fill_with_past_key_values_(common_inputs, direction="inputs")
 
         return common_inputs
 
     @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = super().outputs
-
-        if "last_hidden_state" in common_outputs:
-            common_outputs["last_hidden_state"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            for i in range(self._config.num_layers):
-                common_outputs[f"present.{i}.decoder.key"] = {0: "batch", 2: "decoder_sequence"}
-                common_outputs[f"present.{i}.decoder.value"] = {0: "batch", 2: "decoder_sequence"}
-                common_outputs[f"present.{i}.encoder.key"] = {0: "batch", 2: "encoder_sequence"}
-                common_outputs[f"present.{i}.encoder.value"] = {0: "batch", 2: "encoder_sequence"}
-
-        if self.task == "default":
-            common_outputs["encoder_last_hidden_state"] = {0: "batch", 2: "encoder_sequence"}
-
-        return common_outputs
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-
-        # Generate encoder inputs
-        encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
-
-        # Generate decoder inputs
-        decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
-
-        ordered_inputs = dict(**encoder_inputs, **decoder_inputs)
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-            batch = encoder_inputs["input_ids"].shape[0]
-            encoder_seq_length = encoder_inputs["input_ids"].shape[1]
-            encoder_shape = (
-                batch,
-                self._config.num_heads,
-                encoder_seq_length,
-                self._config.hidden_size // self._config.num_heads,
-            )
-            decoder_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_heads)
-
-            ordered_inputs["past_key_values"] = []
-            for _ in range(self._config.num_layers):
-                ordered_inputs["past_key_values"].append(
-                    (
-                        torch.zeros(decoder_shape),
-                        torch.zeros(decoder_shape),
-                        torch.zeros(encoder_shape),
-                        torch.zeros(encoder_shape),
-                    )
-                )
-
-        return ordered_inputs
-
-    @staticmethod
-    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
-        if name in ["present", "past_key_values"]:
-            flatten_output = {}
-            for idx, t in enumerate(field):
-                flatten_output[f"{name}.{idx}.decoder.key"] = t[0]
-                flatten_output[f"{name}.{idx}.decoder.value"] = t[1]
-                flatten_output[f"{name}.{idx}.encoder.key"] = t[2]
-                flatten_output[f"{name}.{idx}.encoder.value"] = t[3]
-
-            return flatten_output
-
-        return super().flatten_output_collection_property(name, field)
+    def default_onnx_opset(self) -> int:
+        return 13

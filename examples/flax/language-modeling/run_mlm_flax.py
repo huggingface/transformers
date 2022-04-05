@@ -26,7 +26,8 @@ import math
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
 from itertools import chain
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
@@ -54,15 +55,76 @@ from transformers import (
     HfArgumentParser,
     PreTrainedTokenizerBase,
     TensorType,
-    TrainingArguments,
     is_tensorboard_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
+from transformers.utils import get_full_repo_name
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
 
 
 @dataclass
@@ -99,6 +161,13 @@ class ModelArguments:
         default="float32",
         metadata={
             "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
         },
     )
 
@@ -300,7 +369,7 @@ def main():
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        level="NOTSET",
+        level=logging.INFO,
         datefmt="[%X]",
     )
 
@@ -334,7 +403,12 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
@@ -342,12 +416,14 @@ def main():
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
         data_files = {}
@@ -358,7 +434,12 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
@@ -366,12 +447,14 @@ def main():
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             datasets["train"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -382,20 +465,34 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError(
@@ -510,11 +607,18 @@ def main():
 
     if model_args.model_name_or_path:
         model = FlaxAutoModelForMaskedLM.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            model_args.model_name_or_path,
+            config=config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForMaskedLM.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Store some constant

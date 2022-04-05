@@ -24,7 +24,8 @@ import os
 import random
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -50,18 +51,16 @@ from transformers import (
     FlaxAutoModelForQuestionAnswering,
     HfArgumentParser,
     PreTrainedTokenizerFast,
-    TrainingArguments,
     is_tensorboard_available,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, get_full_repo_name
 from utils_qa import postprocess_qa_predictions
 
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.14.0.dev0")
+check_min_version("4.18.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -69,6 +68,69 @@ PRNGKey = Any
 
 
 # region Arguments
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
+
+
 @dataclass
 class ModelArguments:
     """
@@ -386,7 +448,10 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -401,7 +466,13 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            field="data",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -540,7 +611,8 @@ def main():
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
             # We will select sample from whole data if agument is specified
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset
         train_dataset = train_dataset.map(
             prepare_train_features,
@@ -551,7 +623,8 @@ def main():
         )
         if data_args.max_train_samples is not None:
             # Number of samples might increase during Feature Creation, We select only specified max samples
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         processed_raw_datasets["train"] = train_dataset
 
     # Validation preprocessing
@@ -607,7 +680,8 @@ def main():
         eval_examples = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
             # We will select sample from whole data
-            eval_examples = eval_examples.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
+            eval_examples = eval_examples.select(range(max_eval_samples))
         # Validation Feature Creation
         eval_dataset = eval_examples.map(
             prepare_validation_features,
@@ -618,7 +692,8 @@ def main():
         )
         if data_args.max_eval_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         processed_raw_datasets["validation"] = eval_dataset
 
     if training_args.do_predict:
@@ -638,7 +713,8 @@ def main():
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         processed_raw_datasets["test"] = predict_dataset
     # endregion
 

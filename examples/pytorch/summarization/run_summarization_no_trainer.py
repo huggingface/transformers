@@ -49,7 +49,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name, is_offline_mode
+from transformers.utils import get_full_repo_name, is_offline_mode
 from transformers.utils.versions import require_version
 
 
@@ -443,6 +443,7 @@ def main():
         processed_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
+            num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on dataset",

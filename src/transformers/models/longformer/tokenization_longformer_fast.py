@@ -58,10 +58,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class LongformerTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a "fast" Longformer tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Longformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.LongformerTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer
-    to the superclass for usage examples and documentation concerning parameters.
+    [`LongformerTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to the superclass for usage examples
+    and documentation concerning parameters.
     """
     # merges and vocab same as Roberta
     vocab_files_names = VOCAB_FILES_NAMES

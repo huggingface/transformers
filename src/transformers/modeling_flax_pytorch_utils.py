@@ -69,7 +69,7 @@ def rename_key_and_reshape_tensor(
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
     def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
-        """Checks if ``key`` of ``(prefix,) + key`` is in random_flax_state_dict"""
+        """Checks if `key` of `(prefix,) + key` is in random_flax_state_dict"""
         return len(set(random_flax_state_dict) & set([key, (model_prefix,) + key])) > 0
 
     # layer norm

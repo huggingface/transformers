@@ -23,7 +23,8 @@ import logging
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
 from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
@@ -51,10 +52,9 @@ from transformers import (
     AutoTokenizer,
     FlaxAutoModelForSeq2SeqLM,
     HfArgumentParser,
-    TrainingArguments,
     is_tensorboard_available,
 )
-from transformers.file_utils import get_full_repo_name, is_offline_mode
+from transformers.utils import get_full_repo_name, is_offline_mode
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,72 @@ except (LookupError, OSError):
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    label_smoothing_factor: float = field(
+        default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
+    )
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
 
 
 @dataclass
@@ -108,6 +174,13 @@ class ModelArguments:
         default="float32",
         metadata={
             "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
         },
     )
 
@@ -355,7 +428,11 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir, keep_in_memory=False
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            keep_in_memory=False,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -368,27 +445,46 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
 
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError(
@@ -398,11 +494,18 @@ def main():
 
     if model_args.model_name_or_path:
         model = FlaxAutoModelForSeq2SeqLM.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            model_args.model_name_or_path,
+            config=config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     if model.config.decoder_start_token_id is None:
@@ -467,7 +570,7 @@ def main():
 
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
-            jnp.array(labels["input_ids"]), config.pad_token_id, config.decoder_start_token_id
+            labels["input_ids"], config.pad_token_id, config.decoder_start_token_id
         )
         model_inputs["decoder_input_ids"] = np.asarray(decoder_input_ids)
 
@@ -481,7 +584,8 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         train_dataset = train_dataset.map(
             preprocess_function,
             batched=True,
@@ -497,7 +601,8 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         eval_dataset = eval_dataset.map(
             preprocess_function,
             batched=True,
@@ -513,7 +618,8 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         predict_dataset = predict_dataset.map(
             preprocess_function,
             batched=True,

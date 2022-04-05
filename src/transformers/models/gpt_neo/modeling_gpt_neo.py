@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPT Neo model. """
+""" PyTorch GPT Neo model."""
 
 
 import os
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -33,7 +32,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -173,7 +172,7 @@ class GPTNeoSelfAttention(nn.Module):
         Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(*new_shape)
+        tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
@@ -389,85 +388,82 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
 
 GPT_NEO_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
-        config (:class:`~transformers.GPTNeoConfig`): Model configuration class with all the parameters of the model.
+        config ([`GPTNeoConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 GPT_NEO_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
-            ``past_key_values[0][0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be
-            passed as ``input_ids``.
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
 
-            Indices can be obtained using :class:`~transformers.GPTNeoTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`GPTNeoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.num_layers`):
+            [What are input IDs?](../glossary#input-ids)
+        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.num_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
-            have their past given to this model should not be passed as ``input_ids`` as they have already been
-            computed.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
+            their past given to this model should not be passed as `input_ids` as they have already been computed.
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
 
-            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
-            :obj:`past_key_values`).
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
+            `past_key_values`).
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -505,18 +501,18 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -640,7 +636,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         hidden_states = self.ln_f(hidden_states)
 
-        hidden_states = hidden_states.view(*output_shape)
+        hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -722,24 +718,24 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -791,9 +787,9 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
-        This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
+        [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
@@ -805,14 +801,14 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     """
     The GPTNeo Model transformer with a sequence classification head on top (linear layer).
 
-    :class:`~transformers.GPTNeoForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-1) do.
+    [`GPTNeoForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-1) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
-    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
-    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
-    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
-    the last value in each row of the batch).
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
     """,
     GPT_NEO_START_DOCSTRING,
 )
@@ -837,24 +833,24 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -894,7 +890,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
                     f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
 
         loss = None
         if labels is not None:

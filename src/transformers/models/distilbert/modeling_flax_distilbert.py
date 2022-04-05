@@ -24,7 +24,6 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxMaskedLMOutput,
@@ -34,7 +33,7 @@ from ...modeling_flax_outputs import (
     FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -47,53 +46,50 @@ _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 FLAX_DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
+        input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -264,10 +260,7 @@ class FlaxFFN(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
-        assert self.config.activation in [
-            "relu",
-            "gelu",
-        ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
+
         self.activation = ACT2FN[self.config.activation]
 
     def __call__(self, hidden_states, deterministic: bool = True):
@@ -579,7 +572,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
         hidden_states = dlbrt_output[0]
         prediction_logits = self.vocab_transform(hidden_states)
-        prediction_logits = ACT2FN["gelu"](prediction_logits)
+        prediction_logits = ACT2FN[self.config.activation](prediction_logits)
         prediction_logits = self.vocab_layer_norm(prediction_logits)
 
         if self.config.tie_word_embeddings:
@@ -599,7 +592,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""DistilBert Model with a `language modeling` head on top. """, FLAX_DISTILBERT_START_DOCSTRING)
+@add_start_docstrings("""DistilBert Model with a `language modeling` head on top.""", FLAX_DISTILBERT_START_DOCSTRING)
 class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 

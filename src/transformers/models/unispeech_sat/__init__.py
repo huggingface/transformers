@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -27,9 +27,11 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_unispeech_sat"] = [
         "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "UniSpeechSatForAudioFrameClassification",
         "UniSpeechSatForCTC",
         "UniSpeechSatForPreTraining",
         "UniSpeechSatForSequenceClassification",
+        "UniSpeechSatForXVector",
         "UniSpeechSatModel",
         "UniSpeechSatPreTrainedModel",
     ]
@@ -40,9 +42,11 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForAudioFrameClassification,
             UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
             UniSpeechSatForSequenceClassification,
+            UniSpeechSatForXVector,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
@@ -50,4 +54,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

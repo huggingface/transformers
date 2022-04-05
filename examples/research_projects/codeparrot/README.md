@@ -31,6 +31,8 @@ Before you run any of the scripts make sure you are logged in and can push to th
 huggingface-cli login
 ```
 
+Additionally, sure you have git-lfs installed. You can find instructions for how to install it [here](https://git-lfs.github.com/).
+
 ## Dataset
 The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files with less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
 
@@ -56,8 +58,8 @@ During preprocessing the dataset is downloaded and stored locally as well as cac
 ## Tokenizer
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
-python scripts/bpe_training.py
-    --base_tokenizer gpt2
+python scripts/bpe_training.py \
+    --base_tokenizer gpt2 \
     --dataset_name lvwerra/codeparrot-clean-train
 ```
 
@@ -96,7 +98,7 @@ If you want to train the small model you need to make some modifications:
 accelerate launch scripts/codeparrot_training.py \
 --model_ckpt lvwerra/codeparrot-small \
 --train_batch_size 12 \
---eval_batch_size 12 \
+--valid_batch_size 12 \
 --learning_rate 5e-4 \
 --num_warmup_steps 2000 \
 --gradient_accumulation 1 \
@@ -109,6 +111,32 @@ Recall that you can see the full set of possible options with descriptions (for 
 
 ```bash
 python scripts/codeparrot_training.py --help
+```
+
+Instead of streaming the dataset from the hub you can also stream it from disk. This can be helpful for long training runs where the connection can be interrupted sometimes. To stream locally you simply need to clone the datasets and replace the dataset name with their path. In this example we store the data in a folder called `data`: 
+
+```bash
+git lfs install
+mkdir data
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
+```
+
+And then pass the paths to the datasets when we run the training script:
+
+```bash
+accelerate launch scripts/codeparrot_training.py \
+--model_ckpt lvwerra/codeparrot-small \
+--dataset_name_train ./data/codeparrot-clean-train \
+--dataset_name_valid ./data/codeparrot-clean-valid \
+--train_batch_size 12 \
+--valid_batch_size 12 \
+--learning_rate 5e-4 \
+--num_warmup_steps 2000 \
+--gradient_accumulation 1 \
+--gradient_checkpointing False \
+--max_train_steps 150000 \
+--save_checkpoint_steps 15000
 ```
 
 ## Evaluation
@@ -125,7 +153,8 @@ python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
 --do_sample True \
 --temperature 0.2 \
 --top_p 0.95 \
---n_samples=200
+--n_samples=200 \
+--HF_ALLOW_CODE_EVAL="0"
 ```
 
 The results as well as reference values are shown in the following table:

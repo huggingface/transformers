@@ -17,15 +17,22 @@ import copy
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
-import unittest.mock
+import unittest.mock as mock
+from pathlib import Path
 
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import PASS, USER, is_staging_test
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
 config_common_kwargs = {
@@ -51,6 +58,7 @@ config_common_kwargs = {
     "temperature": 2.0,
     "top_k": 10,
     "top_p": 0.7,
+    "typical_p": 0.2,
     "repetition_penalty": 0.8,
     "length_penalty": 0.8,
     "no_repeat_ngram_size": 5,
@@ -74,6 +82,7 @@ config_common_kwargs = {
     "eos_token_id": 8,
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
+    "exponential_decay_length_penalty": (5, 1.01),
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -180,7 +189,7 @@ class ConfigTester(object):
 
         if len(wrong_values) > 0:
             errors = "\n".join([f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values])
-            raise ValueError(f"The following keys were not properly sey in the config:\n{errors}")
+            raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
@@ -190,23 +199,6 @@ class ConfigTester(object):
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
-
-
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
-
-
-# Make sure this is synchronized with the config above.
-FAKE_CONFIG_CODE = """
-from transformers import PretrainedConfig
-
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
-"""
 
 
 @is_staging_test
@@ -263,20 +255,23 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_dynamic_config(self):
-        config = FakeConfig(attribute=42)
-        config.auto_map = {"AutoConfig": "configuration.FakeConfig"}
+        CustomConfig.register_for_auto_class()
+        config = CustomConfig(attribute=42)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
             config.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
-                f.write(FAKE_CONFIG_CODE)
+
+            # This has added the proper auto_map field to the config
+            self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+            # The code has been copied from fixtures
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_configuration.py")))
 
             repo.push_to_hub()
 
         new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
         # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
-        self.assertEqual(new_config.__class__.__name__, "FakeConfig")
+        self.assertEqual(new_config.__class__.__name__, "CustomConfig")
         self.assertEqual(new_config.attribute, 42)
 
 
@@ -309,10 +304,27 @@ class ConfigTestUtils(unittest.TestCase):
                 f"pick another value for them: {', '.join(keys_with_defaults)}."
             )
 
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
 
 class ConfigurationVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
         configuration = AutoConfig.from_pretrained("bert-base-cased")
+        configuration.configuration_files = ["config.4.0.0.json"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
@@ -325,23 +337,30 @@ class ConfigurationVersioningTest(unittest.TestCase):
 
             # Will need to be adjusted if we reach v42 and this test is still here.
             # Should pick the old configuration file as the version of Transformers is < 4.42.0
+            configuration.configuration_files = ["config.42.0.0.json"]
+            configuration.hidden_size = 768
+            configuration.save_pretrained(tmp_dir)
             shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
             self.assertEqual(new_configuration.hidden_size, 768)
 
     def test_repo_versioning_before(self):
-        # This repo has two configuration files, one for v5.0.0 and above with an added token, one for versions lower.
-        repo = "microsoft/layoutxlm-base"
+        # This repo has two configuration files, one for v4.0.0 and above with a different hidden size.
+        repo = "hf-internal-testing/test-two-configs"
 
         import transformers as new_transformers
 
-        new_transformers.configuration_utils.__version__ = "v5.0.0"
-        new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
-        self.assertEqual(new_configuration.tokenizer_class, None)
+        new_transformers.configuration_utils.__version__ = "v4.0.0"
+        new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
+            repo, return_unused_kwargs=True
+        )
+        self.assertEqual(new_configuration.hidden_size, 2)
+        # This checks `_configuration_file` ia not kept in the kwargs by mistake.
+        self.assertDictEqual(kwargs, {"_from_auto": True})
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers
 
         old_transformers.configuration_utils.__version__ = "v3.0.0"
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
-        self.assertEqual(old_configuration.tokenizer_class, "XLMRobertaTokenizer")
+        self.assertEqual(old_configuration.hidden_size, 768)

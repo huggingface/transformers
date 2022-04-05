@@ -23,8 +23,7 @@ from copy import deepcopy
 from functools import partialmethod
 
 from .dependency_versions_check import dep_version_check
-from .file_utils import is_torch_available
-from .utils import logging
+from .utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -41,16 +40,16 @@ class HfDeepSpeedConfig:
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
-    A ``weakref`` of this object is stored in the module's globals to be able to access the config from areas where
-    things like the Trainer object is not available (e.g. ``from_pretrained`` and ``_get_resized_embeddings``).
-    Therefore it's important that this object remains alive while the program is still running.
+    A `weakref` of this object is stored in the module's globals to be able to access the config from areas where
+    things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore
+    it's important that this object remains alive while the program is still running.
 
-    :class:`~transformers.Trainer` uses the ``HfTrainerDeepSpeedConfig`` subclass instead. That subclass has logic to
-    sync the configuration with values of :class:`~transformers.TrainingArguments` by replacing special placeholder
-    values: ``"auto"``. Without this special logic the DeepSpeed configuration is not modified in any way.
+    [`Trainer`] uses the `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration
+    with values of [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic
+    the DeepSpeed configuration is not modified in any way.
 
     Args:
-        config_file_or_dict (:obj:`Union[str, Dict]`): path to DeepSpeed config file or dict.
+        config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
 
     """
 
@@ -73,7 +72,7 @@ class HfDeepSpeedConfig:
 
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
-        # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
+        # during ``zero.Init()`` which needs to know the dtype, and some other hparams.
         self._stage = self.get_value("zero_optimization.stage", -1)
 
         # offload
@@ -104,7 +103,7 @@ class HfDeepSpeedConfig:
 
     def get_value(self, ds_key_long, default=None):
         """
-        Returns the set value or ``default`` if no value is set
+        Returns the set value or `default` if no value is set
         """
         config, ds_key = self.find_config_node(ds_key_long)
         if config is None:
@@ -115,7 +114,7 @@ class HfDeepSpeedConfig:
         """
         Deletes a sub-section of the config file if it's found.
 
-        Unless ``must_exist`` is :obj:`True` the section doesn't have to exist.
+        Unless `must_exist` is `True` the section doesn't have to exist.
         """
         config = self.config
 
@@ -136,9 +135,8 @@ class HfDeepSpeedConfig:
 
     def is_true(self, ds_key_long):
         """
-        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
-        ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
-        isn't set).
+        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
+        specific question of whether the value is set to `True` (and it's not set to `False`` or isn't set).
 
         """
         value = self.get_value(ds_key_long)
@@ -146,9 +144,8 @@ class HfDeepSpeedConfig:
 
     def is_false(self, ds_key_long):
         """
-        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
-        ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
-        isn't set).
+        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
+        specific question of whether the value is set to `False` (and it's not set to `True`` or isn't set).
         """
         value = self.get_value(ds_key_long)
         return False if value is None else not bool(value)
@@ -165,27 +162,29 @@ class HfDeepSpeedConfig:
 
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
-    The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
-    the same lifespan as the latter.
+    The `HfTrainerDeepSpeedConfig` object is meant to be created during `TrainingArguments` object creation and has the
+    same lifespan as the latter.
     """
 
     def __init__(self, config_file_or_dict):
         super().__init__(config_file_or_dict)
-        self._dtype = torch.float16
+        self._dtype = None
         self.mismatches = []
 
     def dtype(self):
+        if self._dtype is None:
+            raise ValueError("trainer_config_process() wasn't called yet to tell dtype")
         return self._dtype
 
     def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
         """
         A utility method that massages the config file and can optionally verify that the values match.
 
-        1. Replace "auto" values with ``TrainingArguments`` value.
+        1. Replace "auto" values with `TrainingArguments` value.
 
-        2. If it wasn't "auto" and ``must_match`` is true, then check that DS config matches Trainer
-        config values and if mismatched add the entry to ``self.mismatched`` - will assert during
-        ``trainer_config_finalize`` for one or more mismatches.
+        2. If it wasn't "auto" and `must_match` is true, then check that DS config matches Trainer
+        config values and if mismatched add the entry to `self.mismatched` - will assert during
+        `trainer_config_finalize` for one or more mismatches.
 
         """
         config, ds_key = self.find_config_node(ds_key_long)
@@ -207,7 +206,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     def trainer_config_process(self, args):
         """
-        Adjust the config with ``TrainingArguments`` values. This stage is run during ``TrainingArguments`` object
+        Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
         # DeepSpeed does:
@@ -230,38 +229,45 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
-        if args.fp16:
+        if args.fp16 or args.fp16_full_eval:
             fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
         else:
             fp16_backend = None
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16+fp16_backend(amp)")
+        self.fill_match(
+            "fp16.enabled",
+            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
+            "fp16|fp16_full_eval+fp16_backend(amp)",
+        )
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
-        # whole config section is missing then the fallback is fp16
-        if self.is_false("fp16.enabled"):
+        self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
+
+        # deepspeed's default mode is fp16 unless there is a config that says differently
+        if self.is_true("bf16.enabled"):
+            self._dtype = torch.bfloat16
+        elif self.is_false("fp16.enabled"):
             self._dtype = torch.float32
-        # later there will be other dtypes besides just fp16 and fp32
-        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
+        else:
+            self._dtype = torch.float16
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
         This stage is run after we have the model and know num_training_steps.
 
-        Now we we can complete the configuration process.
+        Now we can complete the configuration process.
         """
         # zero
+        hidden_size = model.config.hidden_size
+        self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
-            hidden_size = model.config.hidden_size
-            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
@@ -373,7 +379,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
-    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
+    If `resume_from_checkpoint` was passed then an attempt to resume from a previously saved checkpoint will be made.
 
     Args:
         trainer: Trainer object

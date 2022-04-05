@@ -84,7 +84,7 @@ def schedule_threshold(
         spars_warmup_steps = initial_warmup * warmup_steps
         spars_schedu_steps = (final_warmup + initial_warmup) * warmup_steps
         mul_coeff = 1 - (step - spars_warmup_steps) / (total_step - spars_schedu_steps)
-        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff ** 3)
+        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff**3)
     regu_lambda = final_lambda * threshold / final_threshold
     return threshold, regu_lambda
 
@@ -285,14 +285,11 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                         attention_mask=inputs["attention_mask"],
                     )
 
-                loss_logits = (
-                    nn.functional.kl_div(
-                        input=nn.functional.log_softmax(logits_stu / args.temperature, dim=-1),
-                        target=nn.functional.softmax(logits_tea / args.temperature, dim=-1),
-                        reduction="batchmean",
-                    )
-                    * (args.temperature ** 2)
-                )
+                loss_logits = nn.functional.kl_div(
+                    input=nn.functional.log_softmax(logits_stu / args.temperature, dim=-1),
+                    target=nn.functional.softmax(logits_tea / args.temperature, dim=-1),
+                    reduction="batchmean",
+                ) * (args.temperature**2)
 
                 loss = args.alpha_distil * loss_logits + args.alpha_ce * loss
 

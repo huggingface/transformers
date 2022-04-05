@@ -24,7 +24,7 @@ objectives in our [model summary](https://huggingface.co/transformers/model_summ
 
 There are two sets of scripts provided. The first set leverages the Trainer API. The second set with `no_trainer` in the suffix uses a custom training loop and leverages the 🤗 Accelerate library . Both sets use the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-**Note:** The old script `run_language_modeling.py` is still available [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/run_language_modeling.py).
+**Note:** The old script `run_language_modeling.py` is still available [here](https://github.com/huggingface/transformers/blob/main/examples/legacy/run_language_modeling.py).
 
 The following examples, will run on datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.
@@ -39,6 +39,8 @@ python run_clm.py \
     --model_name_or_path gpt2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
@@ -54,6 +56,8 @@ python run_clm.py \
     --model_name_or_path gpt2 \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
@@ -83,6 +87,8 @@ python run_mlm.py \
     --model_name_or_path roberta-base \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-mlm
@@ -95,6 +101,8 @@ python run_mlm.py \
     --model_name_or_path roberta-base \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-mlm
@@ -139,6 +147,8 @@ python run_plm.py \
     --model_name_or_path=xlnet-base-cased \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-plm
@@ -151,6 +161,8 @@ python run_plm.py \
     --model_name_or_path=xlnet-base-cased \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-plm

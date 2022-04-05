@@ -60,7 +60,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
 
                 self.out_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 
@@ -189,18 +189,18 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
     def log_prob(self, hidden):
         r"""
-        Computes log probabilities for all :math:`n\_classes` From:
+        Computes log probabilities for all \\(n\_classes\\) From:
         https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/adaptive.p
 
         Args:
             hidden (Tensor): a minibatch of example
 
         Returns:
-            log-probabilities of for each class :math:`c` in range :math:`0 <= c <= n\_classes`, where
-            :math:`n\_classes` is a parameter passed to ``AdaptiveLogSoftmaxWithLoss`` constructor. Shape:
+            log-probabilities of for each class \\(c\\) in range \\(0 <= c <= n\_classes\\), where \\(n\_classes\\) is
+            a parameter passed to `AdaptiveLogSoftmaxWithLoss` constructor. Shape:
 
-            - Input: :math:`(N, in\_features)`
-            - Output: :math:`(N, n\_classes)`
+            - Input: \\((N, in\_features)\\)
+            - Output: \\((N, n\_classes)\\)
         """
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])

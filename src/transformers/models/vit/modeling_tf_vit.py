@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ViT model. """
+""" TF 2.0 ViT model."""
 
 
 import collections.abc
@@ -23,18 +23,17 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
-    input_processing,
     keras_serializable,
-    shape_list,
+    unpack_inputs,
 )
-from ...utils import logging
+from ...tf_utils import shape_list
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vit import ViTConfig
 
 
@@ -477,6 +476,7 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -486,31 +486,15 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
 
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
+        if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(
-            pixel_values=inputs["pixel_values"],
-            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
-            training=inputs["training"],
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            training=training,
         )
 
         # Prepare head mask if needed
@@ -518,25 +502,25 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if inputs["head_mask"] is not None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.config.num_hidden_layers
+            head_mask = [None] * self.config.num_hidden_layers
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(inputs=sequence_output)
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
@@ -555,6 +539,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
 
     config_class = ViTConfig
     base_model_prefix = "vit"
+    main_input_name = "pixel_values"
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -562,7 +547,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
@@ -581,7 +566,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         Method used for serving the model.
 
         Args:
-            inputs (:obj:`Dict[str, tf.Tensor]`):
+            inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
@@ -591,57 +576,58 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
 
 VIT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
+        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
-            model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
+            [`ViTFeatureExtractor.__call__`] for details.
 
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        interpolate_pos_encoding (:obj:`bool`, `optional`):
+        interpolate_pos_encoding (`bool`, *optional*):
             Whether to interpolate the pre-trained position encodings.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -657,6 +643,7 @@ class TFViTModel(TFViTPreTrainedModel):
 
         self.vit = TFViTMainLayer(config, add_pooling_layer=add_pooling_layer, name="vit")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -668,51 +655,36 @@ class TFViTModel(TFViTPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import ViTFeatureExtractor, TFViTModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import ViTFeatureExtractor, TFViTModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = TFViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="tf")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
+
+        outputs = self.vit(
+            pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        outputs = self.vit(
-            pixel_values=inputs["pixel_values"],
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         return outputs
@@ -770,6 +742,7 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             name="classifier",
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -782,67 +755,51 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
-            >>> import tensorflow as tf
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
+        >>> import tensorflow as tf
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = TFViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+        >>> model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="tf")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
-            >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
+        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
+        ```"""
+
+        outputs = self.vit(
+            pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        outputs = self.vit(
-            pixel_values=inputs["pixel_values"],
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
         logits = self.classifier(inputs=sequence_output[:, 0, :])
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

@@ -78,10 +78,10 @@ jobs:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
@@ -99,7 +99,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
@@ -116,10 +116,10 @@ jobs:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
@@ -149,10 +149,10 @@ jobs:
                   keys:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
@@ -169,7 +169,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
@@ -186,10 +186,10 @@ jobs:
                   keys:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
@@ -217,10 +217,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -237,7 +237,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_all:
         working_directory: ~/transformers
         docker:
@@ -253,10 +253,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -284,7 +284,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
@@ -304,7 +304,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_tf_all:
         working_directory: ~/transformers
         docker:
@@ -320,7 +320,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
@@ -351,7 +351,7 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece,flax-speech,vision]
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -370,7 +370,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_flax_all:
         working_directory: ~/transformers
         docker:
@@ -386,7 +386,7 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece,vision,flax-speech]
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -417,10 +417,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -437,7 +437,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_pipelines_torch_all:
         working_directory: ~/transformers
         docker:
@@ -454,10 +454,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -549,7 +549,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -557,7 +557,11 @@ jobs:
                       - '~/.cache/pip'
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
+                  fi
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -579,7 +583,7 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
@@ -614,7 +618,7 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
@@ -662,7 +666,7 @@ jobs:
                   path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_examples_flax_all:
         working_directory: ~/transformers
         docker:
@@ -729,7 +733,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_hub_all:
         working_directory: ~/transformers
         docker:
@@ -779,7 +783,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -795,7 +799,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_onnxruntime_all:
         working_directory: ~/transformers
         docker:
@@ -812,7 +816,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -848,7 +852,7 @@ jobs:
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
-            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 
     check_repository_consistency:
         working_directory: ~/transformers
@@ -951,7 +955,7 @@ workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - master
+                - main
 workflows:
     version: 2
     build_and_test:
@@ -978,7 +982,7 @@ workflows:
                 filters:
                     branches:
                         only:
-                            - master
+                            - main
         jobs:
             - run_examples_torch_all
             - run_examples_flax_all
@@ -1000,7 +1004,7 @@ workflows:
 #                filters:
 #                    branches:
 #                        only:
-#                            - master
+#                            - main
 #        jobs:
 #            - cleanup-gke-jobs
 #            - run_examples_tpu
