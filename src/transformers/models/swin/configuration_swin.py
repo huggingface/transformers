@@ -73,6 +73,8 @@ class SwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        encoder_stride (`int`, `optional`, defaults to 32):
+            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
         Example:
 
@@ -92,6 +94,7 @@ class SwinConfig(PretrainedConfig):
 
     attribute_map = {
         "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
     }
 
     def __init__(
@@ -113,6 +116,7 @@ class SwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        encoder_stride=32,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -122,6 +126,7 @@ class SwinConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.depths = depths
+        self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
@@ -134,6 +139,7 @@ class SwinConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.encoder_stride = encoder_stride
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = embed_dim * 8
+        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

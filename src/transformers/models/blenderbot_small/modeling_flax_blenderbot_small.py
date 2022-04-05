@@ -31,7 +31,6 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -46,7 +45,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
@@ -137,7 +136,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -168,7 +167,7 @@ BLENDERBOT_SMALL_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 BLENDERBOT_SMALL_DECODE_INPUTS_DOCSTRING = r"""
@@ -214,7 +213,7 @@ BLENDERBOT_SMALL_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -674,8 +673,8 @@ class FlaxBlenderbotSmallDecoderLayerCollection(nn.Module):
 
 class FlaxBlenderbotSmallEncoder(nn.Module):
     config: BlenderbotSmallConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -684,13 +683,6 @@ class FlaxBlenderbotSmallEncoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings,
@@ -742,8 +734,8 @@ class FlaxBlenderbotSmallEncoder(nn.Module):
 
 class FlaxBlenderbotSmallDecoder(nn.Module):
     config: BlenderbotSmallConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -752,13 +744,6 @@ class FlaxBlenderbotSmallDecoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings,
@@ -909,7 +894,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxBlenderbotSmallForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        input_ids = input_ids.at[(..., -1)].set(self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -1282,7 +1267,7 @@ class FlaxBlenderbotSmallForConditionalGenerationModule(nn.Module):
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias.astype(self.dtype)
+        lm_logits += jax.lax.stop_gradient(self.final_logits_bias.astype(self.dtype))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]

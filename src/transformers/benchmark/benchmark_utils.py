@@ -23,6 +23,7 @@ import linecache
 import os
 import platform
 import sys
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from datetime import datetime
@@ -32,8 +33,7 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available, logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -616,6 +616,13 @@ class Benchmark(ABC):
             }
         else:
             self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+
+        warnings.warn(
+            f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
+            " are deprecated in general and it is advised to use external Benchmarking libraries "
+            " to benchmark Transformer models.",
+            FutureWarning,
+        )
 
         if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
             logger.warning(

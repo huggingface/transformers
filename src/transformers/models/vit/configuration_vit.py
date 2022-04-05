@@ -14,7 +14,13 @@
 # limitations under the License.
 """ ViT model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -65,7 +71,8 @@ class ViTConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-
+        encoder_stride (`int`, `optional`, defaults to 16):
+           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
 
@@ -99,6 +106,7 @@ class ViTConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
+        encoder_stride=16,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -112,8 +120,25 @@ class ViTConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.encoder_stride = encoder_stride
+
+
+class ViTOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

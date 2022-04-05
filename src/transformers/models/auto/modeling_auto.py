@@ -28,7 +28,16 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("dpt", "DPTModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("glpn", "GLPNModel"),
+        ("maskformer", "MaskFormerModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
+        ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
+        ("van", "VanModel"),
+        ("resnet", "ResNetModel"),
         ("yoso", "YosoModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
@@ -43,6 +52,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
+        ("plbart", "PLBartModel"),
         ("beit", "BeitModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
@@ -81,6 +91,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "BartModel"),
         ("longformer", "LongformerModel"),
         ("roberta", "RobertaModel"),
+        ("data2vec-text", "Data2VecTextModel"),
+        ("data2vec-audio", "Data2VecAudioModel"),
         ("layoutlm", "LayoutLMModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("bert", "BertModel"),
@@ -131,6 +143,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -162,6 +175,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
+        ("plbart", "PLBartForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -188,6 +202,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -215,6 +230,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("xglm", "XGLMForCausalLM"),
+        ("plbart", "PLBartForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -247,8 +263,18 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+        ("data2vec-text", "Data2VecTextForCausalLM"),
     ]
 )
+
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vit", "ViTForMaskedImageModeling"),
+        ("deit", "DeiTForMaskedImageModeling"),
+        ("swin", "SwinForMaskedImageModeling"),
+    ]
+)
+
 
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     # Model for Causal Image Modeling mapping
@@ -275,6 +301,9 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ),
         ("swin", "SwinForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
+        ("van", "VanForImageClassification"),
+        ("resnet", "ResNetForImageClassification"),
+        ("poolformer", "PoolFormerForImageClassification"),
     ]
 )
 
@@ -291,6 +320,14 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Semantic Segmentation mapping
         ("beit", "BeitForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("dpt", "DPTForSemanticSegmentation"),
+    ]
+)
+
+MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Instance Segmentation mapping
+        ("maskformer", "MaskFormerForInstanceSegmentation"),
     ]
 )
 
@@ -323,6 +360,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForMaskedLM"),
         ("megatron-bert", "MegatronBertForMaskedLM"),
@@ -350,6 +388,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
@@ -380,6 +419,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
+        ("plbart", "PLBartForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -401,6 +441,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForSequenceClassification"),
         ("longformer", "LongformerForSequenceClassification"),
         ("roberta", "RobertaForSequenceClassification"),
+        ("data2vec-text", "Data2VecTextForSequenceClassification"),
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("layoutlm", "LayoutLMForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -466,6 +507,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
         ("splinter", "SplinterForQuestionAnswering"),
+        ("data2vec-text", "Data2VecTextForQuestionAnswering"),
     ]
 )
 
@@ -511,6 +553,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
+        ("data2vec-text", "Data2VecTextForTokenClassification"),
     ]
 )
 
@@ -532,6 +575,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMultipleChoice"),
         ("longformer", "LongformerForMultipleChoice"),
         ("roberta", "RobertaForMultipleChoice"),
+        ("data2vec-text", "Data2VecTextForMultipleChoice"),
         ("squeezebert", "SqueezeBertForMultipleChoice"),
         ("bert", "BertForMultipleChoice"),
         ("distilbert", "DistilBertForMultipleChoice"),
@@ -567,6 +611,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
+        ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
     ]
 )
 
@@ -580,6 +625,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("wavlm", "WavLMForCTC"),
+        ("data2vec-audio", "Data2VecAudioForCTC"),
     ]
 )
 
@@ -589,6 +635,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wavlm", "WavLMForAudioFrameClassification"),
+        ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
     ]
 )
 
@@ -598,6 +645,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wavlm", "WavLMForXVector"),
+        ("data2vec-audio", "Data2VecAudioForXVector"),
     ]
 )
 
@@ -617,8 +665,14 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
 )
+MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES
+)
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
+)
 MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES)
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -768,6 +822,15 @@ AutoModelForSemanticSegmentation = auto_class_update(
 )
 
 
+class AutoModelForInstanceSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING
+
+
+AutoModelForInstanceSegmentation = auto_class_update(
+    AutoModelForInstanceSegmentation, head_doc="instance segmentation"
+)
+
+
 class AutoModelForObjectDetection(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
@@ -819,6 +882,13 @@ class AutoModelForAudioXVector(_BaseAutoModelClass):
 
 
 AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
+
+
+class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING
+
+
+AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

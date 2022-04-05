@@ -22,9 +22,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_pytesseract_available, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
 
 
 # soft dependency
@@ -120,8 +119,6 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.resample = resample
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
-        if apply_ocr:
-            requires_backends(self, "pytesseract")
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -134,7 +131,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -200,6 +197,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Tesseract OCR to get words + normalized bounding boxes
         if self.apply_ocr:
+            requires_backends(self, "pytesseract")
             words_batch = []
             boxes_batch = []
             for image in images:

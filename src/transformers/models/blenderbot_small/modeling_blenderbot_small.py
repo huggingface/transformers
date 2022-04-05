@@ -18,7 +18,7 @@
 import copy
 import math
 import random
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,12 +26,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -40,7 +34,13 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
@@ -288,18 +288,18 @@ class BlenderbotSmallEncoderLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
-    ):
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        layer_head_mask: torch.FloatTensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -376,20 +376,20 @@ class BlenderbotSmallDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -504,20 +504,37 @@ BLENDERBOT_SMALL_START_DOCSTRING = r"""
 """
 
 BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
-    Conversation example::
+    Conversation example:
 
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration >>> mname =
-        'facebook/blenderbot_small-90M' >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname) >>>
-        tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat
-        too many carbs." >>> print("Human: ", UTTERANCE) >>> inputs = tokenizer([UTTERANCE], return_tensors='pt') >>>
-        reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
-        skip_special_tokens=True)[0]) what kind of carbs do they eat? i don't know much about carbs.
+    ```python
+    >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
 
-        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
-        eat too many carbs.</s> " ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> " ...
-        "<s>I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt') >>>
-        inputs.pop("token_type_ids") >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ",
-        tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    >>> mname = "facebook/blenderbot_small-90M"
+    >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
+    >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
+    >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+    >>> print("Human: ", UTTERANCE)
+    Human:  My friends are cool but they eat too many carbs.
+
+    >>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
+    >>> reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+    Bot:  what kind of carbs do they eat? i don't know much about carbs.
+
+    >>> REPLY = "I'm not sure"
+    >>> print("Human: ", REPLY)
+    Human: I'm not sure
+
+    >>> NEXT_UTTERANCE = (
+    ...     "My friends are cool but they eat too many carbs.</s> <s>what kind of carbs do they eat? "
+    ...     "i don't know much about carbs</s> "
+    ...     "<s> I'm not sure."
+    ... )
+    >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
+    >>> next_reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and carbohydrates.
+    ```
 """
 
 BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
@@ -584,11 +601,10 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -607,7 +623,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -692,7 +708,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -902,8 +918,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -914,7 +930,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1086,22 +1102,22 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Union[Tuple, BaseModelOutput]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1113,13 +1129,13 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
         >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
+        >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 3, 512]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1230,23 +1246,23 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
     @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Union[Tuple, BaseModelOutput]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1360,7 +1376,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-large->facebook/blenderbot_small-90M
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1395,20 +1411,20 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1473,7 +1489,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 
@@ -1491,6 +1507,9 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

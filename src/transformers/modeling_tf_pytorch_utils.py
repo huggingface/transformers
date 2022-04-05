@@ -21,8 +21,7 @@ import re
 
 import numpy
 
-from .file_utils import ExplicitEnum
-from .utils import logging
+from .utils import ExplicitEnum, logging
 
 
 logger = logging.get_logger(__name__)

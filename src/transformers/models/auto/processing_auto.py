@@ -22,9 +22,8 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -60,7 +59,10 @@ def processor_class_from_name(class_name: str):
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
             return getattr(module, class_name)
-            break
+
+    for processor in PROCESSOR_MAPPING._extra_content.values():
+        if getattr(processor, "__name__", None) == class_name:
+            return processor
 
     return None
 
@@ -231,3 +233,15 @@ class AutoProcessor:
             f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
             f"{', '.join(c for c in PROCESSOR_MAPPING_NAMES.keys())}"
         )
+
+    @staticmethod
+    def register(config_class, processor_class):
+        """
+        Register a new processor for this class.
+
+        Args:
+            config_class ([`PretrainedConfig`]):
+                The configuration corresponding to the model to register.
+            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+        """
+        PROCESSOR_MAPPING.register(config_class, processor_class)

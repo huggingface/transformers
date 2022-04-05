@@ -18,24 +18,24 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
 from .configuration_deit import DeiTConfig
 
 
@@ -51,7 +51,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 198, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -73,15 +73,16 @@ def to_2tuple(x):
 
 class DeiTEmbeddings(nn.Module):
     """
-    Construct the CLS token, distillation token, position and patch embeddings.
+    Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -92,9 +93,15 @@ class DeiTEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values):
-        batch_size = pixel_values.shape[0]
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
+        batch_size, seq_len, _ = embeddings.size()
+
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
@@ -110,7 +117,13 @@ class PatchEmbeddings(nn.Module):
 
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
+    def __init__(
+        self,
+        image_size: int = 224,
+        patch_size: Union[int, Tuple[int, int]] = 16,
+        num_channels: int = 3,
+        embed_dim: int = 768,
+    ) -> None:
         super().__init__()
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
@@ -121,7 +134,7 @@ class PatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         # FIXME look at relaxing size constraints
         if height != self.image_size[0] or width != self.image_size[1]:
@@ -134,7 +147,7 @@ class PatchEmbeddings(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
 class DeiTSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -152,12 +165,14 @@ class DeiTSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -198,12 +213,12 @@ class DeiTSelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -213,13 +228,13 @@ class DeiTSelfOutput(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DeiT
 class DeiTAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.attention = DeiTSelfAttention(config)
         self.output = DeiTSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -237,7 +252,12 @@ class DeiTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -248,7 +268,7 @@ class DeiTAttention(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
 class DeiTIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -256,7 +276,7 @@ class DeiTIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -266,12 +286,12 @@ class DeiTIntermediate(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DeiT
 class DeiTOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -284,7 +304,7 @@ class DeiTOutput(nn.Module):
 class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -294,7 +314,12 @@ class DeiTLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in DeiT, layernorm is applied before self-attention
             head_mask,
@@ -320,7 +345,7 @@ class DeiTLayer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
 class DeiTEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
@@ -328,12 +353,12 @@ class DeiTEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -388,7 +413,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -396,15 +421,11 @@ class DeiTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module: DeiTEncoder, value: bool = False) -> None:
         if isinstance(module, DeiTEncoder):
             module.gradient_checkpointing = value
 
@@ -439,7 +460,7 @@ DEIT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -448,11 +469,11 @@ DEIT_INPUTS_DOCSTRING = r"""
     DEIT_START_DOCSTRING,
 )
 class DeiTModel(DeiTPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
         super().__init__(config)
         self.config = config
 
-        self.embeddings = DeiTEmbeddings(config)
+        self.embeddings = DeiTEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = DeiTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -461,7 +482,7 @@ class DeiTModel(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -483,11 +504,12 @@ class DeiTModel(DeiTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -505,7 +527,7 @@ class DeiTModel(DeiTPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -531,7 +553,7 @@ class DeiTModel(DeiTPreTrainedModel):
 
 # Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DeiT
 class DeiTPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -546,6 +568,111 @@ class DeiTPooler(nn.Module):
 
 
 @add_start_docstrings(
+    "DeiT Model with a decoder on top for masked image modeling, as proposed in `SimMIM <https://arxiv.org/abs/2111.09886>`__.",
+    DEIT_START_DOCSTRING,
+)
+class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
+    def __init__(self, config: DeiTConfig) -> None:
+        super().__init__(config)
+
+        self.deit = DeiTModel(config, add_pooling_layer=False, use_mask_token=True)
+
+        self.decoder = nn.Sequential(
+            nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
+            nn.PixelShuffle(config.encoder_stride),
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, MaskedLMOutput]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> from transformers import DeiTFeatureExtractor, DeiTForMaskedImageModeling
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
+
+        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> list(reconstructed_pixel_values.shape)
+        [1, 3, 224, 224]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.deit(
+            pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        # Reshape to (batch_size, num_channels, height, width)
+        sequence_output = sequence_output[:, 1:-1]
+        batch_size, sequence_length, num_channels = sequence_output.shape
+        height = width = int(sequence_length**0.5)
+        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+
+        # Reconstruct pixel values
+        reconstructed_pixel_values = self.decoder(sequence_output)
+
+        masked_im_loss = None
+        if bool_masked_pos is not None:
+            size = self.config.image_size // self.config.patch_size
+            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+            mask = (
+                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                .repeat_interleave(self.config.patch_size, 2)
+                .unsqueeze(1)
+                .contiguous()
+            )
+            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
+            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+
+        if not return_dict:
+            output = (reconstructed_pixel_values,) + outputs[2:]
+            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=masked_im_loss,
+            logits=reconstructed_pixel_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
     """
     DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
@@ -553,7 +680,7 @@ class DeiTPooler(nn.Module):
     DEIT_START_DOCSTRING,
 )
 class DeiTForImageClassification(DeiTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -566,16 +693,16 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        head_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -588,9 +715,11 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         ```python
         >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -605,6 +734,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: maillot
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -623,19 +753,31 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
@@ -687,7 +829,7 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     DEIT_START_DOCSTRING,
 )
 class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -714,12 +856,12 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, DeiTForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(

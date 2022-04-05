@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,10 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_xglm import XGLMConfig
 
 
@@ -111,7 +110,7 @@ XGLM_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -211,7 +210,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
             )
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
-            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length)
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
@@ -220,7 +219,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
@@ -235,7 +234,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         position_ids = torch.arange(
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
-        return position_ids.unsqueeze(0).expand(input_shape).contiguous()
+        return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->XGLM
@@ -399,7 +398,7 @@ class XGLMDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         if config.add_cross_attention:
-            self.crossattention = XGLMAttention(
+            self.encoder_attn = XGLMAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.attention_heads,
                 dropout=config.attention_dropout,
@@ -424,7 +423,7 @@ class XGLMDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -595,19 +594,19 @@ class XGLMModel(XGLMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -670,7 +669,7 @@ class XGLMModel(XGLMPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -853,20 +852,20 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

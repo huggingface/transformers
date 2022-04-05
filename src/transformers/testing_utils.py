@@ -30,7 +30,8 @@ from unittest import mock
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
-from .file_utils import (
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
+from .utils import (
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -44,6 +45,7 @@ from .file_utils import (
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_scatter_available,
+    is_scipy_available,
     is_sentencepiece_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -59,7 +61,6 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -347,6 +348,16 @@ def require_sentencepiece(test_case):
     """
     if not is_sentencepiece_available():
         return unittest.skip("test requires SentencePiece")(test_case)
+    else:
+        return test_case
+
+
+def require_scipy(test_case):
+    """
+    Decorator marking a test that requires Scipy. These tests are skipped when SentencePiece isn't installed.
+    """
+    if not is_scipy_available():
+        return unittest.skip("test requires Scipy")(test_case)
     else:
         return test_case
 
@@ -689,6 +700,10 @@ def get_tests_dir(append_path=None):
     # this function caller's __file__
     caller__file__ = inspect.stack()[1][1]
     tests_dir = os.path.abspath(os.path.dirname(caller__file__))
+
+    while not tests_dir.endswith("tests"):
+        tests_dir = os.path.dirname(tests_dir)
+
     if append_path:
         return os.path.join(tests_dir, append_path)
     else:
@@ -1270,10 +1285,10 @@ def pytest_terminal_summary_main(tr, id):
     orig_tbstyle = config.option.tbstyle
     orig_reportchars = tr.reportchars
 
-    dir = "reports"
+    dir = f"reports/{id}"
     Path(dir).mkdir(parents=True, exist_ok=True)
     report_files = {
-        k: f"{dir}/{id}_{k}.txt"
+        k: f"{dir}/{k}.txt"
         for k in [
             "durations",
             "errors",
