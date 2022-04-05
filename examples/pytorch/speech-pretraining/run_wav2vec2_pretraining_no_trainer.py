@@ -42,8 +42,8 @@ from transformers import (
     is_wandb_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
+from transformers.utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -403,7 +403,10 @@ def main():
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
         dataset_split = load_dataset(
-            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir
+            args.dataset_name,
+            dataset_config_name,
+            split=train_split_name,
+            cache_dir=args.cache_dir,
         )
         datasets_splits.append(dataset_split)
 

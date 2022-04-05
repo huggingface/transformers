@@ -17,7 +17,7 @@ Read more about RAG  at https://arxiv.org/abs/2005.11401.
 
 # Finetuning
 
-Our finetuning logic is based on scripts from [`examples/seq2seq`](https://github.com/huggingface/transformers/tree/master/examples/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
+Our finetuning logic is based on scripts from [`examples/seq2seq`](https://github.com/huggingface/transformers/tree/main/examples/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
 ```bash
 train.source
 train.target

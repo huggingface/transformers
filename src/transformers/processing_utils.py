@@ -21,9 +21,8 @@ import os
 from pathlib import Path
 
 from .dynamic_module_utils import custom_object_save
-from .file_utils import PushToHubMixin, copy_func
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .utils import logging
+from .utils import PushToHubMixin, copy_func, logging
 
 
 logger = logging.get_logger(__name__)
@@ -121,7 +120,7 @@ class ProcessorMixin(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)

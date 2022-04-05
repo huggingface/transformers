@@ -278,12 +278,18 @@ def main():
 
     if training_args.do_train:
         raw_datasets["train"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.train_split_name,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:

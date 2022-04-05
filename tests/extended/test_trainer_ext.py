@@ -20,7 +20,6 @@ import unittest
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers.file_utils import is_apex_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     CaptureStderr,
@@ -37,6 +36,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
+from transformers.utils import is_apex_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))

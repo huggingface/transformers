@@ -21,8 +21,7 @@ from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import CONFIG_NAME
-from ...utils import logging
+from ...utils import CONFIG_NAME, logging
 
 
 logger = logging.get_logger(__name__)
@@ -30,7 +29,11 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("dpt", "DPTConfig"),
+        ("decision_transformer", "DecisionTransformerConfig"),
+        ("glpn", "GLPNConfig"),
         ("maskformer", "MaskFormerConfig"),
+        ("decision_transformer", "DecisionTransformerConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("convnext", "ConvNextConfig"),
         ("van", "VanConfig"),
@@ -132,6 +135,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -221,6 +226,9 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("dpt", "DPT"),
+        ("decision_transformer", "Decision Transformer"),
+        ("glpn", "GLPN"),
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),

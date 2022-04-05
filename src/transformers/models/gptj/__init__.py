@@ -17,11 +17,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJOnnxConfig"],
 }
 
 if is_torch_available():
@@ -34,6 +34,15 @@ if is_torch_available():
         "GPTJPreTrainedModel",
     ]
 
+if is_tf_available():
+    _import_structure["modeling_tf_gptj"] = [
+        "TFGPTJForCausalLM",
+        "TFGPTJForQuestionAnswering",
+        "TFGPTJForSequenceClassification",
+        "TFGPTJModel",
+        "TFGPTJPreTrainedModel",
+    ]
+
 if is_flax_available():
     _import_structure["modeling_flax_gptj"] = [
         "FlaxGPTJForCausalLM",
@@ -43,7 +52,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig, GPTJOnnxConfig
 
     if is_torch_available():
         from .modeling_gptj import (
@@ -53,6 +62,15 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_gptj import (
+            TFGPTJForCausalLM,
+            TFGPTJForQuestionAnswering,
+            TFGPTJForSequenceClassification,
+            TFGPTJModel,
+            TFGPTJPreTrainedModel,
         )
 
     if is_flax_available():

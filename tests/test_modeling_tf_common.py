@@ -21,12 +21,14 @@ import os
 import random
 import tempfile
 import unittest
+import unittest.mock as mock
 from importlib import import_module
 from typing import List, Tuple
 
 from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
+from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
@@ -80,6 +82,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
+    from transformers.modeling_tf_utils import unpack_inputs
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -570,7 +573,12 @@ class TFModelTesterMixin:
             pt_model = pt_model_class(config)
 
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(
+                inputs_dict,
+                model_class,
+                # Not all models accept "labels" in the forward pass (yet :) )
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
@@ -719,7 +727,6 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
-            inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
@@ -941,10 +948,6 @@ class TFModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
@@ -953,19 +956,25 @@ class TFModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            # Not all models accept "labels" in the forward pass (yet :) )
+            if "labels" in inspect.signature(model.call).parameters.keys():
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-            )
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1293,6 +1302,56 @@ class TFModelTesterMixin:
 
                 self.assertEqual(loss.shape, [loss_size])
 
+    def test_keras_fit(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", None):
+                # Test that model correctly compute the loss with kwargs
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                # Is there a better way to remove these decoder inputs?
+                prepared_for_class = {
+                    key: val
+                    for key, val in prepared_for_class.items()
+                    if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids")
+                }
+
+                possible_label_cols = {
+                    "labels",
+                    "label",
+                    "label_ids",
+                    "start_positions",
+                    "start_position",
+                    "end_positions",
+                    "end_position",
+                    "next_sentence_label",
+                }
+                label_names = possible_label_cols.intersection(set(prepared_for_class))
+                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+                self.assertGreater(len(inputs_minus_labels), 0)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                # Make sure the model fits without crashing regardless of where we pass the labels
+                history1 = model.fit(
+                    prepared_for_class,
+                    validation_data=prepared_for_class,
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss1 = history1.history["val_loss"][0]
+                history2 = model.fit(
+                    inputs_minus_labels,
+                    labels,
+                    validation_data=(inputs_minus_labels, labels),
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss2 = history2.history["val_loss"][0]
+                self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1437,7 +1496,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
 def random_attention_mask(shape, rng=None, name=None, dtype=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
     # make sure that at least one token is attended to for each batch
-    attn_mask = tf.concat([tf.constant(value=1, shape=(shape[0], 1), dtype=dtype), attn_mask[:, 1:]], axis=1)
+    attn_mask = tf.concat([attn_mask[:, :-1], tf.ones_like(attn_mask[:, -1:], dtype=dtype)], axis=-1)
     return attn_mask
 
 
@@ -1552,6 +1611,84 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    # tests whether the unpack_inputs function behaves as expected
+    def test_unpack_inputs(self):
+        class DummyModel:
+            def __init__(self):
+                config_kwargs = {"output_attentions": False, "output_hidden_states": False, "return_dict": False}
+                self.config = PretrainedConfig(**config_kwargs)
+
+            @unpack_inputs
+            def call(
+                self, input_ids=None, past=None, output_attentions=None, output_hidden_states=None, return_dict=None
+            ):
+                return input_ids, past, output_attentions, output_hidden_states, return_dict
+
+        dummy_model = DummyModel()
+        input_ids = tf.constant([0, 1, 2, 3])
+        past = tf.constant([4, 5, 6, 7])
+
+        # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
+        output = dummy_model.call(input_ids=input_ids, past=past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 2: Same as above, but with positional arguments.
+        output = dummy_model.call(input_ids, past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 3: We can also pack everything in the first input.
+        output = dummy_model.call(input_ids={"input_ids": input_ids, "past": past})
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
+
+        # test case 4: Explicit boolean arguments should override the config.
+        output = dummy_model.call(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertTrue(output[4])
+
+        # test case 5: Unexpected arguments should raise an exception.
+        with self.assertRaises(ValueError):
+            output = dummy_model.call(input_ids=input_ids, past=past, foo="bar")
+
+        # test case 6: Despite the above, `past_key_values` should be interchangeable with `past`
+        # (the decorator moves it to `past`, or vice-versa, depending on the signature).
+        output = dummy_model.call(input_ids=input_ids, past_key_values=past)
+        tf.debugging.assert_equal(output[0], input_ids)
+        tf.debugging.assert_equal(output[1], past)
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
+        self.assertFalse(output[4])
 
 
 @require_tf

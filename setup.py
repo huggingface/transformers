@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
+Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
 To create the package for pypi.
 
@@ -26,10 +26,10 @@ To create the package for pypi.
 
 4. Commit these changes with the message: "Release: <VERSION>" and push.
 
-5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
+5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin master
+   Push the tag to git: git push --tags origin main
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -60,7 +60,7 @@ To create the package for pypi.
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
-    you need to go back to master before executing this.
+    you need to go back to main before executing this.
 """
 
 import os
@@ -95,7 +95,7 @@ _deps = [
     "Pillow",
     "black~=22.0",
     "codecarbon==1.2.0",
-    "cookiecutter==1.7.2",
+    "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.0",
@@ -108,6 +108,7 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
+    "hf-doc-builder>=0.2.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -150,7 +151,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3",
+    "tokenizers>=0.11.1,!=0.11.3,<0.13",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -283,12 +284,13 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -304,7 +306,7 @@ extras["all"] = (
 )
 
 # Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = []
+extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]

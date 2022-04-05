@@ -8,11 +8,11 @@ from unittest.mock import patch
 import numpy as np
 
 from transformers import BartTokenizer
-from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
 
 
 if is_tf_available() and is_datasets_available() and is_faiss_available():

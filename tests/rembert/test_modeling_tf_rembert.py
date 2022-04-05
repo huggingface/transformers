@@ -20,7 +20,7 @@ from transformers import RemBertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -95,7 +95,7 @@ class TFRemBertModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:

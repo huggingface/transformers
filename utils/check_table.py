@@ -23,7 +23,7 @@ import re
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_table.py
 TRANSFORMERS_PATH = "src/transformers"
-PATH_TO_DOCS = "docs/source"
+PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
 

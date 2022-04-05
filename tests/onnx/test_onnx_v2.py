@@ -15,13 +15,12 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
+from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
+from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
-
-from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
 
 
 @require_onnx
@@ -181,6 +180,7 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
+    ("beit", "microsoft/beit-base-patch16-224"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -194,6 +194,8 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
     ("m2m-100", "facebook/m2m100_418M"),
+    ("blenderbot-small", "facebook/blenderbot_small-90M"),
+    ("blenderbot", "facebook/blenderbot-400M-distill"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -242,7 +244,7 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
-            from transformers.file_utils import torch_version
+            from transformers.utils import torch_version
 
             if torch_version < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
