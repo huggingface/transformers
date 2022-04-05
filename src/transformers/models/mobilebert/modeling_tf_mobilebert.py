@@ -64,14 +64,17 @@ _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 # TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASS = "vumichien/mobilebert-finetuned-ner"
 _TOKEN_CLASS_EXPECTED_OUTPUT = "['I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']"
 _TOKEN_CLASS_EXPECTED_LOSS = 0.03
 
 # QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "vumichien/mobilebert-uncased-squad-v2"
 _QA_EXPECTED_OUTPUT = "'a nice puppet'"
 _QA_EXPECTED_LOSS = 0
 
 # SequenceClassification docstring
+_CHECKPOINT_FOR_SEQ_CLASS = "vumichien/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
@@ -1284,7 +1287,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/emo-mobilebert",
+        checkpoint=_CHECKPOINT_FOR_SEQ_CLASS,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
@@ -1379,7 +1382,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/mobilebert-uncased-squad-v2",
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_QA_EXPECTED_OUTPUT,
@@ -1627,7 +1630,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/mobilebert-finetuned-ner",
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASS,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
