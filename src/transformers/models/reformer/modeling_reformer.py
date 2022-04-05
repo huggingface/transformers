@@ -2323,12 +2323,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2347,6 +2342,42 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
                 config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
                 the loss is only computed for the tokens with labels
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import ReformerTokenizer, ReformerForMaskedLM
+
+        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> model = ReformerForMaskedLM.from_pretrained("hf-internal-testing/tiny-random-reformer")
+
+        >>> # add mask_token
+        >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
+        >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # retrieve index of [MASK]
+        >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+
+        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        'it'
+        ```
+
+        ```python
+        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
+        >>> # mask labels of non-[MASK] tokens
+        >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels[:, :inputs['input_ids'].shape[-1]], -100)
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> round(outputs.loss.item(), 2)
+        7.09
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
