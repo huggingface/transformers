@@ -30,7 +30,7 @@ class RegNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`RegNetModel`]. It is used to instantiate an
     RegNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [regnety-40](https://huggingface.co/microsoft/regnety-40) architecture.
+    [regnet-y-40](https://huggingface.co/facebook/regnet-y-40) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

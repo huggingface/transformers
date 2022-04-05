@@ -40,15 +40,15 @@ _CONFIG_FOR_DOC = "RegNetConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "zuppif/regnet-y-040"
+_CHECKPOINT_FOR_DOC = "facebook/regnet-y-040"
 _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "zuppif/regnet-y-040"
+_IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "zuppif/regnet-y-040",
+    "facebook/regnet-y-040",
     # See all regnet models at https://huggingface.co/models?filter=regnet
 ]
 
