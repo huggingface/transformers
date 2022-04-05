@@ -84,7 +84,6 @@ XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 
 
-
 # *** To Fix ***
 M2M_100_TINY = "hf-internal-testing/tiny-random-m2m_100"
 # XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
@@ -106,15 +105,15 @@ HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
 
 # issues with tokenizer
 CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
-TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl" # same as ctrl
+TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"  # same as ctrl
 
 # other issues with tiny models
-IBERT_TINY = "hf-internal-testing/tiny-random-ibert" # multiple issues with either mlm/qa/clas
-REFORMER_TINY = "hf-internal-testing/tiny-random-reformer" # multiple issues with either mlm/qa/clas
+IBERT_TINY = "hf-internal-testing/tiny-random-ibert"  # multiple issues with either mlm/qa/clas
+REFORMER_TINY = "hf-internal-testing/tiny-random-reformer"  # multiple issues with either mlm/qa/clas
 
 # *** Lacking official examples to test with ***
 # or not working with examples
-DPR_TINY ="hf-internal-testing/tiny-random-dpr"
+DPR_TINY = "hf-internal-testing/tiny-random-dpr"
 # - "dpr"  examples/research_projects/rag-end2end-retriever/
 RAG_TINY = "hf-internal-testing/tiny-random-rag"
 # - "rag" research_projects
@@ -134,7 +133,6 @@ TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
 # additional notes on tapas
 # 1. requires torch_scatter - skip if it's not installed?
 # 2. "Table must be of type pd.DataFrame" failure
-
 
 
 # TODO: new models to add:
