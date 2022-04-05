@@ -151,7 +151,6 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     for (src_key, src_param), (dest_key, dest_param) in zip(src_state_dict.items(), dst_state_dict.items()):
         from_to_ours_keys[src_key] = dest_key
         logger.info(f"{src_key} -> {dest_key}")
-        # logger.info(f"\t{src_param.shape} -> {dest_param.shape}")
     # if "in1k" was in the model_name it means it must have a classification head (was finetuned)
     if "in1k" in model_name:
         from_to_ours_keys["0.clf.0.weight"] = "classifier.1.weight"
@@ -251,7 +250,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         logger.info("Loading state_dict in our model.")
         # load state dict
         state_dict_keys = our_model.state_dict().keys()
-        # state_dict = torch.load(save_directory / f"{model_name}.pth")
         PreTrainedModel._load_pretrained_model_low_mem(
             our_model, state_dict_keys, [save_directory / f"{model_name}.pth"]
         )
@@ -261,7 +259,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             repo_path_or_name=save_directory / model_name,
             commit_message="Add model",
             output_dir=save_directory / model_name,
-            use_auth_token=os.environ["HF_TOKEN"],
         )
         size = 384
         # we can use the convnext one
@@ -270,10 +267,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             repo_path_or_name=save_directory / model_name,
             commit_message="Add feature extractor",
             output_dir=save_directory / model_name,
-            use_auth_token=os.environ["HF_TOKEN"],
         )
-
-    # torch.save(converted_state_dict, str(save_directory))
 
 
 if __name__ == "__main__":
