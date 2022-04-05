@@ -185,173 +185,104 @@ class MCTCModelTester:
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
 
-    # def create_and_check_batch_inference(self, config, input_features, *args):
-    #     # test does not pass for models making use of `group_norm`
-    #     # check: https://github.com/pytorch/fairseq/issues/3227
-    #     model = Wav2Vec2Model(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
+    def create_and_check_batch_inference(self, config, input_features, *args):
+        # test does not pass for models making use of `group_norm`
+        # check: https://github.com/pytorch/fairseq/issues/3227
+        model = MCTCModel(config=config)
+        model.to(torch_device)
+        model.eval()
 
-    #     input_features = input_features[:3]
-    #     attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.bool)
+        input_features = input_features[:3]
+        attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.bool)
 
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
 
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
-    #         attention_mask[i, input_lengths[i] :] = 0.0
+        # pad input
+        for i in range(len(input_lengths)):
+            input_features[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0.0
 
-    #     batch_outputs = model(input_features, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(input_features, attention_mask=attention_mask).last_hidden_state
 
-    #     for i in range(input_features.shape[0]):
-    #         input_slice = input_features[i : i + 1, : input_lengths[i]]
-    #         output = model(input_slice).last_hidden_state
+        for i in range(input_features.shape[0]):
+            input_slice = input_features[i : i + 1, : input_lengths[i]]
+            output = model(input_slice).last_hidden_state
 
-    #         batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-    #         self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
+            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
+            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
-    # def check_ctc_loss(self, config, input_features, *args):
-    #     model = Wav2Vec2ForCTC(config=config)
-    #     model.to(torch_device)
+    def check_ctc_loss(self, config, input_features, *args):
+        model = MCTCForCTC(config=config)
+        model.to(torch_device)
 
-    #     # make sure that dropout is disabled
-    #     model.eval()
+        # make sure that dropout is disabled
+        model.eval()
 
-    #     input_features = input_features[:3]
-    #     attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.long)
+        input_features = input_features[:3]
 
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-    #     labels = ids_tensor((input_features.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        # input_features is a 2D window for each sequence
+        attention_mask = torch.ones(input_features.shape[:-1], device=torch_device, dtype=torch.long)
 
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
-    #         attention_mask[i, input_lengths[i] :] = 0
+        # -2 since input_features is a 2D window for each sequence in batch
+        input_lengths = [input_features.shape[-2] // i for i in [2, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_features.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        # pad input
+        for i in range(len(input_lengths)):
+            input_features[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
 
-    #     model.config.ctc_loss_reduction = "sum"
-    #     sum_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
 
-    #     model.config.ctc_loss_reduction = "mean"
-    #     mean_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
 
-    #     self.parent.assertTrue(isinstance(sum_loss, float))
-    #     self.parent.assertTrue(isinstance(mean_loss, float))
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
 
-    # def check_seq_classifier_loss(self, config, input_features, *args):
-    #     model = Wav2Vec2ForSequenceClassification(config=config)
-    #     model.to(torch_device)
 
-    #     # make sure that dropout is disabled
-    #     model.eval()
+    def check_ctc_training(self, config, input_features, *args):
+        config.ctc_zero_infinity = True
+        model = MCTCForCTC(config=config)
+        model.to(torch_device)
+        model.train()
 
-    #     input_features = input_features[:3]
-    #     attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.long)
+        input_features = input_features[:3]
 
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
+        input_lengths = [input_features.shape[-2] // i for i in [2, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 1), model.config.vocab_size)
 
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
-    #         attention_mask[i, input_lengths[i] :] = 0
+        # pad input
+        for i in range(len(input_lengths)):
+            input_features[i, input_lengths[i] :] = 0.0
 
-    #     masked_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
-    #     unmasked_loss = model(input_features, labels=labels).loss.item()
+            if max_length_labels[i] < labels.shape[-1]:
+                # it's important that we make sure that target lenghts are at least
+                # one shorter than logit lenghts to prevent -inf
+                labels[i, max_length_labels[i] - 1 :] = -100
 
-    #     self.parent.assertTrue(isinstance(masked_loss, float))
-    #     self.parent.assertTrue(isinstance(unmasked_loss, float))
-    #     self.parent.assertTrue(masked_loss != unmasked_loss)
+        loss = model(input_features, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
 
-    # def check_ctc_training(self, config, input_features, *args):
-    #     config.ctc_zero_infinity = True
-    #     model = Wav2Vec2ForCTC(config=config)
-    #     model.to(torch_device)
-    #     model.train()
+        loss.backward()
 
-    #     # freeze feature encoder
-    #     model.freeze_feature_encoder()
 
-    #     input_features = input_features[:3]
 
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-    #     labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+    def check_labels_out_of_vocab(self, config, input_features, *args):
+        model = MCTCForCTC(config)
+        model.to(torch_device)
+        model.train()
 
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
+        input_features = input_features[:3]
 
-    #         if max_length_labels[i] < labels.shape[-1]:
-    #             # it's important that we make sure that target lenghts are at least
-    #             # one shorter than logit lenghts to prevent -inf
-    #             labels[i, max_length_labels[i] - 1 :] = -100
+        input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
 
-    #     loss = model(input_features, labels=labels).loss
-    #     self.parent.assertFalse(torch.isinf(loss).item())
-
-    #     loss.backward()
-
-    # def check_seq_classifier_training(self, config, input_features, *args):
-    #     config.ctc_zero_infinity = True
-    #     model = Wav2Vec2ForSequenceClassification(config=config)
-    #     model.to(torch_device)
-    #     model.train()
-
-    #     # freeze everything but the classification head
-    #     model.freeze_base_model()
-
-    #     input_features = input_features[:3]
-
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
-
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
-
-    #     loss = model(input_features, labels=labels).loss
-    #     self.parent.assertFalse(torch.isinf(loss).item())
-
-    #     loss.backward()
-
-    # def check_xvector_training(self, config, input_features, *args):
-    #     config.ctc_zero_infinity = True
-    #     model = Wav2Vec2ForXVector(config=config)
-    #     model.to(torch_device)
-    #     model.train()
-
-    #     # freeze everything but the classification head
-    #     model.freeze_base_model()
-
-    #     input_features = input_features[:3]
-
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
-
-    #     # pad input
-    #     for i in range(len(input_lengths)):
-    #         input_features[i, input_lengths[i] :] = 0.0
-
-    #     loss = model(input_features, labels=labels).loss
-    #     self.parent.assertFalse(torch.isinf(loss).item())
-
-    #     loss.backward()
-
-    # def check_labels_out_of_vocab(self, config, input_features, *args):
-    #     model = Wav2Vec2ForCTC(config)
-    #     model.to(torch_device)
-    #     model.train()
-
-    #     input_features = input_features[:3]
-
-    #     input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-    #     max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-    #     labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
-
-    #     with self.parent.assertRaises(ValueError):
-    #         model(input_features, labels=labels)
+        with self.parent.assertRaises(ValueError):
+            model(input_features, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features, attention_mask = self.prepare_config_and_inputs()
@@ -382,29 +313,19 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
 
-    # def test_ctc_loss_inference(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_ctc_loss(*config_and_inputs)
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
 
-    # def test_seq_classifier_loss_inference(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_seq_classifier_loss(*config_and_inputs)
 
-    # def test_ctc_train(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_ctc_training(*config_and_inputs)
+    def test_ctc_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_training(*config_and_inputs)
 
-    # def test_seq_classifier_train(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
-    # def test_xvector_train(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_xvector_training(*config_and_inputs)
-
-    # def test_labels_out_of_vocab(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
+    def test_labels_out_of_vocab(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # MCTC has no inputs_embeds
     def test_inputs_embeds(self):
@@ -444,8 +365,6 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         model = model_class(config)
         model.to(torch_device)
 
-        
-
         input_features = inputs_dict["input_features"]
 
         input_lengths = torch.tensor(
@@ -473,38 +392,38 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    # def test_initialization(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             uniform_init_parms = [
-    #                 "conv.weight",
-    #                 "masked_spec_embed",
-    #                 "codevectors",
-    #                 "quantizer.weight_proj.weight",
-    #                 "project_hid.weight",
-    #                 "project_hid.bias",
-    #                 "project_q.weight",
-    #                 "project_q.bias",
-    #                 "feature_projection.projection.weight",
-    #                 "feature_projection.projection.bias",
-    #                 "objective.weight",
-    #             ]
-    #             if param.requires_grad:
-    #                 if any([x in name for x in uniform_init_parms]):
-    #                     self.assertTrue(
-    #                         -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "codevectors",
+                    "quantizer.weight_proj.weight",
+                    "project_hid.weight",
+                    "project_hid.bias",
+                    "project_q.weight",
+                    "project_q.bias",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                    "objective.weight",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     # # overwrite from test_modeling_common
     # def _mock_init_weights(self, module):
@@ -522,7 +441,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
     #         module.masked_spec_embed.data.fill_(3)
 
     # def test_mask_feature_prob_ctc(self):
-    #     model = Wav2Vec2ForCTC.from_pretrained(
+    #     model = MCTCForCTC.from_pretrained(
     #         "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
     #     )
     #     model.to(torch_device).train()
@@ -562,7 +481,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 # class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 #     all_model_classes = (
 #         (
-#             Wav2Vec2ForCTC,
+#             MCTCForCTC,
 #             Wav2Vec2Model,
 #             Wav2Vec2ForMaskedLM,
 #             Wav2Vec2ForSequenceClassification,
@@ -734,7 +653,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 #     def test_mask_feature_prob_ctc(self):
-#         model = Wav2Vec2ForCTC.from_pretrained(
+#         model = MCTCForCTC.from_pretrained(
 #             "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
 #         )
 #         model.to(torch_device).train()
@@ -955,7 +874,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 #         return ds[:num_samples]
 
 #     def test_inference_ctc_normal(self):
-#         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+#         model = MCTCForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 #         model.to(torch_device)
 #         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 #         input_speech = self._load_datasamples(1)
@@ -972,7 +891,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 #         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
 #     def test_inference_ctc_normal_batched(self):
-#         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+#         model = MCTCForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 #         model.to(torch_device)
 #         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 
@@ -995,7 +914,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 #         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
 #     def test_inference_ctc_robust_batched(self):
-#         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self").to(torch_device)
+#         model = MCTCForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self").to(torch_device)
 #         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True)
 
 #         input_speech = self._load_datasamples(4)
@@ -1109,7 +1028,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 #         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
 #     def test_phoneme_recognition(self):
-#         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft").to(torch_device)
+#         model = MCTCForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft").to(torch_device)
 #         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
 #         input_speech = self._load_datasamples(4)
@@ -1150,7 +1069,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 #             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
 #         ).numpy()
 
-#         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
+#         model = MCTCForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
 #             torch_device
 #         )
 #         processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")

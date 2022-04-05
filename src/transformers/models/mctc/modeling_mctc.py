@@ -749,15 +749,11 @@ class MCTCEncoder(MCTCPreTrainedModel):
         # inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
-        # if attention_mask is not None:
-        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-        #     padding_mask = attention_mask.ne(1).long()
-        # else:
-        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
-
-        # # review whether there's no position embeddings here. For now going with:
-        # print("inputs_embeds", inputs_embeds.size())
-        # print("padding_mask", padding_mask.size())
+        if attention_mask is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+            padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
 
 
         hidden_states = inputs_embeds
@@ -766,10 +762,9 @@ class MCTCEncoder(MCTCPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
 
         # expand attention_mask
-        # if attention_mask is not None:
-        #     print("inputs_embeds", inputs_embeds.dtype)
-        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        #     attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         # print("attention_mask", attention_mask.size())
         # print("hidden_states", hidden_states.size())
@@ -803,7 +798,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
-                        # attention_mask,
+                        attention_mask,
                         # (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
@@ -894,6 +889,7 @@ class MCTCModel(MCTCPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
+
         return BaseModelOutput(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -954,7 +950,6 @@ class MCTCForCTC(MCTCPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.mctc(
             input_features,
             attention_mask=attention_mask,
@@ -969,16 +964,16 @@ class MCTCForCTC(MCTCPreTrainedModel):
 
         loss = None
         if labels is not None:
-
+            
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
+                attention_mask if attention_mask is not None 
+                else torch.ones(input_features.shape[:-1], dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-            # input_lengths = attention_mask.sum(-1)
             # assuming that padded tokens are filled with -100
             # when not being attended to
             labels_mask = labels >= 0
@@ -998,7 +993,6 @@ class MCTCForCTC(MCTCPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-                print("loss", loss)
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
