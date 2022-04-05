@@ -247,6 +247,13 @@ class FlaxSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
             "One of `['highest', 'float32', 'high', 'bfloat16_3x', 'default', 'bfloat16', 'fastest', None]`."
         },
     )
+    multisteps: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use Optax MultiSteps for gradient accumulation. If `False` and `gradient_accumulation_steps > 1`, "
+            "a custom gradient accumulation implementation will be employed."
+        },
+    )
 
 
 def to_fp32(t):
@@ -894,6 +901,10 @@ def main():
     # Augment the optimizer to facilitate gradient clipping by global norm
     optim = optax.chain(optax.clip_by_global_norm(training_args.max_grad_norm), adamw)
 
+    # Optax MultiSteps for gradient accumulation. For the time being, we'll only call this optimizer transformation if gradient accumulation is required (i.e. gradient accumulation steps > 1)
+    if training_args.multisteps and gradient_accumulation_steps > 1:
+        optim = optax.MultiSteps(optim, gradient_accumulation_steps, use_grad_mean=False)
+
     # Setup train state
     state = MixedPrecisionTrainState.create(
         apply_fn=model.__call__,
@@ -935,7 +946,7 @@ def main():
 
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
-        if gradient_accumulation_steps == 1:
+        if gradient_accumulation_steps == 1 or training_args.multisteps:
             (loss, num_labels), grad = grad_fn(to_dtype(state.params), batch)
 
         # Custom gradient accumulation
