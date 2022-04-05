@@ -38,7 +38,6 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
@@ -53,6 +52,7 @@ from .utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
+    find_labels,
     has_file,
     hf_bucket_url,
     is_offline_mode,
@@ -715,6 +715,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _using_dummy_loss = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -899,24 +900,46 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         function themselves.
         """
         if loss == "passthrough":
+            if metrics is not None:
+                raise ValueError(
+                    "Passing metrics as a dict is not supported when using the internal loss! "
+                    "Please either compile the model with a loss, or remove the metrics argument. "
+                    "Note that advanced metrics using the `KerasMetricCallback` can still be used with the internal "
+                    "loss."
+                )
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
-                "Please ensure your labels are passed as keys in the input dict so that they are "
-                "accessible to the model during the forward pass. To disable this behaviour, please pass a "
-                "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
+                "To disable this behaviour, please pass a loss argument, or explicitly pass "
+                "`loss=None` if you do not want your model to compute a loss."
             )
-            loss = {"loss": dummy_loss}
-        super().compile(
-            optimizer=optimizer,
-            loss=loss,
-            metrics=metrics,
-            loss_weights=loss_weights,
-            weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            steps_per_execution=steps_per_execution,
-            **kwargs,
-        )
+            loss = dummy_loss
+            self._using_dummy_loss = True
+        else:
+            self._using_dummy_loss = False
+        parent_args = list(inspect.signature(tf.keras.Model.compile).parameters.keys())
+        if "steps_per_execution" in parent_args:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
+        else:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                experimental_steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
 
     def compute_loss(self, *args, **kwargs):
         if hasattr(tf.keras.Model, "compute_loss"):
@@ -935,40 +958,54 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def train_step(self, data):
         """
         A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
-        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
-        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
+        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`.
 
-        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
-        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
-        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
-
-        This is possible under the aforementioned circumstances because our overriden compile function can set an
-        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
-        name matching) containing the loss that was used to train the pre-trained model.
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple dummy
+        loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
+        as keys in the input dictionary, or as normal Keras labels.
         """
+
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
-        data = data_adapter.expand_1d(data)
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            label_kwargs = find_labels(self.__class__)
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            if self._using_dummy_loss:
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+            else:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
-        # should be done only with the relevant ModelOutput param that is
-        # considered by the loss.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
-        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+
+        # When using the dummy_loss we know metrics are not present, so we can skip a lot of this
+        if self._using_dummy_loss:
+            self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
+        else:
+            self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
         for metric in self.metrics:
@@ -985,23 +1022,51 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def test_step(self, data):
         """
-        A modification of Keras's default test_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `test_step` that cleans up the printed metrics when we use a dummy loss. If a
+        user specifies a loss at model compile time, this function behaves as the original Keras `test_step`.
+
+        When the model is compiled without specifying the loss, our overridden compile function can set a simple dummy
+        loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
+        as keys in the input dictionary, or as normal Keras labels.
         """
-        data = data_adapter.expand_1d(data)
+        # These are the only transformations `Model.fit` applies to user-input
+        # data when a `tf.data.Dataset` is provided.
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            label_kwargs = find_labels(self.__class__)
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+
+        # Run forward pass.
         y_pred = self(x, training=False)
-        self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-        # Updates stateful loss metrics.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
-        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        if self._using_dummy_loss:
+            self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+        else:
+            self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
+        # When using the dummy_loss we know metrics are not present, so we can skip a lot of this
+        if self._using_dummy_loss:
+            self.compiled_metrics.update_state(y_pred.loss, y_pred.loss, sample_weight)
+        else:
+            self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
         for metric in self.metrics:
