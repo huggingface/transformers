@@ -55,10 +55,12 @@ _TOKENIZER_FOR_DOC = "MBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 # SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-mbart"
 _SEQ_CLASS_EXPECTED_LOSS = 0.69
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 
 # QuestionAsnwering docstring
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-mbart"
 _QA_EXPECTED_LOSS = 3.55
 _QA_EXPECTED_OUTPUT = "'? Jim Henson was a'"
 
@@ -1438,7 +1440,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-mbart",
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
@@ -1565,7 +1567,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-mbart",
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,
