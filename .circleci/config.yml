@@ -65,7 +65,7 @@ jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -78,10 +78,12 @@ jobs:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install tensorflow_probability
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -97,11 +99,11 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -114,10 +116,12 @@ jobs:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install tensorflow_probability
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -145,10 +149,11 @@ jobs:
                   keys:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -164,7 +169,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
@@ -181,10 +186,11 @@ jobs:
                   keys:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -211,10 +217,11 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -230,7 +237,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_all:
         working_directory: ~/transformers
         docker:
@@ -246,10 +253,11 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -276,8 +284,11 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
+            - run: pip install tensorflow_probability
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -293,7 +304,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_tf_all:
         working_directory: ~/transformers
         docker:
@@ -309,8 +320,11 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
+            - run: pip install tensorflow_probability
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -337,8 +351,10 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece,flax-speech,vision]
+            - run: pip install .[flax,testing,sentencepiece,flax-speech,vision]
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
@@ -354,7 +370,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_flax_all:
         working_directory: ~/transformers
         docker:
@@ -370,8 +386,10 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece,vision,flax-speech]
+            - run: pip install .[flax,testing,sentencepiece,vision,flax-speech]
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
@@ -399,10 +417,11 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -418,7 +437,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_pipelines_torch_all:
         working_directory: ~/transformers
         docker:
@@ -435,10 +454,11 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -468,6 +488,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -502,6 +523,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -527,7 +549,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -535,7 +557,11 @@ jobs:
                       - '~/.cache/pip'
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
+                  fi
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -557,7 +583,7 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
@@ -576,7 +602,7 @@ jobs:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_examples_torch_all:
         working_directory: ~/transformers
         docker:
@@ -592,7 +618,7 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
@@ -604,6 +630,69 @@ jobs:
                   TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - v0.4-flax_examples-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install -r examples/flax/_tests_requirements.txt
+            - save_cache:
+                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/flax_examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_flax_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - v0.4-flax_examples-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install -r examples/flax/_tests_requirements.txt
+            - save_cache:
+                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
 
@@ -644,7 +733,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_hub_all:
         working_directory: ~/transformers
         docker:
@@ -694,7 +783,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -710,7 +799,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_onnxruntime_all:
         working_directory: ~/transformers
         docker:
@@ -727,7 +816,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -738,52 +827,6 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-
-    build_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-build_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
-            - save_cache:
-                  key: v0.4-build_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: cd docs && make html SPHINXOPTS="-W -j 4"
-            - store_artifacts:
-                path: ./docs/_build
-
-    deploy_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-deploy_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - save_cache:
-                  key: v0.4-deploy_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: ./.circleci/deploy.sh
 
     check_code_quality:
         working_directory: ~/transformers
@@ -800,7 +843,6 @@ jobs:
                       - v0.4-code_quality-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install isort GitPython
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
@@ -810,7 +852,28 @@ jobs:
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
-            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
+
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[all,quality]
+            - save_cache:
+                  key: v0.4-repository_consistency-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python utils/check_copies.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
@@ -818,17 +881,6 @@ jobs:
             - run: python utils/check_inits.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
-
-    check_repository_consistency:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: small
-        parallelism: 1
-        steps:
-            - checkout
-            - run: pip install requests
-            - run: python ./utils/link_tester.py
 
     run_tests_layoutlmv2:
         working_directory: ~/transformers
@@ -903,7 +955,7 @@ workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - master
+                - main
 workflows:
     version: 2
     build_and_test:
@@ -911,6 +963,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - run_examples_torch
+            - run_examples_flax
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
             - run_tests_torch_and_flax
@@ -921,9 +974,7 @@ workflows:
             - run_tests_pipelines_tf
             - run_tests_onnxruntime
             - run_tests_hub
-            - build_doc
             - run_tests_layoutlmv2
-            - deploy_doc: *workflow_filters
     nightly:
         triggers:
             - schedule:
@@ -931,9 +982,10 @@ workflows:
                 filters:
                     branches:
                         only:
-                            - master
+                            - main
         jobs:
             - run_examples_torch_all
+            - run_examples_flax_all
             - run_tests_torch_and_tf_all
             - run_tests_torch_and_flax_all
             - run_tests_torch_all
@@ -952,7 +1004,7 @@ workflows:
 #                filters:
 #                    branches:
 #                        only:
-#                            - master
+#                            - main
 #        jobs:
 #            - cleanup-gke-jobs
 #            - run_examples_tpu

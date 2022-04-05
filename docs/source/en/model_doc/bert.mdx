@@ -1,0 +1,197 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# BERT
+
+## Overview
+
+The BERT model was proposed in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a
+bidirectional transformer pretrained using a combination of masked language modeling objective and next sentence
+prediction on a large corpus comprising the Toronto Book Corpus and Wikipedia.
+
+The abstract from the paper is the following:
+
+*We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations
+from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional
+representations from unlabeled text by jointly conditioning on both left and right context in all layers. As a result,
+the pre-trained BERT model can be fine-tuned with just one additional output layer to create state-of-the-art models
+for a wide range of tasks, such as question answering and language inference, without substantial task-specific
+architecture modifications.*
+
+*BERT is conceptually simple and empirically powerful. It obtains new state-of-the-art results on eleven natural
+language processing tasks, including pushing the GLUE score to 80.5% (7.7% point absolute improvement), MultiNLI
+accuracy to 86.7% (4.6% absolute improvement), SQuAD v1.1 question answering Test F1 to 93.2 (1.5 point absolute
+improvement) and SQuAD v2.0 Test F1 to 83.1 (5.1 point absolute improvement).*
+
+Tips:
+
+- BERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
+- BERT was trained with the masked language modeling (MLM) and next sentence prediction (NSP) objectives. It is
+  efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation.
+
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/bert).
+
+## BertConfig
+
+[[autodoc]] BertConfig
+    - all
+
+## BertTokenizer
+
+[[autodoc]] BertTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## BertTokenizerFast
+
+[[autodoc]] BertTokenizerFast
+
+## Bert specific outputs
+
+[[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
+
+[[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
+
+[[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
+
+## BertModel
+
+[[autodoc]] BertModel
+    - forward
+
+## BertForPreTraining
+
+[[autodoc]] BertForPreTraining
+    - forward
+
+## BertLMHeadModel
+
+[[autodoc]] BertLMHeadModel
+    - forward
+
+## BertForMaskedLM
+
+[[autodoc]] BertForMaskedLM
+    - forward
+
+## BertForNextSentencePrediction
+
+[[autodoc]] BertForNextSentencePrediction
+    - forward
+
+## BertForSequenceClassification
+
+[[autodoc]] BertForSequenceClassification
+    - forward
+
+## BertForMultipleChoice
+
+[[autodoc]] BertForMultipleChoice
+    - forward
+
+## BertForTokenClassification
+
+[[autodoc]] BertForTokenClassification
+    - forward
+
+## BertForQuestionAnswering
+
+[[autodoc]] BertForQuestionAnswering
+    - forward
+
+## TFBertModel
+
+[[autodoc]] TFBertModel
+    - call
+
+## TFBertForPreTraining
+
+[[autodoc]] TFBertForPreTraining
+    - call
+
+## TFBertModelLMHeadModel
+
+[[autodoc]] TFBertLMHeadModel
+    - call
+
+## TFBertForMaskedLM
+
+[[autodoc]] TFBertForMaskedLM
+    - call
+
+## TFBertForNextSentencePrediction
+
+[[autodoc]] TFBertForNextSentencePrediction
+    - call
+
+## TFBertForSequenceClassification
+
+[[autodoc]] TFBertForSequenceClassification
+    - call
+
+## TFBertForMultipleChoice
+
+[[autodoc]] TFBertForMultipleChoice
+    - call
+
+## TFBertForTokenClassification
+
+[[autodoc]] TFBertForTokenClassification
+    - call
+
+## TFBertForQuestionAnswering
+
+[[autodoc]] TFBertForQuestionAnswering
+    - call
+
+## FlaxBertModel
+
+[[autodoc]] FlaxBertModel
+    - __call__
+
+## FlaxBertForPreTraining
+
+[[autodoc]] FlaxBertForPreTraining
+    - __call__
+
+## FlaxBertForMaskedLM
+
+[[autodoc]] FlaxBertForMaskedLM
+    - __call__
+
+## FlaxBertForNextSentencePrediction
+
+[[autodoc]] FlaxBertForNextSentencePrediction
+    - __call__
+
+## FlaxBertForSequenceClassification
+
+[[autodoc]] FlaxBertForSequenceClassification
+    - __call__
+
+## FlaxBertForMultipleChoice
+
+[[autodoc]] FlaxBertForMultipleChoice
+    - __call__
+
+## FlaxBertForTokenClassification
+
+[[autodoc]] FlaxBertForTokenClassification
+    - __call__
+
+## FlaxBertForQuestionAnswering
+
+[[autodoc]] FlaxBertForQuestionAnswering
+    - __call__

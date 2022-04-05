@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Tokenizer class. """
+""" Auto Tokenizer class."""
 
 import importlib
 import json
@@ -21,17 +21,11 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    cached_path,
-    hf_bucket_url,
-    is_offline_mode,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -52,6 +46,8 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
+            ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
+            ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
@@ -108,7 +104,7 @@ else:
             ),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
-            ("blenderbot", ("BlenderbotTokenizer", None)),
+            ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -124,6 +120,7 @@ else:
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutxlm", ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (
@@ -171,10 +168,12 @@ else:
                 ),
             ),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("luke", ("LukeTokenizer", None)),
+            ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
             ("canine", ("CanineTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
@@ -219,6 +218,21 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
+            (
+                "perceiver",
+                (
+                    "PerceiverTokenizer",
+                    None,
+                ),
+            ),
+            (
+                "xglm",
+                (
+                    "XGLMTokenizer" if is_sentencepiece_available() else None,
+                    "XGLMTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -261,83 +275,72 @@ def get_tokenizer_config(
     Loads the tokenizer configuration from a pretrained model tokenizer configuration.
 
     Args:
-        pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+        pretrained_model_name_or_path (`str` or `os.PathLike`):
             This can be either:
 
-            - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-              namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-            - a path to a `directory` containing a configuration file saved using the
-              :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g., ``./my_model_directory/``.
+            - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
+              under a user or organization name, like `dbmdz/bert-base-german-cased`.
+            - a path to a *directory* containing a configuration file saved using the
+              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
-        cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
+        cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
             cache should not be used.
-        force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        resume_download (`bool`, *optional*, defaults to `False`):
             Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
-        proxies (:obj:`Dict[str, str]`, `optional`):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, will only try to load the tokenizer configuration from local files.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
 
-    .. note::
+    <Tip>
 
-        Passing :obj:`use_auth_token=True` is required when you want to use a private model.
+    Passing `use_auth_token=True` is required when you want to use a private model.
 
+    </Tip>
 
     Returns:
-        :obj:`Dict`: The configuration of the tokenizer.
+        `Dict`: The configuration of the tokenizer.
 
-    Examples::
+    Examples:
 
-        # Download configuration from huggingface.co and cache.
-        tokenizer_config = get_tokenizer_config("bert-base-uncased")
-        # This model does not have a tokenizer config so the result will be an empty dict.
-        tokenizer_config = get_tokenizer_config("xlm-roberta-base")
+    ```python
+    # Download configuration from huggingface.co and cache.
+    tokenizer_config = get_tokenizer_config("bert-base-uncased")
+    # This model does not have a tokenizer config so the result will be an empty dict.
+    tokenizer_config = get_tokenizer_config("xlm-roberta-base")
 
-        # Save a pretrained tokenizer locally and you can reload its config
-        from transformers import AutoTokenizer
+    # Save a pretrained tokenizer locally and you can reload its config
+    from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer.save_pretrained("tokenizer-test")
-        tokenizer_config = get_tokenizer_config("tokenizer-test")
-    """
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
-        config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-    else:
-        config_file = hf_bucket_url(
-            pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
-        )
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_config_file = cached_path(
-            config_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except EnvironmentError:
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer.save_pretrained("tokenizer-test")
+    tokenizer_config = get_tokenizer_config("tokenizer-test")
+    ```"""
+    resolved_config_file = get_file_from_repo(
+        pretrained_model_name_or_path,
+        TOKENIZER_CONFIG_FILE,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
+        use_auth_token=use_auth_token,
+        revision=revision,
+        local_files_only=local_files_only,
+    )
+    if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
@@ -348,9 +351,9 @@ def get_tokenizer_config(
 class AutoTokenizer:
     r"""
     This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library when
-    created with the :meth:`AutoTokenizer.from_pretrained` class method.
+    created with the [`AutoTokenizer.from_pretrained`] class method.
 
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -365,76 +368,80 @@ class AutoTokenizer:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
-        The tokenizer class to instantiate is selected based on the :obj:`model_type` property of the config object
-        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The tokenizer class to instantiate is selected based on the `model_type` property of the config object (either
+        passed as an argument or loaded from `pretrained_model_name_or_path` if possible), or when it's missing, by
+        falling back to using pattern matching on `pretrained_model_name_or_path`:
 
         List options
 
         Params:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 Can be either:
 
-                    - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
-                      using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
-                      ``./my_model_directory/``.
+                    - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
+                      using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
                     - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
-                      single vocabulary file (like Bert or XLNet), e.g.: ``./my_model_directory/vocab.txt``. (Not
+                      single vocabulary file (like Bert or XLNet), e.g.: `./my_model_directory/vocab.txt`. (Not
                       applicable to all derived classes)
-            inputs (additional positional arguments, `optional`):
-                Will be passed along to the Tokenizer ``__init__()`` method.
-            config (:class:`~transformers.PretrainedConfig`, `optional`)
+            inputs (additional positional arguments, *optional*):
+                Will be passed along to the Tokenizer `__init__()` method.
+            config ([`PretrainedConfig`], *optional*)
                 The configuration object used to dertermine the tokenizer class to instantiate.
-            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
+            cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            subfolder (:obj:`str`, `optional`):
+            subfolder (`str`, *optional*):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
                 facebook/rag-token-base), specify it here.
-            use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            use_fast (`bool`, *optional*, defaults to `True`):
                 Whether or not to try to load the fast version of the tokenizer.
-            tokenizer_type (:obj:`str`, `optional`):
+            tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
-            kwargs (additional keyword arguments, `optional`):
-                Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
-                ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
-                ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the Tokenizer `__init__()` method. Can be used to set special tokens like
+                `bos_token`, `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
+                `additional_special_tokens`. See parameters in the `__init__()` for more details.
 
-        Examples::
+        Examples:
 
-            >>> from transformers import AutoTokenizer
+        ```python
+        >>> from transformers import AutoTokenizer
 
-            >>> # Download vocabulary from huggingface.co and cache.
-            >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        >>> # Download vocabulary from huggingface.co and cache.
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-            >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
-            >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+        >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
+        >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
-            >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
-            >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
-
-        """
+        >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
+        >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
+        ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -463,17 +470,51 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+        tokenizer_auto_map = None
+        if "auto_map" in tokenizer_config:
+            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
+                # Legacy format for dynamic tokenizers
+                tokenizer_auto_map = tokenizer_config["auto_map"]
+            else:
+                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             config_tokenizer_class = config.tokenizer_class
+            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
+                tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         # If we have the tokenizer class from the tokenizer config or the model config we're good!
         if config_tokenizer_class is not None:
             tokenizer_class = None
-            if use_fast and not config_tokenizer_class.endswith("Fast"):
+            if tokenizer_auto_map is not None:
+                if not trust_remote_code:
+                    raise ValueError(
+                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that repo "
+                        "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                        "the option `trust_remote_code=True` to remove this error."
+                    )
+                if kwargs.get("revision", None) is None:
+                    logger.warning(
+                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                        "no malicious code has been contributed in a newer revision."
+                    )
+
+                if use_fast and tokenizer_auto_map[1] is not None:
+                    class_ref = tokenizer_auto_map[1]
+                else:
+                    class_ref = tokenizer_auto_map[0]
+
+                module_file, class_name = class_ref.split(".")
+                tokenizer_class = get_class_from_dynamic_module(
+                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                )
+
+            elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
@@ -523,11 +564,11 @@ class AutoTokenizer:
 
 
         Args:
-            config_class (:class:`~transformers.PretrainedConfig`):
+            config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            slow_tokenizer_class (:class:`~transformers.PretrainedTokenizer`, `optional`):
+            slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.
-            slow_tokenizer_class (:class:`~transformers.PretrainedTokenizerFast`, `optional`):
+            slow_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
                 The fast tokenizer to register.
         """
         if slow_tokenizer_class is None and fast_tokenizer_class is None:

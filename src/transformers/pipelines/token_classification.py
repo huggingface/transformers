@@ -1,11 +1,12 @@
+import types
 import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from ..models.bert.tokenization_bert import BasicTokenizer
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
 if is_tf_available():
@@ -28,6 +29,8 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         elif isinstance(inputs, str):
             inputs = [inputs]
             batch_size = 1
+        elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
+            return inputs, None
         else:
             raise ValueError("At least one input is required.")
 
@@ -53,12 +56,13 @@ class AggregationStrategy(ExplicitEnum):
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        ignore_labels (:obj:`List[str]`, defaults to :obj:`["O"]`):
+        ignore_labels (`List[str]`, defaults to `["O"]`):
             A list of labels to ignore.
-        grouped_entities (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            DEPRECATED, use :obj:`aggregation_strategy` instead. Whether or not to group the tokens corresponding to
-            the same entity together in the predictions or not.
-        aggregation_strategy (:obj:`str`, `optional`, defaults to :obj:`"none"`): The strategy to fuse (or not) tokens based on the model prediction.
+        grouped_entities (`bool`, *optional*, defaults to `False`):
+            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
+            same entity together in the predictions or not.
+        aggregation_strategy (`str`, *optional*, defaults to `"none"`):
+            The strategy to fuse (or not) tokens based on the model prediction.
 
                 - "none" : Will simply not do any aggregation and simply return raw results from the model
                 - "simple" : Will attempt to group entities following the default schema. (A, B-TAG), (B, I-TAG), (C,
@@ -69,34 +73,32 @@ class AggregationStrategy(ExplicitEnum):
                   "NAME"}]. Look for FIRST, MAX, AVERAGE for ways to mitigate that and disambiguate words (on languages
                   that support that meaning, which is basically tokens separated by a space). These mitigations will
                   only work on real words, "New york" might still be tagged with two different entities.
-                - "first" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
-                  cannot end up with different tags. Words will simply use the tag of the first token of the word when
-                  there is ambiguity.
-                - "average" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
+                - "first" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
+                  end up with different tags. Words will simply use the tag of the first token of the word when there
+                  is ambiguity.
+                - "average" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
-                - "max" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
-                  cannot end up with different tags. Word entity will simply be the token with the maximum score.
+                - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
+                  end up with different tags. Word entity will simply be the token with the maximum score.
     """,
 )
 class TokenClassificationPipeline(Pipeline):
     """
-    Named Entity Recognition pipeline using any :obj:`ModelForTokenClassification`. See the `named entity recognition
-    examples <../task_summary.html#named-entity-recognition>`__ for more information.
+    Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
+    examples](../task_summary#named-entity-recognition) for more information.
 
-    This token recognition pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location
-    or miscellaneous).
+    This token recognition pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location or miscellaneous).
 
     The models that this pipeline can use are models that have been fine-tuned on a token classification task. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=token-classification>`__.
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=token-classification).
     """
 
     default_input_names = "sequences"
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
-        self.ignore_labels = ["O"]
         super().__init__(*args, **kwargs)
         self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -113,7 +115,12 @@ class TokenClassificationPipeline(Pipeline):
         grouped_entities: Optional[bool] = None,
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
+        offset_mapping: Optional[List[Tuple[int, int]]] = None,
     ):
+
+        preprocess_params = {}
+        if offset_mapping is not None:
+            preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
         if grouped_entities is not None or ignore_subwords is not None:
@@ -148,50 +155,49 @@ class TokenClassificationPipeline(Pipeline):
             postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
         Classify each token of the text(s) given as inputs.
 
         Args:
-            inputs (:obj:`str` or :obj:`List[str]`):
+            inputs (`str` or `List[str]`):
                 One or several texts (or one list of texts) for token classification.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a list of dictionaries (one for each token in
-            the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
-            with the following keys:
+            A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in the
+            corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy) with
+            the following keys:
 
-            - **word** (:obj:`str`) -- The token/word classified.
-            - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
-              `aggregation_strategy` is not :obj:`"none"`.
-            - **index** (:obj:`int`, only present when ``aggregation_strategy="none"``) -- The index of the
-              corresponding token in the sentence.
-            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
-            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
+            - **word** (`str`) -- The token/word classified.
+            - **score** (`float`) -- The corresponding probability for `entity`.
+            - **entity** (`str`) -- The entity predicted for that token/word (it is named *entity_group* when
+              *aggregation_strategy* is not `"none"`.
+            - **index** (`int`, only present when `aggregation_strategy="none"`) -- The index of the corresponding
+              token in the sentence.
+            - **start** (`int`, *optional*) -- The index of the start of the corresponding entity in the sentence. Only
+              exists if the offsets are available within the tokenizer
+            - **end** (`int`, *optional*) -- The index of the end of the corresponding entity in the sentence. Only
+              exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mappings = self._args_parser(inputs, **kwargs)
-        self.offset_mappings = offset_mappings
+        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        if offset_mapping:
+            kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence):
+    def preprocess(self, sentence, offset_mapping=None):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         model_inputs = self.tokenizer(
             sentence,
-            return_attention_mask=False,
             return_tensors=self.framework,
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
         )
-        if self.offset_mappings:
-            offset_mapping = self.offset_mappings[0]
+        if offset_mapping:
             model_inputs["offset_mapping"] = offset_mapping
 
         model_inputs["sentence"] = sentence
@@ -204,26 +210,31 @@ class TokenClassificationPipeline(Pipeline):
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
         if self.framework == "tf":
-            outputs = self.model(model_inputs.data)[0][0]
+            logits = self.model(model_inputs.data)[0]
         else:
-            outputs = self.model(**model_inputs)[0][0]
+            logits = self.model(**model_inputs)[0]
 
         return {
-            "outputs": outputs,
+            "logits": logits,
             "special_tokens_mask": special_tokens_mask,
             "offset_mapping": offset_mapping,
             "sentence": sentence,
             **model_inputs,
         }
 
-    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE):
-        outputs = model_outputs["outputs"].numpy()
+    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
+        if ignore_labels is None:
+            ignore_labels = ["O"]
+        logits = model_outputs["logits"][0].numpy()
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
         special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
-        scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+        maxes = np.max(logits, axis=-1, keepdims=True)
+        shifted_exp = np.exp(logits - maxes)
+        scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
@@ -232,8 +243,8 @@ class TokenClassificationPipeline(Pipeline):
         entities = [
             entity
             for entity in grouped_entities
-            if entity.get("entity", None) not in self.ignore_labels
-            and entity.get("entity_group", None) not in self.ignore_labels
+            if entity.get("entity", None) not in ignore_labels
+            and entity.get("entity_group", None) not in ignore_labels
         ]
         return entities
 
@@ -258,12 +269,13 @@ class TokenClassificationPipeline(Pipeline):
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
-                if self.framework == "pt":
-                    start_ind = start_ind.item()
-                    end_ind = end_ind.item()
-                else:
-                    start_ind = int(start_ind.numpy())
-                    end_ind = int(end_ind.numpy())
+                if not isinstance(start_ind, int):
+                    if self.framework == "pt":
+                        start_ind = start_ind.item()
+                        end_ind = end_ind.item()
+                    else:
+                        start_ind = int(start_ind.numpy())
+                        end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
@@ -382,7 +394,7 @@ class TokenClassificationPipeline(Pipeline):
         Group together the adjacent tokens with the same entity predicted.
 
         Args:
-            entities (:obj:`dict`): The entities predicted by the pipeline.
+            entities (`dict`): The entities predicted by the pipeline.
         """
         # Get the first entity in the entity group
         entity = entities[0]["entity"].split("-")[-1]
@@ -417,7 +429,7 @@ class TokenClassificationPipeline(Pipeline):
         Find and group together the adjacent tokens with the same entity predicted.
 
         Args:
-            entities (:obj:`dict`): The entities predicted by the pipeline.
+            entities (`dict`): The entities predicted by the pipeline.
         """
 
         entity_groups = []

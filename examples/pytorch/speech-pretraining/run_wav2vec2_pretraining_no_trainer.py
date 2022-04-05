@@ -42,8 +42,8 @@ from transformers import (
     is_wandb_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
+from transformers.utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -302,6 +302,8 @@ class DataCollatorForWav2Vec2Pretraining:
         batch_size = batch["input_values"].shape[0]
 
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        # make sure masked sequence length is a Python scalar
+        mask_indices_seq_length = int(mask_indices_seq_length)
 
         # make sure that no loss is computed on padded inputs
         if batch.get("attention_mask") is not None:
@@ -348,7 +350,7 @@ def get_grad_norm(params, scale=1):
         if p.grad is not None:
             param_norm = (p.grad.detach().data / scale).norm(2)
             total_norm += param_norm.item() ** 2
-    total_norm = total_norm ** 0.5
+    total_norm = total_norm**0.5
     return total_norm
 
 
@@ -401,7 +403,10 @@ def main():
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
         dataset_split = load_dataset(
-            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir
+            args.dataset_name,
+            dataset_config_name,
+            split=train_split_name,
+            cache_dir=args.cache_dir,
         )
         datasets_splits.append(dataset_split)
 
@@ -617,7 +622,7 @@ def main():
 
                 # update gumbel temperature
                 gumbel_temperature = max(
-                    args.max_gumbel_temperature * args.gumbel_temperature_decay ** completed_steps,
+                    args.max_gumbel_temperature * args.gumbel_temperature_decay**completed_steps,
                     args.min_gumbel_temperature,
                 )
                 if hasattr(model, "module"):
@@ -667,7 +672,11 @@ def main():
                     unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(commit_message=f"Training in progress step {completed_steps}", blocking=False)
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress step {completed_steps}",
+                        blocking=False,
+                        auto_lfs_prune=True,
+                    )
 
             # if completed steps > `args.max_train_steps` stop
             if completed_steps >= args.max_train_steps:
@@ -714,7 +723,7 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training")
+                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

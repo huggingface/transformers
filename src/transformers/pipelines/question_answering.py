@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
+
+logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -29,10 +31,10 @@ if is_torch_available():
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped to
-    internal :class:`~transformers.SquadExample`.
+    internal [`SquadExample`].
 
-    QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from the
-    command-line supplied arguments.
+    QuestionAnsweringArgumentHandler manages all the possible to create a [`SquadExample`] from the command-line
+    supplied arguments.
     """
 
     def normalize(self, item):
@@ -96,17 +98,17 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class QuestionAnsweringPipeline(Pipeline):
+class QuestionAnsweringPipeline(ChunkPipeline):
     """
-    Question Answering pipeline using any :obj:`ModelForQuestionAnswering`. See the `question answering examples
-    <../task_summary.html#question-answering>`__ for more information.
+    Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering
+    examples](../task_summary#question-answering) for more information.
 
-    This question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"question-answering"`.
+    This question answering pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=question-answering>`__.
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=question-answering).
     """
 
     default_input_names = "question,context"
@@ -142,18 +144,17 @@ class QuestionAnsweringPipeline(Pipeline):
         question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
-        QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally. This helper method
-        encapsulate all the logic for converting question(s) and context(s) to :class:`~transformers.SquadExample`.
+        QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
+        logic for converting question(s) and context(s) to [`SquadExample`].
 
         We currently support extractive question answering.
 
         Arguments:
-            question (:obj:`str` or :obj:`List[str]`): The question(s) asked.
-            context (:obj:`str` or :obj:`List[str]`): The context(s) in which we will look for the answer.
+            question (`str` or `List[str]`): The question(s) asked.
+            context (`str` or `List[str]`): The context(s) in which we will look for the answer.
 
         Returns:
-            One or a list of :class:`~transformers.SquadExample`: The corresponding :class:`~transformers.SquadExample`
-            grouping question and context.
+            One or a list of [`SquadExample`]: The corresponding [`SquadExample`] grouping question and context.
         """
         if isinstance(question, list):
             return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
@@ -180,6 +181,8 @@ class QuestionAnsweringPipeline(Pipeline):
             preprocess_params["doc_stride"] = doc_stride
         if max_question_len is not None:
             preprocess_params["max_question_len"] = max_question_len
+        if max_seq_len is not None:
+            preprocess_params["max_seq_len"] = max_seq_len
 
         postprocess_params = {}
         if topk is not None and top_k is None:
@@ -203,43 +206,42 @@ class QuestionAnsweringPipeline(Pipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            args (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`):
-                One or several :class:`~transformers.SquadExample` containing the question and context.
-            X (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
-                the same way as if passed as the first positional argument).
-            data (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
-                the same way as if passed as the first positional argument).
-            question (:obj:`str` or :obj:`List[str]`):
-                One or several question(s) (must be used in conjunction with the :obj:`context` argument).
-            context (:obj:`str` or :obj:`List[str]`):
+            args ([`SquadExample`] or a list of [`SquadExample`]):
+                One or several [`SquadExample`] containing the question and context.
+            X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
+                passed as the first positional argument).
+            data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
+                passed as the first positional argument).
+            question (`str` or `List[str]`):
+                One or several question(s) (must be used in conjunction with the `context` argument).
+            context (`str` or `List[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
-                :obj:`question` argument).
-            topk (:obj:`int`, `optional`, defaults to 1):
+                `question` argument).
+            topk (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
                 topk answers if there are not enough options available within the context.
-            doc_stride (:obj:`int`, `optional`, defaults to 128):
+            doc_stride (`int`, *optional*, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
-            max_answer_len (:obj:`int`, `optional`, defaults to 15):
+            max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
-            max_seq_len (:obj:`int`, `optional`, defaults to 384):
+            max_seq_len (`int`, *optional*, defaults to 384):
                 The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using :obj:`doc_stride`) if needed.
-            max_question_len (:obj:`int`, `optional`, defaults to 64):
+                split in several chunks (using `doc_stride`) if needed.
+            max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
-            handle_impossible_answer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
-              input).
-            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
-            - **answer** (:obj:`str`) -- The answer to the question.
+            - **score** (`float`) -- The probability associated to the answer.
+            - **start** (`int`) -- The character start index of the answer (in the tokenized version of the input).
+            - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
+            - **answer** (`str`) -- The answer to the question.
         """
 
         # Convert inputs to features
@@ -339,11 +341,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     )
                 )
 
-        split_features = []
-        for feature in features:
+        for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names
+            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
@@ -359,20 +360,15 @@ class QuestionAnsweringPipeline(Pipeline):
                         fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
-            split_features.append({"fw_args": fw_args, "others": others})
-        return {"features": split_features, "example": example}
 
-    def _forward(self, model_inputs):
-        features = model_inputs["features"]
-        example = model_inputs["example"]
-        starts = []
-        ends = []
-        for feature in features:
-            fw_args = feature["fw_args"]
-            start, end = self.model(**fw_args)[:2]
-            starts.append(start)
-            ends.append(end)
-        return {"starts": starts, "ends": ends, "features": features, "example": example}
+            is_last = i == len(features) - 1
+            yield {"example": example, "is_last": is_last, **fw_args, **others}
+
+    def _forward(self, inputs):
+        example = inputs["example"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        start, end = self.model(**model_inputs)[:2]
+        return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
         self,
@@ -383,16 +379,16 @@ class QuestionAnsweringPipeline(Pipeline):
     ):
         min_null_score = 1000000  # large and positive
         answers = []
-        example = model_outputs["example"]
-        for i, (feature_, start_, end_) in enumerate(
-            zip(model_outputs["features"], model_outputs["starts"], model_outputs["ends"])
-        ):
-            feature = feature_["others"]
-            # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-            undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
+        for output in model_outputs:
+            start_ = output["start"]
+            end_ = output["end"]
+            example = output["example"]
 
-            if feature_["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+            # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
+            undesired_tokens = np.abs(np.array(output["p_mask"]) - 1)
+
+            if output.get("attention_mask", None) is not None:
+                undesired_tokens = undesired_tokens & output["attention_mask"].numpy()
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0
@@ -406,7 +402,7 @@ class QuestionAnsweringPipeline(Pipeline):
             end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
 
             if handle_impossible_answer:
-                min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+                min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())
 
             # Mask CLS
             start_[0, 0] = end_[0, 0] = 0.0
@@ -421,7 +417,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 for s, e, score in zip(starts, ends, scores):
-                    token_to_orig_map = feature["token_to_orig_map"]
+                    token_to_orig_map = output["token_to_orig_map"]
                     answers.append(
                         {
                             "score": score.item(),
@@ -437,13 +433,24 @@ class QuestionAnsweringPipeline(Pipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 question_first = bool(self.tokenizer.padding_side == "right")
-                enc = feature["encoding"]
+                enc = output["encoding"]
+
+                # Encoding was *not* padded, input_ids *might*.
+                # It doesn't make a difference unless we're padding on
+                # the left hand side, since now we have different offsets
+                # everywhere.
+                if self.tokenizer.padding_side == "left":
+                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
+                else:
+                    offset = 0
 
                 # Sometimes the max probability token is in the middle of a word so:
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
                 for s, e, score in zip(starts, ends, scores):
+                    s = s - offset
+                    e = e - offset
                     try:
                         start_word = enc.token_to_word(s)
                         end_word = enc.token_to_word(e)
@@ -474,7 +481,7 @@ class QuestionAnsweringPipeline(Pipeline):
         self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
     ) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
+        Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the
         actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than max_answer_len or
@@ -482,11 +489,11 @@ class QuestionAnsweringPipeline(Pipeline):
         the topk argument.
 
         Args:
-            start (:obj:`np.ndarray`): Individual start probabilities for each token.
-            end (:obj:`np.ndarray`): Individual end probabilities for each token.
-            topk (:obj:`int`): Indicates how many possible answer span(s) to extract from the model output.
-            max_answer_len (:obj:`int`): Maximum size of the answer to extract from the model's output.
-            undesired_tokens (:obj:`np.ndarray`): Mask determining tokens that can be part of the answer
+            start (`np.ndarray`): Individual start probabilities for each token.
+            end (`np.ndarray`): Individual end probabilities for each token.
+            topk (`int`): Indicates how many possible answer span(s) to extract from the model output.
+            max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
+            undesired_tokens (`np.ndarray`): Mask determining tokens that can be part of the answer
         """
         # Ensure we have batch axis
         if start.ndim == 1:
@@ -524,12 +531,12 @@ class QuestionAnsweringPipeline(Pipeline):
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
         Args:
-            text (:obj:`str`): The actual context to extract the answer from.
-            start (:obj:`int`): The answer starting token index.
-            end (:obj:`int`): The answer end token index.
+            text (`str`): The actual context to extract the answer from.
+            start (`int`): The answer starting token index.
+            end (`int`): The answer end token index.
 
         Returns:
-            Dictionary like :obj:`{'answer': str, 'start': int, 'end': int}`
+            Dictionary like `{'answer': str, 'start': int, 'end': int}`
         """
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0

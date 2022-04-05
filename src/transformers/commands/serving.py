@@ -15,7 +15,7 @@
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from ..pipelines import SUPPORTED_TASKS, TASK_ALIASES, Pipeline, pipeline
+from ..pipelines import Pipeline, get_supported_tasks, pipeline
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -104,7 +104,7 @@ class ServeCommand(BaseTransformersCLICommand):
         serve_parser.add_argument(
             "--task",
             type=str,
-            choices=list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys()),
+            choices=get_supported_tasks(),
             help="The task to run the pipeline on",
         )
         serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
@@ -131,9 +131,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if not _serve_dependencies_installed:
             raise RuntimeError(
-                "Using serve command requires FastAPI and unicorn. "
+                "Using serve command requires FastAPI and uvicorn. "
                 'Please install transformers with [serving]: pip install "transformers[serving]".'
-                "Or install FastAPI and unicorn separately."
+                "Or install FastAPI and uvicorn separately."
             )
         else:
             logger.info(f"Serving model over {host}:{port}")
@@ -214,9 +214,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     async def forward(self, inputs=Body(None, embed=True)):
         """
-        **inputs**:
-        **attention_mask**:
-        **tokens_type_ids**:
+        **inputs**: **attention_mask**: **tokens_type_ids**:
         """
 
         # Check we don't have empty string

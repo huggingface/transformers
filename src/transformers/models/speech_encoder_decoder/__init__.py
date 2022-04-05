@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
@@ -28,13 +28,19 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_speech_encoder_decoder"] = ["SpeechEncoderDecoderModel"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_speech_encoder_decoder"] = ["FlaxSpeechEncoderDecoderModel"]
+
 if TYPE_CHECKING:
     from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
 
     if is_torch_available():
         from .modeling_speech_encoder_decoder import SpeechEncoderDecoderModel
 
+    if is_flax_available():
+        from .modeling_flax_speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
+
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

@@ -18,15 +18,15 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
+from ...utils import _LazyModule, is_tokenizers_available
 {%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
-from ...file_utils import is_tf_available
+from ...utils import is_tf_available
 {% endif %}
 {%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
-from ...file_utils import is_torch_available
+from ...utils import is_torch_available
 {% endif %}
 {%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
-from ...file_utils import is_flax_available
+from ...utils import is_flax_available
 {% endif %}
 
 _import_structure = {
@@ -210,4 +210,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

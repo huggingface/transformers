@@ -15,11 +15,12 @@
 import itertools
 import os
 import subprocess
+from os.path import dirname
 
 from parameterized import parameterized
+from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    ExtendSysPath,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -30,16 +31,18 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 
-tests_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-root_dir = os.path.dirname(tests_dir)
-with ExtendSysPath(tests_dir):
-    from test_trainer import TrainerIntegrationCommon  # noqa
-
-    if is_torch_available():
-        from test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
+if is_torch_available():
+    from tests.trainer.test_trainer import (  # noqa
+        RegressionModelConfig,
+        RegressionPreTrainedModel,
+        get_regression_trainer,
+    )
 
 
 set_seed(42)
+
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
 
 # translation
 FSMT_TINY = "stas/tiny-wmt19-en-de"
@@ -67,6 +70,8 @@ ELECTRA_TINY = "hf-internal-testing/tiny-electra"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 BERT_TINY = "hf-internal-testing/tiny-bert"
 
+FIXTURE_DIRECTORY = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures")
+ROOT_DIRECTORY = os.path.join(dirname(dirname(dirname(os.path.abspath(__file__)))))
 
 # TODO: to add:
 # albert
@@ -89,12 +94,12 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
 def make_task_cmds():
-    data_dir_fixtures = f"{tests_dir}/fixtures"
-    data_dir_samples = f"{data_dir_fixtures}/tests_samples"
+    data_dir_samples = f"{FIXTURE_DIRECTORY}/tests_samples"
     data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
     data_dir_xsum = f"{data_dir_samples}/xsum"
     args_main = """
@@ -139,7 +144,7 @@ def make_task_cmds():
         ],
     )
 
-    scripts_dir = f"{root_dir}/examples/pytorch"
+    scripts_dir = f"{ROOT_DIRECTORY}/examples/pytorch"
 
     tasks = dict(
         trans=f"""
@@ -153,15 +158,16 @@ def make_task_cmds():
         --train_file {data_dir_xsum}/sample.json
         --max_source_length 12
         --max_target_length 12
+        --lang en
         """,
         clm=f"""
         {scripts_dir}/language-modeling/run_clm.py
-        --train_file {data_dir_fixtures}/sample_text.txt
+        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
         --block_size 8
         """,
         mlm=f"""
         {scripts_dir}/language-modeling/run_mlm.py
-        --train_file {data_dir_fixtures}/sample_text.txt
+        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
         """,
         qa=f"""
         {scripts_dir}/question-answering/run_qa.py
@@ -199,7 +205,18 @@ task_cmds = make_task_cmds()
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
+
 stages = [ZERO2, ZERO3]
+
+# future preparation:
+# for now test just fp16, as these tests are quite slow
+# FP16 = "fp16"
+# BF16 = "bf16"
+#
+# dtypes = [FP16]
+# so just hardcoding --fp16 for now
+# if is_torch_bf16_available():
+#     dtypes += [BF16]
 
 
 def parameterized_custom_name_func(func, param_num, param):
