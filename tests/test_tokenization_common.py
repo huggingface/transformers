@@ -3713,6 +3713,15 @@ class TokenizerTesterMixin:
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
                     self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
+    def test_convert_tokens_to_string_format(self):
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["this", "is", "a", "test"]
+                string = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(string, str)
+
     def test_save_slow_from_fast_and_reload_fast(self):
         if not self.test_slow_tokenizer or not self.test_rust_tokenizer:
             # we need both slow and fast versions

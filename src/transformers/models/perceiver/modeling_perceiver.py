@@ -420,7 +420,7 @@ class PerceiverMLP(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.dense2 = nn.Linear(input_size, input_size)
+        self.dense2 = nn.Linear(widening_factor * input_size, input_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense1(hidden_states)
@@ -710,7 +710,7 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 

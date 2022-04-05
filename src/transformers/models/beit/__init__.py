@@ -22,7 +22,7 @@ from ...utils import _LazyModule, is_flax_available, is_torch_available, is_visi
 
 
 _import_structure = {
-    "configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
+    "configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig", "BeitOnnxConfig"],
 }
 
 if is_vision_available():
@@ -48,7 +48,7 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
+    from .configuration_beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig, BeitOnnxConfig
 
     if is_vision_available():
         from .feature_extraction_beit import BeitFeatureExtractor

@@ -15,6 +15,7 @@
 Generic utilities
 """
 
+import inspect
 from collections import OrderedDict, UserDict
 from contextlib import ExitStack
 from dataclasses import fields
@@ -150,8 +151,8 @@ class ModelOutput(OrderedDict):
 
     <Tip warning={true}>
 
-    You can't unpack a `ModelOutput` directly. Use the [`~file_utils.ModelOutput.to_tuple`] method to convert it to a
-    tuple before.
+    You can't unpack a `ModelOutput` directly. Use the [`~utils.ModelOutput.to_tuple`] method to convert it to a tuple
+    before.
 
     </Tip>
     """
@@ -289,3 +290,23 @@ class ContextManagers:
 
     def __exit__(self, *args, **kwargs):
         self.stack.__exit__(*args, **kwargs)
+
+
+def find_labels(model_class):
+    """
+    Find the labels used by a given model.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+    if "QuestionAnswering" in model_name:
+        return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
+    else:
+        return [p for p in signature.parameters if "label" in p]

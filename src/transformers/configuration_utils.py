@@ -31,6 +31,7 @@ from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     CONFIG_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
@@ -93,7 +94,7 @@ class PretrainedConfig(PushToHubMixin):
         output_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not the model should returns all attentions.
         return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return a [`~transformers.file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
         is_decoder (`bool`, *optional*, defaults to `False`):
@@ -170,7 +171,7 @@ class PretrainedConfig(PushToHubMixin):
         output_scores (`bool`, *optional*, defaults to `False`):
             Whether the model should return the logits when used for generation.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-            Whether the model should return a [`~transformers.file_utils.ModelOutput`] instead of a `torch.LongTensor`.
+            Whether the model should return a [`~transformers.utils.ModelOutput`] instead of a `torch.LongTensor`.
         forced_bos_token_id (`int`, *optional*):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
@@ -379,7 +380,7 @@ class PretrainedConfig(PushToHubMixin):
     @property
     def use_return_dict(self) -> bool:
         """
-        `bool`: Whether or not return [`~file_utils.ModelOutput`] instead of tuples.
+        `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
         """
         # If torchscript is set, force `return_dict=False` to avoid jit errors
         return self.return_dict and not self.torchscript
@@ -417,7 +418,7 @@ class PretrainedConfig(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -626,7 +627,7 @@ class PretrainedConfig(PushToHubMixin):
             )
         except ValueError:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                 f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
                 "{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."

@@ -286,7 +286,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
                 inference to be done sequentially to extract relations within sequences, given their conversational
                 nature.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single

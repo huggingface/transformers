@@ -52,6 +52,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertModel"),
         ("openai-gpt", "TFOpenAIGPTModel"),
         ("gpt2", "TFGPT2Model"),
+        ("gptj", "TFGPTJModel"),
         ("mobilebert", "TFMobileBertModel"),
         ("transfo-xl", "TFTransfoXLModel"),
         ("xlnet", "TFXLNetModel"),
@@ -69,6 +70,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("vit", "TFViTModel"),
+        ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("hubert", "TFHubertModel"),
     ]
@@ -99,6 +101,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("tapas", "TFTapasForMaskedLM"),
         ("funnel", "TFFunnelForPreTraining"),
         ("mpnet", "TFMPNetForMaskedLM"),
+        ("vit_mae", "TFViTMAEForPreTraining"),
     ]
 )
 
@@ -123,6 +126,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertForMaskedLM"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
+        ("gptj", "TFGPTJForCausalLM"),
         ("mobilebert", "TFMobileBertForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -146,6 +150,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertLMHeadModel"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
+        ("gptj", "TFGPTJForCausalLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("xlnet", "TFXLNetLMHeadModel"),
         ("xlm", "TFXLMWithLMHeadModel"),
@@ -239,6 +244,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("tapas", "TFTapasForSequenceClassification"),
         ("funnel", "TFFunnelForSequenceClassification"),
         ("gpt2", "TFGPT2ForSequenceClassification"),
+        ("gptj", "TFGPTJForSequenceClassification"),
         ("mpnet", "TFMPNetForSequenceClassification"),
         ("openai-gpt", "TFOpenAIGPTForSequenceClassification"),
         ("transfo-xl", "TFTransfoXLForSequenceClassification"),
@@ -267,6 +273,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlm", "TFXLMForQuestionAnsweringSimple"),
         ("electra", "TFElectraForQuestionAnswering"),
         ("funnel", "TFFunnelForQuestionAnswering"),
+        ("gptj", "TFGPTJForQuestionAnswering"),
         ("mpnet", "TFMPNetForQuestionAnswering"),
     ]
 )

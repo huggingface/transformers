@@ -268,6 +268,8 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "utils/hub.py": "utils/test_file_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
@@ -463,9 +465,9 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
                 test_files_to_run.append(f)
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
-                test_files_to_run.append("examples/pytorch/test_examples.py")
+                test_files_to_run.append("examples/pytorch/test_pytorch_examples.py")
             elif f.startswith("examples/flax"):
-                test_files_to_run.append("examples/flax/test_examples.py")
+                test_files_to_run.append("examples/flax/test_flax_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:

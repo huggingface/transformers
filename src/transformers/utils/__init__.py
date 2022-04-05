@@ -37,6 +37,7 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    find_labels,
     is_tensor,
     to_numpy,
     to_py_obj,
@@ -136,6 +137,7 @@ from .import_utils import (
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
+WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
