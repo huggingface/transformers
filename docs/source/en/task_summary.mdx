@@ -1030,9 +1030,7 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 ```py
 >>> from transformers import pipeline
 
->>> speech_recognizer = pipeline(
-...     task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h"
-... )
+>>> speech_recognizer = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 >>> speech_recognizer("jfk_moon_speech.wav")
 {'text': "PRESENTETE MISTER VICE PRESIDENT GOVERNOR CONGRESSMEN THOMAS SAN O TE WILAN CONGRESSMAN MILLA MISTER WEBB MSTBELL SCIENIS DISTINGUISHED GUESS AT LADIES AND GENTLEMAN I APPRECIATE TO YOUR PRESIDENT HAVING MADE ME AN HONORARY VISITING PROFESSOR AND I WILL ASSURE YOU THAT MY FIRST LECTURE WILL BE A VERY BRIEF I AM DELIGHTED TO BE HERE AND I'M PARTICULARLY DELIGHTED TO BE HERE ON THIS OCCASION WE MEED AT A COLLEGE NOTED FOR KNOWLEGE IN A CITY NOTED FOR PROGRESS IN A STATE NOTED FOR STRAINTH AN WE STAND IN NEED OF ALL THREE"}
 ```
