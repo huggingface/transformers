@@ -39,6 +39,7 @@ from .utils import (
     is_torch_tpu_available,
 )
 
+
 if is_torch_available():
     import torch
 
@@ -74,10 +75,10 @@ class EvalPrediction:
     """
 
     def __init__(
-            self,
-            predictions: Union[np.ndarray, Tuple[np.ndarray]],
-            label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-            inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        self,
+        predictions: Union[np.ndarray, Tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
