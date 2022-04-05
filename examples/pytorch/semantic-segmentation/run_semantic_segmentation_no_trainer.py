@@ -23,16 +23,14 @@ import random
 from pathlib import Path
 
 import datasets
-from datasets import load_dataset, load_metric
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
-
-from PIL import Image
 import numpy as np
-
 import torch
+from datasets import load_dataset
+from PIL import Image
+from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional
+from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
@@ -40,13 +38,12 @@ from huggingface_hub import Repository, hf_hub_download
 from transformers import (
     AdamW,
     AutoConfig,
-    AutoModelForSemanticSegmentation,
     AutoFeatureExtractor,
-    DataCollatorWithPadding,
-    PretrainedConfig,
+    AutoModelForSemanticSegmentation,
     SchedulerType,
     default_data_collator,
     get_scheduler,
+    is_wandb_available,
     set_seed,
 )
 from transformers.utils import get_full_repo_name
@@ -256,6 +253,19 @@ def parse_args():
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument(
+        "--logging_steps",
+        type=int,
+        default=500,
+        help="Number of steps between each logging",
+    )
+    parser.add_argument("--wandb", action="store_true", help="Whether or not to log to Weights and Biases.")
+    parser.add_argument(
+        "--saving_steps",
+        type=int,
+        default=500,
+        help="Number of steps between each logging",
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
@@ -267,6 +277,9 @@ def parse_args():
     if args.push_to_hub:
         assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
+
     return args
 
 
@@ -275,12 +288,6 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
-    # Make one log on every process with the configuration for debugging.
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-    )
     logger.info(accelerator.state)
 
     # Setup logging, we only want one process per machine to log things on the screen.
@@ -289,6 +296,12 @@ def main():
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
+
+        # set up weights and biases if available
+        if is_wandb_available() and args.wandb:
+            import wandb
+
+            wandb.init(project=args.output_dir.split("/")[-1])
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
@@ -343,7 +356,9 @@ def main():
     num_labels = len(id2label)
 
     # Load pretrained model and feature extractor
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, id2label=id2label, label2id=label2id)
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path, num_labels=num_labels, id2label=id2label, label2id=label2id
+    )
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
     model = AutoModelForSemanticSegmentation.from_pretrained(
         args.model_name_or_path,
@@ -411,7 +426,9 @@ def main():
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size
+    )
 
     # Optimizer
     optimizer = AdamW(
@@ -477,14 +494,48 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1)
-            # metric.add_batch(
-            #     predictions=accelerator.gather(predictions),
-            #     references=accelerator.gather(batch["labels"]),
-            # )
+            # Log all results
+            if (step + 1) % (args.gradient_accumulation_steps * args.logging_steps) == 0:
+                loss.detach()
+
+                if accelerator.state.num_processes > 1:
+                    loss = accelerator.gather(loss).sum()
+
+                train_logs = {
+                    "loss": loss,
+                    "lr": torch.tensor(optimizer.param_groups[0]["lr"]),
+                }
+                log_str = ""
+                for k, v in train_logs.items():
+                    log_str += "| {}: {:.3e}".format(k, v.item())
+
+                if accelerator.is_local_main_process:
+                    progress_bar.write(log_str)
+                    if is_wandb_available() and args.wandb:
+                        wandb.log(train_logs)
+
+            # Save model every `args.saving_steps` steps
+            if (step + 1) % (args.gradient_accumulation_steps * args.saving_steps) == 0:
+                if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
+                    accelerator.wait_for_everyone()
+                    unwrapped_model = accelerator.unwrap_model(model)
+                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+
+                if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress step {completed_steps}",
+                        blocking=False,
+                        auto_lfs_prune=True,
+                    )
+
+        # model.eval()
+        # for step, batch in enumerate(eval_dataloader):
+        #     outputs = model(**batch)
+        #     predictions = outputs.logits.argmax(dim=-1)
+        #     # metric.add_batch(
+        #     #     predictions=accelerator.gather(predictions),
+        #     #     references=accelerator.gather(batch["labels"]),
+        #     # )
 
         # eval_metric = metric.compute()
         # logger.info(f"epoch {epoch}: {eval_metric}")
