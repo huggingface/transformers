@@ -18,6 +18,7 @@
 
 import argparse
 import json
+import os
 import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -36,7 +37,7 @@ from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClass
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from vissl.models.model_helpers import get_trunk_forward_outputs
-import os
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
@@ -112,7 +113,10 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
 
     # create our model (with small weights)
     our_config = RegNetConfig(depths=[2, 7, 17, 1], hidden_sizes=[8, 8, 8, 8], groups_width=8)
-    our_model = RegNetModel(our_config)
+    if "in1k" in model_name:
+        our_model = RegNetForImageClassification(our_config)
+    else:
+        our_model = RegNetModel(our_config)
     # create from model (with small weights)
     from_model = FakeRegNetVisslWrapper(
         RegNet(FakeRegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
@@ -147,7 +151,7 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     for (src_key, src_param), (dest_key, dest_param) in zip(src_state_dict.items(), dst_state_dict.items()):
         from_to_ours_keys[src_key] = dest_key
         logger.info(f"{src_key} -> {dest_key}")
-        logger.info(f"\t{src_param.shape} -> {dest_param.shape}")
+        # logger.info(f"\t{src_param.shape} -> {dest_param.shape}")
     # if "in1k" was in the model_name it means it must have a classification head (was finetuned)
     if "in1k" in model_name:
         from_to_ours_keys["0.clf.0.weight"] = "classifier.1.weight"
@@ -179,7 +183,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
         ),
     }
-    
+
     # add seer weights logic
     def load_using_classy_vision(checkpoint_url: str) -> Tuple[Dict, Dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
@@ -230,7 +234,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         # save our state dict to disk
         torch.save(converted_state_dict, save_directory / f"{model_name}.pth")
 
-        del converted_state_dict    
+        del converted_state_dict
     else:
         logger.info("The state_dict was already stored on disk.")
     if push_to_hub:
@@ -254,8 +258,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         logger.info("Finally, pushing!")
         # push it to hub
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name, commit_message="Add model", output_dir=save_directory / model_name,
-            use_auth_token=os.environ["HF_TOKEN"]
+            repo_path_or_name=save_directory / model_name,
+            commit_message="Add model",
+            output_dir=save_directory / model_name,
+            use_auth_token=os.environ["HF_TOKEN"],
         )
         size = 384
         # we can use the convnext one
@@ -264,7 +270,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             repo_path_or_name=save_directory / model_name,
             commit_message="Add feature extractor",
             output_dir=save_directory / model_name,
-            use_auth_token=os.environ["HF_TOKEN"]
+            use_auth_token=os.environ["HF_TOKEN"],
         )
 
     # torch.save(converted_state_dict, str(save_directory))
