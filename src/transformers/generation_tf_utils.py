@@ -2468,14 +2468,6 @@ class TFGenerationMixin:
         # 1. init beam_search values
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
 
-        # TODO (Joao): after the removal of the old beam_search, do not make an exception of the repetition penalty
-        repetition_processor = TFLogitsProcessorList(
-            [p for p in logits_processor if isinstance(p, TFRepetitionPenaltyLogitsProcessor)]
-        )
-        logits_processor = TFLogitsProcessorList(
-            [p for p in logits_processor if not isinstance(p, TFRepetitionPenaltyLogitsProcessor)]
-        )
-
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -2503,8 +2495,10 @@ class TFGenerationMixin:
         )
 
         use_xla = not tf.executing_eagerly()
+        # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
-        cache_batch_axis = 1 if any([model_name in str(self) for model_name in ("TFGPT2", "TFCTRL")]) else 0
+        model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
+        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
         scores = [] if (return_dict_in_generate and output_scores) else None
@@ -2515,7 +2509,7 @@ class TFGenerationMixin:
         # 3. init tensors to use for "xla-compileable" generate function
         batch_size, num_beams, cur_len = input_ids.shape
 
-        # per batch, beam-item holding current token in loop.
+        # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
         sequences = tf.TensorArray(
             element_shape=(batch_size, num_beams),
             dtype=tf.int32,
@@ -2537,6 +2531,12 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
+        for i in range(max_length):
+            sequences = sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+            running_sequences = running_sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+            intermediary_running_sequences = intermediary_running_sequences.write(
+                i, tf.broadcast_to(pad_token_id, (batch_size, num_beams * 2))
+            )
 
         # write prompt to running_sequences
         for i in range(cur_len):
@@ -2640,14 +2640,6 @@ class TFGenerationMixin:
             # 2. Compute log probs
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
-
-            # TODO (Joao): after the removal of the old beam_search, do not make an exception of the repetition penalty
-            # (all logits processors should be computed after the softmax)
-            logits = repetition_processor(
-                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(logits), cur_len=cur_len
-            )
-            logits = unflatten_beam_dim(logits, batch_size, num_beams)
-
             if self.config.is_encoder_decoder:
                 logits = self.adjust_logits_during_generation(
                     logits,
