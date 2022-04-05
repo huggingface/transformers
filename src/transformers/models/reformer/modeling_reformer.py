@@ -2232,7 +2232,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2406,12 +2405,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2430,6 +2424,71 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Example of single-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
+
+        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_1'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", num_labels=num_labels)
+
+        >>> labels = torch.tensor(1)
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        0.69
+        ```
+
+        Example of multi-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
+
+        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_1'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", num_labels=num_labels)
+
+        >>> num_labels = len(model.config.id2label)
+        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+        ...     torch.float
+        ... )
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        0.69
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
