@@ -23,6 +23,8 @@ import numpy as np
 import tensorflow as tf
 
 from .generation_tf_logits_process import (
+    TFForcedBOSTokenLogitsProcessor,
+    TFForcedEOSTokenLogitsProcessor,
     TFLogitsProcessorList,
     TFMinLengthLogitsProcessor,
     TFNoBadWordsLogitsProcessor,
@@ -1462,6 +1464,13 @@ class TFGenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1534,7 +1543,10 @@ class TFGenerationMixin:
             no_repeat_ngram_size=no_repeat_ngram_size,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
+            max_length=max_length,
             eos_token_id=eos_token_id,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
         )
 
         # 7. go into different generation modes
@@ -1610,8 +1622,6 @@ class TFGenerationMixin:
                 logits_processor=logits_processor,
                 return_dict_in_generate=return_dict_in_generate,
                 num_return_sequences=num_return_sequences,
-                forced_bos_token_id=forced_bos_token_id,
-                forced_eos_token_id=forced_eos_token_id,
                 **model_kwargs,
             )
 
@@ -1809,7 +1819,10 @@ class TFGenerationMixin:
         no_repeat_ngram_size: int,
         bad_words_ids: List[List[int]],
         min_length: int,
+        max_length: int,
         eos_token_id: int,
+        forced_bos_token_id: int,
+        forced_eos_token_id: int,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -1833,6 +1846,10 @@ class TFGenerationMixin:
             processors.append(TFNoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
         if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(TFMinLengthLogitsProcessor(min_length, eos_token_id))
+        if forced_bos_token_id is not None:
+            processors.append(TFForcedBOSTokenLogitsProcessor(forced_bos_token_id))
+        if forced_eos_token_id is not None:
+            processors.append(TFForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
 
         return processors
 
@@ -2325,8 +2342,6 @@ class TFGenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        forced_bos_token_id: Optional[int] = None,
-        forced_eos_token_id: Optional[int] = None,
         **model_kwargs,
     ) -> Union[TFBeamSearchOutput, tf.Tensor]:
         r"""
@@ -2359,12 +2374,6 @@ class TFGenerationMixin:
                 for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-            forced_bos_token_id (`int`, *optional*):
-                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
-                for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
-                the target language token.
-            forced_eos_token_id (`int`, *optional*):
-                The id of the token to force as the last generated token when `max_length` is reached.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model. If model is an
                 encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2486,13 +2495,6 @@ class TFGenerationMixin:
 
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
-
-        forced_bos_token_id = (
-            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
-        )
-        forced_eos_token_id = (
-            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
-        )
 
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
@@ -2640,15 +2642,6 @@ class TFGenerationMixin:
             # 2. Compute log probs
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
-            if self.config.is_encoder_decoder:
-                logits = self.adjust_logits_during_generation(
-                    logits,
-                    cur_len=cur_len,
-                    max_length=max_length,
-                    forced_bos_token_id=forced_bos_token_id,
-                    forced_eos_token_id=forced_eos_token_id,
-                )
-
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(
                 flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len=cur_len

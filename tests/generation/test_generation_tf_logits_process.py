@@ -26,6 +26,8 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.generation_tf_logits_process import (
+        TFForcedBOSTokenLogitsProcessor,
+        TFForcedEOSTokenLogitsProcessor,
         TFLogitsProcessorList,
         TFMinLengthLogitsProcessor,
         TFNoBadWordsLogitsProcessor,
@@ -240,6 +242,51 @@ class TFLogitsProcessorTest(unittest.TestCase):
             tf.math.is_inf(filtered_scores).numpy().tolist(),
             [[True, True, False, True, True], [True, True, True, False, True]],
         )
+
+    def test_forced_bos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        bos_token_id = 0
+
+        logits_processor = TFForcedBOSTokenLogitsProcessor(bos_token_id=bos_token_id)
+
+        # check that all scores are -inf except the bos_token_id score
+        cur_len = 1
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(scores[:, bos_token_id + 1 :]) & (scores[:, bos_token_id + 1 :] < 0)))
+        self.assertListEqual(scores[:, bos_token_id].numpy().tolist(), 4 * [0])  # score for bos_token_id shold be zero
+
+        # check that bos_token_id is not forced if current length is greater than 1
+        cur_len = 4
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
+
+    def test_forced_eos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        eos_token_id = 0
+        max_length = 5
+
+        logits_processor = TFForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
+
+        # check that all scores are -inf except the eos_token_id when max_length-1 is reached
+        cur_len = 4
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(scores[:, eos_token_id + 1 :]) & (scores[:, eos_token_id + 1 :] < 0)))
+        self.assertListEqual(scores[:, eos_token_id].numpy().tolist(), 4 * [0])  # score for eos_token_id should be zero
+
+        # check that eos_token_id is not forced if max_length-1 is not reached
+        cur_len = 3
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
 
     def test_processor_list(self):
         batch_size = 4

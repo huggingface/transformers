@@ -402,3 +402,56 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         )
 
         return scores
+
+
+class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the bos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.bos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.bos_token_id)), scores), axis=-1)
+            if self.bos_token_id < (num_tokens - 1):
+                scores = tf.concat((scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.bos_token_id))), axis=-1)
+        return scores
+
+
+class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
+
+    Args:
+        max_length (`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == self.max_length - 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the eos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.eos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.eos_token_id)), scores), axis=-1)
+            if self.eos_token_id < (num_tokens - 1):
+                scores = tf.concat((scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))), axis=-1)
+        return scores
