@@ -287,6 +287,12 @@ class CLIPConfig(PretrainedConfig):
         self.text_config = CLIPTextConfig(**text_config_dict)
         self.vision_config = CLIPVisionConfig(**vision_config_dict)
 
+        # Update components' (vision & text) configurations for some configs specified in CLIP model.
+        for k in ["output_hidden_states", "output_attentions", "return_dict"]:
+            if self[k] is not None:
+                self.text_config[k] = self[k]
+                self.vision_config[k] = self[k]
+
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
