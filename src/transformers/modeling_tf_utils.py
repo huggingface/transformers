@@ -57,6 +57,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     logging,
+    find_labels,
 )
 
 
@@ -963,14 +964,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
         as keys in the input dictionary, or as normal Keras labels.
         """
-        possible_label_cols = {
-            "labels",
-            "label",
-            "label_ids",
-            "start_positions",
-            "end_positions",
-            "next_sentence_label",
-        }
+
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         if not self._using_dummy_loss:
@@ -981,7 +975,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
             arg_names = list(dict(inspect.signature(self.call).parameters).keys())
-            label_kwargs = possible_label_cols.intersection(arg_names)
+            label_kwargs = find_labels(self.__class__)
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
@@ -1035,14 +1029,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         loss that just reads the loss output head of the model. When using this dummy loss, inputs can be passed either
         as keys in the input dictionary, or as normal Keras labels.
         """
-        possible_label_cols = {
-            "labels",
-            "label",
-            "label_ids",
-            "start_positions",
-            "end_positions",
-            "next_sentence_label",
-        }
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         if not self._using_dummy_loss:
@@ -1053,7 +1039,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
             arg_names = list(dict(inspect.signature(self.call).parameters).keys())
-            label_kwargs = possible_label_cols.intersection(arg_names)
+            label_kwargs = find_labels(self.__class__)
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
