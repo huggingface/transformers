@@ -2226,7 +2226,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         >>> from transformers import ReformerTokenizer, ReformerModelWithLMHead
 
         >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerModelWithLMHead.from_pretrained("hf-internal-testing/tiny-random-reformer", is_decoder=True)
+        >>> model = ReformerModelWithLMHead.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-reformer", is_decoder=True
+        ... )
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
@@ -2372,7 +2374,9 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         ```python
         >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
         >>> # mask labels of non-[MASK] tokens
-        >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels[:, :inputs['input_ids'].shape[-1]], -100)
+        >>> labels = torch.where(
+        ...     inputs.input_ids == tokenizer.mask_token_id, labels[:, : inputs["input_ids"].shape[-1]], -100
+        ... )
 
         >>> outputs = model(**inputs, labels=labels)
         >>> round(outputs.loss.item(), 2)
@@ -2480,7 +2484,9 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", num_labels=num_labels)
+        >>> model = ReformerForSequenceClassification.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
+        ... )
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
@@ -2495,7 +2501,9 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
 
         >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification")
+        >>> model = ReformerForSequenceClassification.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification"
+        ... )
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
 
@@ -2510,7 +2518,9 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer", num_labels=num_labels)
+        >>> model = ReformerForSequenceClassification.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
+        ... )
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
