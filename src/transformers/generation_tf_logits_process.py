@@ -425,7 +425,10 @@ class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
             if self.bos_token_id > 0:
                 scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.bos_token_id)), scores), axis=-1)
             if self.bos_token_id < (num_tokens - 1):
-                scores = tf.concat((scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.bos_token_id))), axis=-1)
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.bos_token_id))),
+                    axis=-1,
+                )
         return scores
 
 
@@ -453,5 +456,8 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
             if self.eos_token_id > 0:
                 scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.eos_token_id)), scores), axis=-1)
             if self.eos_token_id < (num_tokens - 1):
-                scores = tf.concat((scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))), axis=-1)
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))),
+                    axis=-1,
+                )
         return scores

@@ -255,7 +255,9 @@ class TFLogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
-        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(scores[:, bos_token_id + 1 :]) & (scores[:, bos_token_id + 1 :] < 0)))
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(scores[:, bos_token_id + 1 :]) & (scores[:, bos_token_id + 1 :] < 0))
+        )
         self.assertListEqual(scores[:, bos_token_id].numpy().tolist(), 4 * [0])  # score for bos_token_id shold be zero
 
         # check that bos_token_id is not forced if current length is greater than 1
@@ -278,8 +280,12 @@ class TFLogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
-        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(scores[:, eos_token_id + 1 :]) & (scores[:, eos_token_id + 1 :] < 0)))
-        self.assertListEqual(scores[:, eos_token_id].numpy().tolist(), 4 * [0])  # score for eos_token_id should be zero
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(scores[:, eos_token_id + 1 :]) & (scores[:, eos_token_id + 1 :] < 0))
+        )
+        self.assertListEqual(
+            scores[:, eos_token_id].numpy().tolist(), 4 * [0]
+        )  # score for eos_token_id should be zero
 
         # check that eos_token_id is not forced if max_length-1 is not reached
         cur_len = 3
