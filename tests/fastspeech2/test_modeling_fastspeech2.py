@@ -14,17 +14,15 @@
 # limitations under the License.
 """ Testing suite for the PyTorch FastSpeech2 model. """
 
-import math
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers import FastSpeech2Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ..test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -40,9 +38,6 @@ class FastSpeech2ModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
-        # use_input_mask=True,
-        # use_token_type_ids=True,
-        # use_labels=True,
         n_frames_per_step=1,
         output_frame_dim=80,
         encoder_embed_dim=256,
@@ -118,12 +113,12 @@ class FastSpeech2ModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_values = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
 
-        return config, input_values, attention_mask
+        return config, input_ids
 
     def get_config(self):
         return FastSpeech2Config(
@@ -165,22 +160,22 @@ class FastSpeech2ModelTester:
         model = FastSpeech2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values)
+        result = model(input_values, return_dict=True)
 
         # total of 5 keys in result
-        self.assertEqual(len(result), 5)
+        self.parent.assertEqual(len(result), 5)
         # check batch sizes match
-        for value in result:
+        for value in result.values():
             self.parent.assertEqual(value.size(0), self.batch_size)
         # check log_duration, pitch, and energy have same shape
-        for i in range(2, 6):
+        for i in range(2, 4):
             self.parent.assertEqual(result[i].shape, result[i + 1].shape)
         # check predicted mel-spectrogram has correct dimension
         self.parent.assertEqual(result.mel_spectrogram.size(2), self.output_frame_dim)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values, "attention_mask": attention_mask}
+        config, input_ids = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
 
@@ -194,6 +189,8 @@ class FastSpeech2ModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FastSpeech2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FastSpeech2Config)
+        # FastSpeech2Config does not have `hidden_size``
+        self.config_tester.create_and_test_config_common_properties = lambda: None
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -202,115 +199,28 @@ class FastSpeech2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Wav2Vec2 has no inputs_embeds
+    @unittest.skip(reason="FastSpeech2 does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="FastSpeech2 does not output attentions")
+    def test_retain_grad_hidden_states_attentions(sef):
+        pass
+
+    @unittest.skip(reason="FastSpeech2 does not output hidden_states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="FastSpeech2 does not accept inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
-    def test_forward_signature(self):
-        pass
-
-    # Wav2Vec2 cannot resize token embeddings
-    # since it has no tokens embeddings
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    # Wav2Vec2 has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
-        pass
-
-    # def test_retain_grad_hidden_states_attentions(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.output_hidden_states = True
-    #     config.output_attentions = True
-
-    #     # no need to test all models as different heads yield the same functionality
-    #     model_class = self.all_model_classes[0]
-    #     model = model_class(config)
-    #     model.to(torch_device)
-
-    #     # set layer drop to 0
-    #     model.config.layerdrop = 0.0
-
-    #     input_values = inputs_dict["input_values"]
-
-    #     input_lengths = torch.tensor(
-    #         [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
-    #     )
-    #     output_lengths = model._get_feat_extract_output_lengths(input_lengths)
-
-    #     labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
-    #     inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
-    #     inputs_dict["labels"] = labels
-
-    #     outputs = model(**inputs_dict)
-
-    #     output = outputs[0]
-
-    #     # Encoder-/Decoder-only models
-    #     hidden_states = outputs.hidden_states[0]
-    #     attentions = outputs.attentions[0]
-
-    #     hidden_states.retain_grad()
-    #     attentions.retain_grad()
-
-    #     output.flatten()[0].backward(retain_graph=True)
-
-    #     self.assertIsNotNone(hidden_states.grad)
-    #     self.assertIsNotNone(attentions.grad)
-
-    # def test_initialization(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             uniform_init_parms = [
-    #                 "conv.weight",
-    #                 "masked_spec_embed",
-    #                 "codevectors",
-    #                 "quantizer.weight_proj.weight",
-    #                 "project_hid.weight",
-    #                 "project_hid.bias",
-    #                 "project_q.weight",
-    #                 "project_q.bias",
-    #                 "feature_projection.projection.weight",
-    #                 "feature_projection.projection.bias",
-    #                 "objective.weight",
-    #             ]
-    #             if param.requires_grad:
-    #                 if any([x in name for x in uniform_init_parms]):
-    #                     self.assertTrue(
-    #                         -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-
-    # # overwrite from test_modeling_common
-    # def _mock_init_weights(self, module):
-    #     if hasattr(module, "weight") and module.weight is not None:
-    #         module.weight.data.fill_(3)
-    #     if hasattr(module, "weight_g") and module.weight_g is not None:
-    #         module.weight_g.data.fill_(3)
-    #     if hasattr(module, "weight_v") and module.weight_v is not None:
-    #         module.weight_v.data.fill_(3)
-    #     if hasattr(module, "bias") and module.bias is not None:
-    #         module.bias.data.fill_(3)
-    #     if hasattr(module, "codevectors") and module.codevectors is not None:
-    #         module.codevectors.data.fill_(3)
-    #     if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
-    #         module.masked_spec_embed.data.fill_(3)
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
+        pass
+
+    def test_initialization(self):
+        # TODO
         pass
 
     @slow
@@ -319,131 +229,39 @@ class FastSpeech2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-# @require_torch
-# @slow
-# class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
-#     def _load_datasamples(self, num_samples):
-#         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         # automatic decoding with librispeech
-#         speech_samples = ds.sort("id").filter(
-#             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
-#         )[:num_samples]["audio"]
+@require_torch
+@slow
+class FastSpeech2ModelIntegrationTest(unittest.TestCase):
+    @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
+    def test_inference_integration(self):
+        model = FastSpeech2Model.from_pretrained("jaketae/fastspeech2-ljspeech")
+        model.to(torch_device)
+        tokenizer = FastSpeech2Tokenizer.from_pretrained("jaketae/fastspeech2-ljspeech")
+        text = ["This is a test sentence."]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
 
-#         return [x["array"] for x in speech_samples]
+        torch.manual_seed(0)
+        np.random.seed(0)
 
-#     def _load_superb(self, task, num_samples):
-#         ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        with torch.no_grad():
+            output = model(**inputs, return_dict=True)
 
-#         return ds[:num_samples]
+        # mel-spectrogram is too large (123, 80),
+        # so only check top-left 100 elements
+        expected_mel_spectrogram = torch.tensor(
+            [
+                [-7.4015, -7.0025, -6.5533, -6.4955, -6.4318, -5.9519, -5.6957, -5.7323, -5.8078, -5.7491],
+                [-6.8250, -6.3284, -5.7400, -5.3538, -4.1562, -2.9194, -2.1966, -2.1588, -2.4447, -2.5317],
+                [-6.2405, -5.6605, -4.9551, -4.7267, -3.7683, -2.1692, -1.1314, -1.4534, -1.9853, -1.8161],
+                [-6.2821, -5.5036, -4.6862, -4.6298, -4.2279, -2.4826, -0.7308, -1.0276, -2.2183, -2.4050],
+                [-6.2990, -5.5917, -4.8082, -4.9588, -4.6967, -2.7377, -0.3793, -0.4573, -2.6168, -3.7818],
+                [-6.1249, -5.5540, -4.8532, -4.9064, -4.3390, -2.4323, -0.0720, -0.0985, -2.3689, -3.8561],
+                [-5.9463, -5.5087, -4.8651, -4.7078, -3.5536, -1.7139, -0.0421, -0.4204, -2.4050, -3.7703],
+                [-5.7945, -5.4198, -4.8480, -4.6813, -3.1621, -1.3546, -0.5719, -1.4292, -2.9163, -3.7725],
+                [-5.7746, -5.4186, -4.8243, -4.6667, -3.5592, -2.2771, -1.8510, -2.6992, -3.8929, -4.3657],
+                [-5.9439, -5.5150, -4.9092, -4.8813, -4.5146, -3.5995, -2.8243, -3.0832, -4.2484, -4.7525],
+            ],
+            device=torch_device,
+        )
 
-#     # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
-#     def test_inference_integration(self):
-#         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
-#         model.to(torch_device)
-#         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base")
-#         input_speech = self._load_datasamples(2)
-
-#         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
-
-#         batch_size = inputs_dict["input_values"].shape[0]
-#         feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
-
-#         features_shape = (batch_size, feature_seq_length)
-
-#         np.random.seed(4)
-#         mask_time_indices = _compute_mask_indices(
-#             features_shape,
-#             model.config.mask_time_prob,
-#             model.config.mask_time_length,
-#             min_masks=2,
-#         )
-#         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
-#         with torch.no_grad():
-#             outputs = model(
-#                 inputs_dict.input_values.to(torch_device),
-#                 mask_time_indices=mask_time_indices,
-#             )
-
-#         # compute cosine similarity
-#         cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-#         # retrieve cosine sim of masked features
-#         cosine_sim_masked = cosine_sim[mask_time_indices]
-
-#         # cosine similarity of model is all > 0.5 as model is
-#         # pre-trained on contrastive loss
-#         # fmt: off
-#         expected_cosine_sim_masked = torch.tensor([
-#             0.8523, 0.5860, 0.6905, 0.5557, 0.7456, 0.5249, 0.6639, 0.7654, 0.7565,
-#             0.8167, 0.8222, 0.7960, 0.8034, 0.8166, 0.8310, 0.8263, 0.8274, 0.8258,
-#             0.8179, 0.8412, 0.8536, 0.5098, 0.4728, 0.6461, 0.4498, 0.6002, 0.5774,
-#             0.6457, 0.7123, 0.5668, 0.6866, 0.4960, 0.6293, 0.7423, 0.7419, 0.7526,
-#             0.7768, 0.4898, 0.5393, 0.8183
-#         ], device=torch_device)
-#         # fmt: on
-
-#         self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
-
-#     def test_inference_pretrained(self):
-#         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
-#         model.to(torch_device)
-#         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-#             "facebook/wav2vec2-base", return_attention_mask=True
-#         )
-#         input_speech = self._load_datasamples(2)
-
-#         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
-
-#         batch_size = inputs_dict["input_values"].shape[0]
-#         feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
-
-#         features_shape = (batch_size, feature_seq_length)
-
-#         torch.manual_seed(0)
-#         mask_time_indices = _compute_mask_indices(
-#             features_shape,
-#             model.config.mask_time_prob,
-#             model.config.mask_time_length,
-#             min_masks=2,
-#         )
-#         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
-#         with torch.no_grad():
-#             outputs = model(
-#                 inputs_dict.input_values.to(torch_device),
-#                 attention_mask=inputs_dict.attention_mask.to(torch_device),
-#                 mask_time_indices=mask_time_indices,
-#             )
-
-#         # compute cosine similarity
-#         cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-#         # retrieve cosine sim of masked features
-#         cosine_sim_masked = cosine_sim[mask_time_indices]
-
-#         # ... now compare to randomly initialized model
-
-#         config = Wav2Vec2Config.from_pretrained("facebook/wav2vec2-base")
-#         model_rand = Wav2Vec2ForPreTraining(config).to(torch_device).eval()
-
-#         with torch.no_grad():
-#             outputs_rand = model_rand(
-#                 inputs_dict.input_values.to(torch_device),
-#                 attention_mask=inputs_dict.attention_mask.to(torch_device),
-#                 mask_time_indices=mask_time_indices,
-#             )
-
-#         # compute cosine similarity
-#         cosine_sim_rand = torch.cosine_similarity(
-#             outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
-#         )
-
-#         # retrieve cosine sim of masked features
-#         cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
-
-#         # a pretrained wav2vec2 model has learned to predict the quantized latent states
-#         # => the cosine similarity between quantized states and predicted states > 0.5
-#         # a random wav2vec2 model has not learned to predict the quantized latent states
-#         # => the cosine similarity between quantized states and predicted states is very likely < 0.1
-#         self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+        self.assertTrue(torch.allclose(output.mel_spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))

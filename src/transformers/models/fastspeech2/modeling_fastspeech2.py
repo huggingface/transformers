@@ -473,7 +473,7 @@ class Postnet(nn.Module):
             )
             nn.init.xavier_uniform_(
                 cur_layers[0].weight,
-                torch.nn.init.calculate_gain("tanh" if i < n_layers - 1 else "linear"),
+                nn.init.calculate_gain("tanh" if i < n_layers - 1 else "linear"),
             )
             self.convolutions.append(nn.Sequential(*cur_layers))
 
@@ -558,15 +558,17 @@ class FastSpeech2Encoder(nn.Module):
 
     def forward(
         self,
-        src_tokens,
+        input_ids,
         speaker=None,
         durations=None,
         pitches=None,
         energies=None,
+        return_dict=False,
+        **kwargs,
     ):
-        x = self.embed_tokens(src_tokens)
+        x = self.embed_tokens(input_ids)
 
-        enc_padding_mask = src_tokens.eq(self.padding_idx)
+        enc_padding_mask = input_ids.eq(self.padding_idx)
         x += self.pos_emb_alpha * self.embed_positions(enc_padding_mask)
         x = self.dropout_module(x)
 
@@ -601,6 +603,9 @@ class FastSpeech2Encoder(nn.Module):
             x = x * self.std.view(1, 1, -1).expand_as(x)
         if self.mean is not None:
             x = x + self.mean.view(1, 1, -1).expand_as(x)
+
+        if not return_dict:
+            return tuple([x, out_lens, log_dur_out, pitch_out, energy_out])
         return FastSpeech2ModelOutput(x, out_lens, log_dur_out, pitch_out, energy_out)
 
 
@@ -631,6 +636,11 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
 
 
 class FastSpeech2Model(FastSpeech2PreTrainedModel):
+
+    config_class = FastSpeech2Config
+    base_model_prefix = "fastspeech2"
+    supports_gradient_checkpointing = False
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -668,18 +678,20 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
 
     def forward(
         self,
-        input_ids,
-        speaker=None,
-        durations=None,
-        pitches=None,
-        energies=None,
+        input_ids: torch.Tensor,
+        speaker: Optional[torch.Tensor] = None,
+        durations: Optional[torch.Tensor] = None,
+        pitches: Optional[torch.Tensor] = None,
+        energies: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = False,
         **kwargs,
     ):
         return self.encoder(
-            src_tokens=input_ids,
+            input_ids=input_ids,
             speaker=speaker,
             durations=durations,
             pitches=pitches,
             energies=energies,
+            return_dict=return_dict,
             **kwargs,
         )
