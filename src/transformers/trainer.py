@@ -67,7 +67,6 @@ from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enab
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
-from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -124,6 +123,7 @@ from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
+    find_labels,
     get_full_repo_name,
     is_apex_available,
     is_datasets_available,
@@ -488,18 +488,18 @@ class Trainer:
         else:
             self.label_smoother = None
 
-        self.state = TrainerState()
+        self.state = TrainerState(
+            is_local_process_zero=self.is_local_process_zero(),
+            is_world_process_zero=self.is_world_process_zero(),
+        )
+
         self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
-        default_label_names = (
-            ["start_positions", "end_positions"]
-            if type(self.model).__name__ in MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES.values()
-            else ["labels"]
-        )
+        default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -991,6 +991,7 @@ class Trainer:
 
             trial.report(self.objective, epoch)
             if trial.should_prune():
+                self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune

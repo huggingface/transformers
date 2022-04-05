@@ -581,7 +581,6 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -751,7 +750,6 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.convbert(
             input_ids=input_ids,
@@ -870,7 +868,6 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -979,7 +976,6 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1073,7 +1069,6 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1188,7 +1183,6 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1268,7 +1262,6 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         start_positions: Optional[tf.Tensor] = None,
         end_positions: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):

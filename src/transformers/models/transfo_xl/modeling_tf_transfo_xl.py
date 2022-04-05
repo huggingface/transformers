@@ -550,7 +550,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
@@ -898,7 +897,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.transformer(
             input_ids=input_ids,
@@ -979,7 +977,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None:
             bsz, tgt_len = shape_list(input_ids)[:2]
@@ -1088,7 +1085,6 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFTransfoXLSequenceClassifierOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
