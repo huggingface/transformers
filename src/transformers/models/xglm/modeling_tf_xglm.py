@@ -610,8 +610,6 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
     config_class = XGLMConfig
     base_model_prefix = "model"
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights", r"lm_head.weight"]
-    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
 
     @property
     def dummy_inputs(self):
@@ -754,9 +752,6 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
         embed_tokens: [TFSharedEmbeddings]: output embedding
     """
 
-    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights"]
-    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
-
     def __init__(
         self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
     ) -> None:
@@ -832,8 +827,13 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
 )
 class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [r"model.embed_positions.weights", r"lm_head.weight"]
-    _keys_to_ignore_on_save = [r"model.embed_positions.weights"]
+    _keys_to_ignore_on_load_missing = [
+        r"model.embed_positions.weights",
+        r"lm_head.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        r"model.embed_positions.weights",
+    ]
 
     def __init__(
         self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
