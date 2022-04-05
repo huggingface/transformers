@@ -25,7 +25,7 @@ from pathlib import Path
 import datasets
 import numpy as np
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, load_metric
 from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -274,8 +274,10 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+    if args.push_to_hub or args.wandb:
+        assert (
+            args.output_dir is not None
+        ), "Need an `output_dir` to create a repo when `--push_to_hub` or `--wandb` is passed."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -395,7 +397,7 @@ def main():
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = _train_transforms(image, target)
+            image, target = _train_transforms(image.convert("RGB"), target)
             pixel_values.append(image)
             labels.append(target)
 
@@ -409,7 +411,7 @@ def main():
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = _val_transforms(image, target)
+            image, target = _val_transforms(image.convert("RGB"), target)
             pixel_values.append(image)
             labels.append(target)
 
@@ -460,12 +462,14 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-    # TODO add metric
-    # metric = load_metric("mean_iou")
+    # Instantiate metric
+    metric = load_metric("mean_iou")
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
+    print("Running training:")
+    print("Number of training epochs:", args.num_train_epochs)
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -478,10 +482,11 @@ def main():
     completed_steps = 0
 
     for epoch in range(args.num_train_epochs):
+        print("Epoch:", epoch)
         model.train()
         for step, batch in enumerate(train_dataloader):
             outputs = model(**batch)
-            loss = outputs.loss
+            loss, logits = outputs.loss, outputs.logits
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
@@ -499,15 +504,42 @@ def main():
                 loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum()
+                    loss = accelerator.gather(loss).sum() / accelerator.num_processes
 
                 train_logs = {
                     "loss": loss,
                     "lr": torch.tensor(optimizer.param_groups[0]["lr"]),
                 }
+
+                if accelerator.is_main_process:
+                    # evaluate (only on main process for now, ideally we'd like to have this computed
+                    # on all devices and synchronized properly)
+                    with torch.no_grad():
+                        upsampled_logits = torch.nn.functional.interpolate(
+                            logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
+                        )
+                        predicted = upsampled_logits.argmax(dim=1)
+
+                        # note that the metric expects predictions + labels as numpy arrays
+                        metric.add_batch(
+                            predictions=predicted.detach().cpu().numpy(),
+                            references=batch["labels"].detach().cpu().numpy(),
+                        )
+                    metrics = metric.compute(
+                        num_labels=len(id2label),
+                        ignore_index=255,
+                        reduce_labels=False,  # we've already reduced the labels before
+                    )
+                    train_logs["mean_iou"] = metrics["mean_iou"]
+                    train_logs["mean_accuracy"] = metrics["mean_accuracy"]
+                    train_logs["overall_accuracy"] = metrics["overall_accuracy"]
+
                 log_str = ""
                 for k, v in train_logs.items():
-                    log_str += "| {}: {:.3e}".format(k, v.item())
+                    if isinstance(v, torch.Tensor):
+                        log_str += "| {}: {:.3e}".format(k, v.item())
+                    else:
+                        log_str += "| {}: {:.3e}".format(k, v)
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
@@ -541,6 +573,7 @@ def main():
         # logger.info(f"epoch {epoch}: {eval_metric}")
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
+            print("Pushing after epoch:", epoch)
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
