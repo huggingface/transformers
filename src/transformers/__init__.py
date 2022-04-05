@@ -197,6 +197,7 @@ _import_structure = {
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig", "GPTNeoXTokenizer"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
@@ -438,6 +439,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -639,6 +641,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.gpt_neox"].extend(
+        [
+            "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoXForMaskedLM",
+            "GPTNeoXForCausalLM",
+            "GPTNeoXForMultipleChoice",
+            "GPTNeoXForQuestionAnswering",
+            "GPTNeoXForSequenceClassification",
+            "GPTNeoXForTokenClassification",
+            "GPTNeoXLayer",
+            "GPTNeoXModel",
+            "GPTNeoXPreTrainedModel",
+            "load_tf_weights_in_gpt_neox",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2499,6 +2517,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig, GPTNeoXTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2789,6 +2808,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2899,6 +2919,20 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.gpt_neox import (
+            GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoXForMaskedLM,
+            GPTNeoXForCausalLM,
+            GPTNeoXForMultipleChoice,
+            GPTNeoXForQuestionAnswering,
+            GPTNeoXForSequenceClassification,
+            GPTNeoXForTokenClassification,
+            GPTNeoXLayer,
+            GPTNeoXModel,
+            GPTNeoXPreTrainedModel,
+            load_tf_weights_in_gpt_neox,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments

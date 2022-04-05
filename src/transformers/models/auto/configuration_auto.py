@@ -32,6 +32,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
         ("glpn", "GLPNConfig"),
+        ("gpt_neox", "GPTNeoXConfig"),
         ("maskformer", "MaskFormerConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
         ("poolformer", "PoolFormerConfig"),
@@ -135,8 +136,12 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+<<<<<<< HEAD
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+=======
+        ("gpt_neox", "GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+>>>>>>> 5f1592719 (initial)
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -226,9 +231,13 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+<<<<<<< HEAD
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),
         ("glpn", "GLPN"),
+=======
+        ("gpt_neox", "GPTNeoX"),
+>>>>>>> 5f1592719 (initial)
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),

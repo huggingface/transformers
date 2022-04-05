@@ -31,6 +31,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("glpn", "GLPNModel"),
+        ("gpt_neox", "GPTNeoXModel"),
         ("maskformer", "MaskFormerModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
@@ -173,6 +174,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+("gpt_neox", "GPTNeoXForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("plbart", "PLBartForConditionalGeneration"),
@@ -229,6 +231,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("gpt_neox", "GPTNeoXForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
@@ -340,6 +343,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+("gpt_neox", "GPTNeoXForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("perceiver", "PerceiverForMaskedLM"),
@@ -417,6 +421,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("gpt_neox", "GPTNeoXForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
         ("plbart", "PLBartForSequenceClassification"),
@@ -469,6 +474,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("gpt_neox", "GPTNeoXForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
@@ -521,6 +527,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+("gpt_neox", "GPTNeoXForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
         ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
@@ -560,6 +567,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+("gpt_neox", "GPTNeoXForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
         ("nystromformer", "NystromformerForMultipleChoice"),
         ("qdqbert", "QDQBertForMultipleChoice"),
