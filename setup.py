@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
+Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
 To create the package for pypi.
 
@@ -26,10 +26,10 @@ To create the package for pypi.
 
 4. Commit these changes with the message: "Release: <VERSION>" and push.
 
-5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
+5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin master
+   Push the tag to git: git push --tags origin main
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -60,7 +60,7 @@ To create the package for pypi.
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
-    you need to go back to master before executing this.
+    you need to go back to main before executing this.
 """
 
 import os
@@ -95,23 +95,25 @@ _deps = [
     "Pillow",
     "black~=22.0",
     "codecarbon==1.2.0",
-    "cookiecutter==1.7.2",
+    "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.9",
+    "deepspeed>=0.6.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
     "flax>=0.3.5",
+    "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
+    "hf-doc-builder>=0.2.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8",
+    "jax>=0.2.8,!=0.3.2",
     "jaxlib>=0.1.65",
     "jieba",
     "nltk",
@@ -149,7 +151,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.10.1,!=0.11.3",
+    "tokenizers>=0.11.1,!=0.11.3,<0.13",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -242,6 +244,7 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
+extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
@@ -281,12 +284,13 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -302,11 +306,41 @@ extras["all"] = (
 )
 
 # Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = []
+extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
+extras["dev-torch"] = (
+    extras['testing']
+    + extras['torch']
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["torch-speech"]
+    + extras["vision"]
+    + extras["integrations"]
+    + extras["timm"]
+    + extras["codecarbon"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
+    + extras["onnxruntime"]
+)
+extras["dev-tensorflow"] = (
+        extras['testing']
+        + extras['tf']
+        + extras["sentencepiece"]
+        + extras["tokenizers"]
+        + extras["vision"]
+        + extras["quality"]
+        + extras["docs_specific"]
+        + extras["sklearn"]
+        + extras["modelcreation"]
+        + extras["onnx"]
+        + extras["tf-speech"]
+)
 extras["dev"] = (
     extras["all"]
     + extras["testing"]
@@ -351,7 +385,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.17.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

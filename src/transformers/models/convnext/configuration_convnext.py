@@ -85,6 +85,7 @@ class ConvNextConfig(PretrainedConfig):
         is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
+        image_size=224,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -99,3 +100,4 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
+        self.image_size = image_size

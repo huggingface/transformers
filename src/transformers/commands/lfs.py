@@ -9,8 +9,8 @@ Spec is: github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md
 To launch debugger while developing:
 
 ``` [lfs "customtransfer.multipart"]
- path = /path/to/transformers/.env/bin/python args = -m debugpy --listen 5678 --wait-for-client
-/path/to/transformers/src/transformers/commands/transformers_cli.py lfs-multipart-upload ``` """
+path = /path/to/transformers/.env/bin/python args = -m debugpy --listen 5678 --wait-for-client
+/path/to/transformers/src/transformers/commands/transformers_cli.py lfs-multipart-upload ```"""
 
 import json
 import os

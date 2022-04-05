@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -32,11 +32,14 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_auto"] = [
         "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
         "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_CAUSAL_LM_MAPPING",
         "MODEL_FOR_CTC_MAPPING",
         "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+        "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+        "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_MASKED_LM_MAPPING",
         "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -60,6 +63,8 @@ if is_torch_available():
         "AutoModelForCTC",
         "AutoModelForImageClassification",
         "AutoModelForImageSegmentation",
+        "AutoModelForInstanceSegmentation",
+        "AutoModelForMaskedImageModeling",
         "AutoModelForMaskedLM",
         "AutoModelForMultipleChoice",
         "AutoModelForNextSentencePrediction",
@@ -148,11 +153,14 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_AUDIO_XVECTOR_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -176,6 +184,8 @@ if TYPE_CHECKING:
             AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForInstanceSegmentation,
+            AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,

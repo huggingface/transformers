@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -30,6 +30,7 @@ if is_torch_available():
     _import_structure["modeling_swin"] = [
         "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwinForImageClassification",
+        "SwinForMaskedImageModeling",
         "SwinModel",
         "SwinPreTrainedModel",
     ]
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
         from .modeling_swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwinForImageClassification,
+            SwinForMaskedImageModeling,
             SwinModel,
             SwinPreTrainedModel,
         )

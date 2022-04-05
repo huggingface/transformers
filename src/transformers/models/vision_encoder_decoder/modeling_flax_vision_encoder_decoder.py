@@ -25,10 +25,9 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
 from ...modeling_flax_utils import FlaxPreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FlaxAutoModel, FlaxAutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
@@ -108,7 +107,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
 """
 
 VISION_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
@@ -123,7 +122,7 @@ VISION_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxBaseModelOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxBaseModelOutput`] instead of a plain tuple.
 """
 
 VISION_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
@@ -162,8 +161,8 @@ VISION_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxCausalLMOutputWithCrossAttentions`] instead of
-            a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxCausalLMOutputWithCrossAttentions`] instead of a
+            plain tuple.
 """
 
 
@@ -393,7 +392,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from transformers import ViTFeatureExtractor, FlaxVisionEncoderDecoderModel
         >>> from PIL import Image
         >>> import requests
 
@@ -403,7 +402,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -469,7 +470,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from transformers import ViTFeatureExtractor, FlaxVisionEncoderDecoderModel
         >>> import jax.numpy as jnp
         >>> from PIL import Image
         >>> import requests
@@ -480,7 +481,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -610,7 +613,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> tokenizer_output = GPT2Tokenizer.from_pretrained("gpt2")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
