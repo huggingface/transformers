@@ -1,0 +1,42 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# FastSpeech2
+
+## Overview
+
+The FastSpeech2 model was proposed in [FastSpeech 2: Fast and High-Quality End-to-End Text to Speech](https://arxiv.org/abs/2006.04558)  by Ren et. al. FastSpeech2 is an all-encoder transformer text-to-speech (TTS) model that outputs mel-spectrograms given user input text.
+
+The abstract from the paper is the following:
+
+Non-autoregressive text to speech (TTS) models such as FastSpeech (Ren et al., 2019) can synthesize speech significantly faster than previous autoregressive mod- els with comparable quality. The training of FastSpeech model relies on an au- toregressive teacher model for duration prediction (to provide more information as input) and knowledge distillation (to simplify the data distribution in out- put), which can ease the one-to-many mapping problem (i.e., multiple speech variations correspond to the same text) in TTS. However, FastSpeech has sev- eral disadvantages: 1) the teacher-student distillation pipeline is complicated and time-consuming, 2) the duration extracted from the teacher model is not accu- rate enough, and the target mel-spectrograms distilled from teacher model suf- fer from information loss due to data simplification, both of which limit the voice quality. In this paper, we propose FastSpeech 2, which addresses the is- sues in FastSpeech and better solves the one-to-many mapping problem in TTS by 1) directly training the model with ground-truth target instead of the simpli- fied output from teacher, and 2) introducing more variation information of speech (e.g., pitch, energy and more accurate duration) as conditional inputs. Specifi- cally, we extract duration, pitch and energy from speech waveform and directly take them as conditional inputs in training and use predicted values in inference. We further design FastSpeech 2s, which is the first attempt to directly generate speech waveform from text in parallel, enjoying the benefit of fully end-to-end inference. Experimental results show that 1) FastSpeech 2 achieves a 3x train- ing speed-up over FastSpeech, and FastSpeech 2s enjoys even faster inference speed; 2) FastSpeech 2 and 2s outperform FastSpeech in voice quality, and Fast- Speech 2 can even surpass autoregressive models. Audio samples are available at https://speechresearch.github.io/fastspeech2/.
+
+This model was contributed by [jaketae](https://huggingface.co/jaketae). The original code can be found [here](https://github.com/pytorch/fairseq).
+
+## FastSpeech2Config
+
+[[autodoc]] FastSpeech2Config
+
+
+## FastSpeech2Tokenizer
+
+[[autodoc]] FastSpeech2Tokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+
+## FastSpeech2Model
+
+[[autodoc]] FastSpeech2Model
+    - forward
