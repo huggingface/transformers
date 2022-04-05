@@ -354,16 +354,78 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
+    # Don't copy this method to model specific test file!
+    # TODO: remove this method once the issues are all fixed!
+    def _make_attention_mask_non_null(self, inputs_dict):
+        """Make sure no sequence has all zeros as attention mask"""
+
+        for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
+            if k in inputs_dict:
+                attention_mask = inputs_dict[k]
+
+                # # make sure no all 0s attention masks - to avoid failure at this moment.
+                # # TODO: remove this line once the TODO below is implemented.
+                # attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
+                attention_mask = tf.concat(
+                    [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
+                )
+
+                # Here we make the first sequence with all 0s as attention mask.
+                # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
+                # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
+                # TODO: enable this block once the large negative values thing is cleaned up.
+                # (see https://github.com/huggingface/transformers/issues/14859)
+                # attention_mask = tf.concat(
+                #     [
+                #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
+                #         tf.cast(attention_mask[1:], dtype=tf.int32)
+                #     ],
+                #     axis=0
+                # )
+
+                inputs_dict[k] = attention_mask
+
+    # Don't copy this method to model specific test file!
+    # TODO: remove this method once the issues are all fixed!
+    def _postprocessing_to_ignore_test_cases(self, tf_outputs, pt_outputs, model_class):
+        """For temporarily ignoring some failed test cases (issues to be fixed)"""
+
+        tf_keys = set([k for k, v in tf_outputs.items() if v is not None])
+        pt_keys = set([k for k, v in pt_outputs.items() if v is not None])
+
+        key_differences = tf_keys.symmetric_difference(pt_keys)
+
+        if model_class.__name__ in [
+            "TFFlaubertWithLMHeadModel",
+            "TFFunnelForPreTraining",
+            "TFElectraForPreTraining",
+            "TFXLMWithLMHeadModel",
+            "TFTransfoXLLMHeadModel",
+        ]:
+            for k in key_differences:
+                if k in ["loss", "losses"]:
+                    tf_keys.discard(k)
+                    pt_keys.discard(k)
+        elif model_class.__name__.startswith("TFGPT2"):
+            # `TFGPT2` has `past_key_values` as a tensor while `GPT2` has it as a tuple.
+            tf_keys.discard("past_key_values")
+            pt_keys.discard("past_key_values")
+
+        # create new outputs from the remaining fields
+        new_tf_outputs = type(tf_outputs)(**{k: tf_outputs[k] for k in tf_keys})
+        new_pt_outputs = type(pt_outputs)(**{k: pt_outputs[k] for k in pt_keys})
+
+        return new_tf_outputs, new_pt_outputs
+
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, name="outputs", attributes=None):
         """
         Args:
             model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
-                debugging easier and faster.
-
-            names: A string, or a tuple of strings. These specify what tf_outputs/pt_outputs represent in the model outputs.
-                Currently unused, but in the future, we could use this information to make the error message clearer
-                by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
+                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
+                error messages.
+            name (`str`): The name of the output. For example, `output.hidden_states`, `output.attentions`, etc.
+            attributes (`Tuple[str]`): The names of the output's element if the output is a tuple/list with each element
+                being a named field in the output.
         """
 
         self.assertEqual(type(name), str)
@@ -379,7 +441,7 @@ class TFModelTesterMixin:
 
             # Don't copy this block to model specific test file!
             # TODO: remove this method and this line after issues are fixed
-            tf_outputs, pt_outputs = self._postprocessing_to_ignore(tf_outputs, pt_outputs, model_class)
+            tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
 
             tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
             pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
@@ -444,37 +506,6 @@ class TFModelTesterMixin:
                 f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
             )
 
-    # Don't copy this method to model specific test file!
-    # TODO: remove this method once the issues are all fixed!
-    def _postprocessing_to_ignore(self, tf_outputs, pt_outputs, model_class):
-
-        tf_keys = set([k for k, v in tf_outputs.items() if v is not None])
-        pt_keys = set([k for k, v in pt_outputs.items() if v is not None])
-
-        key_differences = tf_keys.symmetric_difference(pt_keys)
-
-        if model_class.__name__ in [
-            "TFFlaubertWithLMHeadModel",
-            "TFFunnelForPreTraining",
-            "TFElectraForPreTraining",
-            "TFXLMWithLMHeadModel",
-            "TFTransfoXLLMHeadModel",
-        ]:
-            for k in key_differences:
-                if k in ["loss", "losses"]:
-                    tf_keys.discard(k)
-                    pt_keys.discard(k)
-        elif model_class.__name__.startswith("TFGPT2"):
-            # `TFGPT2` has `past_key_values` as a tensor while `GPT2` has it as a tuple.
-            tf_keys.discard("past_key_values")
-            pt_keys.discard("past_key_values")
-
-        # create new outputs from the remaining fields
-        new_tf_outputs = type(tf_outputs)(**{k: tf_outputs[k] for k in tf_keys})
-        new_pt_outputs = type(pt_outputs)(**{k: pt_outputs[k] for k in pt_keys})
-
-        return new_tf_outputs, new_pt_outputs
-
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
         def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
 
@@ -533,25 +564,10 @@ class TFModelTesterMixin:
             if self.has_attentions:
                 config.output_attentions = True
 
-            for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
-                if k in inputs_dict:
-                    attention_mask = inputs_dict[k]
-                    # make sure no all 0s attention masks - to avoid failure at this moment.
-                    # TODO: remove this line once the TODO below is implemented.
-                    attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
-                    # Here we make the first sequence with all 0s as attention mask.
-                    # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
-                    # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
-                    # TODO: enable this block once the large negative values thing is cleaned up.
-                    # (see https://github.com/huggingface/transformers/issues/14859)
-                    # attention_mask = tf.concat(
-                    #     [
-                    #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
-                    #         tf.cast(attention_mask[1:], dtype=tf.int32)
-                    #     ],
-                    #     axis=0
-                    # )
-                    inputs_dict[k] = attention_mask
+            # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
+            # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
+            # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
+            self._make_attention_mask_non_null(inputs_dict)
 
             pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
