@@ -52,12 +52,12 @@ from .utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
+    find_labels,
     has_file,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
     logging,
-    find_labels,
 )
 
 
