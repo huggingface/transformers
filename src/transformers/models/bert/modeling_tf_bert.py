@@ -69,6 +69,20 @@ _CHECKPOINT_FOR_DOC = "bert-base-cased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
+# TokenClassification docstring
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', " "'I-LOC'] "
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.01
+
+# QuestionAnswering docstring
+_QA_EXPECTED_OUTPUT = "'a nice puppet'"
+_QA_EXPECTED_LOSS = 7.41
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.01
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
@@ -1938,11 +1952,11 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="huggingface-course/bert-finetuned-squad",
+        checkpoint="ydshieh/bert-base-cased-squad2",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'nice puppet'",
-        expected_loss=8.03,
+        expected_output="'a nice puppet'",
+        expected_loss=7.41,
     )
     def call(
         self,

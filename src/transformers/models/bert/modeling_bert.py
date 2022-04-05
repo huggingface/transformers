@@ -63,6 +63,21 @@ _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
+# TokenClassification docstring
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', " "'I-LOC'] "
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.01
+
+# QuestionAnswering docstring
+_QA_EXPECTED_OUTPUT = "'a nice puppet'"
+_QA_EXPECTED_LOSS = 7.41
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.01
+
+
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
@@ -1506,8 +1521,8 @@ class BertForSequenceClassification(BertPreTrainedModel):
         checkpoint="textattack/bert-base-uncased-yelp-polarity",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_1'",
-        expected_loss=0.01,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1707,8 +1722,8 @@ class BertForTokenClassification(BertPreTrainedModel):
         checkpoint="dbmdz/bert-large-cased-finetuned-conll03-english",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']",
-        expected_loss=0.01,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1790,8 +1805,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         checkpoint="deepset/bert-base-cased-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'a nice puppet'",
-        expected_loss=7.41,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
