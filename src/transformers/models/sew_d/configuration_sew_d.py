@@ -14,6 +14,9 @@
 # limitations under the License.
 """ SEW-D model configuration"""
 
+import functools
+import operator
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -63,8 +66,8 @@ class SEWDConfig(PretrainedConfig):
         position_biased_input (`bool`, *optional*, defaults to `False`):
             Whether to add absolute position embedding to content embedding.
         pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
-            The type of relative position attention, it can be a combination of `("p2c", "c2p", "p2p")`, e.g.
-            `("p2c")`, `("p2c", "c2p")`, `("p2c", "c2p", 'p2p")`.
+            The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
+            `("p2c", "c2p")`, `("p2c", "c2p")`.
         norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
             Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
@@ -279,3 +282,7 @@ class SEWDConfig(PretrainedConfig):
         # sequence classification
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return functools.reduce(operator.mul, self.conv_stride, 1)

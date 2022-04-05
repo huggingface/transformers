@@ -157,12 +157,20 @@ class BartphoTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(str(vocab_file))
 
         # Load the reduced vocab
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+
+        # Keep order of special tokens for backward compatibility
+        self.fairseq_tokens_to_ids = {}
+        cnt = 0
+        for token in [bos_token, pad_token, eos_token, unk_token, sep_token, cls_token]:
+            if str(token) not in self.fairseq_tokens_to_ids:
+                self.fairseq_tokens_to_ids[str(token)] = cnt
+                cnt += 1
         with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
             for line in f.readlines():
                 token = line.strip().split()[0]
                 self.fairseq_tokens_to_ids[token] = len(self.fairseq_tokens_to_ids)
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.fairseq_tokens_to_ids)
+        if str(mask_token) not in self.fairseq_tokens_to_ids:
+            self.fairseq_tokens_to_ids[str(mask_token)] = len(self.fairseq_tokens_to_ids)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
@@ -278,7 +286,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         else:
-            return self.fairseq_tokens_to_ids["<unk>"]
+            return self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -301,10 +309,21 @@ class BartphoTokenizer(PreTrainedTokenizer):
             (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["monolingual_vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
-        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(out_monolingual_vocab_file):
+        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(
+            out_monolingual_vocab_file
+        ) and os.path.isfile(self.monolingual_vocab_file):
             copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
+        elif not os.path.isfile(self.monolingual_vocab_file):
+            with open(out_monolingual_vocab_file, "w", encoding="utf-8") as fp:
+                for token in self.fairseq_tokens_to_ids:
+                    if token not in self.all_special_tokens:
+                        fp.write(f"{str(token)} \n")
 
         return out_vocab_file, out_monolingual_vocab_file

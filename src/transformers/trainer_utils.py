@@ -29,10 +29,9 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import (
+from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_sagemaker_dp_enabled,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -210,16 +209,36 @@ def default_hp_space_sigopt(trial):
     ]
 
 
+def default_hp_space_wandb(trial) -> Dict[str, float]:
+    from .integrations import is_wandb_available
+
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
+
+    return {
+        "method": "random",
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "num_train_epochs": {"distribution": "int_uniform", "min": 1, "max": 6},
+            "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+            "per_device_train_batch_size": {"values": [4, 8, 16, 32, 64]},
+        },
+    }
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
     SIGOPT = "sigopt"
+    WANDB = "wandb"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
     HPSearchBackend.SIGOPT: default_hp_space_sigopt,
+    HPSearchBackend.WANDB: default_hp_space_wandb,
 }
 
 
@@ -243,10 +262,6 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_dp_enabled():
-        import smdistributed.dataparallel.torch.distributed as dist
-
-        return dist.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -497,6 +512,17 @@ class TrainerMemoryTracker:
         # init doesn't have metrics to update so we just save that data for later stages to retrieve
         if metrics is not None:
             self.update_metrics(stage, metrics)
+
+
+def has_length(dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        return len(dataset) is not None
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
 
 
 def denumpify_detensorize(metrics):

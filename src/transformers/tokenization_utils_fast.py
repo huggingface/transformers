@@ -27,7 +27,6 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
-from .file_utils import PaddingStrategy, add_end_docstrings
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -41,11 +40,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .utils import logging
+from .utils import PaddingStrategy, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
-
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
@@ -71,6 +69,8 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
+
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
@@ -86,6 +86,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
     can_save_slow_tokenizer: bool = True
 
@@ -333,7 +334,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         section.
 
         Args:
-            padding_strategy ([`~file_utils.PaddingStrategy`]):
+            padding_strategy ([`~utils.PaddingStrategy`]):
                 The kind of padding that will be applied to the input
             truncation_strategy ([`~tokenization_utils_base.TruncationStrategy`]):
                 The kind of truncation that will be applied to the input
@@ -600,7 +601,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return file_names
 
     def train_new_from_iterator(
-        self, text_iterator, vocab_size, new_special_tokens=None, special_tokens_map=None, **kwargs
+        self,
+        text_iterator,
+        vocab_size,
+        length=None,
+        new_special_tokens=None,
+        special_tokens_map=None,
+        **kwargs,
     ):
         """
         Trains a tokenizer on a new corpus with the same defaults (in terms of special tokens or tokenization pipeline)
@@ -612,6 +619,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 if you have everything in memory.
             vocab_size (`int`):
                 The size of the vocabulary you want for your tokenizer.
+            length (`int`, *optional*):
+                The total number of sequences in the iterator. This is used to provide meaningful progress tracking
             new_special_tokens (list of `str` or `AddedToken`, *optional*):
                 A list of new special tokens to add to the tokenizer you are training.
             special_tokens_map (`Dict[str, str]`, *optional*):
@@ -693,7 +702,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
-        tokenizer.train_from_iterator(text_iterator, trainer=trainer)
+        tokenizer.train_from_iterator(text_iterator, length=length, trainer=trainer)
 
         if post_processor is not None:
             trained_tokenizer_json = json.loads(tokenizer.to_str())

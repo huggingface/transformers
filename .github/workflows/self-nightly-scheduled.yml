@@ -33,9 +33,10 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libsndfile1-dev git
+                  apt -y update && apt install -y libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+                  pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
 
             - name: Are GPUs recognized by our DL frameworks
@@ -100,9 +101,10 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libsndfile1-dev git
+                  apt -y update && apt install -y libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+                  pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
 
             - name: Are GPUs recognized by our DL frameworks
@@ -152,10 +154,11 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libaio-dev
+                  apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
                   pip install .[testing,deepspeed]
+                  pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install git+https://github.com/microsoft/DeepSpeed
 
             - name: Are GPUs recognized by our DL frameworks
@@ -193,11 +196,12 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libaio-dev
+                  apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
                   rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
                   pip install .[testing,fairscale]
+                  pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install git+https://github.com/microsoft/DeepSpeed # testing bleeding edge
 
             - name: Are GPUs recognized by our DL frameworks

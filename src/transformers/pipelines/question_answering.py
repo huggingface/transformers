@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
@@ -182,6 +181,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["doc_stride"] = doc_stride
         if max_question_len is not None:
             preprocess_params["max_question_len"] = max_question_len
+        if max_seq_len is not None:
+            preprocess_params["max_seq_len"] = max_seq_len
 
         postprocess_params = {}
         if topk is not None and top_k is None:
@@ -434,11 +435,22 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 question_first = bool(self.tokenizer.padding_side == "right")
                 enc = output["encoding"]
 
+                # Encoding was *not* padded, input_ids *might*.
+                # It doesn't make a difference unless we're padding on
+                # the left hand side, since now we have different offsets
+                # everywhere.
+                if self.tokenizer.padding_side == "left":
+                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
+                else:
+                    offset = 0
+
                 # Sometimes the max probability token is in the middle of a word so:
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
                 for s, e, score in zip(starts, ends, scores):
+                    s = s - offset
+                    e = e - offset
                     try:
                         start_word = enc.token_to_word(s)
                         end_word = enc.token_to_word(e)

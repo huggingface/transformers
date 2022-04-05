@@ -108,7 +108,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         config.hidden_size = ds_args.hidden_size
         config.num_hidden_layers = ds_args.num_layers
         config.num_attention_heads = ds_args.num_attention_heads
-        config.intermediate_size = ds_args.get("ffn_hidden_size", 4 * ds_args.hidden_size)
+        config.intermediate_size = ds_args.ffn_hidden_size if "ffn_hidden_size" in ds_args else 4 * ds_args.hidden_size
         # pprint(config)
 
     # The number of heads.

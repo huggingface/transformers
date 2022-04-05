@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sentencepiece as spm
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
 
-from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -33,7 +32,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from ...utils import logging
+from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 from ..xlm_roberta.tokenization_xlm_roberta import (
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
     PRETRAINED_VOCAB_FILES_MAP,
@@ -331,8 +330,12 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (out_vocab_file,)
 

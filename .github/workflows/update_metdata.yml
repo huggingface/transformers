@@ -3,7 +3,7 @@ name: Update Transformers metadata
 on:
   push:
     branches:
-      - master
+      - main
       - update_transformers_metadata
 
 jobs:
