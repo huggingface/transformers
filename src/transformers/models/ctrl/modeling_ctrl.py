@@ -359,8 +359,8 @@ class CTRLModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -521,8 +521,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: torch.LongTensor = None,
@@ -625,8 +625,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
