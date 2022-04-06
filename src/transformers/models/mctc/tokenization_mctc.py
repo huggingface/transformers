@@ -58,10 +58,10 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "mctc-large": "https://huggingface.co/facebook/mctc-large/resolve/main/vocab.json",
+        "cwkeam/mctc-large": "https://huggingface.co/cwkeam/mctc-large/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "mctc-large": "https://huggingface.co/facebook/mctc-large/resolve/main/tokenizer_config.json",
+        "cwkeam/mctc-large": "https://huggingface.co/cwkeam/mctc-large/resolve/main/tokenizer_config.json",
     },
 }
 
@@ -159,7 +159,7 @@ class MCTCTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,

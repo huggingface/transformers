@@ -203,6 +203,7 @@ class Conv1dSubsampler(nn.Module):
 
     def forward(self, input_features):
         # input_features == B x T x Features
+        # -> hidden_states == B x F (channels) x T
         hidden_states = input_features.transpose(1, 2).contiguous() # -> B x F x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
