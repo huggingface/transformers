@@ -26,6 +26,8 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.generation_tf_logits_process import (
+        TFForcedBOSTokenLogitsProcessor,
+        TFForcedEOSTokenLogitsProcessor,
         TFLogitsProcessorList,
         TFMinLengthLogitsProcessor,
         TFNoBadWordsLogitsProcessor,
@@ -43,7 +45,7 @@ if is_tf_available():
 @require_tf
 class TFLogitsProcessorTest(unittest.TestCase):
     def _get_uniform_logits(self, batch_size: int, length: int):
-        scores = np.ones((batch_size, length), dtype=np.float32) / length
+        scores = tf.ones((batch_size, length), dtype=tf.float32) / length
         return scores
 
     def test_min_length_dist_processor(self):
@@ -54,15 +56,17 @@ class TFLogitsProcessorTest(unittest.TestCase):
         min_dist_processor = TFMinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
 
         # check that min length is applied at length 5
-        input_ids = ids_tensor((batch_size, 5), vocab_size=20)
+        cur_len = 5
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_before_min_length = min_dist_processor(input_ids, scores)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len)
         self.assertListEqual(scores_before_min_length[:, eos_token_id].numpy().tolist(), 4 * [-float("inf")])
 
         # check that min length is not applied anymore at length 15
-        input_ids = ids_tensor((batch_size, 15), vocab_size=20)
+        cur_len = 15
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_before_min_length = min_dist_processor(input_ids, scores)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len)
         self.assertFalse(tf.math.reduce_any(tf.math.is_inf(scores_before_min_length)).numpy())
 
     def test_temperature_dist_warper(self):
@@ -72,8 +76,10 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size=2, length=length)
 
         # tweak scores to not be uniform anymore
+        scores = scores.numpy()
         scores[1, 5] = (1 / length) + 0.1  # peak, 1st batch
         scores[1, 10] = (1 / length) - 0.4  # valley, 1st batch
+        scores = tf.convert_to_tensor(scores)
 
         # compute softmax
         probs = tf.nn.softmax(scores, axis=-1)
@@ -97,8 +103,11 @@ class TFLogitsProcessorTest(unittest.TestCase):
         self.assertLess(tf.math.reduce_min(probs[1, :]), tf.math.reduce_min(warped_prob_smooth[1, :]))
 
     def test_repetition_penalty_dist_process(self):
-        input_ids = tf.constant([[0, 1], [5, 0]], dtype=tf.int32)
         vocab_size = 10
+        cur_len = 2
+
+        input_ids = tf.constant([[0, 1], [5, 0]], dtype=tf.int32)
+        self.assertEqual(cur_len, input_ids.shape[1])
 
         scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
 
@@ -109,7 +118,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         rep_penalty_proc = TFRepetitionPenaltyLogitsProcessor(penalty=2.0)
 
-        scores = rep_penalty_proc(input_ids, tf.identity(scores))
+        scores = rep_penalty_proc(input_ids, tf.identity(scores), cur_len)
 
         # check that values were correctly changed
         self.assertAlmostEqual(scores[0, 0].numpy(), -(1 / vocab_size) * 2)
@@ -188,15 +197,18 @@ class TFLogitsProcessorTest(unittest.TestCase):
     def test_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
         batch_size = 2
+        cur_len = 4
 
         input_ids = tf.constant([[1, 1, 2, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        self.assertEqual(cur_len, input_ids.shape[1])
+
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
         no_repeat_proc_2_gram = TFNoRepeatNGramLogitsProcessor(2)
         no_repeat_proc_3_gram = TFNoRepeatNGramLogitsProcessor(3)
 
-        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, tf.identity(scores))
-        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, tf.identity(scores))
+        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, tf.identity(scores), cur_len)
+        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, tf.identity(scores), cur_len)
 
         # 2-gram would forbid 2nd and 3rd token (1,2) at 1st batch and 1st token (0) at 2nd batch
         self.assertListEqual(
@@ -212,14 +224,17 @@ class TFLogitsProcessorTest(unittest.TestCase):
         vocab_size = 5
         batch_size = 2
         eos_token_id = 4
+        cur_len = 4
 
         input_ids = tf.constant([[0, 1, 3, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        self.assertEqual(cur_len, input_ids.shape[1])
+
         bad_word_tokens = [[1], [4], [1, 0], [0, 1, 2], [1, 3, 1, 3]]
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
 
-        filtered_scores = no_bad_words_dist_proc(input_ids, tf.identity(scores))
+        filtered_scores = no_bad_words_dist_proc(input_ids, tf.identity(scores), cur_len)
 
         # batch 1: 1st, 2nd, and 4th (0, 1, 3) token are forbidden
         # batch 2: 1st, 2nd, and 3rd (0, 1, 2) token are forbidden
@@ -228,14 +243,65 @@ class TFLogitsProcessorTest(unittest.TestCase):
             [[True, True, False, True, True], [True, True, True, False, True]],
         )
 
+    def test_forced_bos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        bos_token_id = 0
+
+        logits_processor = TFForcedBOSTokenLogitsProcessor(bos_token_id=bos_token_id)
+
+        # check that all scores are -inf except the bos_token_id score
+        cur_len = 1
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(scores[:, bos_token_id + 1 :]) & (scores[:, bos_token_id + 1 :] < 0))
+        )
+        self.assertListEqual(scores[:, bos_token_id].numpy().tolist(), 4 * [0])  # score for bos_token_id shold be zero
+
+        # check that bos_token_id is not forced if current length is greater than 1
+        cur_len = 4
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
+
+    def test_forced_eos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        eos_token_id = 0
+        max_length = 5
+
+        logits_processor = TFForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
+
+        # check that all scores are -inf except the eos_token_id when max_length-1 is reached
+        cur_len = 4
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(scores[:, eos_token_id + 1 :]) & (scores[:, eos_token_id + 1 :] < 0))
+        )
+        self.assertListEqual(
+            scores[:, eos_token_id].numpy().tolist(), 4 * [0]
+        )  # score for eos_token_id should be zero
+
+        # check that eos_token_id is not forced if max_length-1 is not reached
+        cur_len = 3
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
+
     def test_processor_list(self):
         batch_size = 4
-        sequence_length = 10
+        cur_len = 10
         vocab_size = 15
         eos_token_id = 0
 
         # dummy input_ids and scores
-        input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
+        input_ids = ids_tensor((batch_size, cur_len), vocab_size)
         input_ids_comp = tf.identity(input_ids)
 
         scores = self._get_uniform_logits(batch_size, vocab_size)
@@ -251,13 +317,13 @@ class TFLogitsProcessorTest(unittest.TestCase):
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
 
         # no processor list
-        scores = min_dist_proc(input_ids, scores)
+        scores = min_dist_proc(input_ids, scores, cur_len)
         scores = temp_dist_warp(input_ids, scores)
-        scores = rep_penalty_proc(input_ids, scores)
+        scores = rep_penalty_proc(input_ids, scores, cur_len)
         scores = top_k_warp(input_ids, scores)
         scores = top_p_warp(input_ids, scores)
-        scores = no_repeat_proc(input_ids, scores)
-        scores = no_bad_words_dist_proc(input_ids, scores)
+        scores = no_repeat_proc(input_ids, scores, cur_len)
+        scores = no_bad_words_dist_proc(input_ids, scores, cur_len)
 
         # with processor list
         processor = TFLogitsProcessorList(
@@ -271,7 +337,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
                 no_bad_words_dist_proc,
             ]
         )
-        scores_comp = processor(input_ids, scores_comp)
+        scores_comp = processor(input_ids, scores_comp, cur_len=cur_len)
 
         # remove inf
         scores = set_tensor_by_indices_to_value(scores, tf.math.is_inf(scores), -1e9)
