@@ -517,7 +517,7 @@ class MPNetModel(MPNetPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: : Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
