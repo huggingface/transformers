@@ -47,7 +47,7 @@ class TokenizedDataset(IterableDataset):
         outputs = self.tokenizer(prompts, padding=True, return_tensors="pt")
         for task in range(self.n_tasks):
             for _ in range(self.n_copies):
-                yield {"ids": ouptuts.input_ids[task], "task_id": task, "input_len": ouptuts.attention_mask[task].sum()}
+                yield {"ids": outputs.input_ids[task], "task_id": task, "input_len": outputs.attention_mask[task].sum()}
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -74,7 +74,7 @@ def remove_last_block(string):
     return "".join(string_list[:-2])
 
 
-def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **gen_kwargs):
+def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size=20, **gen_kwargs):
     """Generate multiple codes for each task in the dataset. This function leverage accelerator to distribute
     the processing to multiple GPUs.
     dataloader, a wrapper around a TokenizeDataset objectm is supposed to send all the prompts from
@@ -95,6 +95,10 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
 
     dataloader: DataLoader
         The dataloader is a wrapper around a TokenizeDataset object. It is designed to be used with multiple GPUs.
+    
+    n_tasks: int
+        The number of tasks in the dataset. It is used to determine the length of the output.
+        Should be aligned with the number of tasks in the TokenizeDataset.
 
     batch_size: int
         num_return_sequences per copy of the prompt such that num_sample = batch_size * n_copies
@@ -104,8 +108,8 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
 
     Returns
     -------
-    code_gens_dict: dict of task_num -> list
-        Dict of generated codes for each task.
+    code_gens: list of list of str, of length n_tasks
+        List of generated codes for each task.
         Each element is a list of generated codes for each task, with length num_samples
     """
     gen_token_dict = defaultdict(list)  # dict of list of generated tokens
@@ -127,7 +131,6 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
             for task, generated_tokens in zip(generated_tasks, generated_tokens):
                 gen_token_dict[task].append(generated_tokens)
 
-    n_tasks = dataloader.n_tasks
     code_gens = [[] for _ in range(n_tasks)]
     for task, generated_tokens in gen_token_dict.items():
         for s in generated_tokens:
@@ -191,7 +194,7 @@ def main():
         tokenizer, human_eval["test"], max_length=max_len, n_copies=n_copies, n_tasks=n_tasks
     )
     # do not confuse args.batch_size, which is actually the num_return_sequences
-    human_eval_loader = DataLoader(human_eval_td, batch_size=1)
+    human_eval_loader = DataLoader(human_eval_tokenized, batch_size=1)
 
     # Run a quick test to see if code evaluation is enabled
     try:
@@ -209,6 +212,7 @@ def main():
         model,
         tokenizer,
         human_eval_loader,
+        n_tasks=n_tasks,
         batch_size=args.batch_size,
         **gen_kwargs,
     )
