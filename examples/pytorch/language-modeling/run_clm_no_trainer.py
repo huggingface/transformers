@@ -226,10 +226,7 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    if args.with_tracking:
-        accelerator = Accelerator(log_with="all")
-    else:
-        accelerator = Accelerator()
+    accelerator = Accelerator(log_with="all") if args.with_tracking else Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
