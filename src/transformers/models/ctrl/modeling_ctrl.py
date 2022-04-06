@@ -561,6 +561,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> outputs.loss.item()
         5.788386821746826
+
         >>> outputs.logits.shape
         torch.Size([1, 5, 246534])
         ```"""
@@ -705,9 +706,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
 
         >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained(
-        ...     "ctrl", problem_type="multi_label_classification"
-        ... )
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
 
         >>> with torch.no_grad():
