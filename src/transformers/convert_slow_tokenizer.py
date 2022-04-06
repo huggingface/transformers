@@ -431,7 +431,6 @@ class SpmConverter(Converter):
         self.proto = m
 
         if self.proto.trainer_spec.byte_fallback:
-            # AttributeError: byte_fallback
             warnings.warn(
                 "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
                 " which is not implemented in the fast tokenizers."
