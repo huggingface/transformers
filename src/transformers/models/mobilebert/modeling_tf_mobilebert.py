@@ -929,7 +929,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Untion[Tuple, TFBaseModelOutputWithPooling]:
+    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         outputs = self.mobilebert(
             input_ids=input_ids,
             attention_mask=attention_mask,
