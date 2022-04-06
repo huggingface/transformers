@@ -519,6 +519,9 @@ class TFModelTesterMixin:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 elif name == "input_features":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                # other general float inputs
+                elif tf_inputs_dict[name].dtype.is_floating:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
