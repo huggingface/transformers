@@ -1266,7 +1266,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english ",
+        checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="['B-LOC', 'B-ORG', 'O', 'O', 'O', 'O', 'O', 'B-LOC', 'O', 'B-LOC', 'I-LOC']",
