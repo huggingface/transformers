@@ -431,7 +431,7 @@ class SpmConverter(Converter):
         with open(self.original_tokenizer.vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
-
+        
         if self.proto.trainer_spec.byte_fallback:
             # AttributeError: byte_fallback
             logger.warning(
