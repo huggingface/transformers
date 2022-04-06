@@ -22,24 +22,19 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
         logging.set_verbosity_warning()
         logger = logging.get_logger("transformers.convert_slow_tokenizer")
 
-        with CaptureLogger(logger) as cl:
+        with warnings.catch_warnings(record=True) as w:
             _ = SpmConverter(original_tokenizer_without_bytefallback)
-        self.assertNotIn(
-            (
-                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                " which is not implemented in the fast tokenizers."
-            ),
-            cl.out,
-        )
+        self.assertEqual(len(w), 0)
 
         original_tokenizer_with_bytefallback = FakeOriginalTokenizer(vocab_file=spm_model_file_with_bytefallback)
 
-        with CaptureLogger(logger) as cl:
+        with warnings.catch_warnings(record=True) as w:
             _ = SpmConverter(original_tokenizer_with_bytefallback)
+        self.assertEqual(len(w), 1)
         self.assertIn(
             (
                 "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
                 " which is not implemented in the fast tokenizers."
             ),
-            cl.out,
+            str(w[0].message),
         )
