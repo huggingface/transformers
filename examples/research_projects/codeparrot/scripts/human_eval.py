@@ -26,7 +26,7 @@ from transformers import (
 EOF_STRINGS = ["\nclass", "\ndef", "\n#", "\n@", "\nprint", "\nif"]
 
 
-class TokenizeDataset(IterableDataset):
+class TokenizedDataset(IterableDataset):
     """Tokenize and preprocess the dataset
     Multiple copies of the same prompt are sent sequentially.
     See compute_code for more details.
@@ -40,14 +40,14 @@ class TokenizeDataset(IterableDataset):
         self.max_length = max_length
 
     def __iter__(self):
+        prompts = []
         for task in range(self.n_tasks):
             # without strip, the model generate commented codes ...
-            prompt = self.tokenizer.eos_token + self.dataset[task]["prompt"].strip()
-            # codeparrot model is not robust to padding
-            input_len = len(self.tokenizer(prompt)["input_ids"])
-            input_ids = self.tokenizer(prompt, max_length=self.max_length, padding="max_length")["input_ids"]
+            prompts.append(self.tokenizer.eos_token + self.dataset[task]["prompt"].strip())
+        outputs = self.tokenizer(prompts, padding=True, return_tensors="pt")
+        for task in range(self.n_tasks):
             for _ in range(self.n_copies):
-                yield {"ids": torch.tensor(input_ids), "task_id": task, "input_len": input_len}
+                yield {"ids": ouptuts.input_ids[task], "task_id": task, "input_len": ouptuts.attention_mask[task].sum()}
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -116,7 +116,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
                 input_ids=batch["ids"][:, : batch["input_len"]], num_return_sequences=batch_size, **gen_kwargs
             )
             # each task is generated batch_size times
-            generated_tasks = torch.cat([batch["task_id"] for _ in range(batch_size)], dim=0)
+            generated_tasks = batch["task_id"].repeat(batch_size)
             generated_tokens = accelerator.pad_across_processes(
                 generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
             )
@@ -127,7 +127,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, batch_size=20, **ge
             for task, generated_tokens in zip(generated_tasks, generated_tokens):
                 gen_token_dict[task].append(generated_tokens)
 
-    n_tasks = max(gen_token_dict.keys()) + 1
+    n_tasks = dataloader.n_tasks
     code_gens = [[] for _ in range(n_tasks)]
     for task, generated_tokens in gen_token_dict.items():
         for s in generated_tokens:
@@ -187,7 +187,7 @@ def main():
         input_len = len(tokenizer(prompt)["input_ids"])
         max_len = max(max_len, input_len)
 
-    human_eval_td = TokenizeDataset(
+    human_eval_tokenized = TokenizedDataset(
         tokenizer, human_eval["test"], max_length=max_len, n_copies=n_copies, n_tasks=n_tasks
     )
     # do not confuse args.batch_size, which is actually the num_return_sequences
