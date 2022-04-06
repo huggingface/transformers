@@ -30,7 +30,7 @@ from transformers.utils import logging
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel
-from ...pytorch_utils import prune_linear_layer, find_pruneable_heads_and_indices
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,

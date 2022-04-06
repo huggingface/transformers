@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import prune_conv1d_layer, find_pruneable_heads_and_indices
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 

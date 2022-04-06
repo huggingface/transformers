@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import apply_chunking_to_forward, prune_linear_layer, find_pruneable_heads_and_indices
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,

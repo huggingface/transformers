@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import Callable, Optional, Union, List, Set, Tuple
+from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
