@@ -18,21 +18,17 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available, is_speech_available
+from ...file_utils import _LazyModule, is_speech_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig"],
+    "processor_mctc": ["MCTCProcessor"],
     "tokenization_mctc": ["MCTCTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_mctc"] = ["MCTCTokenizer"]
-
 if is_speech_available():
     _import_structure["feature_extraction_mctc"] = ["MCTCFeatureExtractor"]
-    _import_structure["processing_mctc"] = ["MCTCProcessor"]
 
 
 if is_torch_available():
@@ -44,27 +40,16 @@ if is_torch_available():
     ]
 
 
-
 if TYPE_CHECKING:
     from .configuration_mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig
+    from .processing_mctc import MCTCProcessor
     from .tokenization_mctc import MCTCTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_mctc_fast import MCTCTokenizerFast
 
     if is_speech_available():
         from .feature_extraction_mctc import MCTCFeatureExtractor
-        from .processing_mctc import MCTCProcessor
 
     if is_torch_available():
-        from .modeling_mctc import (
-            MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MCTCForCTC,
-            MCTCModel,
-            MCTCPreTrainedModel,
-            load_tf_weights_in_mctc,
-        )
-
+        from .modeling_mctc import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCForCTC, MCTCModel, MCTCPreTrainedModel
 
 
 else:

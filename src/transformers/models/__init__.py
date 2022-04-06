@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    mctc,
     albert,
     auto,
     bart,
@@ -75,6 +74,7 @@ from . import (
     maskformer,
     mbart,
     mbart50,
+    mctc,
     megatron_bert,
     megatron_gpt2,
     mluke,

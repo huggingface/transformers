@@ -148,11 +148,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.mctc": [
-        "MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", 
-        "MCTCConfig", 
-        "MCTCProcessor",
-        "MCTCTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -254,6 +249,7 @@ _import_structure = {
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
+    "models.mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig", "MCTCProcessor", "MCTCTokenizer"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mluke": [],
@@ -504,8 +500,8 @@ else:
 
 # Speech-specific objects
 if is_speech_available():
-    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.mctc"].append("MCTCFeatureExtractor")
+    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 else:
     from .utils import dummy_speech_objects
 
@@ -640,15 +636,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.mctc"].extend(
-        [
-            "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MCTCForCTC",
-            "MCTCModel",
-            "MCTCPreTrainedModel",
-            "load_tf_weights_in_mctc",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1162,6 +1149,15 @@ if is_torch_available():
             "MBartForSequenceClassification",
             "MBartModel",
             "MBartPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mctc"].extend(
+        [
+            "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCForCTC",
+            "MCTCModel",
+            "MCTCPreTrainedModel",
+            "load_tf_weights_in_mctc",
         ]
     )
     _import_structure["models.megatron_bert"].extend(
@@ -2500,7 +2496,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig, MCTCTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2591,6 +2586,7 @@ if TYPE_CHECKING:
     from .models.marian import MarianConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
+    from .models.mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig, MCTCProcessor, MCTCTokenizer
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
@@ -2750,7 +2746,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.mctc import MCTCTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2805,8 +2800,8 @@ if TYPE_CHECKING:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
 
     if is_speech_available():
-        from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.mctc import MCTCFeatureExtractor
+        from .models.speech_to_text import Speech2TextFeatureExtractor
     else:
         from .utils.dummy_speech_objects import *
 
@@ -2860,13 +2855,6 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
-        from .models.mctc import (
-            MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MCTCLayer,
-            MCTCModel,
-            MCTCPreTrainedModel,
-            load_tf_weights_in_mctc,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3345,6 +3333,13 @@ if TYPE_CHECKING:
             MBartForSequenceClassification,
             MBartModel,
             MBartPreTrainedModel,
+        )
+        from .models.mctc import (
+            MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCForCTC,
+            MCTCModel,
+            MCTCPreTrainedModel,
+            load_tf_weights_in_mctc,
         )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

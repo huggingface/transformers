@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
-from transformers.models.mctc import MCTCTokenizer, MCTCFeatureExtractor, MCTCProcessor
+from transformers.models.mctc import MCTCFeatureExtractor, MCTCProcessor, MCTCTokenizer
 from transformers.models.mctc.tokenization_mctc import VOCAB_FILES_NAMES
 
 from .test_feature_extraction_mctc import floats_list

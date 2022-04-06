@@ -35,8 +35,9 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a mCTC feature extractor.
 
-    FROM THE PAPER: 
-        The input to the encoder is a sequence of 80-dimensional log mel filterbank frames, extracted using 25 ms Hamming windows every 10 ms from the 16 kHz audio signal
+    FROM THE PAPER:
+        The input to the encoder is a sequence of 80-dimensional log mel filterbank frames, extracted using 25 ms
+        Hamming windows every 10 ms from the 16 kHz audio signal
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -58,7 +59,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             Whether or not to zero-mean normalize the extracted features.
         normalize_vars (`bool`, *optional*, defaults to `True`):
             Whether or not to unit-variance normalize the extracted features.
-        """
+    """
 
     model_input_names = ["input_features", "attention_mask"]
 
@@ -74,17 +75,17 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         normalize_vars=True,
         **kwargs
     ):
-        '''
-        NOTE TO SELF: maybe raise an issue about Speech2TextFeatureExtractor for not having
-        separate num_mel_bins and feature_size parameters, since they must both be the same.
-        '''
+        """
+        NOTE TO SELF: maybe raise an issue about Speech2TextFeatureExtractor for not having separate num_mel_bins and
+        feature_size parameters, since they must both be the same.
+        """
         # if num_mel_bins != feature_size:
         #     '''Very redundant code, but I'm conflicted between following the standard of using "feature_size" for FeatureExtractor
         #     classes & the fact that the "features" here are mel bins. Should be easy change either way.
         #     '''
         #     raise ValueError("`num_mel_bins` must be the same as `feature_size`")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        
+
         self.feature_size = feature_size
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
@@ -119,13 +120,9 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
 
         return x
 
-    def _normalize(
-        self, 
-        input_features: List[np.ndarray], 
-        attention_mask: Optional[np.ndarray] = None
-    ):
+    def _normalize(self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None):
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
-        
+
         return [
             self._normalize_one(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
             for x, n in zip(input_features, lengths)
@@ -145,12 +142,12 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             hop_length=self.hop_length,
             n_mels=self.feature_size,
             window_fn=getattr(torch, self.win_function),
-            normalized=False
+            normalized=False,
         )
 
         waveform = torch.from_numpy(waveform)
-        mel_specgram = mel_transform(waveform) # (n_mels, time)
-        return mel_specgram.numpy().transpose((1, 0)) # (time, n_mels)
+        mel_specgram = mel_transform(waveform)  # (n_mels, time)
+        return mel_specgram.numpy().transpose((1, 0))  # (time, n_mels)
 
     def __call__(
         self,
@@ -270,13 +267,12 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
         attention_mask = padded_inputs.get("attention_mask")
-        
+
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
-
         if self.normalize_means or self.normalize_vars:
-            
+
             attention_mask = (
                 np.array(attention_mask, dtype=np.int32)
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
@@ -286,7 +282,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = self._normalize(
                 padded_inputs["input_features"], attention_mask=attention_mask
             )
-    
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 

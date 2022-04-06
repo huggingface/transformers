@@ -2484,6 +2484,34 @@ class MBartPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MCTC_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MCTCForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MCTCModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MCTCPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_mctc(*args, **kwargs):
+    requires_backends(load_tf_weights_in_mctc, ["torch"])
+
+
 MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

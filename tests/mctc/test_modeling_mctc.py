@@ -17,44 +17,19 @@
 import math
 import unittest
 
-import numpy as np
 from datasets import load_dataset
 
 from transformers import MCTCConfig, is_torch_available
-from transformers.testing_utils import (
-    is_pt_flax_cross_test,
-    is_pyctcdecode_available,
-    is_torchaudio_available,
-    require_pyctcdecode,
-    require_soundfile,
-    require_torch,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ..test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MCTCFeatureExtractor,
-        MCTCForCTC,
-        MCTCModel,
-        MCTCProcessor,
-    )
-
-if is_torchaudio_available():
-    import torchaudio
-
+    from transformers import MCTCForCTC, MCTCModel, MCTCProcessor
 
 
 class MCTCModelTester:
@@ -69,17 +44,14 @@ class MCTCModelTester:
         num_hidden_layers=4,
         intermediate_size=20,
         num_attention_heads=4,
-
         attention_head_dim=128,
         max_position_embeddings=920,
-
         layer_norm_eps=1e-12,
         layerdrop=0.3,
         hidden_act="relu",
         initializer_range=0.02,
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
-
         conv_glu_dim=2,
         conv_dropout=0.3,
         num_conv_layers=1,
@@ -87,48 +59,47 @@ class MCTCModelTester:
         conv_stride=(3,),
         input_feat_per_channel=80,
         input_channels=1,
-        conv_channels=None,        
+        conv_channels=None,
     ):
         self.parent = parent
-        self.batch_size=batch_size
-        self.seq_length=seq_length  # speech is longer
-        self.is_training=is_training
-        
-        self.vocab_size=vocab_size
-        self.hidden_size=hidden_size
-        self.num_hidden_layers=num_hidden_layers
-        self.intermediate_size=intermediate_size
-        self.num_attention_heads=num_attention_heads
+        self.batch_size = batch_size
+        self.seq_length = seq_length  # speech is longer
+        self.is_training = is_training
 
-        self.attention_head_dim=attention_head_dim
-        self.max_position_embeddings=max_position_embeddings
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_attention_heads
 
-        self.layer_norm_eps=layer_norm_eps
-        self.layerdrop=layerdrop
-        self.hidden_act=hidden_act
-        self.initializer_range=initializer_range
-        self.hidden_dropout_prob=hidden_dropout_prob
-        self.attention_probs_dropout_prob=attention_probs_dropout_prob
+        self.attention_head_dim = attention_head_dim
+        self.max_position_embeddings = max_position_embeddings
 
-        self.conv_glu_dim=conv_glu_dim
-        self.conv_dropout=conv_dropout
-        self.num_conv_layers=num_conv_layers
-        self.conv_kernel=conv_kernel
-        self.conv_stride=conv_stride
-        self.input_feat_per_channel=input_feat_per_channel
-        self.input_channels=input_channels
-        self.conv_channels=conv_channels
+        self.layer_norm_eps = layer_norm_eps
+        self.layerdrop = layerdrop
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+
+        self.conv_glu_dim = conv_glu_dim
+        self.conv_dropout = conv_dropout
+        self.num_conv_layers = num_conv_layers
+        self.conv_kernel = conv_kernel
+        self.conv_stride = conv_stride
+        self.input_feat_per_channel = input_feat_per_channel
+        self.input_channels = input_channels
+        self.conv_channels = conv_channels
 
         output_seq_length = self.seq_length
         padding = 0
         dilation = 1
         for i, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
-            output_seq_length = ((output_seq_length + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
+            output_seq_length = ((output_seq_length + 2 * padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
             output_seq_length = output_seq_length // self.conv_glu_dim
 
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
-
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
@@ -242,7 +213,6 @@ class MCTCModelTester:
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
-
     def check_ctc_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
         model = MCTCForCTC(config=config)
@@ -269,8 +239,6 @@ class MCTCModelTester:
 
         loss.backward()
 
-
-
     def check_labels_out_of_vocab(self, config, input_features, *args):
         model = MCTCForCTC(config)
         model.to(torch_device)
@@ -293,11 +261,7 @@ class MCTCModelTester:
 
 @require_torch
 class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (MCTCForCTC, MCTCModel)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MCTCForCTC, MCTCModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -313,16 +277,13 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
-
     def test_ctc_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_training(*config_and_inputs)
-
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -464,7 +425,6 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     #     self.assertEqual(logits.shape, (4, 1498, 32))
 
-    
     # @unittest.skip(reason="Feed forward chunking is not implemented")
     # def test_feed_forward_chunking(self):
     #     pass
@@ -473,9 +433,6 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
     # def test_model_from_pretrained(self):
     #     model = MCTCModel.from_pretrained("facebook/wav2vec2-base-960h")
     #     self.assertIsNotNone(model)
-
-
-
 
 
 @require_torch
@@ -493,9 +450,7 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = MCTCModelTester(
-            self
-        )
+        self.model_tester = MCTCModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MCTCConfig, hidden_size=37)
 
     def test_config(self):
@@ -505,7 +460,6 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_batch_inference(*config_and_inputs)
@@ -513,7 +467,6 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
-
 
     def test_ctc_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -630,35 +583,33 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
+    #     def test_mask_feature_prob_ctc(self):
+    #         model = MCTCForCTC.from_pretrained(
+    #             "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
+    #         )
+    #         model.to(torch_device).train()
+    #         processor = MCTCProcessor.from_pretrained(
+    #             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+    #         )
 
-#     def test_mask_feature_prob_ctc(self):
-#         model = MCTCForCTC.from_pretrained(
-#             "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
-#         )
-#         model.to(torch_device).train()
-#         processor = MCTCProcessor.from_pretrained(
-#             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
-#         )
+    #         batch_duration_in_seconds = [1, 3, 2, 6]
+    #         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
 
-#         batch_duration_in_seconds = [1, 3, 2, 6]
-#         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+    #         batch = processor(
+    #             input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+    #         )
 
-#         batch = processor(
-#             input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-#         )
+    #         logits = model(
+    #             input_features=batch["input_features"].to(torch_device),
+    #             attention_mask=batch["attention_mask"].to(torch_device),
+    #         ).logits
 
-#         logits = model(
-#             input_features=batch["input_features"].to(torch_device),
-#             attention_mask=batch["attention_mask"].to(torch_device),
-#         ).logits
-
-#         self.assertEqual(logits.shape, (4, 1498, 32))
-
-
+    #         self.assertEqual(logits.shape, (4, 1498, 32))
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
 
 #     @slow
 #     def test_model_from_pretrained(self):

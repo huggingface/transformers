@@ -23,11 +23,7 @@ import unittest
 
 import numpy as np
 
-from transformers import (
-    MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-    MCTCConfig,
-    MCTCTokenizer,
-)
+from transformers import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCConfig, MCTCTokenizer
 from transformers.models.mctc.tokenization_mctc import VOCAB_FILES_NAMES, MCTCTokenizerOutput
 from transformers.testing_utils import require_torch, slow
 
@@ -51,8 +47,9 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class MCTCTokenizerTest(unittest.TestCase):
+class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MCTCTokenizer
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()
@@ -71,79 +68,102 @@ class MCTCTokenizerTest(unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return MCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
+    def test_tokenizer_add_token_chars(self):
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
+
+        # check adding a single token
+        tokenizer.add_tokens("x")
+        token_ids = tokenizer("C x A").input_ids
+        self.assertEqual(token_ids, [25, 82, 78, 82, 23])
+
+        tokenizer.add_tokens(["a", "b", "c"])
+        token_ids = tokenizer("C a A c").input_ids
+        self.assertEqual(token_ids, [25, 82, 55, 82, 23, 82, 57])
+
+        tokenizer.add_tokens(["a", "b", "c"])
+        token_ids = tokenizer("CaA c").input_ids
+        self.assertEqual(token_ids, [25, 55, 23, 82, 57])
+
+    def test_tokenizer_add_token_words(self):
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
+
+        # check adding a single token
+        tokenizer.add_tokens("xxx")
+        token_ids = tokenizer("C xxx A B").input_ids
+        self.assertEqual(token_ids, [25, 82, 8068, 82, 23, 82, 24])
+
+        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
+        token_ids = tokenizer("C aaa A ccc B B").input_ids
+        self.assertEqual(token_ids, [25, 82, 8069, 82, 23, 82, 8071, 82, 24, 82, 24])
+
+        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
+        token_ids = tokenizer("CaaaA ccc B B").input_ids
+        self.assertEqual(token_ids, [25, 8069, 23, 82, 8071, 82, 24, 82, 24])
+
     def test_tokenizer_decode(self):
-        # TODO(PVP) - change to facebook
-        tokenizer = MCTCTokenizer.from_pretrained("cwkeam/mctc-large")
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
 
         sample_ids = [
-            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77],
+            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
+            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27],
         ]
         tokens = tokenizer.decode(sample_ids[0])
         batch_tokens = tokenizer.batch_decode(sample_ids)
         self.assertEqual(tokens, batch_tokens[0])
-        self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
+        self.assertEqual(batch_tokens, ["HELLO", "BYE BYE"])
 
     def test_tokenizer_decode_special(self):
-        # TODO(PVP) - change to facebook
-        tokenizer = MCTCTokenizer.from_pretrained("cwkeam/mctc-large")
-
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
+        # fmt: off
         sample_ids = [
-            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77],
+            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
+            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27],
         ]
         sample_ids_2 = [
-            [11, 5, 5, 5, 5, 5, 15, 15, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [
-                24,
-                22,
-                5,
-                tokenizer.pad_token_id,
-                tokenizer.pad_token_id,
-                tokenizer.pad_token_id,
-                tokenizer.word_delimiter_token_id,
-                24,
-                22,
-                5,
-                77,
-                tokenizer.word_delimiter_token_id,
-            ],
+            [30, 27, 27, 27, 27, 27, 34, 34, 34, 34, 34, tokenizer.pad_token_id, 34, 37],
+            [24, 47, 27, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 82, 24, 47, 27, tokenizer.word_delimiter_token_id],
         ]
+        # fmt: on
 
         batch_tokens = tokenizer.batch_decode(sample_ids)
         batch_tokens_2 = tokenizer.batch_decode(sample_ids_2)
         self.assertEqual(batch_tokens, batch_tokens_2)
-        self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
+        self.assertEqual(batch_tokens, ["HELLO", "BYE BYE"])
 
     def test_tokenizer_decode_added_tokens(self):
-        tokenizer = MCTCTokenizer.from_pretrained("cwkeam/mctc-large")
-        tokenizer.add_tokens(["!", "?"])
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
         tokenizer.add_special_tokens({"cls_token": "$$$"})
+        token_ids = tokenizer("HELLO$$$").input_ids
+        print("token_ids", token_ids)
 
+        # fmt: off
         sample_ids = [
-            [
-                11,
-                5,
-                15,
-                tokenizer.pad_token_id,
-                15,
-                8,
-                98,
-                32,
-                32,
-                33,
-                tokenizer.word_delimiter_token_id,
-                32,
-                32,
-                33,
-                34,
-                34,
-            ],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
+            [30, 27, 34, tokenizer.pad_token_id, 34, 34, 34, 37, 37, tokenizer.word_delimiter_token_id, 37, 37, 8068, 8068],
         ]
+        # fmt: on
         batch_tokens = tokenizer.batch_decode(sample_ids)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens, ["HELLO O$$$"])
+
+    def test_special_characters_in_vocab(self):
+        sent = "ʈʰ æ æ̃ ˧ kʰ"
+
+        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
+        vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
+
+        with open(vocab_file, "w") as f:
+            json.dump(vocab_dict, f)
+
+        tokenizer = MCTCTokenizer(vocab_file)
+
+        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
+        self.assertEqual(sent, expected_sent)
+
+        tokenizer.save_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
+        tokenizer = MCTCTokenizer.from_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
+
+        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
+        self.assertEqual(sent, expected_sent)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -346,126 +366,6 @@ class MCTCTokenizerTest(unittest.TestCase):
             # only "layer" feature extraction norm should make use of
             # attention_mask
             self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
-
-
-class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = MCTCTokenizer
-    test_rust_tokenizer = False
-
-    def setUp(self):
-        super().setUp()
-
-        vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
-
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return MCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def test_tokenizer_add_token_chars(self):
-        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-
-        # check adding a single token
-        tokenizer.add_tokens("x")
-        token_ids = tokenizer("C x A").input_ids
-        self.assertEqual(token_ids, [25, 82, 78, 82, 23])
-
-        tokenizer.add_tokens(["a", "b", "c"])
-        token_ids = tokenizer("C a A c").input_ids
-        self.assertEqual(token_ids, [25, 82, 55, 82, 23, 82, 57])
-
-        tokenizer.add_tokens(["a", "b", "c"])
-        token_ids = tokenizer("CaA c").input_ids
-        self.assertEqual(token_ids, [25, 55, 23, 82, 57])
-
-    def test_tokenizer_add_token_words(self):
-        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-
-        # check adding a single token
-        tokenizer.add_tokens("xxx")
-        token_ids = tokenizer("C xxx A B").input_ids
-        self.assertEqual(token_ids, [25, 82, 8068, 82, 23, 82, 24])
-
-        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
-        token_ids = tokenizer("C aaa A ccc B B").input_ids
-        self.assertEqual(token_ids, [25, 82, 8069, 82, 23, 82, 8071, 82, 24, 82, 24])
-
-        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
-        token_ids = tokenizer("CaaaA ccc B B").input_ids
-        self.assertEqual(token_ids, [25, 8069, 23, 82, 8071, 82, 24, 82, 24] )
-
-    def test_tokenizer_decode(self):
-        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-
-        sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27]
-        ]
-        tokens = tokenizer.decode(sample_ids[0])
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-        self.assertEqual(tokens, batch_tokens[0])
-        self.assertEqual(batch_tokens, ["HELLO", "BYE BYE"])
-
-    def test_tokenizer_decode_special(self):
-        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-        
-        # fmt: off
-        sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27],
-        ]
-        sample_ids_2 = [
-            [30, 27, 27, 27, 27, 27, 34, 34, 34, 34, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 82, 24, 47, 27, tokenizer.word_delimiter_token_id],
-        ]
-        # fmt: on
-
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-        batch_tokens_2 = tokenizer.batch_decode(sample_ids_2)
-        self.assertEqual(batch_tokens, batch_tokens_2)
-        self.assertEqual(batch_tokens, ["HELLO", "BYE BYE"])
-
-    def test_tokenizer_decode_added_tokens(self):
-        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-        tokenizer.add_special_tokens({"cls_token": "$$$"})
-        token_ids = tokenizer("HELLO$$$").input_ids
-        print("token_ids", token_ids)
-
-        # fmt: off
-        sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 34, 34, 37, 37, tokenizer.word_delimiter_token_id, 37, 37, 8068, 8068],
-        ]
-        # fmt: on
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-
-        self.assertEqual(batch_tokens, ["HELLO O$$$"])
-
-    def test_special_characters_in_vocab(self):
-        sent = "ʈʰ æ æ̃ ˧ kʰ"
-
-        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
-        vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
-
-        with open(vocab_file, "w") as f:
-            json.dump(vocab_dict, f)
-
-        tokenizer = MCTCTokenizer(vocab_file)
-
-        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
-        self.assertEqual(sent, expected_sent)
-
-        tokenizer.save_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
-        tokenizer = MCTCTokenizer.from_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
-
-        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
-        self.assertEqual(sent, expected_sent)
 
     @staticmethod
     def get_from_offsets(offsets, key):

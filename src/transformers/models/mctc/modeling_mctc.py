@@ -12,37 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mCTC model. """
-
-
+""" PyTorch mCTC model."""
 
 
 import math
-import random
 import os
-from typing import Optional, Tuple, Union
+import random
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -147,6 +135,7 @@ def load_tf_weights_in_mctc(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -174,14 +163,16 @@ class Conv1dSubsampler(nn.Module):
         self.glu_dim = config.conv_glu_dim
 
         self.dropout = nn.Dropout(config.conv_dropout)
-        
+
         self.num_layers = config.num_conv_layers
         self.in_channels = config.input_feat_per_channel * config.input_channels
-        
+
         if self.num_layers > 1:
             if config.conv_channels is None:
-                raise ValueError(f"Need to specify `conv_channels` configuration in `MCTCConfig` to use multiple convolution layers.")
-            
+                raise ValueError(
+                    "Need to specify `conv_channels` configuration in `MCTCConfig` to use multiple convolution layers."
+                )
+
             self.mid_channels = config.conv_channels
         else:
             self.mid_channels = None
@@ -204,7 +195,7 @@ class Conv1dSubsampler(nn.Module):
     def forward(self, input_features):
         # input_features == B x T x Features
         # -> hidden_states == B x F (channels) x T
-        hidden_states = input_features.transpose(1, 2).contiguous() # -> B x F x T
+        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x F x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
             hidden_states = nn.functional.glu(hidden_states, dim=self.glu_dim)
@@ -212,7 +203,6 @@ class Conv1dSubsampler(nn.Module):
 
         hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> B x T x F
         return hidden_states
-
 
 
 class MCTCEmbeddings(nn.Module):
@@ -262,7 +252,7 @@ class MCTCEmbeddings(nn.Module):
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-                
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_features)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -297,49 +287,9 @@ class MCTCSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-
-        '''
-        mCTC Model Position Embeddings Clues
-
-        The encoder has a single convolutional layer
-        with a filter length of 7 and a stride of 3, followed by 36 transformer layers with 4 heads, feedforward dimension 3072,
-        and self-attention dimension 768, using the relative position embeddings of [15].
-        [15] Peter Shaw et al., "Self-attention with relative position representations," NAACL, 2018.
-
-        From: https://github.com/flashlight/flashlight/blob/main/flashlight/fl/contrib/modules/Transformer.cpp
-        if (bptt > 0) {
-            params_.push_back(
-                uniform(2 * bptt - 1, headDim, -0.1, 0.1, af::dtype::f32, true));
-        }
-        
-
-        From: https://github.com/flashlight/flashlight/blob/main/flashlight/fl/contrib/modules/Transformer.cpp
-        ...
-        Variable Transformer::selfAttention(const std::vector<Variable>& input) {
-            // previous step[optionally], input, padMask
-            auto encoderInput = input.at(input.size() - 2);
-            // in case of previous state input[0] has size CxT_prevxB
-            int n = input[0].dims(1), bsz = input[0].dims(2);
-        
-        ...
-        
-        if (bptt_ > 0) {
-            posEmb =
-                tile(params_[0].as(encoderInput.type()), af::dim4(1, 1, nHeads_ * bsz));
-        }
-        ...
-
-        FROM: https://fl.readthedocs.io/en/latest/functions.html?highlight=tile#_CPPv4N2fl4tileERK8VariableRKN2af4dim4EKN2af5dtypeE
-        Variablefl::tile(constVariable &input, const af::dim4 &dims, const af::dtype precision)
-            Repeats the tensor input along specific dimensions.
-            The number of repetition along each dimension is specified in descriptor dims.
-
-            Parameters
-            [in] precision: Type of the output vector when is it is desired to be different from the input type. This is particularly useful when tile is applied on parameters and the results will be used in a half precision arithmetic.
-
-
-        '''
-        self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
@@ -372,11 +322,11 @@ class MCTCSelfAttention(nn.Module):
             # reuse k,v, cross_attentions
             key_layer = past_key_value[0]
             value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
+            # attention_mask = encoder_attention_mask
         elif is_cross_attention:
             key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
+            # attention_mask = encoder_attention_mask
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -533,11 +483,10 @@ class MCTCLayer(nn.Module):
     def __init__(self, config: MCTCConfig):
         super().__init__()
 
-        '''
-        following conventions for now and adding this feed_forward_chunking utility,
-        but not entirely sure what it does and what I'm supposed to be doing with this
-        seq_len_dim. Why isn't this a config variable?
-        '''
+        """
+        following conventions for now and adding this feed_forward_chunking utility, but not entirely sure what it does
+        and what I'm supposed to be doing with this seq_len_dim. Why isn't this a config variable?
+        """
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
 
@@ -554,17 +503,14 @@ class MCTCLayer(nn.Module):
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        '''
+        """
         what does this apply_chunking_to_forward function do exactly??
-        '''
+        """
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
@@ -579,11 +525,10 @@ class MCTCLayer(nn.Module):
         return layer_output
 
 
-
 class MCTCPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = MCTCConfig
@@ -594,7 +539,7 @@ class MCTCPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -620,11 +565,13 @@ class MCTCPreTrainedModel(PreTrainedModel):
         """
         padding = 0
         dilation = 1
-        for i, kernel_sz, stride in zip(range(self.config.num_conv_layers), self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = ((input_lengths + 2*padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
+        for i, kernel_sz, stride in zip(
+            range(self.config.num_conv_layers), self.config.conv_kernel, self.config.conv_stride
+        ):
+            input_lengths = ((input_lengths + 2 * padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
             input_lengths = input_lengths // self.config.conv_glu_dim
         return input_lengths
-        
+
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
@@ -644,21 +591,20 @@ class MCTCPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
 
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (MCTCEncoder)):
             module.gradient_checkpointing = value
 
 
 MCTC_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`~MCTCConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 MCTC_INPUTS_DOCSTRING = r"""
@@ -666,8 +612,7 @@ MCTC_INPUTS_DOCSTRING = r"""
         input_features (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MCTCTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`MCTCTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -679,15 +624,16 @@ MCTC_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -698,8 +644,8 @@ MCTC_INPUTS_DOCSTRING = r"""
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_features* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            This is useful if you want more control over how to convert *input_features* indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -709,7 +655,6 @@ MCTC_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
-
 
 
 class MCTCEncoder(MCTCPreTrainedModel):
@@ -746,16 +691,16 @@ class MCTCEncoder(MCTCPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inputs_embeds = self.conv(input_features)
-        
+
         # inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
         if attention_mask is not None:
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-            padding_mask = attention_mask.ne(1).long()
+            # padding_mask = attention_mask.ne(1).long()
         else:
-            padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
-
+            # padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
+            pass
 
         hidden_states = inputs_embeds
         # embed_pos = self.embed_positions(padding_mask)
@@ -795,7 +740,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
                             return module(*inputs, output_attentions)
 
                         return custom_forward
-         
+
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
@@ -811,7 +756,6 @@ class MCTCEncoder(MCTCPreTrainedModel):
 
                 hidden_states = layer_outputs[0]
 
-            
             if skip_the_layer:
                 layer_outputs = (None, None)
 
@@ -826,8 +770,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-   
-    
+
 
 @add_start_docstrings(
     "The bare mCTC Model transformer outputting raw hidden-states without any specific head on top.",
@@ -858,7 +801,7 @@ class MCTCModel(MCTCPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -890,7 +833,6 @@ class MCTCModel(MCTCPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-
         return BaseModelOutput(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -916,13 +858,11 @@ class MCTCForCTC(MCTCPreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = config.hidden_size
-        
 
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -965,13 +905,14 @@ class MCTCForCTC(MCTCPreTrainedModel):
 
         loss = None
         if labels is not None:
-            
+
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
-                attention_mask if attention_mask is not None 
+                attention_mask
+                if attention_mask is not None
                 else torch.ones(input_features.shape[:-1], dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
@@ -1004,7 +945,6 @@ class MCTCForCTC(MCTCPreTrainedModel):
         )
 
 
-
 # class MCTCClassificationHead(nn.Module):
 #     """Head for sentence-level classification tasks."""
 
@@ -1024,4 +964,3 @@ class MCTCForCTC(MCTCPreTrainedModel):
 #         x = self.dropout(x)
 #         x = self.out_proj(x)
 #         return x
-

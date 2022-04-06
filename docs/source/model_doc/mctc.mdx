@@ -39,10 +39,21 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+## MCTCFeatureExtractor
 
-## MCTCTokenizerFast
+[[autodoc]] MCTCFeatureExtractor
+    - __call__
 
-[[autodoc]] MCTCTokenizerFast
+
+## MCTCProcessor
+
+[[autodoc]] MCTCProcessor
+    - __call__
+    - from_pretrained
+    - save_pretrained
+    - batch_decode
+    - decode
+    - as_target_processor
 
 
 ## MCTCModel
@@ -51,36 +62,7 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - forward
 
 
-## MCTCForCausalLM
+## MCTCForCTC
 
-[[autodoc]] MCTCForCausalLM
-    - forward
-
-
-## MCTCForMaskedLM
-
-[[autodoc]] MCTCForMaskedLM
-    - forward
-
-
-## MCTCForSequenceClassification
-
-[[autodoc]] transformers.MCTCForSequenceClassification
-    - forward
-
-## MCTCForMultipleChoice
-
-[[autodoc]] transformers.MCTCForMultipleChoice
-    - forward
-
-
-## MCTCForTokenClassification
-
-[[autodoc]] transformers.MCTCForTokenClassification
-    - forward
-
-
-## MCTCForQuestionAnswering
-
-[[autodoc]] MCTCForQuestionAnswering
+[[autodoc]] MCTCForCTC
     - forward

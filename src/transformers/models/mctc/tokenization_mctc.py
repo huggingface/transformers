@@ -17,25 +17,15 @@
 import json
 import os
 import sys
-import warnings
 from dataclasses import dataclass
 from itertools import groupby
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import (
-    ModelOutput,
-    PaddingStrategy,
-    TensorType,
-    add_end_docstrings,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    to_py_obj,
-)
+from ...file_utils import ModelOutput, is_flax_available, is_tf_available, is_torch_available, to_py_obj
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
-from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...tokenization_utils_base import AddedToken
 from ...utils import logging
 
 
@@ -100,11 +90,12 @@ MCTC_KWARGS_DOCSTRING = r"""
 ListOfDict = List[Dict[str, Union[int, str]]]
 
 
-'''
-Pretty concerning here with the naming. Code adapted from Wav2Vec2CTCTokenizer,
-but since the model here is "MCTC", it has to be MCTCCTCTokenizer...
-Shortening to MCTCTokenizer makes it seems like the model name is just "M"...
-'''
+"""
+Pretty concerning here with the naming. Code adapted from Wav2Vec2CTCTokenizer, but since the model here is "MCTC", it
+has to be MCTCCTCTokenizer... Shortening to MCTCTokenizer makes it seems like the model name is just "M"...
+"""
+
+
 @dataclass
 class MCTCTokenizerOutput(ModelOutput):
     """
@@ -379,9 +370,9 @@ class MCTCTokenizer(PreTrainedTokenizer):
         output_char_offsets: Optional[bool] = False,
     ) -> str:
         """
-        special _decode function is needed for MCTCTokenizer because added tokens should be treated exactly the
-        same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
-        the whole token list and not individually on added tokens
+        special _decode function is needed for MCTCTokenizer because added tokens should be treated exactly the same as
+        tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on the
+        whole token list and not individually on added tokens
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -441,9 +432,9 @@ class MCTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.mctc.tokenization_mctc.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.mctc.tokenization_mctc.batch_decode`] works the same way with batched output.
+                Please take a look at the Example of [`~models.mctc.tokenization_mctc.decode`] to better understand how
+                to make use of `output_word_offsets`. [`~model.mctc.tokenization_mctc.batch_decode`] works the same way
+                with batched output.
 
                 </Tip>
 
@@ -453,9 +444,9 @@ class MCTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.mctc.tokenization_mctc.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.mctc.tokenization_mctc.batch_decode`] works the same way with batched output.
+                Please take a look at the Example of [`~models.mctc.tokenization_mctc.decode`] to better understand how
+                to make use of `output_word_offsets`. [`~model.mctc.tokenization_mctc.batch_decode`] works the same way
+                with batched output.
 
                 </Tip>
 
@@ -463,9 +454,9 @@ class MCTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]` or [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`]: The list of decoded
-            sentences. Will be a [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`] when
-            `output_char_offsets == True` or `output_word_offsets == True`.
+            `List[str]` or [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`]: The list of decoded sentences. Will
+            be a [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`] when `output_char_offsets == True` or
+            `output_word_offsets == True`.
         """
         batch_decoded = [
             self.decode(
@@ -514,8 +505,8 @@ class MCTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.mctc.tokenization_mctc.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the example of [`~models.mctc.tokenization_mctc.decode`] to better understand how
+                to make use of `output_word_offsets`.
 
                 </Tip>
 
@@ -525,8 +516,8 @@ class MCTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.mctc.tokenization_mctc.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the example of [`~models.mctc.tokenization_mctc.decode`] to better understand how
+                to make use of `output_word_offsets`.
 
                 </Tip>
 
@@ -534,9 +525,9 @@ class MCTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `str` or [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`]: The list of decoded
-            sentences. Will be a [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`] when
-            `output_char_offsets == True` or `output_word_offsets == True`.
+            `str` or [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`]: The list of decoded sentences. Will be a
+            [`~models.mctc.tokenization_mctc.MCTCTokenizerOutput`] when `output_char_offsets == True` or
+            `output_word_offsets == True`.
 
         Example:
 
