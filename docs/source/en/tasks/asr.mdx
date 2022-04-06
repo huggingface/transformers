@@ -59,9 +59,7 @@ DatasetDict({
 While the dataset contains a lot of helpful information, like `lang_id` and `intent_class`, you will focus on the `audio` and `transcription` columns in this guide. Remove the other columns:
 
 ```py
->>> minds = minds.remove_columns(
-...     ["english_transcription", "intent_class", "lang_id"]
-... )
+>>> minds = minds.remove_columns(["english_transcription", "intent_class", "lang_id"])
 ```
 
 Take a look at the example again:
