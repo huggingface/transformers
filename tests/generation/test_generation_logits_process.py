@@ -33,11 +33,11 @@ if is_torch_available():
         ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
         InfNanRemoveLogitsProcessor,
+        LogitNormalization,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
-        NormalizationLogitsWarper,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
@@ -539,15 +539,15 @@ class LogitsProcessorTest(unittest.TestCase):
             ).all()
         )
 
-    def test_normalization_warper(self):
+    def test_normalization(self):
         input_ids = None
 
         scores = torch.tensor(
             [[-23.18, -29.96, -43.54, 47.77], [-33.58, -26.87, -32.96, 22.51]], device=torch_device, dtype=torch.float
         )
 
-        normalization_warper = NormalizationLogitsWarper()
-        normalized_scores = normalization_warper(input_ids, scores).exp()
+        logit_normalization = LogitNormalization()
+        normalized_scores = logit_normalization(input_ids, scores).exp()
 
         ones = torch.ones(scores.shape[0], device=torch_device, dtype=torch.float)
         self.assertTrue(normalized_scores.sum(dim=-1).allclose(ones))
