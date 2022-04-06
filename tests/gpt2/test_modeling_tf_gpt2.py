@@ -536,7 +536,6 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
             "no_repeat_ngram_size": 2,
             "do_sample": False,
-            "repetition_penalty": 1.3,
             "num_beams": 2,
         }
 
@@ -544,8 +543,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         expected_output_string = [
-            "Today is a beautiful day and I hope you enjoy it.\nI am very happy to announce that",
-            "Yesterday was the first time I've ever seen a game where you can play with",
+            "Today is a beautiful day and a great day for all of us.\n\nI’m",
+            "Yesterday was the first day of the year for the second time in a row,",
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
