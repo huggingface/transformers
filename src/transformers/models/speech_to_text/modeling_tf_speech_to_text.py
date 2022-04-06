@@ -1265,7 +1265,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         return_dict: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[Union[np.ndarray, tf.Tensor]] = False,
         **kwargs
-    ):
+    ) -> Union[Tuple, TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1354,7 +1354,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ):
+    ) -> Union[Tuple, TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
