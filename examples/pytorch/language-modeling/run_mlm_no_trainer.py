@@ -606,13 +606,13 @@ def main():
 
         if args.with_tracking:
             accelerator.log(
-            {
-                "perplexity": perplexity,
-                "train_loss": total_loss,
-                "epoch": epoch,
-            },
-            step=completed_steps,
-        )
+                {
+                    "perplexity": perplexity,
+                    "train_loss": total_loss,
+                    "epoch": epoch,
+                },
+                step=completed_steps,
+            )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
@@ -623,7 +623,7 @@ def main():
                 repo.push_to_hub(
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
-                
+
         if args.checkpointing_steps == "epoch":
             accelerator.save_state(f"epoch_{epoch}")
 

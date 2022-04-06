@@ -560,13 +560,13 @@ def main():
 
         if args.with_tracking:
             accelerator.log(
-            {
-                "accuracy": eval_metric,
-                "train_loss": total_loss,
-                "epoch": epoch,
-            },
-            step=completed_steps,
-        )
+                {
+                    "accuracy": eval_metric,
+                    "train_loss": total_loss,
+                    "epoch": epoch,
+                },
+                step=completed_steps,
+            )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
