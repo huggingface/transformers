@@ -26,6 +26,8 @@ from torch import nn
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx.node import Argument
 
+import transformers.pytorch_utils
+
 from .. import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -244,7 +246,7 @@ class HFTracer(Tracer):
 
     _FUNCTIONS_TO_AUTOWRAP = {
         torch: {"arange", "zeros", "ones", "full_like", "eye"},
-        modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
+        transformers.pytorch_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
     }
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
