@@ -28,7 +28,7 @@ import numpy as np
 
 from transformers import ViTMAEConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow, torch_device
+from transformers.testing_utils import, require_tf, require_vision, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
