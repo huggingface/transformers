@@ -559,8 +559,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
-        >>> outputs.loss.item()
-        5.788386821746826
+        >>> round(outputs.loss.item(), 2)
+        5.78
 
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
