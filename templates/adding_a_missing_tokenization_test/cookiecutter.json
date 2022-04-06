@@ -1,0 +1,10 @@
+{
+  "modelname": "BrandNewBERT",
+  "uppercase_modelname": "BRAND_NEW_BERT",
+  "lowercase_modelname": "brand_new_bert",
+  "camelcase_modelname": "BrandNewBert",
+  "has_slow_class": ["True", "False"],
+  "has_fast_class": ["True", "False"],
+  "slow_tokenizer_use_sentencepiece": ["True", "False"],
+  "authors": "The HuggingFace Team"
+}

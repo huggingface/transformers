@@ -207,6 +207,7 @@ def main():
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
         task="image-classification",
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.

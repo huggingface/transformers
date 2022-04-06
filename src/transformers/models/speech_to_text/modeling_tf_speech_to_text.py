@@ -791,7 +791,6 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         """
         Args:
@@ -957,7 +956,6 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         Args:

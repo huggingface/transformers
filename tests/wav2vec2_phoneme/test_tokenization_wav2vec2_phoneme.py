@@ -398,3 +398,14 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
+
+    def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests assumes that the output of `convert_tokens_to_string` is a string which
+        # is not the case for Wav2Vec2PhonemeCTCTokenizer.
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["ð", "ɪ", "s", "ɪ", "z", "ɐ", "t", "ɛ", "k", "s", "t"]
+                output = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(output["text"], str)

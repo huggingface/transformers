@@ -115,23 +115,23 @@ Create a [`pipeline`] with the task you want to solve for and the model you want
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 ```
 
-Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [SUPERB](https://huggingface.co/datasets/superb) dataset:
+Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset:
 
 ```py
 >>> import datasets
 
->>> dataset = datasets.load_dataset("superb", name="asr", split="test")  # doctest: +IGNORE_RESULT
+>>> dataset = datasets.load_dataset("minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
 You can pass a whole dataset pipeline:
 
 ```py
->>> files = dataset["file"]
+>>> files = dataset["path"]
 >>> speech_recognizer(files[:4])
-[{'text': 'HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE'},
- {'text': 'STUFFERED INTO YOU HIS BELLY COUNSELLED HIM'},
- {'text': 'AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP HERE AND THERE THE SQUALID QUARTER OF THE BROTHELS'},
- {'text': 'HO BERTIE ANY GOOD IN YOUR MIND'}]
+[{'text': 'I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT'}, 
+ {'text': "FONDERING HOW I'D SET UP A JOIN TO HELL T WITH MY WIFE AND WHERE THE AP MIGHT BE"}, 
+ {'text': "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AN I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS"}, 
+ {'text': 'HOW DO I FURN A JOINA COUT'}]
 ```
 
 For a larger dataset where the inputs are big (like in speech or vision), you will want to pass along a generator instead of a list that loads all the inputs in memory. See the [pipeline documentation](./main_classes/pipelines) for more information.
