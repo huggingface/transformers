@@ -29,9 +29,8 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from emmental import MaskedBertConfig
 from emmental.modules import MaskedLinear
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 from transformers.models.bert.modeling_bert import ACT2FN, load_tf_weights_in_bert
-from transformers.pytorch_utils import prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
