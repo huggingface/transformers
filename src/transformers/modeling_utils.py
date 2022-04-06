@@ -40,6 +40,7 @@ from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
+    prune_layer,
     prune_conv1d_layer,
     prune_linear_layer,
 )
