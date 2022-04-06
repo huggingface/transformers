@@ -54,6 +54,7 @@ _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 # SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-plbart"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.69
 
@@ -1409,7 +1410,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-plbart",
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
