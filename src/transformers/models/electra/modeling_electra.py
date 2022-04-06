@@ -1092,18 +1092,23 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ElectraTokenizer, ElectraForPreTraining
+        >>> from transformers import ElectraForPreTraining, ElectraTokenizerFast
         >>> import torch
 
-        >>> tokenizer = ElectraTokenizer.from_pretrained("google/electra-small-discriminator")
-        >>> model = ElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
+        >>> discriminator = ElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
+        >>> tokenizer = ElectraTokenizerFast.from_pretrained("google/electra-small-discriminator")
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
-        ...     0
-        >>> )  # Batch size 1
-        >>> logits = model(input_ids).logits
+        >>> sentence = "The quick brown fox jumps over the lazy dog"
+        >>> fake_sentence = "The quick brown fox fake over the lazy dog"
 
+        >>> fake_tokens = tokenizer.tokenize(fake_sentence)
+        >>> fake_inputs = tokenizer.encode(fake_sentence, return_tensors="pt")
+        >>> discriminator_outputs = discriminator(fake_inputs)
+        >>> predictions = torch.round((torch.sign(discriminator_outputs[0]) + 1) / 2)
 
+        >>> [print("%7s" % token, end="") for token in fake_tokens]
+
+        >>> [print("%7s" % int(prediction), end="") for prediction in predictions.squeeze().tolist()]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1174,12 +1179,12 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="google/electra-small-discriminator",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="[mask]",
-        expected_output="'togo'",
-        expected_loss=11.43,
+        expected_output="'paris'",
+        expected_loss=1.22,
     )
     def forward(
         self,
@@ -1601,8 +1606,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
