@@ -506,40 +506,40 @@ class TFModelTesterMixin:
                 f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
             )
 
+    def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
+
+        pt_inputs_dict = {}
+        for name, key in tf_inputs_dict.items():
+            if type(key) == bool:
+                pt_inputs_dict[name] = key
+            elif name == "input_values":
+                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+            elif name == "pixel_values":
+                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+            elif name == "input_features":
+                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+            # other general float inputs
+            elif tf_inputs_dict[name].dtype.is_floating:
+                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+            else:
+                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+
+        return pt_inputs_dict
+
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-        def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
 
-            pt_inputs_dict = {}
-            for name, key in tf_inputs_dict.items():
-                if type(key) == bool:
-                    pt_inputs_dict[name] = key
-                elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                elif name == "pixel_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                elif name == "input_features":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                # other general float inputs
-                elif tf_inputs_dict[name].dtype.is_floating:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+        pt_inputs_dict = self.prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
 
-            return pt_inputs_dict
+        # send pytorch inputs to the correct device
+        pt_inputs_dict = {
+            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
+        }
 
         # send pytorch model to the correct device
         pt_model.to(torch_device)
 
         # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
         pt_model.eval()
-
-        pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
-        # pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
-
-        # send pytorch inputs to the correct device
-        pt_inputs_dict = {
-            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-        }
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs_dict)
