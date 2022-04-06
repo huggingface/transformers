@@ -33,6 +33,7 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 else:
     is_amp_available = False
 
+from ... import Conv1D
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -40,13 +41,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    SequenceSummary,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
+from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...pytorch_utils import prune_conv1d_layer, find_pruneable_heads_and_indices
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,

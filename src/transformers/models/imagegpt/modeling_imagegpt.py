@@ -32,13 +32,15 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 else:
     is_amp_available = False
 
+from ... import Conv1D
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import prune_conv1d_layer, find_pruneable_heads_and_indices
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
