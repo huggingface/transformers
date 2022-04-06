@@ -373,15 +373,15 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> from transformers import CTRLTokenizer, CTRLModel
         >>> import torch
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
-        >>> model = CTRLModel.from_pretrained("sshleifer/tiny-ctrl")
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLModel.from_pretrained("ctrl")
 
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> last_hidden_states.shape
-        torch.Size([1, 5, 16])
+        torch.Size([1, 5, 1280])
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -554,13 +554,13 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import CTRLTokenizer, CTRLLMHeadModel
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
-        >>> model = CTRLLMHeadModel.from_pretrained("sshleifer/tiny-ctrl")
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
 
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> outputs.loss.item()
-        12.4479
+        5.788386821746826
         >>> outputs.logits.shape
         torch.Size([1, 5, 246534])
         ```"""
@@ -671,8 +671,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl")
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
 
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
 
@@ -690,12 +690,12 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        1.21
+        0.57
         ```
 
         Example of multi-label classification:
@@ -704,9 +704,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained(
-        ...     "sshleifer/tiny-ctrl", problem_type="multi_label_classification"
+        ...     "ctrl", problem_type="multi_label_classification"
         ... )
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
 
@@ -721,7 +721,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl", num_labels=num_labels)
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
