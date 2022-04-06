@@ -32,12 +32,11 @@ class TokenizedDataset(IterableDataset):
     See compute_code for more details.
     """
 
-    def __init__(self, tokenizer, dataset, max_length, n_tasks=None, n_copies=1):
+    def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1):
         self.tokenizer = tokenizer
         self.dataset = dataset
         self.n_tasks = len(dataset) if n_tasks is None else n_tasks
         self.n_copies = n_copies
-        self.max_length = max_length
 
     def __iter__(self):
         prompts = []
@@ -186,16 +185,7 @@ def main():
     n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
     n_copies = args.n_samples // args.batch_size
 
-    # get tokens max length. It there a smarter way to do this?
-    max_len = 0
-    for task in range(n_tasks):
-        prompt = tokenizer.eos_token + human_eval["test"][task]["prompt"].strip()
-        input_len = len(tokenizer(prompt)["input_ids"])
-        max_len = max(max_len, input_len)
-
-    human_eval_tokenized = TokenizedDataset(
-        tokenizer, human_eval["test"], max_length=max_len, n_copies=n_copies, n_tasks=n_tasks
-    )
+    human_eval_tokenized = TokenizedDataset(tokenizer, human_eval["test"], n_copies=n_copies, n_tasks=n_tasks)
     # do not confuse args.batch_size, which is actually the num_return_sequences
     human_eval_loader = DataLoader(human_eval_tokenized, batch_size=1)
 
