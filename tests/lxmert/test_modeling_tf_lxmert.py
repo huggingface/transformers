@@ -497,9 +497,7 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             if isinstance(value, dict):
                 pt_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
             elif isinstance(value, (list, tuple)):
-                pt_inputs_dict[key] = (
-                    self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value
-                )
+                pt_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
             elif type(key) == bool:
                 pt_inputs_dict[key] = value
             elif key == "input_values":
