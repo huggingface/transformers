@@ -417,8 +417,9 @@ class TFModelTesterMixin:
 
         return new_tf_outputs, new_pt_outputs
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, name="outputs", attributes=None):
-        """
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
+        """Check the outputs from PyTorch and TensorFlow models are closed enough. Checks are done in a recursive way.
+
         Args:
             model_class: The class of the model that is currently testing. For example, `TFBertModel`,
                 TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
@@ -452,7 +453,7 @@ class TFModelTesterMixin:
             # appending each key to the current (string) `names`
             attributes = tuple([f"{name}.{k}" for k in tf_keys])
             self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, name=name, attributes=attributes
+                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
             )
 
         # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
@@ -472,7 +473,7 @@ class TFModelTesterMixin:
                 attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
 
             for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, name=attr)
+                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
 
         elif isinstance(tf_outputs, tf.Tensor):
             self.assertTrue(
@@ -500,7 +501,7 @@ class TFModelTesterMixin:
             tf_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, 1e-5, f"{name}: Difference between torch and tf is {max_diff} (>= {1e-5}).")
+            self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
         else:
             raise ValueError(
                 f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
