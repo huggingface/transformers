@@ -367,12 +367,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         lambda: FakeRegNetVisslWrapper(RegNetY128gf()),
     )
 
-    # names_to_from_model_map["regnet-y-2560-seer"] = partial(
-    #     load_using_classy_vision,
-    #     "https://dl.fbaipublicfiles.com/vissl/model_zoo/swav_ig1b_cosine_rg256gf_noBNhead_wd1e5_fairstore_bs16_node64_sinkhorn10_proto16k_apex_syncBN64_warmup8k/model_final_checkpoint_phase0.torch",
-    #     lambda: FakeRegNetVisslWrapper(RegNetY256gf()),
-    # )
-
     names_to_from_model_map["regnet-y-10b-seer"] = partial(
         load_using_classy_vision,
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch",
@@ -399,12 +393,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_regnet128_finetuned_in1k_model_final_checkpoint_phase78.torch",
         lambda: FakeRegNetVisslWrapper(RegNetY128gf()),
     )
-
-    # names_to_from_model_map["regnet-y-2560-seer-in1k"] = partial(
-    #     load_using_classy_vision,
-    #     "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_regnet256_finetuned_in1k_model_final_checkpoint_phase38.torch",
-    #     lambda: FakeRegNetVisslWrapper(RegNetY256gf()),
-    # )
 
     names_to_from_model_map["regnet-y-10b-seer-in1k"] = partial(
         load_using_classy_vision,
