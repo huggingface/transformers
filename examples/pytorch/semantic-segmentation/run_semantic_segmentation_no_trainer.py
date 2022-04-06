@@ -36,7 +36,6 @@ import transformers
 from accelerate import Accelerator
 from huggingface_hub import Repository, hf_hub_download
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForSemanticSegmentation,
@@ -75,13 +74,21 @@ class Compose:
         return image, target
 
 
+class Identity:
+    def __init__(self):
+        pass
+
+    def __call__(self, image, target):
+        return image, target
+
+
 class Resize:
     def __init__(self, size):
         self.size = size
 
     def __call__(self, image, target):
         image = functional.resize(image, self.size)
-        target = functional.resize(target, self.size)
+        target = functional.resize(target, self.size, interpolation=transforms.InterpolationMode.NEAREST)
         return image, target
 
 
@@ -175,6 +182,11 @@ def parse_args():
         type=str,
         help="Name of the dataset on the hub.",
         default="scene_parse_150",
+    )
+    parser.add_argument(
+        "--reduce_labels",
+        action="store_true",
+        help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
     parser.add_argument(
         "--train_val_split",
@@ -373,7 +385,7 @@ def main():
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
     _train_transforms = Compose(
         [
-            ReduceLabels(),
+            ReduceLabels() if args.reduce_labels else Identity(),
             RandomCrop(size=feature_extractor.size),
             RandomHorizontalFlip(flip_prob=0.5),
             PILToTensor(),
@@ -385,7 +397,7 @@ def main():
     # jitter = ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1)
     _val_transforms = Compose(
         [
-            ReduceLabels(),
+            ReduceLabels() if args.reduce_labels else Identity(),
             Resize(size=(feature_extractor.size, feature_extractor.size)),
             PILToTensor(),
             ConvertImageDtype(torch.float),
@@ -433,7 +445,7 @@ def main():
     )
 
     # Optimizer
-    optimizer = AdamW(
+    optimizer = torch.optim.AdamW(
         list(model.parameters()),
         lr=args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],
@@ -551,8 +563,9 @@ def main():
                         auto_lfs_prune=True,
                     )
 
+        logger.info("***** Running evaluation *****")
         model.eval()
-        for step, batch in enumerate(eval_dataloader):
+        for step, batch in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)):
             outputs = model(**batch)
 
             upsampled_logits = torch.nn.functional.interpolate(

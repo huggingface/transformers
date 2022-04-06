@@ -29,7 +29,13 @@ accelerate config
 and reply to the questions asked regarding the environment on which you'd like to train. Then:
 
 ```bash
-accelerate launch run_semantic_segmentation_no_trainer.py 
+accelerate launch run_semantic_segmentation_no_trainer.py --reduce_labels --output_dir segformer-finetuned-ade --wandb --push_to_hub
 ```
 
 and boom, you're training, possible on multiple GPUs :) 
+
+## Important notes
+
+Some datasets, like [`scene_parse_150`](scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
+
+In case you're training on such a dataset, make sure to set the ``reduce_labels`` flag, which will take care of this.
