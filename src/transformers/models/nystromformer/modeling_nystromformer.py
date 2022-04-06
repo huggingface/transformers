@@ -15,7 +15,6 @@
 """ PyTorch Nystromformer model."""
 
 
-from ast import Mult
 import math
 from typing import Union, Tuple, Optional
 
