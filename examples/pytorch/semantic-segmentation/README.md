@@ -16,7 +16,7 @@ limitations under the License.
 
 # Semantic segmentation example
 
-This directory contains a script, `run_semantic_segmentation_no_trainer.py`, that showcases how to fine-tune any `AutoModelForSemanticSegmentation` (such as SegFormer, BEiT, DPT) for semantic segmentation using PyTorch.
+This directory contains a script, `run_semantic_segmentation_no_trainer.py`, that showcases how to fine-tune any model supported by the [`AutoModelForSemanticSegmentation` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSemanticSegmentation) (such as [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer), [BEiT](https://huggingface.co/docs/transformers/main/en/model_doc/beit), [DPT]((https://huggingface.co/docs/transformers/main/en/model_doc/dpt))) for semantic segmentation using PyTorch.
 
 The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
 
@@ -26,13 +26,69 @@ First, run:
 accelerate config
 ```
 
-and reply to the questions asked regarding the environment on which you'd like to train. Then:
+and reply to the questions asked regarding the environment on which you'd like to train. Then
 
 ```bash
-accelerate launch run_semantic_segmentation_no_trainer.py --reduce_labels --output_dir segformer-finetuned-ade --wandb --push_to_hub
+accelerate test
 ```
 
-and boom, you're training, possible on multiple GPUs :) 
+that will check everything is ready for training. Finally, you can launch training with
+
+```bash
+accelerate launch run_semantic_segmentation_no_trainer.py \
+  --output_dir segformer-finetuned-sidewalk \
+  --logging_steps 100 \
+  --saving_steps 100 \
+  --wandb \
+  --push_to_hub
+```
+
+and boom, you're training, possible on multiple GPUs, logging everything to Weights and Biases and regularly pushing your model to the hub :)
+
+With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](segments/sidewalk-semantic) dataset.
+
+The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk.
+
+## Reload and perform inference
+
+This means that after training, you can easily load your trained model as follows:
+
+```python
+from transformers import AutoFeatureExtractor, AutoModelForSemanticSegmentation
+
+model_name = "name_of_repo_on_the_hub_or_path_to_local_folder"
+
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+model = AutoModelForSemanticSegmentation.from_pretrained(model_name)
+```
+
+and perform inference as follows:
+
+```python
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+# prepare image for the model
+inputs = feature_extractor(images=image, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    logits = outputs.logits
+
+# rescale logits to original image size
+logits = nn.functional.interpolate(outputs.logits.detach().cpu(),
+                                    size=image.size[::-1], # (height, width)
+                                    mode='bilinear',
+                                    align_corners=False)
+
+predicted = logits.argmax(1)
+```
+
+For visualization of the segmentation maps, we refer to the [example notebook]().
 
 ## Important notes
 

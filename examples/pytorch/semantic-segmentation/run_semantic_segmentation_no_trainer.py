@@ -181,7 +181,7 @@ def parse_args():
         "--dataset_name",
         type=str,
         help="Name of the dataset on the hub.",
-        default="scene_parse_150",
+        default="segments/sidewalk-semantic",
     )
     parser.add_argument(
         "--reduce_labels",
