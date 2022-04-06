@@ -105,7 +105,9 @@ class ModelArguments:
     freeze_feature_encoder: bool = field(
         default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
-
+    hidden_dropout: float = field(
+        default=0.1, metadata={"help": "The dropout probability for all fully connected layers in the embeddings, encoder, and pooler."}
+    )
 
 @flax.struct.dataclass
 class DataTrainingArguments:
@@ -704,6 +706,10 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    # Set regularisation according to model args
+    model.config.encoder.hidden_dropout = model_args.hidden_dropout
+    model.config.decoder.dropout = model_args.hidden_dropout
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
