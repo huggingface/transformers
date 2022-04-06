@@ -117,12 +117,12 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     Used to remove heads.
 
     Args:
-        layer ([`~modeling_utils.Conv1D`]): The layer to prune.
+        layer ([`~pytorch_utils.Conv1D`]): The layer to prune.
         index (`torch.LongTensor`): The indices to keep in the layer.
         dim (`int`, *optional*, defaults to 1): The dimension on which to keep the indices.
 
     Returns:
-        [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
+        [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
     W = layer.weight.index_select(dim, index).clone().detach()
@@ -156,7 +156,7 @@ def prune_layer(
         dim (`int`, *optional*): The dimension on which to keep the indices.
 
     Returns:
-        `torch.nn.Linear` or [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
+        `torch.nn.Linear` or [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     if isinstance(layer, nn.Linear):
         return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
