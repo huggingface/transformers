@@ -414,6 +414,8 @@ class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
     """
 
     def __init__(self, bos_token_id: int):
+        if bos_token_id < 0:
+            raise ValueError(f"The forced bos token id  must be a non-negative integer, got {bos_token_id}")
         self.bos_token_id = bos_token_id
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
@@ -445,6 +447,8 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
 
     def __init__(self, max_length: int, eos_token_id: int):
         self.max_length = max_length
+        if eos_token_id < 0:
+            raise ValueError(f"The forced eos token id must be a non-negative integer, got {eos_token_id}")
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
