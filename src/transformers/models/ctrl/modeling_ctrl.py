@@ -380,8 +380,8 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
-        >>> last_hidden_states.shape
-        torch.Size([1, 5, 1280])
+        >>> list(last_hidden_states.shape)
+        [1, 5, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -562,8 +562,10 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> outputs.loss.item()
         5.788386821746826
 
-        >>> outputs.logits.shape
-        torch.Size([1, 5, 246534])
+        >>> list(outputs.logits.shape)
+        [1, 5, 246534]
+
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
