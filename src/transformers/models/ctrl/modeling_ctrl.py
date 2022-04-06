@@ -670,7 +670,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> tokenizer = CTRLTokenizer.from_pretrained("sshleifer/tiny-ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained("sshleifer/tiny-ctrl")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
