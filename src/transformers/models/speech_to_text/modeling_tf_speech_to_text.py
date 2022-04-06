@@ -20,8 +20,6 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
-import transformers.pytorch_utils
-
 from ...activations_tf import get_tf_activation, glu
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
@@ -132,7 +130,7 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         self.kernel_sizes = config.conv_kernel_sizes
 
         self.conv_layers = [
-            transformers.pytorch_utils.Conv1D(
+            tf.keras.layers.Conv1D(
                 filters=self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
                 strides=2,

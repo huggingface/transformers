@@ -22,8 +22,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-import transformers.pytorch_utils
-
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
 from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
@@ -525,7 +523,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         return broadcast_shape
 
 
-class TFWav2Vec2WeightNormConv1D(transformers.pytorch_utils.Conv1D):
+class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
     """Adapted from https://www.tensorflow.org/probability/api_docs/python/tfp/layers/weight_norm/WeightNorm"""
 
     def __init__(self, filters, kernel_size, groups, explicit_padding, **kwargs):
@@ -591,7 +589,7 @@ class TFWav2Vec2NoLayerNormConvLayer(tf.keras.layers.Layer):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = transformers.pytorch_utils.Conv1D(
+        self.conv = tf.keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
@@ -612,7 +610,7 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = transformers.pytorch_utils.Conv1D(
+        self.conv = tf.keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
@@ -635,7 +633,7 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = transformers.pytorch_utils.Conv1D(
+        self.conv = tf.keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
