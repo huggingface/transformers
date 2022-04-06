@@ -380,6 +380,8 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> last_hidden_states.shape
+        torch.Size([1, 5, 16])
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -557,8 +559,10 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+        >>> outputs.loss.item()
+        12.4479
+        >>> outputs.logits.shape
+        torch.Size([1, 5, 246534])
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
