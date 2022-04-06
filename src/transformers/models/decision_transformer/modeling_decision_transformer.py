@@ -24,10 +24,9 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 
-from ... import Conv1D
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
