@@ -449,9 +449,6 @@ def main():
     if accelerator.distributed_type == DistributedType.TPU:
         model.tie_weights()
 
-    # Note -> the training dataloader needs to be prepared before we grab its length below (cause its length will be
-    # shorter in multiprocess)
-
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
@@ -498,24 +495,23 @@ def main():
     completed_steps = 0
 
     # Potentially load in the weights and states from a previous save
-    state_restored = True
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
             accelerator.load_state(args.resume_from_checkpoint)
             resume_step = None
+            path = args.resume_from_checkpoint
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-            if "epoch" in path.name:
-                num_epochs -= int(path.name.replace("epoch_", ""))
-            else:
-                resume_step = int(path.name.replace("step_", ""))
-                num_epochs -= resume_step // len(train_dataloader)
-                resume_step = (num_epochs * len(train_dataloader)) - resume_step
-                state_restored = False
+        if "epoch" in path:
+            args.num_train_epochs -= int(path.replace("epoch_", ""))
+        else:
+            resume_step = int(path.replace("step_", ""))
+            args.num_train_epochs -= resume_step // len(train_dataloader)
+            resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
 
     for epoch in range(args.num_train_epochs):
         model.train()
