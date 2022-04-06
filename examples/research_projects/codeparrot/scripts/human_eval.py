@@ -47,7 +47,11 @@ class TokenizedDataset(IterableDataset):
         outputs = self.tokenizer(prompts, padding=True, return_tensors="pt")
         for task in range(self.n_tasks):
             for _ in range(self.n_copies):
-                yield {"ids": outputs.input_ids[task], "task_id": task, "input_len": outputs.attention_mask[task].sum()}
+                yield {
+                    "ids": outputs.input_ids[task],
+                    "task_id": task,
+                    "input_len": outputs.attention_mask[task].sum(),
+                }
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -95,7 +99,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
 
     dataloader: DataLoader
         The dataloader is a wrapper around a TokenizeDataset object. It is designed to be used with multiple GPUs.
-    
+
     n_tasks: int
         The number of tasks in the dataset. It is used to determine the length of the output.
         Should be aligned with the number of tasks in the TokenizeDataset.
