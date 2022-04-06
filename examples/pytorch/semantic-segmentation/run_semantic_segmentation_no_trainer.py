@@ -325,12 +325,12 @@ def main():
     accelerator.wait_for_everyone()
 
     # Load dataset
-    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
     dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
 
-    # Rename column names to standardized names
+    # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:
         dataset = dataset.rename_columns({"pixel_values": "image"})
     if "annotation" in dataset["train"].column_names:
@@ -445,9 +445,6 @@ def main():
         model, optimizer, train_dataloader, eval_dataloader
     )
 
-    # Note -> the training dataloader needs to be prepared before we grab his length below (cause its length will be
-    # shorter in multiprocess)
-
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
@@ -468,8 +465,6 @@ def main():
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
-    print("Running training:")
-    print("Number of training epochs:", args.num_train_epochs)
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -482,11 +477,10 @@ def main():
     completed_steps = 0
 
     for epoch in range(args.num_train_epochs):
-        print("Epoch:", epoch)
         model.train()
         for step, batch in enumerate(train_dataloader):
             outputs = model(**batch)
-            loss, logits = outputs.loss, outputs.logits
+            loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
@@ -511,28 +505,25 @@ def main():
                     "lr": torch.tensor(optimizer.param_groups[0]["lr"]),
                 }
 
-                if accelerator.is_main_process:
-                    # evaluate (only on main process for now, ideally we'd like to have this computed
-                    # on all devices and synchronized properly)
-                    with torch.no_grad():
-                        upsampled_logits = torch.nn.functional.interpolate(
-                            logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
-                        )
-                        predicted = upsampled_logits.argmax(dim=1)
-
-                        # note that the metric expects predictions + labels as numpy arrays
-                        metric.add_batch(
-                            predictions=predicted.detach().cpu().numpy(),
-                            references=batch["labels"].detach().cpu().numpy(),
-                        )
-                    metrics = metric.compute(
-                        num_labels=len(id2label),
-                        ignore_index=255,
-                        reduce_labels=False,  # we've already reduced the labels before
+                # Evaluate (gather required)
+                with torch.no_grad():
+                    upsampled_logits = torch.nn.functional.interpolate(
+                        outputs.logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
                     )
-                    train_logs["mean_iou"] = metrics["mean_iou"]
-                    train_logs["mean_accuracy"] = metrics["mean_accuracy"]
-                    train_logs["overall_accuracy"] = metrics["overall_accuracy"]
+                    predictions = upsampled_logits.argmax(dim=1)
+
+                    metric.add_batch(
+                        predictions=accelerator.gather(predictions),
+                        references=accelerator.gather(batch["labels"]),
+                    )
+                train_metrics = metric.compute(
+                    num_labels=len(id2label),
+                    ignore_index=255,
+                    reduce_labels=False,  # we've already reduced the labels before
+                )
+                train_logs["mean_iou"] = train_metrics["mean_iou"]
+                train_logs["mean_accuracy"] = train_metrics["mean_accuracy"]
+                train_logs["overall_accuracy"] = train_metrics["overall_accuracy"]
 
                 log_str = ""
                 for k, v in train_logs.items():
@@ -560,20 +551,28 @@ def main():
                         auto_lfs_prune=True,
                     )
 
-        # model.eval()
-        # for step, batch in enumerate(eval_dataloader):
-        #     outputs = model(**batch)
-        #     predictions = outputs.logits.argmax(dim=-1)
-        #     # metric.add_batch(
-        #     #     predictions=accelerator.gather(predictions),
-        #     #     references=accelerator.gather(batch["labels"]),
-        #     # )
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
+            outputs = model(**batch)
 
-        # eval_metric = metric.compute()
-        # logger.info(f"epoch {epoch}: {eval_metric}")
+            upsampled_logits = torch.nn.functional.interpolate(
+                outputs.logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
+            )
+            predictions = upsampled_logits.argmax(dim=1)
+
+            metric.add_batch(
+                predictions=accelerator.gather(predictions),
+                references=accelerator.gather(batch["labels"]),
+            )
+
+        eval_metrics = metric.compute(
+            num_labels=len(id2label),
+            ignore_index=255,
+            reduce_labels=False,  # we've already reduced the labels before
+        )
+        logger.info(f"epoch {epoch}: {eval_metrics}")
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
-            print("Pushing after epoch:", epoch)
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
