@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Research, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,10 +27,10 @@ REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RegNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RegNetModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`RegNetModel`]. It is used to instantiate a
     RegNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [regnet-y-40](https://huggingface.co/facebook/regnet-y-40) architecture.
+    [facebook/regnet-y-40](https://huggingface.co/facebook/regnet-y-40) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

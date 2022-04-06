@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Research, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -230,7 +230,7 @@ class RegNetEncoder(nn.Module):
     def __init__(self, config: RegNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
-        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
+        # based on `downsample_in_first_stage`, the first layer of the first stage may or may not downsample the input
         self.stages.append(
             RegNetStage(
                 config,
