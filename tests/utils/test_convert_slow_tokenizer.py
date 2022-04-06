@@ -2,9 +2,8 @@ import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers import logging
 from transformers.convert_slow_tokenizer import SpmConverter
-from transformers.testing_utils import CaptureLogger, get_tests_dir
+from transformers.testing_utils import get_tests_dir
 
 
 @dataclass
@@ -18,9 +17,6 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
         spm_model_file_with_bytefallback = f"{get_tests_dir()}/fixtures/test_sentencepiece_with_bytefallback.model"
 
         original_tokenizer_without_bytefallback = FakeOriginalTokenizer(vocab_file=spm_model_file_without_bytefallback)
-
-        logging.set_verbosity_warning()
-        logger = logging.get_logger("transformers.convert_slow_tokenizer")
 
         with warnings.catch_warnings(record=True) as w:
             _ = SpmConverter(original_tokenizer_without_bytefallback)
