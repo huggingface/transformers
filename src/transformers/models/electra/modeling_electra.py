@@ -1102,6 +1102,8 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         ...     0
         >>> )  # Batch size 1
         >>> logits = model(input_ids).logits
+
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1175,6 +1177,9 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[mask]",
+        expected_output="'togo'",
+        expected_loss=11.43,
     )
     def forward(
         self,
@@ -1256,9 +1261,11 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english ",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['B-LOC', 'B-ORG', 'O', 'O', 'O', 'O', 'O', 'B-LOC', 'O', 'B-LOC', 'I-LOC']",
+        expected_loss=0.11,
     )
     def forward(
         self,
@@ -1336,9 +1343,11 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="deepset/electra-base-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'a nice puppet'",
+        expected_loss=0.0,
     )
     def forward(
         self,
@@ -1592,6 +1601,8 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
+
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
