@@ -2168,8 +2168,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         param_dtype = getattr(submodule, param_name).dtype
                         if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
                             new_val = torch.nn.Parameter(new_val)
-                        setattr(submodule, param_name, new_val)
                         new_val = state_dict[k].to(param_dtype)
+                        setattr(submodule, param_name, new_val)
 
             del state_dict
 
