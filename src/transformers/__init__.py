@@ -645,16 +645,10 @@ if is_torch_available():
     _import_structure["models.gpt_neox"].extend(
         [
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTNeoXForMaskedLM",
             "GPTNeoXForCausalLM",
-            "GPTNeoXForMultipleChoice",
-            "GPTNeoXForQuestionAnswering",
-            "GPTNeoXForSequenceClassification",
-            "GPTNeoXForTokenClassification",
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
-            "load_tf_weights_in_gpt_neox",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2922,16 +2916,10 @@ if TYPE_CHECKING:
 
         from .models.gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoXForMaskedLM,
             GPTNeoXForCausalLM,
-            GPTNeoXForMultipleChoice,
-            GPTNeoXForQuestionAnswering,
-            GPTNeoXForSequenceClassification,
-            GPTNeoXForTokenClassification,
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
-            load_tf_weights_in_gpt_neox,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
