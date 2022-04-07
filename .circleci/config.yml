@@ -587,6 +587,7 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
