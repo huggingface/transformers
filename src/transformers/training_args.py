@@ -418,8 +418,8 @@ class TrainingArguments:
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
-            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for
-            metrics that need inputs, predictions and references for scoring calculation in Metric class.
+            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
+            that need inputs, predictions and references for scoring calculation in Metric class.
     """
 
     output_dir: str = field(
