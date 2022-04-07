@@ -2505,7 +2505,9 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     "hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification"
         ... )
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> # add pad_token
+        >>> tokenizer.add_special_tokens({"pad_token": "[PAD]"})  # doctest: +IGNORE_RESULT
+        >>> inputs = tokenizer("Hello, my dog is cute", max_length=100, padding="max_length", return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -2521,14 +2523,14 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         >>> model = ReformerForSequenceClassification.from_pretrained(
         ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
         ... )
+        >>> model.train()  # doctest: +IGNORE_RESULT
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
         ...     torch.float
         ... )
         >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.69
+        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
