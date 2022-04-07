@@ -363,9 +363,9 @@ class TFModelTesterMixin:
             if k in inputs_dict:
                 attention_mask = inputs_dict[k]
 
-                # # make sure no all 0s attention masks - to avoid failure at this moment.
-                # # TODO: remove this line once the TODO below is implemented.
-                # attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
+                # Make sure no all 0s attention masks - to avoid failure at this moment.
+                # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
+                # TODO: remove this line once a fix regarding large negative values for attention mask is done.
                 attention_mask = tf.concat(
                     [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
                 )
