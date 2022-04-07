@@ -461,19 +461,21 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
 class GPTNeoXModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = GPTNeoXForMaskedLM.from_pretrained("gpt-neox-20b")
+        model = GPTNeoXForMaskedLM.from_pretrained("Eleuther/gpt-neox-20b")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 50432
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[33.8045,  2.3958, 34.2816],
+              [63.7805,  4.8332, 63.5882],
+              [66.9116,  5.2198, 63.1185]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

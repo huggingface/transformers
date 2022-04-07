@@ -60,19 +60,17 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        # if isinstance(module, nn.Linear):
-        #     # Slightly different from the TF version which uses truncated_normal for initialization
-        #     # cf https://github.com/pytorch/pytorch/pull/5617
-        #     module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
-        # elif isinstance(module, nn.Embedding):
-        #     module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        #     if module.padding_idx is not None:
-        #         module.weight.data[module.padding_idx].zero_()
-        # elif isinstance(module, nn.LayerNorm):
-        #     module.bias.data.zero_()
-        #     module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTNeoXModel):
@@ -200,18 +198,36 @@ class GPTNeoXAttention(nn.Module):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
         # compute causal mask from causal mask buffer
-        query_length, key_length = query.size(-2), key.size(-2)
+        batch_size, num_attention_heads, query_length, attn_head_size = query.size()
+        key_length = key.size(-2)
+
         causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
 
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
-        attn_weights = attn_weights / self.norm_factor
+        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
+        attn_scores = torch.empty(
+            batch_size * num_attention_heads,
+            query_length,
+            key_length,
+            dtype=query.dtype,
+            device=query.device,
+        )
+        attn_scores = torch.baddbmm(
+            attn_scores,
+            query,
+            key.permute(0, 2, 1),
+            beta=0.0,
+            alpha=(1.0 / self.norm_factor),
+        )
+        attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+
+        attn_scores = torch.where(causal_mask, attn_scores, self.masked_bias.to(attn_scores.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
+            attn_scores = attn_scores + attention_mask
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_scores, dim=-1)
         attn_weights = attn_weights.to(value.dtype)
 
         # Mask heads if we want to
@@ -302,11 +318,11 @@ class GPTNeoXLayer(nn.Module):
         use_cache=False,
         layer_past=None,
         output_attentions=False,
-        output_hidden_states=False,
-        return_dict=False,
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
+        if torch.isnan(ln_out).any():
+            raise RuntimeError()
         attention_layer_outputs = self.attention(
             ln_out,
             attention_mask=attention_mask,
@@ -315,10 +331,14 @@ class GPTNeoXLayer(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
+        if torch.isnan(attention_layer_outputs[0]).any():
+            raise RuntimeError()
         attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attention_layer_outputs[1:]
 
         mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+        if torch.isnan(mlp_output).any():
+            raise RuntimeError()
         hidden_states = mlp_output + attn_output + residual
 
         if use_cache:
@@ -395,21 +415,6 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
     GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXModel(GPTNeoXPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the
-    `is_decoder` argument of the configuration set to `True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an
-    `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -473,7 +478,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if past_key_values is None:
             past_key_values = tuple([None] * self.config.num_hidden_layers)
@@ -508,12 +512,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             inputs_embeds = self.embed_in(input_ids)
 
         hidden_states = inputs_embeds
-        # Convert from [batch_size, seq_length, hidden_size] to [seq_length, batch_size, hidden_size]
-        # hidden_states = self.pre_transformer_transpose(hidden_states)
-        if past_key_values is not None:
-            #TODO: check
-            #past_key_values = self.pre_transformer_transpose(past_key_values)
-            pass
 
         presents = () if use_cache else None
         all_attentions = () if output_attentions else None
@@ -526,8 +524,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 layer_past=layer_past,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
             hidden_states = outputs[0]
             if use_cache is True:
@@ -536,10 +532,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 all_attentions = all_attentions + (outputs[2 if use_cache else 1],)
 
         hidden_states = self.final_layer_norm(hidden_states)
-        # hidden_states = self.post_transformer_transpose(hidden_states)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -547,14 +545,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
-
-    @classmethod
-    def pre_transformer_transpose(cls, x):
-        return x.transpose(0, 1).contiguous()
-
-    @classmethod
-    def post_transformer_transpose(cls, x):
-        return x.transpose(0, 1).contiguous()
 
 
 @add_start_docstrings(
@@ -595,15 +585,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
             tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
@@ -611,9 +592,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
             model.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-            decoding.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks
+            that can be used (see `past_key_values` input) to speed up sequential decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`

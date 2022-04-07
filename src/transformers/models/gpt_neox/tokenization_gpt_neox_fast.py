@@ -18,7 +18,6 @@ from typing import Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
-from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_gpt_neox import GPTNeoXTokenizer
@@ -38,7 +37,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class GPT2TokenizerFast(PreTrainedTokenizerFast):
+class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-NeoX-20B tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
