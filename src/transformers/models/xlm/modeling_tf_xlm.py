@@ -19,7 +19,7 @@
 import itertools
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -33,6 +33,7 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -347,20 +348,20 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         # removed: src_enc=None, src_len=None
 
         if input_ids is not None and inputs_embeds is not None:
@@ -558,8 +559,8 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Optional[tf.Tensor] = None
+    attentions: Optional[tf.Tensor] = None
 
 
 XLM_START_DOCSTRING = r"""
@@ -693,20 +694,20 @@ class TFXLMModel(TFXLMPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -828,20 +829,20 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFXLMWithLMHeadModelOutput, Tuple[tf.Tensor]]:
         transformer_outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -900,21 +901,21 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1007,21 +1008,21 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
             seq_length = shape_list(input_ids)[2]
@@ -1131,21 +1132,21 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1216,22 +1217,22 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        start_positions=None,
-        end_positions=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        langs: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        lengths: Optional[tf.Tensor] = None,
+        cache: Dict[str, tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[bool] = None,
+        end_positions: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
