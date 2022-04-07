@@ -117,6 +117,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.r3m": ["R3M_PRETRAINED_CONFIG_ARCHIVE_MAP", "R3MConfig", "R3MTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -438,6 +439,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.r3m"].append("R3MTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -639,6 +641,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.r3m"].extend(
+        [
+            "R3M_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "R3MForMaskedLM",
+            "R3MForCausalLM",
+            "R3MForMultipleChoice",
+            "R3MForQuestionAnswering",
+            "R3MForSequenceClassification",
+            "R3MForTokenClassification",
+            "R3MLayer",
+            "R3MModel",
+            "R3MPreTrainedModel",
+            "load_tf_weights_in_r3m",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2497,6 +2515,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.r3m import R3M_PRETRAINED_CONFIG_ARCHIVE_MAP, R3MConfig, R3MTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2787,6 +2806,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.r3m import R3MTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2897,6 +2917,20 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.r3m import (
+            R3M_PRETRAINED_MODEL_ARCHIVE_LIST,
+            R3MForMaskedLM,
+            R3MForCausalLM,
+            R3MForMultipleChoice,
+            R3MForQuestionAnswering,
+            R3MForSequenceClassification,
+            R3MForTokenClassification,
+            R3MLayer,
+            R3MModel,
+            R3MPreTrainedModel,
+            load_tf_weights_in_r3m,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments

@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    r3m,
     albert,
     auto,
     bart,
