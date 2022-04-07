@@ -681,7 +681,6 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         return scores
 
 
-
 class LogitNormalization(LogitsProcessor, LogitsWarper):
     r"""
     [`LogitsWarper`] and [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
