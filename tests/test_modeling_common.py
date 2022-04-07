@@ -115,6 +115,83 @@ def _config_zero_init(config):
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 
 
+import threading  # noqa
+
+
+class CPUMemoryTracker:
+    def __init__(self):
+
+        # XXX: check is_psutil_available():
+        import psutil  # noqa
+
+        # if not is_psutil_available():
+        self.process = psutil.Process()
+
+    def cpu_mem_used(self):
+        """get resident set size memory for the current process"""
+        return self.process.memory_info().rss
+
+    def peak_monitor_func(self):
+        self.cpu_mem_used_peak = -1
+
+        while True:
+            self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
+
+            # can't sleep or will not catch the peak right (this comment is here on purpose)
+            # time.sleep(0.001) # 1msec
+
+            if not self.peak_monitoring:
+                break
+
+    def start(self):
+        """start tracking for the caller's stage"""
+
+        gc.collect()
+
+        # cpu
+        self.cpu_mem_used_at_start = self.cpu_mem_used()
+
+        self.peak_monitoring = True
+        peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
+        peak_monitor_thread.daemon = True
+        peak_monitor_thread.start()
+
+    def stop(self):
+        """stop tracking for the passed stage"""
+
+        # this sends a signal to peak_monitor_func to complete its loop
+        self.peak_monitoring = False
+
+        # first ensure all objects get collected and their memory is freed
+        gc.collect()
+
+        # concepts:
+        # - alloc_delta:  the difference of allocated memory between the end and the start
+        # - peaked_delta: the difference between the peak memory and the current memory
+        # in order to know how much memory the measured code consumed one needs to sum these two
+
+        # cpu
+        self.cpu_mem_used_now = self.cpu_mem_used()
+        self.stats = dict(
+            begin=self.cpu_mem_used_at_start,
+            end=self.cpu_mem_used_now,
+            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        )
+
+    def peaked(self):
+        if hasattr(self, "stats"):
+            return self.stats["peaked"]
+        else:
+            raise ValueError("call stop first")
+
+    def alloc(self):
+        if hasattr(self, "stats"):
+            return self.stats["alloc"]
+        else:
+            raise ValueError("call stop first")
+
+
 @require_torch
 class ModelTesterMixin:
 
@@ -2475,6 +2552,44 @@ class ModelUtilsTest(TestCasePlus):
         ref_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
+
+    def test_from_pretrained_low_cpu_mem_usage_measured(self):
+        # test that `low_cpu_mem_usage=True` uses less cpu memory than normal
+
+        mname = "bert-base-uncased"
+
+        cpu_memo_tracker = CPUMemoryTracker()
+        cpu_memo_tracker.start()
+
+        model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
+        del model
+
+        cpu_memo_tracker.stop()
+        # print(f"{cpu_memo_tracker.alloc()=}, {cpu_memo_tracker.peaked()=}")
+        peaked_normal = cpu_memo_tracker.peaked()
+
+        cpu_memo_tracker = CPUMemoryTracker()
+        cpu_memo_tracker.start()
+
+        model = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
+        del model
+
+        cpu_memo_tracker.stop()
+        # print(f"{cpu_memo_tracker.alloc()=}, {cpu_memo_tracker.peaked()=}")
+        peaked_low = cpu_memo_tracker.peaked()
+        assert (
+            peaked_low < peaked_normal
+        ), "should use less CPU peak memory but got peaked_low={peaked_low} and peaked_normal={peaked_normal}"
+
+    def test_from_pretrained_low_cpu_mem_usage_functional(self):
+        # test that we can use `low_cpu_mem_usage=True` with normal and sharded models
+
+        mnames = [
+            "hf-internal-testing/tiny-random-bert-sharded",
+            "hf-internal-testing/tiny-random-bert",
+        ]
+        for mname in mnames:
+            _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
