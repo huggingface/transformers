@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
         ("glpn", "GLPNConfig"),
@@ -135,7 +136,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
-        # Add archive maps here
+        # Add archive maps here)
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
