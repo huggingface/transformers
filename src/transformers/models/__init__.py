@@ -96,6 +96,7 @@ from . import (
     rag,
     realm,
     reformer,
+    regnet,
     rembert,
     resnet,
     retribert,
