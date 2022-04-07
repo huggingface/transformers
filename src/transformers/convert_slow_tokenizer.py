@@ -433,7 +433,9 @@ class SpmConverter(Converter):
         if self.proto.trainer_spec.byte_fallback:
             warnings.warn(
                 "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                " which is not implemented in the fast tokenizers."
+                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                "unknown tokens into a sequence of byte tokens matching the original piece of text."
             )
 
     def vocab(self, proto):
