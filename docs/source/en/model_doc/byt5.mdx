@@ -53,10 +53,12 @@ ByT5 works on raw UTF-8 bytes, so it can be used without a tokenizer:
 
 >>> model = T5ForConditionalGeneration.from_pretrained("google/byt5-small")
 
->>> input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + 3  # add 3 for special tokens
+>>> input_ids = (
+...     torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + 3
+>>> )  # add 3 for special tokens
 >>> labels = (
 ...     torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + 3
-... )  # add 3 for special tokens
+>>> )  # add 3 for special tokens
 
 >>> loss = model(input_ids, labels=labels).loss
 >>> loss.item()
@@ -76,7 +78,7 @@ For batched inference and training it is however recommended to make use of the 
 ... )
 >>> labels = tokenizer(
 ...     ["La vie est comme une boîte de chocolat.", "Aujourd'hui c'est lundi."], padding="longest", return_tensors="pt"
-... ).input_ids
+>>> ).input_ids
 
 >>> loss = model(**model_inputs, labels=labels).loss
 >>> loss.item()
@@ -100,7 +102,7 @@ for us.
 >>> input_ids = tokenizer(input_ids_prompt).input_ids
 
 >>> # Now Mask
->>> # Note that we can add "{extra_id_...}" to the string directly 
+>>> # Note that we can add "{extra_id_...}" to the string directly
 >>> # as the Byte tokenizer would incorrectly merge the tokens
 >>> # We need to work on the character level directly here
 >>> # => mask to "The dog [258]a ball [257]park."
@@ -112,7 +114,8 @@ tensor([[ 87, 107, 104,  35, 103, 114, 106,  35, 258,  35, 100,  35, 101, 100, 1
 >>> output_ids = model.generate(input_ids, max_length=100)[0].tolist()
 >>> output_ids
 [0, 258, 108, 118,  35, 119, 107, 104,  35, 114, 113, 104,  35, 122, 107, 114,  35, 103, 114, 104, 118, 257,  35, 108, 113,  35, 119, 107, 104,  35, 103, 108, 118, 102, 114, 256, 108, 113,  35, 119, 107, 104, 35, 115, 100, 117, 110,  49,  35,  87, 107, 104,  35, 103, 114, 106, 35, 108, 118,  35, 119, 107, 104,  35, 114, 113, 104,  35, 122, 107, 114,  35, 103, 114, 104, 118,  35, 100,  35, 101, 100, 111, 111,  35, 108, 113, 255,  35, 108, 113,  35, 119, 107, 104,  35, 115, 100, 117, 110,  49]
->>> #^- Note how 258 descends to 257, 256, 255
+
+>>> # ^- Note how 258 descends to 257, 256, 255
 
 >>> # Now we need to split on the sentinel tokens, let's write a short loop for this
 >>> output_ids_list = []
@@ -120,13 +123,13 @@ tensor([[ 87, 107, 104,  35, 103, 114, 106,  35, 258,  35, 100,  35, 101, 100, 1
 >>> sentinel_token = 258
 >>> while sentinel_token in output_ids:
 ...     split_idx = output_ids.index(sentinel_token)
-...     output_ids_list.append(output_ids[start_token: split_idx])
+...     output_ids_list.append(output_ids[start_token:split_idx])
 ...     start_token = split_idx
 ...     sentinel_token -= 1
 
 >>> output_ids_list.append(output_ids[start_token:])
 >>> output_string = tokenizer.batch_decode(output_ids_list)
->>> output_string  
+>>> output_string
 ['<pad>', 'is the one who does', ' in the disco', 'in the park. The dog is the one who does a ball in', ' in the park.']
 ```
 
