@@ -34,6 +34,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 from huggingface_hub import Repository, hf_hub_download
 from transformers import (
     AutoConfig,
@@ -42,8 +43,6 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_wandb_available,
-    set_seed,
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
@@ -272,17 +271,23 @@ def parse_args():
         help="Number of steps between each logging",
     )
     parser.add_argument("--wandb", action="store_true", help="Whether or not to log to Weights and Biases.")
-    parser.add_argument(
-        "--saving_steps",
-        type=int,
-        default=500,
-        help="Number of steps between each logging",
-    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--checkpointing_steps",
+        type=str,
+        default=None,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default=None,
+        help="If the training should continue from a checkpoint folder.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -301,7 +306,8 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator()
+    # If we're using wandb, we also need to initialize it here
+    accelerator = Accelerator(log_with="wandb") if args.wandb else Accelerator()
     logger.info(accelerator.state)
 
     # Setup logging, we only want one process per machine to log things on the screen.
@@ -310,19 +316,16 @@ def main():
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
-
-        # set up weights and biases if available
-        if is_wandb_available() and args.wandb:
-            import wandb
-
-            wandb.init(project=args.output_dir.split("/")[-1])
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
+    if args.wandb:
+        accelerator.init_trackers(args.output_dir.split("/")[-1])
 
     # If passed along, set the training seed now.
+    # We set device_specific to True as we want different data augmentation per device.
     if args.seed is not None:
-        set_seed(args.seed)
+        set_seed(args.seed, device_specific=True)
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -374,10 +377,7 @@ def main():
         args.model_name_or_path, num_labels=num_labels, id2label=id2label, label2id=label2id
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
-    model = AutoModelForSemanticSegmentation.from_pretrained(
-        args.model_name_or_path,
-        config=config,
-    )
+    model = AutoModelForSemanticSegmentation.from_pretrained(args.model_name_or_path, config=config)
 
     # Preprocessing the datasets
     # Define torchvision transforms to be applied to each image + target.
@@ -452,10 +452,13 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader
-    )
+    # Figure out how many steps we should save the Accelerator states
+    if hasattr(args.checkpointing_steps, "isdigit"):
+        checkpointing_steps = args.checkpointing_steps
+        if args.checkpointing_steps.isdigit():
+            checkpointing_steps = int(args.checkpointing_steps)
+    else:
+        checkpointing_steps = None
 
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -469,6 +472,11 @@ def main():
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.max_train_steps,
+    )
+
+    # Prepare everything with our `accelerator`.
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
     # Instantiate metric
@@ -488,9 +496,31 @@ def main():
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
 
+    # Potentially load in the weights and states from a previous save
+    if args.resume_from_checkpoint:
+        if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
+            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+            accelerator.load_state(args.resume_from_checkpoint)
+            resume_step = None
+            path = args.resume_from_checkpoint
+        else:
+            # Get the most recent checkpoint
+            dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
+            dirs.sort(key=os.path.getctime)
+            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+        if "epoch" in path:
+            args.num_train_epochs -= int(path.replace("epoch_", ""))
+        else:
+            resume_step = int(path.replace("step_", ""))
+            args.num_train_epochs -= resume_step // len(train_dataloader)
+            resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
+
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
+            # We need to skip steps until we reach the resumed step
+            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
+                continue
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
@@ -501,6 +531,10 @@ def main():
                 optimizer.zero_grad()
                 progress_bar.update(1)
                 completed_steps += 1
+
+            if isinstance(checkpointing_steps, int):
+                if completed_steps % checkpointing_steps == 0:
+                    accelerator.save_state(f"step_{completed_steps}")
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -546,22 +580,22 @@ def main():
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
-                    if is_wandb_available() and args.wandb:
-                        wandb.log(train_logs)
+                    if args.wandb:
+                        accelerator.log(train_logs)
 
-            # Save model every `args.saving_steps` steps
-            if (step + 1) % (args.gradient_accumulation_steps * args.saving_steps) == 0:
-                if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
-                    accelerator.wait_for_everyone()
-                    unwrapped_model = accelerator.unwrap_model(model)
-                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            if isinstance(checkpointing_steps, int):
+                if (step + 1) % (args.gradient_accumulation_steps * checkpointing_steps) == 0:
+                    if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
+                        accelerator.wait_for_everyone()
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
-                if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(
-                        commit_message=f"Training in progress step {completed_steps}",
-                        blocking=False,
-                        auto_lfs_prune=True,
-                    )
+                    if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
+                        repo.push_to_hub(
+                            commit_message=f"Training in progress step {completed_steps}",
+                            blocking=False,
+                            auto_lfs_prune=True,
+                        )
 
         logger.info("***** Running evaluation *****")
         model.eval()
@@ -585,15 +619,19 @@ def main():
         )
         logger.info(f"epoch {epoch}: {eval_metrics}")
 
-        if args.push_to_hub and epoch < args.num_train_epochs - 1:
-            accelerator.wait_for_everyone()
-            unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-            if accelerator.is_main_process:
-                feature_extractor.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
-                )
+        if isinstance(checkpointing_steps, int):
+            if args.push_to_hub and epoch < args.num_train_epochs - 1:
+                accelerator.wait_for_everyone()
+                unwrapped_model = accelerator.unwrap_model(model)
+                unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                if accelerator.is_main_process:
+                    feature_extractor.save_pretrained(args.output_dir)
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                    )
+
+        if args.checkpointing_steps == "epoch":
+            accelerator.save_state(f"epoch_{epoch}")
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
