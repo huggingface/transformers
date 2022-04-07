@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
+import json
 import logging
 import math
 import os
@@ -149,7 +150,6 @@ def parse_args():
     parser.add_argument(
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
-    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--checkpointing_steps",
@@ -488,7 +488,10 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{completed_steps}")
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -526,7 +529,10 @@ def main():
                 )
 
         if args.checkpointing_steps == "epoch":
-            accelerator.save_state(f"epoch_{epoch}")
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -556,6 +562,10 @@ def main():
 
         eval_metric = metric.compute()
         logger.info(f"mnli-mm: {eval_metric}")
+
+    if args.output_dir is not None:
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump({"eval_accuracy": eval_metric["accuracy"]}, f)
 
 
 if __name__ == "__main__":
