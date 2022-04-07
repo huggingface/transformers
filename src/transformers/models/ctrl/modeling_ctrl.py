@@ -376,7 +376,10 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
         >>> model = CTRLModel.from_pretrained("ctrl")
 
+        >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
@@ -557,7 +560,10 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
         >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
 
+        >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
         5.78
@@ -677,7 +683,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
 
+        >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -709,7 +717,10 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
+
+        >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
