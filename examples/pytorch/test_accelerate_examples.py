@@ -149,9 +149,6 @@ class ExamplesTests(TestCasePlus):
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
             return
 
-        if torch_device != "cuda":
-            testargs.append("--no_cuda")
-
         with patch.object(sys, "argv", testargs):
             run_clm_no_trainer.main()
             result = get_results(tmp_dir)
@@ -172,9 +169,6 @@ class ExamplesTests(TestCasePlus):
             --num_train_epochs=1
             --checkpointing_steps epoch
         """.split()
-
-        if torch_device != "cuda":
-            testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
             run_mlm_no_trainer.main()
@@ -203,9 +197,6 @@ class ExamplesTests(TestCasePlus):
             --seed 7
             --checkpointing_steps=2
         """.split()
-
-        if torch_device != "cuda":
-            testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
             run_ner_no_trainer.main()
