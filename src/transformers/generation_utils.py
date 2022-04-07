@@ -649,7 +649,6 @@ class GenerationMixin:
         top_p = top_p if top_p is not None else self.config.top_p
         typical_p = typical_p if typical_p is not None else self.config.typical_p
         temperature = temperature if temperature is not None else self.config.temperature
-        renormalize_logits = renormalize_logits if renormalize_logits is not None else self.config.renormalize_logits
         # instantiate warpers list
         warpers = LogitsProcessorList()
 
@@ -723,7 +722,6 @@ class GenerationMixin:
             if exponential_decay_length_penalty is not None
             else self.config.exponential_decay_length_penalty
         )
-        renormalize_logits = renormalize_logits if renormalize_logits is not None else self.config.renormalize_logits
         # instantiate processors list
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
