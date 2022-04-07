@@ -377,7 +377,7 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> model = CTRLModel.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
-        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
         >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> outputs = model(**inputs)
@@ -561,8 +561,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
-        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values())
 
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
@@ -682,7 +682,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
-        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
         >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
@@ -717,7 +717,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
 
         >>> # CTRL was trained with control codes as the first token
-        >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
         >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
