@@ -82,9 +82,12 @@ class SageMakerTrainingArguments(TrainingArguments):
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+
+        set_cpu_ddp = self.no_cuda
+
         if self.no_cuda:
-            device = torch.device("cpu")
-            self._n_gpu = 0
+            # logic below
+            pass
         elif is_sagemaker_model_parallel_available():
             local_rank = smp.local_rank()
             device = torch.device("cuda", local_rank)
@@ -107,13 +110,17 @@ class SageMakerTrainingArguments(TrainingArguments):
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
             self._n_gpu = torch.cuda.device_count()
-        else:
+        elif torch.cuda.is_available():
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             if not torch.distributed.is_initialized():
                 torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
+
+        if set_cpu_ddp:
+            device = torch.device("cpu")
+            self._n_gpu = 0
 
         if device.type == "cuda":
             torch.cuda.set_device(device)

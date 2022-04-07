@@ -252,7 +252,7 @@ class TrainingArguments:
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (`str`, *optional*):
-            The backend to use for xpu distributed training. Must be one of `"mpi"` or `"ccl"`.
+            The backend to use for xpu distributed training. Must be one of `"mpi"`, `"ccl"` or `"gloo"`.
         tpu_num_cores (`int`, *optional*):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
@@ -595,7 +595,7 @@ class TrainingArguments:
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     xpu_backend: str = field(
         default=None,
-        metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl"]},
+        metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl", "gloo"]},
     )
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
@@ -1026,17 +1026,12 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
-        if self.no_cuda:
-            device = torch.device("cpu")
-            self._n_gpu = 0
-            if self.local_rank != -1 and not torch.distributed.is_initialized():
-                # Initializes distributed backend for cpu
-                if self.xpu_backend not in ("mpi", "ccl"):
-                    raise ValueError(
-                        "CPU distributed training backend is not properly set. "
-                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
-                    )
-                torch.distributed.init_process_group(backend=self.xpu_backend)
+
+        set_cpu_ddp = self.no_cuda
+
+        if set_cpu_ddp:
+            # logic below
+            pass
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
@@ -1077,13 +1072,27 @@ class TrainingArguments:
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
             self._n_gpu = torch.cuda.device_count()
-        else:
+        elif torch.cuda.is_available():
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             if not torch.distributed.is_initialized():
                 torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
+        else:
+            set_cpu_ddp = True
+
+        if set_cpu_ddp:
+            device = torch.device("cpu")
+            self._n_gpu = 0
+            if self.local_rank != -1 and not torch.distributed.is_initialized():
+                # Initializes distributed backend for cpu
+                if self.xpu_backend not in ("mpi", "ccl", "gloo"):
+                    raise ValueError(
+                        "CPU distributed training backend is not properly set. "
+                        "Please set '--xpu_backend' to either 'mpi', 'ccl' or 'gloo'."
+                    )
+                torch.distributed.init_process_group(backend=self.xpu_backend)
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
