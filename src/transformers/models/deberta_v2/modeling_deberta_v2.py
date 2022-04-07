@@ -1236,8 +1236,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         output_dim = self.pooler.output_dim
 
         self.classifier = nn.Linear(output_dim, num_labels)
-        drop_out = getattr(config, "cls_dropout", None)
-        drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
+        drop_out = getattr(config, "cls_dropout", self.config.hidden_dropout_prob)
         self.dropout = StableDropout(drop_out)
 
         # Initialize weights and apply final processing
@@ -1352,7 +1351,8 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         self.num_labels = config.num_labels
 
         self.deberta = DebertaV2Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        drop_out = getattr(config, "cls_dropout", self.config.hidden_dropout_prob)
+        self.dropout = StableDropout(drop_out)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

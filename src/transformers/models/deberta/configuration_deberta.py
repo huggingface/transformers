@@ -83,6 +83,8 @@ class DebertaConfig(PretrainedConfig):
             `["p2c", "c2p"]`.
         layer_norm_eps (`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        cls_dropout (`float`, optional, defaults to 0.1):
+            The dropout for the task layer.
     """
     model_type = "deberta"
 
@@ -107,7 +109,8 @@ class DebertaConfig(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
-        **kwargs
+        cls_dropout=0.1,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -137,3 +140,4 @@ class DebertaConfig(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        cls_dropout = cls_dropout
