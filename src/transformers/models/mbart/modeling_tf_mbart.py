@@ -684,7 +684,6 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
         Args:
@@ -848,7 +847,6 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[
         TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
     ]:
@@ -1278,7 +1276,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: [Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1287,7 +1285,6 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         """
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

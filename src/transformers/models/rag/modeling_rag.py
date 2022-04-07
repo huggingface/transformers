@@ -496,7 +496,7 @@ class RagModel(RagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        retriever: Optional = None,  # or maybe just use a `set_retriever(...)` method
+        retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
         assert config is not None or (
@@ -537,21 +537,21 @@ class RagModel(RagPreTrainedModel):
     @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_outputs=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        past_key_values=None,
-        doc_scores=None,
-        context_input_ids=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        doc_scores: Optional[torch.FloatTensor] = None,
+        context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        output_retrieved=None,
-        n_docs=None,
-    ):
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_retrieved: Optional[bool] = None,
+        n_docs: Optional[int] = None,
+    ) -> Union[Tuple[torch.Tensor], RetrievAugLMOutput]:
         r"""
         Returns:
 
@@ -740,7 +740,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        retriever: Optional = None,
+        retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
         assert config is not None or (
@@ -1137,7 +1137,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        retriever: Optional = None,
+        retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
         assert config is not None or (

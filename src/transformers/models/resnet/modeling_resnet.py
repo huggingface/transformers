@@ -66,12 +66,14 @@ class ResNetConvLayer(nn.Sequential):
 
 class ResNetEmbeddings(nn.Sequential):
     """
-    ResNet Embedddings (stem) composed of a single aggressive convolution.
+    ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
+    def __init__(self, config: ResNetConfig):
         super().__init__()
-        self.embedder = ResNetConvLayer(num_channels, out_channels, kernel_size=7, stride=2, activation=activation)
+        self.embedder = ResNetConvLayer(
+            config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
+        )
         self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
@@ -267,7 +269,7 @@ class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = ResNetEmbeddings(config.num_channels, config.embedding_size, config.hidden_act)
+        self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing

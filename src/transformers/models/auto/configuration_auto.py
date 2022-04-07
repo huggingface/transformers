@@ -38,6 +38,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextConfig"),
         ("van", "VanConfig"),
         ("resnet", "ResNetConfig"),
+        ("regnet", "RegNetConfig"),
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -142,6 +143,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -234,6 +236,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("convnext", "ConvNext"),
         ("van", "VAN"),
         ("resnet", "ResNet"),
+        ("regnet", "RegNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
@@ -389,7 +392,13 @@ class _LazyConfigMapping(OrderedDict):
         module_name = model_type_to_module_name(key)
         if module_name not in self._modules:
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
-        return getattr(self._modules[module_name], value)
+        if hasattr(self._modules[module_name], value):
+            return getattr(self._modules[module_name], value)
+
+        # Some of the mappings have entries model_type -> config of another model type. In that case we try to grab the
+        # object at the top level.
+        transformers_module = importlib.import_module("transformers")
+        return getattr(transformers_module, value)
 
     def keys(self):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
