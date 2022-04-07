@@ -56,11 +56,14 @@ _TOKENIZER_FOR_DOC = "BartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "valhalla/bart-large-sst2"
+_SEQ_CLASS_EXPECTED_LOSS = 0.0
+_SEQ_CLASS_EXPECTED_OUTPUT = "'POSITIVE'"
 
 # QuestionAsnwering docstring
-_QA_EXPECTED_LOSS = 2.98
-_QA_EXPECTED_OUTPUT_SHAPE = [1, 17]
+_CHECKPOINT_FOR_QA = "valhalla/bart-large-finetuned-squadv1"
+_QA_EXPECTED_LOSS = 0.59
+_QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1447,10 +1450,11 @@ class BartForSequenceClassification(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1572,11 +1576,11 @@ class BartForQuestionAnswering(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_QA_EXPECTED_OUTPUT,
     )
     def forward(
         self,

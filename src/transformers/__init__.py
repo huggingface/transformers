@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.18.0.dev0"
+__version__ = "4.19.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -1717,6 +1717,8 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_logits_process"] = [
+        "TFForcedBOSTokenLogitsProcessor",
+        "TFForcedEOSTokenLogitsProcessor",
         "TFLogitsProcessor",
         "TFLogitsProcessorList",
         "TFLogitsWarper",
@@ -3861,6 +3863,8 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_logits_process import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
             TFLogitsProcessor,
             TFLogitsProcessorList,
             TFLogitsWarper,

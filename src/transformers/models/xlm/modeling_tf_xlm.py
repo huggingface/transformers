@@ -360,7 +360,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         # removed: src_enc=None, src_len=None
 
@@ -707,7 +706,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.transformer(
             input_ids=input_ids,
@@ -843,7 +841,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -917,7 +914,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1025,7 +1021,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1150,7 +1145,6 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1237,7 +1231,6 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         start_positions=None,
         end_positions=None,
         training=False,
-        **kwargs,
     ):
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):

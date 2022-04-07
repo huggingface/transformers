@@ -269,9 +269,10 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+    >>> model = {model_class}.from_pretrained(
+    ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
+    ... )
 
-    >>> num_labels = len(model.config.id2label)
     >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
     ...     torch.float
     ... )
@@ -794,6 +795,67 @@ TF_CAUSAL_LM_SAMPLE = r"""
     ```
 """
 
+TF_SPEECH_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
+    >>> outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+TF_SPEECH_CTC_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import tensorflow as tf
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
+    >>> logits = model(**inputs).logits
+    >>> predicted_ids = tf.math.argmax(logits, axis=-1)
+
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    {expected_output}
+    ```
+
+    ```python
+    >>> with processor.as_target_processor():
+    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="tf").input_ids
+
+    >>> # compute loss
+    >>> loss = model(**inputs).loss
+    >>> round(float(loss), 2)
+    {expected_loss}
+    ```
+"""
+
 TF_VISION_BASE_MODEL_SAMPLE = r"""
     Example:
 
@@ -848,6 +910,8 @@ TF_SAMPLE_DOCSTRINGS = {
     "MaskedLM": TF_MASKED_LM_SAMPLE,
     "LMHead": TF_CAUSAL_LM_SAMPLE,
     "BaseModel": TF_BASE_MODEL_SAMPLE,
+    "SpeechBaseModel": TF_SPEECH_BASE_MODEL_SAMPLE,
+    "CTC": TF_SPEECH_CTC_SAMPLE,
     "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
     "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
 }

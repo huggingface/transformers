@@ -504,7 +504,6 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         input_shape = shape_list(input_ids)
 
@@ -593,7 +592,6 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -632,7 +630,6 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         embedding_output = self.embeddings(pixel_values=pixel_values)
@@ -683,7 +680,6 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         if pixel_values is None:
@@ -762,7 +758,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
 
         if input_ids is None:
@@ -796,7 +791,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -826,7 +820,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
 
         if input_ids is None:
@@ -1058,7 +1051,6 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1153,7 +1145,6 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1258,7 +1249,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1297,7 +1287,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1345,7 +1334,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:

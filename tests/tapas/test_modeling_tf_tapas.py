@@ -38,7 +38,7 @@ from transformers.testing_utils import require_tensorflow_probability, require_t
 from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -158,7 +158,7 @@ class TFTapasModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = []
         for type_vocab_size in self.type_vocab_sizes:

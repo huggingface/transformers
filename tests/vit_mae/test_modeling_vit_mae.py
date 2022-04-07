@@ -561,7 +561,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs, noise=torch.from_numpy(noise))
+            outputs = model(**inputs, noise=torch.from_numpy(noise).to(device=torch_device))
 
         # verify the logits
         expected_shape = torch.Size((1, 196, 768))

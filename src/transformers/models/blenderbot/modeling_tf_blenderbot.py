@@ -662,7 +662,6 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         """
         Args:
@@ -823,7 +822,6 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1276,7 +1274,6 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -403,7 +403,10 @@ def main():
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
         dataset_split = load_dataset(
-            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir
+            args.dataset_name,
+            dataset_config_name,
+            split=train_split_name,
+            cache_dir=args.cache_dir,
         )
         datasets_splits.append(dataset_split)
 
