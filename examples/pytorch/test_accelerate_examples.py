@@ -52,23 +52,23 @@ sys.path.extend(SRC_DIRS)
 
 if SRC_DIRS is not None:
     # import run_audio_classification_no_trainer
-    import run_clm_no_trainer
+    # import run_clm_no_trainer
 
     # import run_generation_no_trainer
     import run_glue_no_trainer
 
     # import run_image_classification_no_trainer
     # import run_mae_no_trainer
-    import run_mlm_no_trainer
-    import run_ner_no_trainer
-    import run_qa_no_trainer as run_squad
+    # import run_mlm_no_trainer
+    # import run_ner_no_trainer
+    # import run_qa_no_trainer as run_squad
 
     # import run_seq2seq_qa_no_trainer as run_squad_seq2seq
     # import run_speech_recognition_ctc_no_trainer
     # import run_speech_recognition_seq2seq_no_trainer
-    import run_summarization_no_trainer
-    import run_swag_no_trainer
-    import run_translation_no_trainer
+    # import run_summarization_no_trainer
+    # import run_swag_no_trainer
+    # import run_translation_no_trainer
 
     # import run_wav2vec2_pretraining_no_trainer_no_trainer
 
