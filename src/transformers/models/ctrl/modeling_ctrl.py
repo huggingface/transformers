@@ -378,7 +378,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> outputs = model(**inputs)
 
@@ -562,7 +562,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
@@ -570,8 +570,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
-
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -685,7 +683,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -720,7 +718,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion my dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0,0].item() in tokenizer.control_codes.values()
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
