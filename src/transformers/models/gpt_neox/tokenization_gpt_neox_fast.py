@@ -28,7 +28,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
-        "gpt-neox-20b": "https://huggingface.co/gpt-neox-20b/resolve/main/tokenizer.json",
+        "gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/tokenizer.json",
     },
 }
 
@@ -46,8 +46,8 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import GPT2TokenizerFast
-    >>> tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+    >>> from transformers import GPTNeoXTokenizerFast
+    >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("gpt2")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']

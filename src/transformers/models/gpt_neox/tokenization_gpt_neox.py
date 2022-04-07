@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 from ...utils import logging
-from ..bart.tokenization_bart import BartTokenizer
+from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -35,17 +35,18 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class GPTNeoXTokenizer(BartTokenizer):
+class GPTNeoXTokenizer(GPT2Tokenizer):
     """
     Construct a GPTNeoX tokenizer.
 
     [`~GPTNeoXTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass [`BartTokenizer`] for usage examples and documentation concerning
+    Refer to superclass [`GPT2Tokenzer`] for usage examples and documentation concerning
     parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
