@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ResNet model."""
+""" PyTorch RegNet model."""
 
 from typing import Optional
 
@@ -22,64 +22,87 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_resnet import ResNetConfig
+from ...utils import logging
+from .configuration_regnet import RegNetConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ResNetConfig"
+_CONFIG_FOR_DOC = "RegNetConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
+_CHECKPOINT_FOR_DOC = "facebook/regnet-y-040"
+_EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
+_IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
-RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/resnet-50",
-    # See all resnet models at https://huggingface.co/models?filter=resnet
+REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/regnet-y-040",
+    # See all regnet models at https://huggingface.co/models?filter=regnet
 ]
 
 
-class ResNetConvLayer(nn.Sequential):
+class RegNetConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        groups: int = 1,
+        activation: Optional[str] = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=kernel_size // 2,
+            groups=groups,
+            bias=False,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
+    def forward(self, hidden_state):
+        hidden_state = self.convolution(hidden_state)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
-class ResNetEmbeddings(nn.Sequential):
+
+class RegNetEmbeddings(nn.Module):
     """
-    ResNet Embeddings (stem) composed of a single aggressive convolution.
+    RegNet Embedddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: ResNetConfig):
+    def __init__(self, config: RegNetConfig):
         super().__init__()
-        self.embedder = ResNetConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
+        self.embedder = RegNetConvLayer(
+            config.num_channels, config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act
         )
-        self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+    def forward(self, hidden_state):
+        hidden_state = self.embedder(hidden_state)
+        return hidden_state
 
 
-class ResNetShortCut(nn.Sequential):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut with ResNet->RegNet
+class RegNetShortCut(nn.Sequential):
     """
-    ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
+    RegNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
     """
 
@@ -89,22 +112,48 @@ class ResNetShortCut(nn.Sequential):
         self.normalization = nn.BatchNorm2d(out_channels)
 
 
-class ResNetBasicLayer(nn.Module):
+class RegNetSELayer(nn.Module):
     """
-    A classic ResNet's residual layer composed by a two `3x3` convolutions.
+    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
+    def __init__(self, in_channels: int, reduced_channels: int):
+        super().__init__()
+
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
+        self.attention = nn.Sequential(
+            nn.Conv2d(in_channels, reduced_channels, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(reduced_channels, in_channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, hidden_state):
+        # b c h w -> b c 1 1
+        pooled = self.pooler(hidden_state)
+        attention = self.attention(pooled)
+        hidden_state = hidden_state * attention
+        return hidden_state
+
+
+class RegNetXLayer(nn.Module):
+    """
+    RegNet's layer composed by three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
+    """
+
+    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
+        groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
-            ResNetConvLayer(in_channels, out_channels, stride=stride),
-            ResNetConvLayer(out_channels, out_channels, activation=None),
+            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
+            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.activation = ACT2FN[activation]
+        self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -115,29 +164,25 @@ class ResNetBasicLayer(nn.Module):
         return hidden_state
 
 
-class ResNetBottleNeckLayer(nn.Module):
+class RegNetYLayer(nn.Module):
     """
-    A classic ResNet's bottleneck layer composed by a three `3x3` convolutions.
-
-    The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
+    RegNet's Y layer: an X layer with Squeeze and Excitation.
     """
 
-    def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4
-    ):
+    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
-        reduces_channels = out_channels // reduction
+        groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
-            ResNetConvLayer(in_channels, reduces_channels, kernel_size=1),
-            ResNetConvLayer(reduces_channels, reduces_channels, stride=stride),
-            ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
+            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
+            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            RegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4))),
+            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.activation = ACT2FN[activation]
+        self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -148,14 +193,14 @@ class ResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-class ResNetStage(nn.Sequential):
+class RegNetStage(nn.Module):
     """
-    A ResNet stage composed by stacked layers.
+    A RegNet stage composed by stacked layers.
     """
 
     def __init__(
         self,
-        config: ResNetConfig,
+        config: RegNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 2,
@@ -163,22 +208,31 @@ class ResNetStage(nn.Sequential):
     ):
         super().__init__()
 
-        layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
+        layer = RegNetXLayer if config.layer_type == "x" else RegNetYLayer
 
         self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
-            layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
-            *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
+            layer(
+                config,
+                in_channels,
+                out_channels,
+                stride=stride,
+            ),
+            *[layer(config, out_channels, out_channels) for _ in range(depth - 1)],
         )
 
+    def forward(self, hidden_state):
+        hidden_state = self.layers(hidden_state)
+        return hidden_state
 
-class ResNetEncoder(nn.Module):
-    def __init__(self, config: ResNetConfig):
+
+class RegNetEncoder(nn.Module):
+    def __init__(self, config: RegNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
-        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
+        # based on `downsample_in_first_stage`, the first layer of the first stage may or may not downsample the input
         self.stages.append(
-            ResNetStage(
+            RegNetStage(
                 config,
                 config.embedding_size,
                 config.hidden_sizes[0],
@@ -188,7 +242,7 @@ class ResNetEncoder(nn.Module):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(ResNetStage(config, in_channels, out_channels, depth=depth))
+            self.stages.append(RegNetStage(config, in_channels, out_channels, depth=depth))
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
@@ -207,20 +261,18 @@ class ResNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
-class ResNetPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RegNet,resnet->regnet
+class RegNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ResNetConfig
-    base_model_prefix = "resnet"
+    config_class = RegNetConfig
+    base_model_prefix = "regnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -232,22 +284,22 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ResNetModel):
+        if isinstance(module, RegNetModel):
             module.gradient_checkpointing = value
 
 
-RESNET_START_DOCSTRING = r"""
+REGNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ResNetConfig`]): Model configuration class with all the parameters of the model.
+        config ([`RegNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-RESNET_INPUTS_DOCSTRING = r"""
+REGNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
@@ -257,25 +309,26 @@ RESNET_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare ResNet model outputting raw features without any specific head on top.",
-    RESNET_START_DOCSTRING,
+    "The bare RegNet model outputting raw features without any specific head on top.",
+    REGNET_START_DOCSTRING,
 )
-class ResNetModel(ResNetPreTrainedModel):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
+class RegNetModel(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = ResNetEmbeddings(config)
-        self.encoder = ResNetEncoder(config)
+        self.embedder = RegNetEmbeddings(config)
+        self.encoder = RegNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -314,16 +367,17 @@ class ResNetModel(ResNetPreTrainedModel):
 
 @add_start_docstrings(
     """
-    ResNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    RegNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
-    RESNET_START_DOCSTRING,
+    REGNET_START_DOCSTRING,
 )
-class ResNetForImageClassification(ResNetPreTrainedModel):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->REGNET,ResNet->RegNet,resnet->regnet
+class RegNetForImageClassification(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.resnet = ResNetModel(config)
+        self.regnet = RegNetModel(config)
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -332,7 +386,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -354,7 +408,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.regnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
