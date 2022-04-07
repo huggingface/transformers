@@ -998,12 +998,13 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
 
         softmax_output = self.crit(pred_hid, labels, training=training)
+        prediction_scores = softmax_output if labels is None else ()
 
         if not return_dict:
-            return (softmax_output,) + transformer_outputs[1:]
+            return (prediction_scores,) + transformer_outputs[1:]
 
         return TFTransfoXLLMHeadModelOutput(
-            prediction_scores=softmax_output,
+            prediction_scores=prediction_scores,
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
