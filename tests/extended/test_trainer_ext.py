@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import unittest
+from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -228,6 +229,43 @@ class TestTrainerExt(TestCasePlus):
         contents = {os.path.basename(p) for p in contents}
         assert "generated_predictions.txt" in contents
         assert "predict_results.json" in contents
+
+    @slow
+    @require_bnb
+    def test_run_seq2seq_bnb_slow(self):
+        from transformers.training_args import OptimizerNames
+
+        def train_and_return_metrics(optim: str) -> Tuple[int, float]:
+            from pathlib import Path
+
+            extra_args = (
+                "--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
+                "False --adafactor False --log_level debug"
+            )
+
+            output_dir = self.run_trainer(
+                eval_steps=2,
+                max_len=128,
+                model_name=MARIAN_MODEL,
+                learning_rate=3e-4,
+                num_train_epochs=1,
+                distributed=False,
+                extra_args_str=extra_args.format(optim=optim),
+                do_eval=False,
+                do_predict=False,
+            )
+
+            # Check metrics
+            logs = TrainerState.load_from_json(Path(output_dir, "trainer_state.json")).log_history
+            gpu_peak_memory = logs[0]["train_mem_gpu_peaked_delta"]
+            loss = logs[0]["train_loss"]
+            return gpu_peak_memory, loss
+
+        original_gpu_peak_memory, original_loss = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
+        bnb_gpu_peak_memory, bnb_loss = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
+
+        assert original_gpu_peak_memory < bnb_gpu_peak_memory
+        assert original_loss == bnb_loss
 
     def run_trainer(
         self,
