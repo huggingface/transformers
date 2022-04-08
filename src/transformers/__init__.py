@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.18.0.dev0"
+__version__ = "4.19.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -243,6 +243,7 @@ _import_structure = {
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
+    "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
@@ -267,6 +268,7 @@ _import_structure = {
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
+    "models.tapex": ["TapexTokenizer"],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -1351,6 +1353,14 @@ if is_torch_available():
             "ReformerPreTrainedModel",
         ]
     )
+    _import_structure["models.regnet"].extend(
+        [
+            "REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RegNetForImageClassification",
+            "RegNetModel",
+            "RegNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.rembert"].extend(
         [
             "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1708,6 +1718,8 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_logits_process"] = [
+        "TFForcedBOSTokenLogitsProcessor",
+        "TFForcedEOSTokenLogitsProcessor",
         "TFLogitsProcessor",
         "TFLogitsProcessorList",
         "TFLogitsWarper",
@@ -2620,6 +2632,7 @@ if TYPE_CHECKING:
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
@@ -2641,6 +2654,7 @@ if TYPE_CHECKING:
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
+    from .models.tapex import TapexTokenizer
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -3550,6 +3564,12 @@ if TYPE_CHECKING:
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
         )
+        from .models.regnet import (
+            REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RegNetForImageClassification,
+            RegNetModel,
+            RegNetPreTrainedModel,
+        )
         from .models.rembert import (
             REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RemBertForCausalLM,
@@ -3842,6 +3862,8 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_logits_process import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
             TFLogitsProcessor,
             TFLogitsProcessorList,
             TFLogitsWarper,

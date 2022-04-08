@@ -207,7 +207,8 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = torch.tensor([14]), torch.tensor([15])
+    >>> target_start_index = torch.tensor([{qa_target_start_index}])
+    >>> target_end_index = torch.tensor([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = outputs.loss
@@ -269,9 +270,10 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+    >>> model = {model_class}.from_pretrained(
+    ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
+    ... )
 
-    >>> num_labels = len(model.config.id2label)
     >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
     ...     torch.float
     ... )
@@ -666,7 +668,8 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
+    >>> target_start_index = tf.constant([{qa_target_start_index}])
+    >>> target_end_index = tf.constant([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = tf.math.reduce_mean(outputs.loss)
@@ -1053,6 +1056,8 @@ def add_code_sample_docstrings(
     output_type=None,
     config_class=None,
     mask="[MASK]",
+    qa_target_start_index=14,
+    qa_target_end_index=15,
     model_cls=None,
     modality=None,
     expected_output="",
@@ -1077,6 +1082,8 @@ def add_code_sample_docstrings(
             processor_class=processor_class,
             checkpoint=checkpoint,
             mask=mask,
+            qa_target_start_index=qa_target_start_index,
+            qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
         )
