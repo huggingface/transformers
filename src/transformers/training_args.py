@@ -247,8 +247,10 @@ class TrainingArguments:
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
         tf32 (`bool`, *optional*):
-            Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API
-            and it may change.
+            Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
+            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
+            the [TF32](https://huggingface.co/docs/transformers/performance#tf32) documentation. This is an
+            experimental API and it may change.
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (`str`, *optional*):
