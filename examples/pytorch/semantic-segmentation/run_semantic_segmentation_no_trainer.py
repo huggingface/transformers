@@ -534,7 +534,16 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{completed_steps}")
+                    accelerator.save_state(args.output_dir)
+
+                    # Optionally push to the hub
+                    if args.push_to_hub and accelerator.is_main_process:
+                        feature_extractor.save_pretrained(args.output_dir)
+                        repo.push_to_hub(
+                            commit_message=f"Training in progress, steps {completed_steps}",
+                            blocking=False,
+                            auto_lfs_prune=True,
+                        )
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -578,24 +587,9 @@ def main():
                     else:
                         log_str += "| {}: {:.3e}".format(k, v)
 
-                if accelerator.is_local_main_process:
-                    progress_bar.write(log_str)
-                    if args.wandb:
-                        accelerator.log(train_logs)
-
-            if isinstance(checkpointing_steps, int):
-                if (step + 1) % (args.gradient_accumulation_steps * checkpointing_steps) == 0:
-                    if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
-                        accelerator.wait_for_everyone()
-                        unwrapped_model = accelerator.unwrap_model(model)
-                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-
-                    if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                        repo.push_to_hub(
-                            commit_message=f"Training in progress step {completed_steps}",
-                            blocking=False,
-                            auto_lfs_prune=True,
-                        )
+                progress_bar.write(log_str)
+                if args.wandb:
+                    accelerator.log(train_logs)
 
         logger.info("***** Running evaluation *****")
         model.eval()
@@ -619,19 +613,15 @@ def main():
         )
         logger.info(f"epoch {epoch}: {eval_metrics}")
 
-        if isinstance(checkpointing_steps, int):
-            if args.push_to_hub and epoch < args.num_train_epochs - 1:
-                accelerator.wait_for_everyone()
-                unwrapped_model = accelerator.unwrap_model(model)
-                unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-                if accelerator.is_main_process:
-                    feature_extractor.save_pretrained(args.output_dir)
-                    repo.push_to_hub(
-                        commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
-                    )
-
         if args.checkpointing_steps == "epoch":
-            accelerator.save_state(f"epoch_{epoch}")
+            accelerator.save_state(args.output_dir)
+
+            # Optionally push to the hub
+            if args.push_to_hub and accelerator.is_main_process:
+                feature_extractor.save_pretrained(args.output_dir)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress, epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
