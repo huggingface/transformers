@@ -85,8 +85,10 @@ def is_cuda_and_apex_available():
     is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
     return is_using_cuda and is_apex_available()
 
+
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
+
 
 class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_glue_no_trainer(self):

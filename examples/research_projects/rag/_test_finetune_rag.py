@@ -7,7 +7,7 @@ from pathlib import Path
 import finetune_rag
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import (
-    HandlerTestCasePlus,
+    TestCasePlus,
     execute_subprocess_async,
     require_ray,
     require_torch_gpu,
@@ -18,17 +18,11 @@ from transformers.testing_utils import (
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
 
-class RagFinetuneExampleTests(HandlerTestCasePlus):
-    def setUp(self):
-        super().setUp()
-        stream_handler = logging.StreamHandler(sys.stdout)
-        self.add_handler(stream_handler, logger)
-    
-    def tearDown(self):
-        super().tearDown()
-        self.remove_handlers(logger)
 
+class RagFinetuneExampleTests(TestCasePlus):
     def _create_dummy_data(self, data_dir):
         os.makedirs(data_dir, exist_ok=True)
         contents = {"source": "What is love ?", "target": "life"}

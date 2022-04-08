@@ -1185,6 +1185,7 @@ class TestCasePlus(unittest.TestCase):
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
 
+
 def mockenv(**kwargs):
     """
     this is a convenience wrapper, that allows this ::
