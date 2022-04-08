@@ -102,7 +102,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size=1
             --learning_rate=1e-4
             --seed=42
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
             """.split()
 
         if is_cuda_and_apex_available():
@@ -112,7 +112,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             run_glue_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_clm_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -129,7 +129,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size 5
             --num_train_epochs 2
             --output_dir {tmp_dir}
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
             """.split()
 
         if torch.cuda.device_count() > 1:
@@ -140,7 +140,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             run_clm_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 100)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_mlm_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -182,7 +182,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size=2
             --num_train_epochs={epochs}
             --seed 7
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -190,7 +190,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertLess(result["train_loss"], 0.5)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_squad_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -209,7 +209,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -217,7 +217,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_f1"], 30)
             self.assertGreaterEqual(result["eval_exact"], 30)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_swag_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -235,14 +235,12 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
-            --checkpointing_steps=2
         """.split()
 
         with patch.object(sys, "argv", testargs):
             run_swag_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.8)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
     @slow
     def test_run_summarization_no_trainer(self):
@@ -261,7 +259,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -271,7 +269,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertGreaterEqual(result["eval_rouge2"], 2)
             self.assertGreaterEqual(result["eval_rougeL"], 7)
             self.assertGreaterEqual(result["eval_rougeLsum"], 7)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     @slow
     def test_run_translation_no_trainer(self):
@@ -294,11 +292,11 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size=1
             --source_lang en_XX
             --target_lang ro_RO
-            --checkpointing_steps=2
+            --checkpointing_steps epoch
         """.split()
 
         with patch.object(sys, "argv", testargs):
             run_translation_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
