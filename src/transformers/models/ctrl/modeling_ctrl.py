@@ -561,12 +561,17 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
-        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("Wikipedia The llama is", return_tensors="pt")
         >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> sequence_ids = model.generate(inputs["input_ids"])
+        >>> sequences = tokenizer.batch_decode(sequence_ids)
+        >>> sequences
+        ['Wikipedia The llama is a member of the family Bovidae. It is native to the Andes of Peru,']
 
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
-        6.0
+        9.21
 
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
