@@ -36,6 +36,7 @@ src/transformers/models/van/modeling_van.py
 src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/vit/modeling_vit.py
+src/transformers/models/vit/modeling_tf_vit.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
