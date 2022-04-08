@@ -657,6 +657,6 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         expected_results = [
             {"answer": " 69"},
             {"answer": " 59"},
-            {"answer": "10 june 1996"},
+            {"answer": " 10 june 1996"},
         ]
         self.assertListEqual(results, expected_results)
