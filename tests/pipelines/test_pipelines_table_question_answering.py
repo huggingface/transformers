@@ -647,12 +647,16 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             "Number of movies": ["87", "53", "69"],
             "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
         }
-        queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
+        queries = [
+            "How many movies has George Clooney played in?",
+            "How old is Mr Clooney ?",
+            "What's the date of birth of Leonardo ?",
+        ]
         results = table_querier(data, queries, sequential=True)
 
         expected_results = [
             {"answer": " 69"},
-            {"answer": " 56"},
-            {"answer": " 7 february 1967"},
+            {"answer": " 59"},
+            {"answer": "10 june 1996"},
         ]
         self.assertListEqual(results, expected_results)
