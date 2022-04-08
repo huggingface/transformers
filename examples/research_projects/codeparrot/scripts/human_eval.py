@@ -12,15 +12,9 @@ from tqdm import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 from arguments import HumanEvalArguments
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    HfArgumentParser,
-    StoppingCriteria,
-    StoppingCriteriaList,
-    set_seed,
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, StoppingCriteria, StoppingCriteriaList
 
 
 EOF_STRINGS = ["\nclass", "\ndef", "\n#", "\n@", "\nprint", "\nif"]
@@ -118,12 +112,10 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
     gen_token_dict = defaultdict(list)  # dict of list of generated tokens
     for step, batch in tqdm(enumerate(dataloader)):
         with torch.no_grad():
-            # do not generate if the batch is empty, it could be the case when multi GPU is used
-            if len(batch["ids"]):
-                gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
-                generated_tokens = accelerator.unwrap_model(model).generate(
-                    input_ids=batch["ids"][:, : batch["input_len"]], num_return_sequences=batch_size, **gen_kwargs
-                )
+            gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
+            generated_tokens = accelerator.unwrap_model(model).generate(
+                input_ids=batch["ids"][:, : batch["input_len"]], num_return_sequences=batch_size, **gen_kwargs
+            )
             # each task is generated batch_size times
             generated_tasks = batch["task_id"].repeat(batch_size)
             generated_tokens = accelerator.pad_across_processes(
@@ -159,7 +151,9 @@ def main():
     if args.num_workers is None:
         args.num_workers = multiprocessing.cpu_count()
 
-    set_seed(args.seed)
+    # Use dataset load to feed to accelerate
+    accelerator = Accelerator()
+    set_seed(args.seed, device_specific=True)
 
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
@@ -179,9 +173,6 @@ def main():
     # Load evaluation dataset and metric
     human_eval = load_dataset("openai_humaneval")
     code_eval_metric = load_metric("code_eval")
-
-    # Use dataset load to feed to accelerate
-    accelerator = Accelerator()
 
     n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
     n_copies = args.n_samples // args.batch_size
