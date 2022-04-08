@@ -871,7 +871,7 @@ CNN / Daily Mail), it yields very good results.
 ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
 ... )
 
->>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=False))
 prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
 counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
 between 1999 and 2002.
@@ -943,7 +943,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ... )
 >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
 
->>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=False))
 Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </pt>
@@ -1017,7 +1017,7 @@ The general process for using a model and feature extractor for audio classifica
 >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
 >>> predicted_label = model.config.id2label[predicted_class_ids]
 >>> predicted_label
-_unknown_
+'_unknown_'
 ```
 </pt>
 </frameworkcontent>
@@ -1064,7 +1064,7 @@ The general process for using a model and processor for automatic speech recogni
 
 >>> transcription = processor.batch_decode(predicted_ids)
 >>> transcription[0]
-MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL
+'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
 ```
 </pt>
 </frameworkcontent>
