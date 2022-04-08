@@ -122,7 +122,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
                 generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
             )
 
-            generated_tokens, generated_tasks = accelerator.gather(generated_tokens, generated_tasks)
+            generated_tokens, generated_tasks = accelerator.gather((generated_tokens, generated_tasks))
             generated_tokens = generated_tokens.cpu().numpy()
             generated_tasks = generated_tasks.cpu().numpy()
 
