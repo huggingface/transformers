@@ -1003,7 +1003,7 @@ class TrainingArguments:
         if (is_sagemaker_mp_enabled() and self.smp_save_partial and self.load_best_model_at_end ):
             self.smp_load_partial = True
 
-        if (is_sagemaker_mp_enabled() and (not self.smp_save_partial) and (self.save_strategy =! "no")):
+        if (is_sagemaker_mp_enabled() and (not self.smp_save_partial) and (self.save_strategy != IntervalStrategy.NO)):
             warnings.warn("Saving weights but not the optimizer state.")
 
     def __str__(self):

@@ -1368,9 +1368,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for filename in os.listdir(save_directory):
                 full_filename = os.path.join(save_directory, filename)
                 if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
-                    #os.remove(full_filename)
-                    print("derya remove file", full_filename)
+                    os.remove(full_filename)
             output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+
+            # Save the model
             save_function(state_dict, output_model_file)
             logger.info(f"Model weights saved in {output_model_file}")
         else:
