@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 import torch
 
-from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
+from transformers.testing_utils import HandlerTestCasePlus, get_gpu_count, slow, torch_device
 from transformers.utils import is_apex_available
 
 
@@ -86,11 +86,17 @@ def is_cuda_and_apex_available():
     return is_using_cuda and is_apex_available()
 
 
-class ExamplesTestsNoTrainer(TestCasePlus):
-    def test_run_glue_no_trainer(self):
+class ExamplesTestsNoTrainer(HandlerTestCasePlus):
+    def setUp(self):
+        super().setUp()
         stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
+        self.add_handler(stream_handler, logger)
+    
+    def tearDown(self):
+        super().tearDown()
+        self.remove_handlers(logger)
 
+    def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue_no_trainer.py
@@ -115,9 +121,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_clm_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm_no_trainer.py
@@ -143,9 +146,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_mlm_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm_no_trainer.py
@@ -164,9 +164,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_ner_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if get_gpu_count() > 1 else 2
 
@@ -193,9 +190,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_squad_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa_no_trainer.py
@@ -220,9 +214,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
     def test_run_swag_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_swag_no_trainer.py
@@ -244,9 +235,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
 
     @slow
     def test_run_summarization_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_summarization_no_trainer.py
@@ -273,9 +261,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
 
     @slow
     def test_run_translation_no_trainer(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_translation_no_trainer.py
