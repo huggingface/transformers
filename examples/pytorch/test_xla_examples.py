@@ -21,7 +21,7 @@ import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, require_torch_tpu
+from transformers.testing_utils import HandlerTestCasePlus, require_torch_tpu
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -41,13 +41,18 @@ def get_results(output_dir):
 
 
 @require_torch_tpu
-class TorchXLAExamplesTests(TestCasePlus):
+class TorchXLAExamplesTests(HandlerTestCasePlus):
+    def setUp(self):
+        super().setUp()
+        stream_handler = logging.StreamHandler(sys.stdout)
+        self.add_handler(stream_handler, logger)
+    
+    def tearDown(self):
+        super().tearDown()
+        self.remove_handlers(logger)
+
     def test_run_glue(self):
         import xla_spawn
-
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             ./examples/pytorch/text-classification/run_glue.py
