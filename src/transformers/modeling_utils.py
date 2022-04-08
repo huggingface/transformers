@@ -1792,7 +1792,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
-            if not is_sharded:
+            if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
             # set dtype to instantiate the model under:
