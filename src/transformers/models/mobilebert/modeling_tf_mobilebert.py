@@ -71,7 +71,9 @@ _TOKEN_CLASS_EXPECTED_LOSS = 0.03
 # QuestionAnswering docstring
 _CHECKPOINT_FOR_QA = "vumichien/mobilebert-uncased-squad-v2"
 _QA_EXPECTED_OUTPUT = "'a nice puppet'"
-_QA_EXPECTED_LOSS = 0
+_QA_EXPECTED_LOSS = 3.98
+_QA_TARGET_START_INDEX = 12
+_QA_TARGET_END_INDEX = 13
 
 # SequenceClassification docstring
 _CHECKPOINT_FOR_SEQ_CLASS = "vumichien/emo-mobilebert"
@@ -1379,6 +1381,8 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
         expected_output=_QA_EXPECTED_OUTPUT,
         expected_loss=_QA_EXPECTED_LOSS,
     )

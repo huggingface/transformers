@@ -80,6 +80,8 @@ _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 _CHECKPOINT_FOR_QA = "ydshieh/bert-base-cased-squad2"
 _QA_EXPECTED_OUTPUT = "'a nice puppet'"
 _QA_EXPECTED_LOSS = 7.41
+_QA_TARGET_START_INDEX = 14
+_QA_TARGET_END_INDEX = 15
 
 # SequenceClassification docstring
 _CHECKPOINT_FOR_SEQ_CLASS = "ydshieh/bert-base-uncased-yelp-polarity"
@@ -1214,9 +1216,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
-        >>> input_ids = tokenizer(
-        ...     "Hello, my dog is cute", add_special_tokens=True, return_tensors="tf"
-        >>> )  # Batch size 1
+        >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf")
+        >>> # Batch size 1
 
         >>> outputs = model(input_ids)
         >>> prediction_logits, seq_relationship_logits = outputs[:2]

@@ -74,6 +74,8 @@ _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 _CHECKPOINT_FOR_QA = "deepset/bert-base-cased-squad2"
 _QA_EXPECTED_OUTPUT = "'a nice puppet'"
 _QA_EXPECTED_LOSS = 7.41
+_QA_TARGET_START_INDEX = 14
+_QA_TARGET_END_INDEX = 15
 
 # SequenceClassification docstring
 _CHECKPOINT_FOR_SEQ_CLASS = "textattack/bert-base-uncased-yelp-polarity"
@@ -1808,6 +1810,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
         expected_output=_QA_EXPECTED_OUTPUT,
         expected_loss=_QA_EXPECTED_LOSS,
     )
