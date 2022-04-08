@@ -976,16 +976,19 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 
 ```py
 >>> from transformers import pipeline
+>>> from datasets import load_dataset
+
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> dataset = dataset.sort("id")
+>>> audio_file = dataset[0]["audio"]["path"]
 
 >>> audio_classifier = pipeline(
 ...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 ... )
->>> audio_classifier("jfk_moon_speech.wav")
-[{'label': 'calm', 'score': 0.13856211304664612},
- {'label': 'disgust', 'score': 0.13148026168346405},
- {'label': 'happy', 'score': 0.12635163962841034},
- {'label': 'angry', 'score': 0.12439591437578201},
- {'label': 'fearful', 'score': 0.12404385954141617}]
+>>> predictions = audio_classifier(audio_file)
+>>> predictions = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in predictions]
+>>> predictions
+[{'score': 0.1323, 'label': 'surprised'}, {'score': 0.128, 'label': 'calm'}, {'score': 0.1262, 'label': 'fearful'}, {'score': 0.1252, 'label': 'angry'}, {'score': 0.1246, 'label': 'sad'}]
 ```
 
 The general process for using a model and feature extractor for audio classification is:
@@ -1030,10 +1033,15 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 
 ```py
 >>> from transformers import pipeline
+>>> from datasets import load_dataset
+
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> dataset = dataset.sort("id")
+>>> audio_file = dataset[0]["audio"]["path"]
 
 >>> speech_recognizer = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
->>> speech_recognizer("jfk_moon_speech.wav")
-{'text': "PRESENTETE MISTER VICE PRESIDENT GOVERNOR CONGRESSMEN THOMAS SAN O TE WILAN CONGRESSMAN MILLA MISTER WEBB MSTBELL SCIENIS DISTINGUISHED GUESS AT LADIES AND GENTLEMAN I APPRECIATE TO YOUR PRESIDENT HAVING MADE ME AN HONORARY VISITING PROFESSOR AND I WILL ASSURE YOU THAT MY FIRST LECTURE WILL BE A VERY BRIEF I AM DELIGHTED TO BE HERE AND I'M PARTICULARLY DELIGHTED TO BE HERE ON THIS OCCASION WE MEED AT A COLLEGE NOTED FOR KNOWLEGE IN A CITY NOTED FOR PROGRESS IN A STATE NOTED FOR STRAINTH AN WE STAND IN NEED OF ALL THREE"}
+>>> speech_recognizer(audio_file)
+{'text': 'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'}
 ```
 
 The general process for using a model and processor for automatic speech recognition is:
