@@ -25,7 +25,7 @@ from unittest.mock import patch
 import torch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
-from transformers.testing_utils import CaptureLogger, HandlerTestCasePlus, get_gpu_count, slow, torch_device
+from transformers.testing_utils import CaptureLogger, TestCasePlus, get_gpu_count, slow, torch_device
 from transformers.utils import is_apex_available
 
 
@@ -96,17 +96,10 @@ def is_cuda_and_apex_available():
     is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
     return is_using_cuda and is_apex_available()
 
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
 
-class ExamplesTests(HandlerTestCasePlus):
-    def setUp(self):
-        super().setUp()
-        stream_handler = logging.StreamHandler(sys.stdout)
-        self.add_handler(stream_handler, logger)
-
-    def tearDown(self):
-        super().tearDown()
-        self.remove_handlers(logger)
-
+class ExamplesTests(TestCasePlus):
     def test_run_glue(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""

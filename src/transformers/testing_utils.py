@@ -1185,28 +1185,6 @@ class TestCasePlus(unittest.TestCase):
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
 
-
-class HandlerTestCasePlus(TestCasePlus):
-    """
-    This class extends *TestCasePlus* to reduce the overload of Logging Handlers.
-    """
-    _handlers = []
-    def add_handler(self, handler:logging.Handler, logger:logging.Logger):
-        """
-        Adds `handler` to the current `logger` and stores it in `self._handlers`.
-        Should be called during `setUp`.
-        """
-        logger.addHandler(handler)
-        self._handlers.append(handler)
-
-    def remove_handlers(self, logger):
-        """
-        Removes all logging handlers that have been added from `add_handler`.
-        Should be called during `tearDown`
-        """
-        for handler in self._handlers:
-            logger.removeHandler(handler)
-
 def mockenv(**kwargs):
     """
     this is a convenience wrapper, that allows this ::

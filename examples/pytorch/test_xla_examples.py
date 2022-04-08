@@ -21,7 +21,7 @@ import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import HandlerTestCasePlus, require_torch_tpu
+from transformers.testing_utils import TestCasePlus, require_torch_tpu
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -39,18 +39,11 @@ def get_results(output_dir):
         raise ValueError(f"can't find {path}")
     return results
 
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
 
 @require_torch_tpu
-class TorchXLAExamplesTests(HandlerTestCasePlus):
-    def setUp(self):
-        super().setUp()
-        stream_handler = logging.StreamHandler(sys.stdout)
-        self.add_handler(stream_handler, logger)
-    
-    def tearDown(self):
-        super().tearDown()
-        self.remove_handlers(logger)
-
+class TorchXLAExamplesTests(TestCasePlus):
     def test_run_glue(self):
         import xla_spawn
         tmp_dir = self.get_auto_remove_tmp_dir()
