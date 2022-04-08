@@ -960,8 +960,8 @@ Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ... )
 >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
 
->>> print(tokenizer.decode(outputs[0]))
-<pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=False))
+Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </tf>
 </frameworkcontent>
