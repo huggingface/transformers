@@ -1285,13 +1285,9 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if resume_from_checkpoint is not None:
-            if is_sagemaker_mp_enabled():
-                if self.args.smp_load_partial:
-                    state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
-                else:
-                    state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                model.load_state_dict(state_dict)
+        if resume_from_checkpoint is not None and is_sagemaker_mp_enabled():
+            state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
+            model.load_state_dict(state_dict)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1563,7 +1559,12 @@ class Trainer:
             )
 
             best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-            if os.path.exists(best_model_path):
+            if self.args.smp_load_partial:
+                import glob
+                # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
+                smp_checkpoint_file_exists = glob.glob(best_model_path + "_*")
+
+            if os.path.exists(best_model_path) or smp_checkpoint_file_exists:
                 if self.deepspeed:
                     # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
                     deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
@@ -1578,10 +1579,7 @@ class Trainer:
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     if is_sagemaker_mp_enabled():
-                        if self.args.smp_load_partial:
-                            state_dict = smp.load(best_model_path, partial=self.args.smp_load_partial)
-                        else:
-                            state_dict = torch.load(best_model_path, map_location="cpu")
+                        state_dict = smp.load(best_model_path, partial=self.args.smp_load_partial)
                         model.load_state_dict(state_dict)
                     else:
                         state_dict = torch.load(best_model_path, map_location="cpu")
@@ -1744,18 +1742,15 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if smp.rdp_rank() == 0:
-            # Consolidate the state dict on all processed of rdp_rank 0
-                if self.args.smp_save_partial:
-                    opt_state_dict = self.optimizer.local_state_dict()
-                else:
-                    opt_state_dict = self.optimizer.state_dict()
+            # Consolidate the state dict on all processes
+            if self.args.smp_save_partial:
+                opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            else:
+                opt_state_dict = self.optimizer.state_dict()
+            if self.args.should_save or smp.state.cfg.shard_optimizer_state:
+                smp.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME), partial=self.args.smp_save_partial, v3=smp.state.cfg.shard_optimizer_state)
             # Save it and the scheduler on the main process
             if self.args.should_save:
-                if self.args.smp_save_partial:
-                    smp.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME), partial=self.args.smp_save_partial)
-                else:
-                    torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
@@ -1856,12 +1851,10 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
-                if is_sagemaker_mp_enabled() and self.args.smp_load_partial:
-                    self.optimizer.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial))
-                else:
-                    self.optimizer.load_state_dict(
-                    torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
-                )
+                if is_sagemaker_mp_enabled():
+                    def opt_load_hook(mod, opt):
+                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial))
+                    self.model_wrapped.register_post_step_hook(opt_load_hook)
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)

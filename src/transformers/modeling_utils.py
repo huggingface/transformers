@@ -1364,6 +1364,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from .utils import is_sagemaker_mp_enabled
         if is_sagemaker_mp_enabled():
             # Do not shard checkpoints when sagemaker model parallel is enabled
+            # Clean the folder from a previous save
+            for filename in os.listdir(save_directory):
+                full_filename = os.path.join(save_directory, filename)
+                if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+                    #os.remove(full_filename)
+                    print("derya remove file", full_filename)
             output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
             save_function(state_dict, output_model_file)
             logger.info(f"Model weights saved in {output_model_file}")
