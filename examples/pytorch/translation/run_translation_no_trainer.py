@@ -19,6 +19,7 @@ Fine-tuning a 🤗 Transformers model on text translation.
 # You can also adapt this script on your own text translation task. Pointers for this are left as comments.
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -586,7 +587,10 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{completed_steps}")
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -653,7 +657,10 @@ def main():
                 )
 
         if args.checkpointing_steps == "epoch":
-            accelerator.save_state(f"epoch_{epoch}")
+            output_dir = f"step_{completed_steps}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -663,6 +670,8 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump({"eval_bleu": eval_metric["score"]}, f)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextModel"),
         ("van", "VanModel"),
         ("resnet", "ResNetModel"),
+        ("regnet", "RegNetModel"),
         ("yoso", "YosoModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
@@ -303,6 +304,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextForImageClassification"),
         ("van", "VanForImageClassification"),
         ("resnet", "ResNetForImageClassification"),
+        ("regnet", "RegNetForImageClassification"),
         ("poolformer", "PoolFormerForImageClassification"),
     ]
 )
@@ -388,6 +390,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("tapex", "BartForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
@@ -417,6 +420,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("tapex", "BartForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
         ("plbart", "PLBartForSequenceClassification"),
