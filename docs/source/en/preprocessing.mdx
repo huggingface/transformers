@@ -199,22 +199,22 @@ Audio inputs are preprocessed differently than textual inputs, but the end goal 
 pip install datasets
 ```
 
-Load the keyword spotting task from the [SUPERB](https://huggingface.co/datasets/superb) benchmark (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset):
+Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset):
 
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("superb", "ks")
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
 Access the first element of the `audio` column to take a look at the input. Calling the `audio` column will automatically load and resample the audio file:
 
 ```py
->>> dataset["train"][0]["audio"]
-{'array': array([ 0.        ,  0.        ,  0.        , ..., -0.00592041,
-        -0.00405884, -0.00253296], dtype=float32),
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/05734a36d88019a09725c20cc024e1c4e7982e37d7d55c0c1ca1742ea1cdd47f/_background_noise_/doing_the_dishes.wav',
- 'sampling_rate': 16000}
+>>> dataset[0]["audio"]
+{'array': array([ 0.        ,  0.00024414, -0.00024414, ..., -0.00024414,
+         0.        ,  0.        ], dtype=float32),
+ 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~JOINT_ACCOUNT/602ba55abb1e6d0fbce92065.wav',
+ 'sampling_rate': 8000}
 ```
 
 This returns three items:
@@ -227,34 +227,34 @@ This returns three items:
 
 For this tutorial, you will use the [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) model. As you can see from the model card, the Wav2Vec2 model is pretrained on 16kHz sampled speech audio. It is important your audio data's sampling rate matches the sampling rate of the dataset used to pretrain the model. If your data's sampling rate isn't the same, then you need to resample your audio data. 
 
-For example, load the [LJ Speech](https://huggingface.co/datasets/lj_speech) dataset which has a sampling rate of 22050kHz. In order to use the Wav2Vec2 model with this dataset, downsample the sampling rate to 16kHz:
+For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000kHz. In order to use the Wav2Vec2 model with this dataset, upsample the sampling rate to 16kHz:
 
 ```py
->>> lj_speech = load_dataset("lj_speech", split="train")
->>> lj_speech[0]["audio"]
-{'array': array([-7.3242188e-04, -7.6293945e-04, -6.4086914e-04, ...,
-         7.3242188e-04,  2.1362305e-04,  6.1035156e-05], dtype=float32),
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/917ece08c95cf0c4115e45294e3cd0dee724a1165b7fc11798369308a465bd26/LJSpeech-1.1/wavs/LJ001-0001.wav',
- 'sampling_rate': 22050}
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
+>>> dataset[0]["audio"]
+{'array': array([ 0.        ,  0.00024414, -0.00024414, ..., -0.00024414,
+         0.        ,  0.        ], dtype=float32),
+ 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~JOINT_ACCOUNT/602ba55abb1e6d0fbce92065.wav',
+ 'sampling_rate': 8000}
 ```
 
-1. Use 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) method to downsample the sampling rate to 16kHz:
+1. Use 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) method to upsample the sampling rate to 16kHz:
 
 ```py
->>> lj_speech = lj_speech.cast_column("audio", Audio(sampling_rate=16_000))
+>>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
 ```
 
 2. Load the audio file:
 
 ```py
->>> lj_speech[0]["audio"]
-{'array': array([-0.00064146, -0.00074657, -0.00068768, ...,  0.00068341,
-         0.00014045,  0.        ], dtype=float32),
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/917ece08c95cf0c4115e45294e3cd0dee724a1165b7fc11798369308a465bd26/LJSpeech-1.1/wavs/LJ001-0001.wav',
+>>> dataset[0]["audio"]
+{'array': array([ 2.3443763e-05,  2.1729663e-04,  2.2145823e-04, ...,
+         3.8356509e-05, -7.3497440e-06, -2.1754686e-05], dtype=float32),
+ 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~JOINT_ACCOUNT/602ba55abb1e6d0fbce92065.wav',
  'sampling_rate': 16000}
 ```
 
-As you can see, the `sampling_rate` was downsampled to 16kHz. Now that you know how resampling works, let's return to our previous example with the SUPERB dataset!
+As you can see, the `sampling_rate` is now 16kHz!
 
 ### Feature extractor
 
@@ -271,9 +271,10 @@ Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 Pass the audio `array` to the feature extractor. We also recommend adding the `sampling_rate` argument in the feature extractor in order to better debug any silent errors that may occur.
 
 ```py
->>> audio_input = [dataset["train"][0]["audio"]["array"]]
+>>> audio_input = [dataset[0]["audio"]["array"]]
 >>> feature_extractor(audio_input, sampling_rate=16000)
-{'input_values': [array([ 0.00045439,  0.00045439,  0.00045439, ..., -0.1578519 , -0.10807519, -0.06727459], dtype=float32)]}
+{'input_values': [array([ 3.8106556e-04,  2.7506407e-03,  2.8015103e-03, ...,
+        5.6335266e-04,  4.6588284e-06, -1.7142107e-04], dtype=float32)]}
 ```
 
 ### Pad and truncate
@@ -281,11 +282,11 @@ Pass the audio `array` to the feature extractor. We also recommend adding the `s
 Just like the tokenizer, you can apply padding or truncation to handle variable sequences in a batch. Take a look at the sequence length of these two audio samples:
 
 ```py
->>> dataset["train"][0]["audio"]["array"].shape
-(1522930,)
+>>> dataset[0]["audio"]["array"].shape
+(173398,)
 
->>> dataset["train"][1]["audio"]["array"].shape
-(988891,)
+>>> dataset[1]["audio"]["array"].shape
+(106496,)
 ```
 
 As you can see, the first sample has a longer sequence than the second sample. Let's create a function that will preprocess the dataset. Specify a maximum sample length, and the feature extractor will either pad or truncate the sequences to match it:
@@ -297,7 +298,7 @@ As you can see, the first sample has a longer sequence than the second sample. L
 ...         audio_arrays,
 ...         sampling_rate=16000,
 ...         padding=True,
-...         max_length=1000000,
+...         max_length=100000,
 ...         truncation=True,
 ...     )
 ...     return inputs
@@ -306,17 +307,17 @@ As you can see, the first sample has a longer sequence than the second sample. L
 Apply the function to the the first few examples in the dataset:
 
 ```py
->>> processed_dataset = preprocess_function(dataset["train"][:5])
+>>> processed_dataset = preprocess_function(dataset[:5])
 ```
 
 Now take another look at the processed sample lengths:
 
 ```py
 >>> processed_dataset["input_values"][0].shape
-(1000000,)
+(100000,)
 
 >>> processed_dataset["input_values"][1].shape
-(1000000,)
+(100000,)
 ```
 
 The lengths of the first two samples now match the maximum length you specified.
