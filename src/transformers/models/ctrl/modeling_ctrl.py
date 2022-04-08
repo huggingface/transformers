@@ -562,11 +562,11 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
-        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values())
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
-        5.78
+        6.0
 
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
@@ -704,7 +704,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        0.57
+        0.35
         ```
 
         Example of multi-label classification:
