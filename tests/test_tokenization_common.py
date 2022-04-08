@@ -520,9 +520,25 @@ class TokenizerTesterMixin:
                     "cls_token",
                     "mask_token",
                 ]
+                should_test_setters_not_none = len(tokenizer) >= 0
+                if should_test_setters_not_none:
+                    token_id_to_test_setters = 0
+                    token_to_test_setters = tokenizer.convert_ids_to_tokens(
+                        token_id_to_test_setters, skip_special_tokens=False
+                    )
+
                 for attr in attributes_list:
                     self.assertTrue(hasattr(tokenizer, attr))
                     self.assertTrue(hasattr(tokenizer, attr + "_id"))
+
+                    setattr(tokenizer, attr + "_id", None)
+                    self.assertEqual(getattr(tokenizer, attr), None)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), None)
+
+                    if should_test_setters_not_none:
+                        setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+                        self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+                        self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
 
                 self.assertTrue(hasattr(tokenizer, "additional_special_tokens"))
                 self.assertTrue(hasattr(tokenizer, "additional_special_tokens_ids"))
