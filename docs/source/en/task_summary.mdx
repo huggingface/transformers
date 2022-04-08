@@ -988,7 +988,11 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> predictions = audio_classifier(audio_file)
 >>> predictions = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in predictions]
 >>> predictions
-[{'score': 0.1323, 'label': 'surprised'}, {'score': 0.128, 'label': 'calm'}, {'score': 0.1262, 'label': 'fearful'}, {'score': 0.1252, 'label': 'angry'}, {'score': 0.1246, 'label': 'sad'}]
+[{'label': 'surprised', 'score': 0.1323},
+ {'label': 'calm', 'score': 0.128},
+ {'label': 'fearful', 'score': 0.1262},
+ {'label': 'angry', 'score': 0.1252},
+ {'label': 'sad', 'score': 0.1246}]
 ```
 
 The general process for using a model and feature extractor for audio classification is:
