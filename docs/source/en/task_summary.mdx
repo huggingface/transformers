@@ -979,7 +979,7 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> from datasets import load_dataset
 >>> import torch
 
->>> torch.manual_seed(42)
+>>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
 
 >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 >>> dataset = dataset.sort("id")
