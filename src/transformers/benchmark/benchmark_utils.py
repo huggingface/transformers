@@ -712,6 +712,7 @@ class Benchmark(ABC):
                     if self.args.inference:
                         if self.args.memory:
                             memory, inference_summary = self.inference_memory(model_name, batch_size, sequence_length)
+
                             inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if self.args.speed:
                             time = self.inference_speed(model_name, batch_size, sequence_length)
