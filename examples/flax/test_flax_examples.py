@@ -21,7 +21,7 @@ import os
 import sys
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
+from transformers.testing_utils import HandlerTestCasePlus, get_gpu_count, slow
 
 
 SRC_DIRS = [
@@ -70,11 +70,17 @@ def get_results(output_dir, split="eval"):
     return results
 
 
-class ExamplesTests(TestCasePlus):
-    def test_run_glue(self):
+class ExamplesTests(HandlerTestCasePlus):
+    def setUp(self):
+        super().setUp()
         stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
+        self.add_handler(stream_handler, logger)
+    
+    def tearDown(self):
+        super().tearDown()
+        self.remove_handlers(logger)
 
+    def test_run_glue(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue.py
@@ -98,9 +104,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_clm(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm_flax.py
@@ -125,9 +128,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_summarization(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_summarization.py
@@ -158,9 +158,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_mlm(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm.py
@@ -185,9 +182,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_t5_mlm(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_t5_mlm_flax.py
@@ -212,9 +206,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_ner(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if get_gpu_count() > 1 else 2
 
@@ -245,9 +236,6 @@ class ExamplesTests(TestCasePlus):
 
     @slow
     def test_run_qa(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa.py
