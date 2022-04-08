@@ -668,7 +668,8 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
+    >>> target_start_index = tf.constant([{qa_target_start_index}])
+    >>> target_end_index = tf.constant([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = tf.math.reduce_mean(outputs.loss)
