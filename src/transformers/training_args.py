@@ -248,7 +248,7 @@ class TrainingArguments:
             metric values.
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
-            on pytorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
+            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/performance#tf32) documentation. This is an
             experimental API and it may change.
         local_rank (`int`, *optional*, defaults to -1):
