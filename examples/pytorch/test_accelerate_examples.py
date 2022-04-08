@@ -49,27 +49,14 @@ sys.path.extend(SRC_DIRS)
 
 
 if SRC_DIRS is not None:
-    # import run_audio_classification_no_trainer
     import run_clm_no_trainer
-
-    # import run_generation_no_trainer
     import run_glue_no_trainer
-
-    # import run_image_classification_no_trainer
-    # import run_mae_no_trainer
     import run_mlm_no_trainer
     import run_ner_no_trainer
     import run_qa_no_trainer as run_squad_no_trainer
-
-    # import run_seq2seq_qa_no_trainer as run_squad_seq2seq
-    # import run_speech_recognition_ctc_no_trainer
-    # import run_speech_recognition_seq2seq_no_trainer
     import run_summarization_no_trainer
     import run_swag_no_trainer
     import run_translation_no_trainer
-
-    # import run_wav2vec2_pretraining_no_trainer_no_trainer
-
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -99,8 +86,8 @@ def is_cuda_and_apex_available():
     return is_using_cuda and is_apex_available()
 
 
-class ExamplesTests(TestCasePlus):
-    def test_run_glue(self):
+class ExamplesTestsNoTrainer(TestCasePlus):
+    def test_run_glue_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -127,7 +114,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
-    def test_run_clm(self):
+    def test_run_clm_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -155,7 +142,7 @@ class ExamplesTests(TestCasePlus):
             self.assertLess(result["perplexity"], 100)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
-    def test_run_mlm(self):
+    def test_run_mlm_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -176,7 +163,7 @@ class ExamplesTests(TestCasePlus):
             self.assertLess(result["perplexity"], 42)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
 
-    def test_run_ner(self):
+    def test_run_ner_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -205,7 +192,7 @@ class ExamplesTests(TestCasePlus):
             self.assertLess(result["train_loss"], 0.5)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
-    def test_run_squad(self):
+    def test_run_squad_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -232,7 +219,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_exact"], 30)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
-    def test_run_swag(self):
+    def test_run_swag_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -258,7 +245,7 @@ class ExamplesTests(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
     @slow
-    def test_run_summarization(self):
+    def test_run_summarization_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -287,7 +274,7 @@ class ExamplesTests(TestCasePlus):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_2")))
 
     @slow
-    def test_run_translation(self):
+    def test_run_translation_no_trainer(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
