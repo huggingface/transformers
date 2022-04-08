@@ -977,6 +977,9 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 ```py
 >>> from transformers import pipeline
 >>> from datasets import load_dataset
+>>> import torch
+
+>>> torch.manual_seed(42)
 
 >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 >>> dataset = dataset.sort("id")
@@ -988,11 +991,11 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> predictions = audio_classifier(audio_file)
 >>> predictions = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in predictions]
 >>> predictions
-[{'label': 'surprised', 'score': 0.1323},
- {'label': 'calm', 'score': 0.128},
- {'label': 'fearful', 'score': 0.1262},
- {'label': 'angry', 'score': 0.1252},
- {'label': 'sad', 'score': 0.1246}]
+[{'label': 'calm', 'score': 0.1315},
+ {'label': 'neutral', 'score': 0.1307},
+ {'label': 'sad', 'score': 0.1274},
+ {'label': 'fearful', 'score': 0.1261},
+ {'label': 'happy', 'score': 0.1242}]
 ```
 
 The general process for using a model and feature extractor for audio classification is:
