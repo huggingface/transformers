@@ -185,43 +185,43 @@ Otra opción para usar 🤗 Transformers offline es descargando previamente los 
 * Utiliza el flujo de [`PreTrainedModel.from_pretrained`] y [`PreTrainedModel.save_pretrained`]:
     1. Descarga previamente los archivos con [`PreTrainedModel.from_pretrained`]:
 
-        ```py
-                    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+    ```py
+    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
-        ```
+    >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
+    ```
 
 
     2. Guarda los archivos en un directorio específico con [`PreTrainedModel.save_pretrained`]:
 
     ```py
-     >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
-     >>> model.save_pretrained("./your/path/bigscience_t0")
-     ```
+    >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
+    >>> model.save_pretrained("./your/path/bigscience_t0")
+    ```
 
     3. Cuando te encuentres offline, recarga los archivos con [`PreTrainedModel.from_pretrained`] desde el directorio especificado: 
 
     ```py
-     >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
-     >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
-     ```
+    >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
+    >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
+    ```
 
 * Descarga de manera programática los archivos con la biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub):
 
     1. Instala la biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) en tu entorno virtual: 
 
     ```bash
-      python -m pip install huggingface_hub
-     ```
+    python -m pip install huggingface_hub
+    ```
 
     2. Utiliza la función [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) para descargar un archivo a un path específico. Por ejemplo, el siguiente comando descarga el archivo `config.json` del modelo [T0](https://huggingface.co/bigscience/T0_3B) al path deseado:
 
     ```py
-     >>> from huggingface_hub import hf_hub_download
+    >>> from huggingface_hub import hf_hub_download
 
-     >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
-     ```
+    >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
+    ```
 
 Una vez que el archivo se descargue y se almacene en caché localmente, especifica tu ruta local para cargarlo y usarlo:
 
@@ -236,9 +236,3 @@ Una vez que el archivo se descargue y se almacene en caché localmente, especifi
 Para más detalles sobre cómo descargar archivos almacenados en el Hub consulta la sección [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream).
 
 </Tip>
-
-
-
-
-
-

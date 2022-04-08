@@ -416,6 +416,9 @@ class TrainingArguments:
             `huggingface-cli login`.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
+            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
+            that need inputs, predictions and references for scoring calculation in Metric class.
     """
 
     output_dir: str = field(
@@ -738,6 +741,9 @@ class TrainingArguments:
         metadata={
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
+    )
+    include_inputs_for_metrics: bool = field(
+        default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
     )
     # Deprecated arguments
     fp16_backend: str = field(
