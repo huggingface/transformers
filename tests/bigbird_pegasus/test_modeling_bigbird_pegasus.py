@@ -251,7 +251,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
     # torchscript tests are not passing for now.
     # Also torchscript is not an important feature to have in the beginning.
-    # ###test_torchscript = True  # False
+    test_torchscript = False
 
     # overwrite from GenerationTesterMixin to solve problem
     # with conflicting random seeds

@@ -324,7 +324,7 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SEWDForCTC, SEWDModel, SEWDForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    # ###test_torchscript = True  # False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SEWDModelTester(self)

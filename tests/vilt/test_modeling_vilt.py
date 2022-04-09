@@ -210,7 +210,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    # ###test_torchscript = True  # False
+    test_torchscript = False
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

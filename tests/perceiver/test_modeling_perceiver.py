@@ -280,7 +280,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
-    # ###test_torchscript = True  # False
+    test_torchscript = False
 
     maxDiff = None
 
