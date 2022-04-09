@@ -1855,6 +1855,10 @@ class Trainer:
                     def opt_load_hook(mod, opt):
                         opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial))
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
+                else:
+                    self.optimizer.load_state_dict(
+                    torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
