@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import unittest
 
 from transformers import XGLMConfig, XGLMTokenizer, is_tf_available
