@@ -437,7 +437,7 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
 
     # torchscript should be possible, but takes prohibitively long to test.
     # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
 
     all_model_classes = (
         (

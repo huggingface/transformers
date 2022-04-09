@@ -166,7 +166,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     is_encoder_decoder = True
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False

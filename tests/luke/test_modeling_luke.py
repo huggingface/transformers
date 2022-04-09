@@ -428,7 +428,7 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_pruning = False
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
     test_resize_embeddings = True
     test_head_masking = True
 

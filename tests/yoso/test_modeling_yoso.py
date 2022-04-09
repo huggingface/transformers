@@ -291,7 +291,7 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
 
     all_generative_model_classes = ()
 

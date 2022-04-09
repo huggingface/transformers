@@ -151,7 +151,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPVisionModel,) if is_torch_available() else ()
 
     test_pruning = False
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
     test_resize_embeddings = False
     test_head_masking = False
 

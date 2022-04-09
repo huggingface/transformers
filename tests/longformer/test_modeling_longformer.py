@@ -271,7 +271,7 @@ class LongformerModelTester:
 @require_torch
 class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
-    test_torchscript = True  # False
+    # test_torchscript = True  # False
 
     all_model_classes = (
         (
