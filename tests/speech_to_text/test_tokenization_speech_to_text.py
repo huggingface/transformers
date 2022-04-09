@@ -121,6 +121,10 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             revision="a14f04cf0776c02f62a8cb800cf7909e15ea23ad",
         )
 
+    # vocab is predefined, so testing setters doesn't make sense here
+    def test_tokenizers_common_ids_setters(self):
+        pass
+
 
 @require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):

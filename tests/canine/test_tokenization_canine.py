@@ -303,3 +303,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # tests all ids in vocab => vocab doesn't exist so unnecessary to test
     def test_conversion_reversible(self):
         pass
+
+    # ids are predefined, so testing setters doesn't make sense here
+    def test_tokenizers_common_ids_setters(self):
+        pass
