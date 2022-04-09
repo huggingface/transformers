@@ -581,7 +581,7 @@ class ModelTesterMixin:
                         [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                     )
 
-    @slow
+    # @slow
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
