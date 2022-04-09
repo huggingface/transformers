@@ -51,17 +51,20 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
+_TOKENIZER_FOR_DOC = "PegasusTokenizerFast"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-bigbird_pegasus"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 
 # QuestionAsnwering docstring
-_QA_EXPECTED_LOSS = 2.56
-_QA_EXPECTED_OUTPUT_SHAPE = [1, 12]
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-bigbird_pegasus"
+_QA_EXPECTED_LOSS = 3.96
+_QA_EXPECTED_OUTPUT = "''"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -2645,10 +2648,11 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -2771,11 +2775,11 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_QA_EXPECTED_OUTPUT,
     )
     def forward(
         self,

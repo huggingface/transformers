@@ -17,6 +17,20 @@ class TensorFlowBenchmark(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLogitsProcessor(metaclass=DummyObject):
     _backends = ["tf"]
 

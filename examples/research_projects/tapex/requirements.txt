@@ -1,0 +1,4 @@
+numpy
+datasets
+pandas
+nltk

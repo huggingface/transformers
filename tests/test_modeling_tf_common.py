@@ -1179,7 +1179,7 @@ class TFModelTesterMixin:
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating more sequences than having beams leads is not possible
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
