@@ -1,9 +1,11 @@
-- sections: 
+- sections:
+  - local: index
+    title: 🤗 Transformers
   - local: quicktour
-    title: Quick tour
+    title: Tour rápido
   - local: installation
     title: Instalación
-  title: Get started
+  title: Comenzando
 - sections:
   - local: pipeline_tutorial
     title: Pipelines para inferencia
@@ -11,7 +13,7 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
-  title: Tutorials
+  title: Tutoriales
 - sections:
   - local: multilingual
     title: Modelos multilingües para inferencia
