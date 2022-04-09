@@ -113,6 +113,7 @@ from . import (
     swin,
     t5,
     tapas,
+    tapex,
     transfo_xl,
     trocr,
     unispeech,
