@@ -418,9 +418,12 @@ class TrainingArguments:
             `huggingface-cli login`.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+<<<<<<< HEAD
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+=======
+>>>>>>> 29ae2ec71c66be1428e20654e97edd58e43ecb53
         smp_save_partial (`bool`, *optional*, defaults to `False`):
             If True, saves checkpoints partially. `"smp_save_partial"` can only be used with Sagemaker Model Parallel library.
         smp_load_partial (`bool`, *optional*, defaults to `False`):
@@ -750,9 +753,12 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
+<<<<<<< HEAD
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
     )
+=======
+>>>>>>> 29ae2ec71c66be1428e20654e97edd58e43ecb53
     smp_save_partial: bool = field(default=False, metadata={"help": "Save checkpoints partially for SMP."})
     smp_load_partial: bool = field(default=False, metadata={"help": "Load partial checkpoints for SMP."})
     smp_tensor_parallel_full_model: bool = field(default=False, metadata={"help": "Enables tensor parallelism for full model in SMP."})
