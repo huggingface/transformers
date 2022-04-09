@@ -602,7 +602,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    # test_torchscript = True  # False
+    # ###test_torchscript = True  # False
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -689,7 +689,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    # test_torchscript = True  # False
+    # ###test_torchscript = True  # False
 
     def setUp(self):
         self.model_tester = ReformerModelTester(

@@ -273,7 +273,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
-    test_torchscript = True
+    ###test_torchscript = True
 
     input_name = "input_features"
 
