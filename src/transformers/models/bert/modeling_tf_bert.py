@@ -65,7 +65,7 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-cased"
+_CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
@@ -1304,8 +1304,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'P a r i s'",
-        expected_loss=0.81,
+        expected_output="'p a r i s'",
+        expected_loss=0.88,
     )
     def call(
         self,
@@ -1630,8 +1630,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         checkpoint=_CHECKPOINT_FOR_SEQ_CLASS,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_1'",
-        expected_loss=0.01,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def call(
         self,
@@ -1859,8 +1859,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASS,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']",
-        expected_loss=0.01,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def call(
         self,
@@ -1951,8 +1951,8 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'a nice puppet'",
-        expected_loss=7.41,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def call(
         self,
