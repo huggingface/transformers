@@ -32,23 +32,23 @@ Si no fuese así, se espera que el código funcione para ambos backends sin ning
 El [`pipeline`] soporta muchas tareas comunes listas para usar:
 
 **Texto**:
-* Análisis de Sentimientos: clasifica la polaridad de un texto dado.
-* Generación de texto (solo en inglés): genera texto a partir de un input dado.
-* Name entity recognition (NER): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
-* Responder preguntas: extrae la respuesta del contexto dado un contexto y una pregunta.
-* Fill-mask: rellena el espacio faltante dado un texto con palabras enmascaradas.
-* Summarization: genera un resumen de una secuencia larga de texto o un documento.
-* Traducción: traduce un texto a otro idioma.
-* Extracción de características: crea una representación tensorial del texto.
+* Análisis de Sentimiento (Sentiment Analysis, en inglés): clasifica la polaridad de un texto dado.
+* Generación de Texto (Text Generation, en inglés): genera texto a partir de un input dado.
+* Reconocimiento de Entidades (Name Entity Recognition o NER, en inglés): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
+* Responder Preguntas (Question answering, en inglés): extrae la respuesta del contexto dado un contexto y una pregunta.
+* Rellenar Máscara (Fill-mask, en inglés): rellena el espacio faltante dado un texto con palabras enmascaradas.
+* Resumir (Summarization, en inglés): genera un resumen de una secuencia larga de texto o un documento.
+* Traducción (Translation, en inglés): traduce un texto a otro idioma.
+* Extracción de Características (Feature Extraction, en inglés): crea una representación tensorial del texto.
 
 **Imagen**:
-* Clasificación de imágenes: clasifica una imagen.
-* Segmentación de imágenes: clasifica cada pixel de una imagen.
-* Detección de objetos: detecta objetos dentro de una imagen.
+* Clasificación de Imágenes (Image Classification, en inglés): clasifica una imagen.
+* Segmentación de Imágenes (Image Segmentation, en inglés): clasifica cada pixel de una imagen.
+* Detección de Objetos (Object Detection, en inglés): detecta objetos dentro de una imagen.
 
 **Audio**:
-* Clasificación de audios: asigna una etiqueta a un segmento de audio.
-* Automatic speech recognition (ASR): transcribe datos de audio a un texto.
+* Clasificación de Audios (Audio Classification, en inglés): asigna una etiqueta a un segmento de audio.
+* Reconocimiento de Voz Automático (Automatic Speech Recognition o ASR, en inglés): transcribe datos de audio a un texto.
 
 <Tip>
 
@@ -112,7 +112,7 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 >>> import torch
 >>> from transformers import pipeline
 
->>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
+>>> reconocedor_de_voz = pipeline("automatic-speech-recognition", model="jonatasgrosman/wav2vec2-large-xlsr-53-spanish", device=0)
 ```
 
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
@@ -205,11 +205,11 @@ Después, el tokenizador convierte los tokens a números para construir un tenso
 Pasa tu texto al tokenizador:
 
 ```py
->>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
+>>> encoding = tokenizer("Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.")
 >>> print(encoding)
-{'input_ids': [101, 11312, 10320, 12495, 19308, 10114, 11391, 10855, 10103, 100, 58263, 13299, 119, 102],
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+{'input_ids': [101, 10602, 14000, 13653, 43353, 10107, 10102, 47201, 10218, 10106, 18283, 10102, 100, 58263, 119, 102],
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
 El tokenizador devolverá un diccionario conteniendo:
