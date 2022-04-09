@@ -124,7 +124,7 @@ class VanModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VanModel, VanForImageClassification) if is_torch_available() else ()
 
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True  # False
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False

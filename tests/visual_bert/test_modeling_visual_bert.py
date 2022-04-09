@@ -313,7 +313,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_torchscript = False
+    test_torchscript = True  # False
     test_pruning = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
