@@ -32,6 +32,9 @@ from torch.nn import CrossEntropyLoss
 
 from requests import HTTPError
 
+# XXX:
+from transformers.debug_utils import see_cpu_memory_usage
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
@@ -345,8 +348,16 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
+
     try:
         return torch.load(checkpoint_file, map_location="cpu")
+
+        # see_cpu_memory_usage(f"before load_state_dict {checkpoint_file}", True)
+        # x = torch.load(checkpoint_file, map_location="cuda")
+        # see_cpu_memory_usage(f"after load_state_dict {checkpoint_file}", True)
+
+        # return x
+
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -370,6 +381,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+    # XXX: this is already done in `_load_pretrained_model`
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -415,6 +427,100 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                 load(child, prefix + name + ".")
 
     load(model_to_load, prefix=start_prefix)
+
+    return error_msgs
+
+
+# a helper util to find the last sub-module and the param/buffer name
+def find_submodule_and_param_name(model, long_key, start_prefix):
+    # print(f"\n\n!!!{long_key} => {start_prefix}")
+
+    # XXX: Fixme
+    if len(start_prefix) > 0 and long_key.startswith(start_prefix):
+        long_key = ".".join(long_key.split(".")[1:])
+
+    split_key = long_key.split(".")
+    submodule = model
+    while len(split_key) > 1:
+        # print(f"{split_key[0]}")
+        if hasattr(submodule, split_key[0]):
+            # print(f"found {split_key[0]}")
+            submodule = getattr(submodule, split_key[0])
+            del split_key[0]
+        else:
+            # print(f"failed {split_key[0]}")
+            submodule = None
+            break
+    if submodule == model:
+        submodule = None
+    return submodule, split_key[0]
+
+
+def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+
+    # meta device was added in pt=1.9
+    require_version_core("torch>=1.9")
+
+    # see_cpu_memory_usage("before move to meta", True)
+
+    # dematerialize param storage for keys that are going to be replaced by state_dict, by
+    # putting those on the meta device
+    for k in loaded_state_dict_keys:
+        # print(k)
+        submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+        if submodule is not None:
+            # print(f"yes {k}")
+            # selectively switch to the meta device only those params/buffers that will
+            # be next replaced from state_dict. This a complex way to do p.to_("meta")
+            # since we have no in-place to_ for tensors.
+            new_val = getattr(submodule, param_name)
+            # new_val = torch.ones(1).cuda()
+            if isinstance(new_val, torch.nn.Parameter):
+                # isinstance returns False for Params on meta device, so switch after the check
+                new_val = torch.nn.Parameter(new_val.to("meta"))
+            else:
+                new_val = new_val.to("meta")
+            setattr(submodule, param_name, new_val)
+        else:
+            print(f"!!! didn't meta {k}")
+
+            # print(getattr(submodule, param_name))
+
+    # for n,p in model.named_parameters():
+    #     #print(f"{p} {n}")
+    #     p.data = torch.ones(1).data
+
+    # model = model.cpu()
+
+    # model = None
+    import gc
+
+    gc.collect()
+
+    # see_cpu_memory_usage("after move to meta", True)
+    # import sys; sys.exit(0)
+
+
+def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
+    # XXX: this can be fixed below
+    if is_deepspeed_zero3_enabled():
+        raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+
+    # XXX: error_msgs?
+    error_msgs = []
+
+    # XXX: need to copy metadata - see _load_state_dict_into_model
+
+    # materialize state_dict entries one by one on CPU
+    for k in loaded_state_dict_keys:
+        if k in state_dict:
+            submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+            if submodule is not None:
+                param_dtype = getattr(submodule, param_name).dtype
+                new_val = state_dict[k].to(param_dtype)
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
 
     return error_msgs
 
@@ -1569,6 +1675,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         from_pt = not (from_tf | from_flax)
 
+        see_cpu_memory_usage("from_pretrained start", True)
+
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
@@ -1795,6 +1903,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
+
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -1818,16 +1927,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+            if is_sharded:
+                loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
+            else:
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
             if low_cpu_mem_usage:
-                # save the keys
-                if is_sharded:
-                    loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
-                else:
-                    loaded_state_dict_keys = [k for k in state_dict.keys()]
-                    del state_dict  # free CPU memory - will reload again later
+                # del state_dict
+                state_dict = None
+                see_cpu_memory_usage(f"after del state_dict", True)
+                # print(f"Ref count: {sys.getrefcount(state_dict)}")
+                # state_dict = None # free CPU memory - will reload again later
+                import gc
+                import sys
+
+                gc.collect()
+
+        # import sys
+        # sys.exit(0)
 
         config.name_or_path = pretrained_model_name_or_path
 
+        see_cpu_memory_usage(f"before model init", True)
         # Instantiate model.
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1842,10 +1962,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
 
-        if from_pt:
-            # restore default dtype
-            if dtype_orig is not None:
-                torch.set_default_dtype(dtype_orig)
+        # model = model.cuda()
+        # model = model.cpu()
+        # model = model.cuda()
+        see_cpu_memory_usage(f"after model init", True)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1876,18 +1996,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
 
-            if low_cpu_mem_usage:
-                cls._load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
-            else:
-                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
-                    model,
-                    state_dict,
-                    resolved_archive_file,
-                    pretrained_model_name_or_path,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    sharded_metadata=sharded_metadata,
-                    _fast_init=_fast_init,
-                )
+            # restore default dtype
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
+
+            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
+                model,
+                state_dict,
+                loaded_state_dict_keys,  # XXX: rename?
+                resolved_archive_file,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                _fast_init=_fast_init,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1911,17 +2034,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cls,
         model,
         state_dict,
+        loaded_keys,
         resolved_archive_file,
         pretrained_model_name_or_path,
         ignore_mismatched_sizes=False,
         sharded_metadata=None,
         _fast_init=True,
+        low_cpu_mem_usage=False,
     ):
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-        loaded_keys = list(state_dict.keys()) if state_dict is not None else sharded_metadata["all_checkpoint_keys"]
         prefix = model.base_model_prefix
+
+        model = model.cpu()
+        see_cpu_memory_usage(f"??? before _load_pretrained_model", True)
 
         def _fix_key(key):
             if "beta" in key:
@@ -1984,9 +2111,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "properly saved?"
                 )
 
-        if state_dict is not None:
-            # Whole checkpoint
+        def _find_mismatched_keys(
+            state_dict,
+            model_state_dict,
+            loaded_keys,
+            add_prefix_to_model,
+            remove_prefix_from_model,
+            ignore_mismatched_sizes,
+        ):
             mismatched_keys = []
+            # XXX: This if condition looks wrong - should it be `if not ignore_mismatched_sizes`?
             if ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
                     model_key = checkpoint_key
@@ -2005,40 +2139,62 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                         )
                         del state_dict[checkpoint_key]
+            return mismatched_keys
 
+        if low_cpu_mem_usage:
+            model_state_dict = None
+            see_cpu_memory_usage("before move to meta", True)
+            # model = model.cpu()
+            move_model_to_meta(model, loaded_keys, start_prefix)
+            see_cpu_memory_usage("after move to meta", True)
+
+        if state_dict is not None:
+            print("Loading full single checkpoint")
+            # Whole checkpoint
             error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+            see_cpu_memory_usage("after state_dict load", True)
+
+            mismatched_keys = _find_mismatched_keys(
+                state_dict,
+                model_state_dict,
+                loaded_keys,
+                add_prefix_to_model,
+                remove_prefix_from_model,
+                ignore_mismatched_sizes,
+            )
         else:
-            # Sharded checkpoint
+            # Sharded checkpoint or whole but low_cpu_mem_usage==True
+
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
             error_msgs = []
+            mismatched_keys = []
             for shard_file in resolved_archive_file:
+                see_cpu_memory_usage("before state_dict load", True)
                 state_dict = load_state_dict(shard_file)
+                see_cpu_memory_usage("after state_dict load", True)
+
+                if low_cpu_mem_usage:
+                    print("Loading low_mem checkpoint")
+                    error_msgs += _load_state_dict_into_meta_model(
+                        model_to_load, state_dict, start_prefix, loaded_keys
+                    )
+                    model_state_dict = model.state_dict()
+                else:
+                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
-                mismatched_keys = []
-                if ignore_mismatched_sizes:
-                    for checkpoint_key in loaded_keys:
-                        model_key = checkpoint_key
-                        if remove_prefix_from_model:
-                            # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                            model_key = f"{prefix}.{checkpoint_key}"
-                        elif add_prefix_to_model:
-                            # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                            model_key = ".".join(checkpoint_key.split(".")[1:])
-
-                        if (
-                            model_key in model_state_dict
-                            and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-                        ):
-                            mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                            )
-                            del state_dict[checkpoint_key]
-
-                error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                mismatched_keys += _find_mismatched_keys(
+                    state_dict,
+                    model_state_dict,
+                    loaded_keys,
+                    add_prefix_to_model,
+                    remove_prefix_from_model,
+                    ignore_mismatched_sizes,
+                )
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -2103,14 +2259,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @staticmethod
-    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file):
+    def _load_pretrained_model_low_mem2(model, loaded_state_dict_keys, resolved_archive_file):
         """
+        XXX: copy the algorithm somewhere else
+
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
         Before it gets called we do:
 
         1. save which state_dict keys we have
-        2. drop state_dict before model is created, since the latter takes 1x model size memory
+        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
 
         Here then we continue:
 
@@ -2118,44 +2276,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         4. load state_dict 2nd time
         5. replace the params/buffers from the state_dict
 
-        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed ZeRO stage 3.
         """
         require_version_core("torch>=1.9")
         if is_deepspeed_zero3_enabled():
             raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
 
-        # a helper util to find the last sub-module and the param/buffer name
-        def find_submodule_and_param_name(model, long_key):
-            split_key = long_key.split(".")
-            submodule = model
-            while len(split_key) > 1:
-                if hasattr(submodule, split_key[0]):
-                    submodule = getattr(submodule, split_key[0])
-                    del split_key[0]
-                else:
-                    submodule = None
-                    break
-            return submodule, split_key[0]
-
-        # dematerialize param storage for keys that are going to be replaced by state_dict, by
-        # putting those on the meta device
-        for k in loaded_state_dict_keys:
-            submodule, param_name = find_submodule_and_param_name(model, k)
-            if submodule is not None:
-                # selectively switch to the meta device only those params/buffers that will
-                # be next replaced from state_dict. This a complex way to do p.to_("meta")
-                # since we have no in-place to_ for tensors.
-                new_val = getattr(submodule, param_name)
-                if isinstance(new_val, torch.nn.Parameter):
-                    # isinstance returns False for Params on meta device, so switch after the check
-                    new_val = torch.nn.Parameter(new_val.to("meta"))
-                else:
-                    new_val = new_val.to("meta")
-                setattr(submodule, param_name, new_val)
-
         # only now can load state_dict(s)
         if not isinstance(resolved_archive_file, list):
             resolved_archive_file = [resolved_archive_file]
+
+        import sys
+
+        sys.exit(0)
 
         for archive_file in resolved_archive_file:
             state_dict = torch.load(archive_file, map_location="cpu")
@@ -2163,7 +2296,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # materialize state_dict entries one by one on CPU
             for k in loaded_state_dict_keys:
                 if k in state_dict:
-                    submodule, param_name = find_submodule_and_param_name(model, k)
+                    submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
                     if submodule is not None:
                         param_dtype = getattr(submodule, param_name).dtype
                         new_val = state_dict[k].to(param_dtype)
