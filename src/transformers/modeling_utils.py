@@ -2120,7 +2120,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ignore_mismatched_sizes,
         ):
             mismatched_keys = []
-            # XXX: This if condition looks wrong - should it be `if not ignore_mismatched_sizes`?
             if ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
                     model_key = checkpoint_key
@@ -2151,8 +2150,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if state_dict is not None:
             print("Loading full single checkpoint")
             # Whole checkpoint
-            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
-            see_cpu_memory_usage("after state_dict load", True)
 
             mismatched_keys = _find_mismatched_keys(
                 state_dict,
@@ -2162,6 +2159,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
+
+            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+            see_cpu_memory_usage("after state_dict load", True)
         else:
             # Sharded checkpoint or whole but low_cpu_mem_usage==True
 
@@ -2177,13 +2177,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 see_cpu_memory_usage("after state_dict load", True)
 
                 if low_cpu_mem_usage:
-                    print("Loading low_mem checkpoint")
-                    error_msgs += _load_state_dict_into_meta_model(
-                        model_to_load, state_dict, start_prefix, loaded_keys
-                    )
                     model_state_dict = model.state_dict()
-                else:
-                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -2195,6 +2189,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,
                 )
+
+                if low_cpu_mem_usage:
+                    print("Loading low_mem checkpoint")
+                    error_msgs += _load_state_dict_into_meta_model(
+                        model_to_load, state_dict, start_prefix, loaded_keys
+                    )
+                else:
+                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
