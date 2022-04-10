@@ -419,8 +419,12 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     return error_msgs
 
 
-# a helper util to find the last sub-module and the param/buffer name
 def find_submodule_and_param_name(model, long_key, start_prefix):
+    """
+    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll removed
+    from the start of the key
+    """
+
     if len(start_prefix) > 0 and long_key.startswith(start_prefix):
         long_key = ".".join(long_key.split(".")[1:])
 
@@ -438,7 +442,14 @@ def find_submodule_and_param_name(model, long_key, start_prefix):
     return submodule, split_key[0]
 
 
-def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+    """
+    Moves `loaded_state_dict_keys` in model to meta device which frees up the memory taken by those params.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
 
     # meta device was added in pt=1.9
     require_version_core("torch>=1.9")
@@ -464,14 +475,27 @@ def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
 
 def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
-    # XXX: this can be fixed below
+    """
+    This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
+    params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
+    params back to the normal device, but only for `loaded_state_dict_keys`.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
+
+    # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
+    # - deepspeed zero 3 support
+    # - need to copy metadata if any - see _load_state_dict_into_model
+    # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
+    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
+    #   they won't get loaded.
+
     if is_deepspeed_zero3_enabled():
-        raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+        raise ValueError("low_cpu_mem_usage arg cannot currently be used with DeepSpeed ZeRO-3")
 
-    # XXX: error_msgs?
     error_msgs = []
-
-    # XXX: need to copy metadata - see _load_state_dict_into_model
 
     # materialize state_dict entries one by one on CPU
     for k in loaded_state_dict_keys:
@@ -2099,7 +2123,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if low_cpu_mem_usage:
             model_state_dict = None  # free references to model's params to allow memory freeing
-            move_model_to_meta(model, loaded_keys, start_prefix)
+            _move_model_to_meta(model, loaded_keys, start_prefix)
 
         if state_dict is not None:
             # Whole checkpoint
