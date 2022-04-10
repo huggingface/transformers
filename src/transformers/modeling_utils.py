@@ -32,9 +32,6 @@ from torch.nn import CrossEntropyLoss
 
 from requests import HTTPError
 
-# XXX:
-from transformers.debug_utils import see_cpu_memory_usage
-
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
@@ -352,12 +349,6 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     try:
         return torch.load(checkpoint_file, map_location="cpu")
 
-        # see_cpu_memory_usage(f"before load_state_dict {checkpoint_file}", True)
-        # x = torch.load(checkpoint_file, map_location="cuda")
-        # see_cpu_memory_usage(f"after load_state_dict {checkpoint_file}", True)
-
-        # return x
-
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -381,7 +372,6 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
-    # XXX: this is already done in `_load_pretrained_model`
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -461,8 +451,6 @@ def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
     # meta device was added in pt=1.9
     require_version_core("torch>=1.9")
 
-    # see_cpu_memory_usage("before move to meta", True)
-
     # dematerialize param storage for keys that are going to be replaced by state_dict, by
     # putting those on the meta device
     for k in loaded_state_dict_keys:
@@ -481,24 +469,8 @@ def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             else:
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
-        else:
-            print(f"!!! didn't meta {k}")
-
-            # print(getattr(submodule, param_name))
-
-    # for n,p in model.named_parameters():
-    #     #print(f"{p} {n}")
-    #     p.data = torch.ones(1).data
-
-    # model = model.cpu()
-
-    # model = None
-    import gc
-
-    gc.collect()
-
-    # see_cpu_memory_usage("after move to meta", True)
-    # import sys; sys.exit(0)
+        # else:
+        #     print(f"!!! didn't meta {k}")
 
 
 def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
@@ -1652,7 +1624,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
         >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
-        ```"""
+        ```
+
+        * `low_cpu_mem_usage` algorithm:
+
+        This is an experimental function that loads the model using ~1.x model size CPU memory
+
+        Before it gets called we do:
+
+        1. save which state_dict keys we have
+        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
+        3. after the model has been instantiated switch to the meta device all params/buffers that
+        are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it can't handle deepspeed ZeRO stage 3 and loading errors
+
+        """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1674,8 +1663,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
 
         from_pt = not (from_tf | from_flax)
-
-        see_cpu_memory_usage("from_pretrained start", True)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1932,22 +1919,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 loaded_state_dict_keys = [k for k in state_dict.keys()]
             if low_cpu_mem_usage:
-                # del state_dict
                 state_dict = None
-                see_cpu_memory_usage(f"after del state_dict", True)
-                # print(f"Ref count: {sys.getrefcount(state_dict)}")
-                # state_dict = None # free CPU memory - will reload again later
-                import gc
-                import sys
-
-                gc.collect()
-
-        # import sys
-        # sys.exit(0)
 
         config.name_or_path = pretrained_model_name_or_path
 
-        see_cpu_memory_usage(f"before model init", True)
         # Instantiate model.
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1961,11 +1936,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
-
-        # model = model.cuda()
-        # model = model.cpu()
-        # model = model.cuda()
-        see_cpu_memory_usage(f"after model init", True)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -2046,9 +2016,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
-
-        model = model.cpu()
-        see_cpu_memory_usage(f"??? before _load_pretrained_model", True)
 
         def _fix_key(key):
             if "beta" in key:
@@ -2141,16 +2108,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return mismatched_keys
 
         if low_cpu_mem_usage:
-            model_state_dict = None
-            see_cpu_memory_usage("before move to meta", True)
-            # model = model.cpu()
+            # XXX: move together with state_dict = None?
+            model_state_dict = None  # state_dict ref count to 0
             move_model_to_meta(model, loaded_keys, start_prefix)
-            see_cpu_memory_usage("after move to meta", True)
 
         if state_dict is not None:
-            print("Loading full single checkpoint")
             # Whole checkpoint
-
             mismatched_keys = _find_mismatched_keys(
                 state_dict,
                 model_state_dict,
@@ -2159,9 +2122,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
-
             error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
-            see_cpu_memory_usage("after state_dict load", True)
         else:
             # Sharded checkpoint or whole but low_cpu_mem_usage==True
 
@@ -2172,9 +2133,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             error_msgs = []
             mismatched_keys = []
             for shard_file in resolved_archive_file:
-                see_cpu_memory_usage("before state_dict load", True)
                 state_dict = load_state_dict(shard_file)
-                see_cpu_memory_usage("after state_dict load", True)
 
                 if low_cpu_mem_usage:
                     model_state_dict = model.state_dict()
@@ -2191,13 +2150,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
                 if low_cpu_mem_usage:
-                    print("Loading low_mem checkpoint")
                     error_msgs += _load_state_dict_into_meta_model(
                         model_to_load, state_dict, start_prefix, loaded_keys
                     )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
-
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -2260,54 +2217,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
-
-    @staticmethod
-    def _load_pretrained_model_low_mem2(model, loaded_state_dict_keys, resolved_archive_file):
-        """
-        XXX: copy the algorithm somewhere else
-
-        This is an experimental function that loads the model using ~1.x model size CPU memory
-
-        Before it gets called we do:
-
-        1. save which state_dict keys we have
-        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
-
-        Here then we continue:
-
-        3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
-        4. load state_dict 2nd time
-        5. replace the params/buffers from the state_dict
-
-        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed ZeRO stage 3.
-        """
-        require_version_core("torch>=1.9")
-        if is_deepspeed_zero3_enabled():
-            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
-
-        # only now can load state_dict(s)
-        if not isinstance(resolved_archive_file, list):
-            resolved_archive_file = [resolved_archive_file]
-
-        import sys
-
-        sys.exit(0)
-
-        for archive_file in resolved_archive_file:
-            state_dict = torch.load(archive_file, map_location="cpu")
-
-            # materialize state_dict entries one by one on CPU
-            for k in loaded_state_dict_keys:
-                if k in state_dict:
-                    submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
-                    if submodule is not None:
-                        param_dtype = getattr(submodule, param_name).dtype
-                        new_val = state_dict[k].to(param_dtype)
-                        if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                            new_val = torch.nn.Parameter(new_val)
-                        setattr(submodule, param_name, new_val)
-
-            del state_dict
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):

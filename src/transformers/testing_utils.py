@@ -17,6 +17,7 @@ import inspect
 import logging
 import os
 import re
+import shlex
 import shutil
 import sys
 import tempfile
@@ -1177,6 +1178,37 @@ class TestCasePlus(unittest.TestCase):
             self.teardown_tmp_dirs.append(tmp_dir)
 
         return tmp_dir
+
+    def python_one_liner_max_rss(self, one_liner_str):
+        """
+        runs the passed python one liner (just the code) and returns how much max cpu memory was used to run the
+        program.
+
+        Args:
+            one_liner_str (`string`):
+                a python program that gets passed to `python -c`
+
+        Returns:
+            max cpu memory used to run the program in bytes. This value is likely to vary slightly from run to run.
+
+        Requirements:
+            this helper needs `/usr/bin/time` to be installed (`apt install time`)
+
+        Example:
+
+        ```
+        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("t5-large")'
+        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
+        ```
+
+        """
+
+        cmd = shlex.split(f"/usr/bin/time -f %M python -c '{one_liner_str}'")
+        with CaptureStd() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        max_rss_normal = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
+        # print(f"MAX RSS={max_rss_normal}")
+        return max_rss_normal
 
     def tearDown(self):
 

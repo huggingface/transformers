@@ -115,167 +115,6 @@ def _config_zero_init(config):
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 
 
-import threading  # noqa
-
-
-class CPUMemoryTracker:
-    def __init__(self):
-
-        # XXX: check is_psutil_available():
-        import psutil  # noqa
-
-        # if not is_psutil_available():
-        self.process = psutil.Process()
-
-    def cpu_mem_used(self):
-        """get resident set size memory for the current process"""
-        return self.process.memory_info().rss
-
-    def peak_monitor_func(self):
-        self.cpu_mem_used_peak = -1
-
-        while True:
-            self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
-
-            # can't sleep or will not catch the peak right (this comment is here on purpose)
-            # time.sleep(0.001) # 1msec
-
-            if not self.peak_monitoring:
-                break
-
-    def start(self):
-        """start tracking for the caller's stage"""
-
-        gc.collect()
-
-        # cpu
-        self.cpu_mem_used_at_start = self.cpu_mem_used()
-
-        self.peak_monitoring = True
-        peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
-        peak_monitor_thread.daemon = True
-        peak_monitor_thread.start()
-
-    def stop(self):
-        """stop tracking for the passed stage"""
-
-        # # this sends a signal to peak_monitor_func to complete its loop
-        self.peak_monitoring = False
-
-        # first ensure all objects get collected and their memory is freed
-        gc.collect()
-
-        # concepts:
-        # - alloc_delta:  the difference of allocated memory between the end and the start
-        # - peaked_delta: the difference between the peak memory and the current memory
-        # in order to know how much memory the measured code consumed one needs to sum these two
-
-        # cpu
-        self.cpu_mem_used_now = self.cpu_mem_used()
-        self.stats = dict(
-            begin=self.cpu_mem_used_at_start,
-            end=self.cpu_mem_used_now,
-            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
-            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
-        )
-
-    def peaked(self):
-        if hasattr(self, "stats"):
-            return self.stats["peaked"]
-        else:
-            raise ValueError("call stop first")
-
-    def alloc(self):
-        if hasattr(self, "stats"):
-            return self.stats["alloc"]
-        else:
-            raise ValueError("call stop first")
-
-
-class CPUMemoryTrackerTracemalloc:
-    def __init__(self):
-
-        import tracemalloc
-
-        self.tracemalloc = tracemalloc
-
-        # # XXX: check is_psutil_available():
-        # import psutil  # noqa
-
-        # # if not is_psutil_available():
-        # self.process = psutil.Process()
-
-    # def cpu_mem_used(self):
-    #     """get resident set size memory for the current process"""
-    #     return self.process.memory_info().rss
-
-    # def peak_monitor_func(self):
-    #     self.cpu_mem_used_peak = -1
-
-    #     while True:
-    #         self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
-
-    #         # can't sleep or will not catch the peak right (this comment is here on purpose)
-    #         # time.sleep(0.001) # 1msec
-
-    #         if not self.peak_monitoring:
-    #             break
-
-    def start(self):
-        """start tracking for the caller's stage"""
-
-        gc.collect()
-        self.tracemalloc.start()
-
-        # # cpu
-        # self.cpu_mem_used_at_start = self.cpu_mem_used()
-
-        # self.peak_monitoring = True
-        # peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
-        # peak_monitor_thread.daemon = True
-        # peak_monitor_thread.start()
-
-    def stop(self):
-        """stop tracking for the passed stage"""
-
-        # # this sends a signal to peak_monitor_func to complete its loop
-        # self.peak_monitoring = False
-
-        # first ensure all objects get collected and their memory is freed
-        gc.collect()
-
-        self.tracemalloc.stop()
-
-        # concepts:
-        # - alloc_delta:  the difference of allocated memory between the end and the start
-        # - peaked_delta: the difference between the peak memory and the current memory
-        # in order to know how much memory the measured code consumed one needs to sum these two
-
-        current, peak = self.tracemalloc.get_traced_memory()
-
-        # cpu
-        # self.cpu_mem_used_now = self.cpu_mem_used()
-        self.stats = dict(alloc=current, peaked=peak)
-        # self.stats = dict(
-        #     begin=self.cpu_mem_used_at_start,
-        #     end=self.cpu_mem_used_now,
-        #     alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
-        #     peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
-        # )
-
-    def peaked(self):
-        if hasattr(self, "stats"):
-            return self.stats["peaked"]
-        else:
-            raise ValueError("call stop first")
-
-    def alloc(self):
-        if hasattr(self, "stats"):
-            return self.stats["alloc"]
-        else:
-            raise ValueError("call stop first")
-
-
 @require_torch
 class ModelTesterMixin:
 
@@ -2637,199 +2476,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    """
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", low_cpu_mem_usage=False)'
-325656
-
-
-# 420 MB https://huggingface.co/bert-base-uncased
-
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bert-base-uncased", low_cpu_mem_usage=True)'
-1139516
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bert-base-uncased", low_cpu_mem_usage=False)'
-1140324
-
-
-1140324
-1139316
--325656
--------
-814_668
-813_660
-
-# 1.25GB https://huggingface.co/bert-large-uncased/
-
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bert-large-uncased", low_cpu_mem_usage=True)'
-2906584
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bert-large-uncased", low_cpu_mem_usage=False)'
-2908236
-
-2906584
-2908236
--325656
--------
-2_580_928
-2_582_580
-
-# 41.5 GB https://huggingface.co/bigscience/T0
-
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bigscience/T0", low_cpu_mem_usage=True)'
-43788452
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bigscience/T0", low_cpu_mem_usage=False)'
-86765944
-
-
-# 10.6 GB https://huggingface.co/bigscience/T0_3B
-
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bigscience/T0_3B", low_cpu_mem_usage=True)'
-16122900
-/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("bigscience/T0_3B", low_cpu_mem_usage=False)'
-22299560
-
-16123620
-22297904
-- 325656
---------
-15_797_964
-21_972_248
-
-
-214069248
-437928960
-
-    """
-
-    # @slow
-    def test_from_pretrained_low_cpu_mem_usage_measured(self):
-        # test that `low_cpu_mem_usage=True` uses less cpu memory than normal
-
-        import shlex
-
-        from transformers.testing_utils import CaptureStd, execute_subprocess_async
-
-        mname = "bert-base-uncased"
-
-        # how many bytes?
-        model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
-        total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        total_bytes = total_numel * 4  # 420MB
-        del model
-
-        cmd = shlex.split(
-            f"""/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'"""
-        )
-        with CaptureStd() as cs:
-            execute_subprocess_async(cmd, env=self.get_env())
-        max_rss_normal = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
-        print(f"MAX RSS={max_rss_normal}")
-
-        cmd = shlex.split(
-            f"""/usr/bin/time -f %M python -c 'from transformers import AutoModel; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'"""
-        )
-        with CaptureStd() as cs:
-            execute_subprocess_async(cmd, env=self.get_env())
-        max_rss_low_mem = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
-        print(f"MAX RSS={max_rss_low_mem}")
-
-        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-        # measuring cpu memory on linux is very tricky, so instead change that it's at least 25%
-        # less cpu memory consumed
-        diff_bytes = max_rss_normal - max_rss_low_mem
-        diff_percent = diff_bytes / max_rss_low_mem
-
-        print(f"diff_bytes={diff_bytes}, 1x model size in bytes={total_bytes}, diff_percent={diff_percent}")
-        assert (
-            diff_percent > 0.10
-        ), f"should use less CPU memory for low mem, but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}"
-
-    # #@slow
-    # def test_from_pretrained_low_cpu_mem_usage_measurded3(self):
-    #     # test that `low_cpu_mem_usage=True` uses less cpu memory than normal
-
-    #     mname = "bert-base-uncased"
-
-    #     # 1. normal cpu mem usage  measurement
-    #     cpu_memo_tracker = CPUMemoryTracker()
-    #     cpu_memo_tracker.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
-    #     del model
-    #     cpu_memo_tracker.stop()
-    #     print(f"{cpu_memo_tracker.alloc()=}, {cpu_memo_tracker.peaked()=}, {cpu_memo_tracker.alloc()+cpu_memo_tracker.peaked()=}")
-    #     peaked_normal = cpu_memo_tracker.peaked()
-    #     total_normal = cpu_memo_tracker.alloc()+cpu_memo_tracker.peaked()
-
-    #     # 2. low cpu mem usage measurement
-    #     cpu_memo_tracker = CPUMemoryTracker()
-    #     cpu_memo_tracker.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
-    #     del model
-    #     cpu_memo_tracker.stop()
-    #     print(f"{cpu_memo_tracker.alloc()=}, {cpu_memo_tracker.peaked()=}, {cpu_memo_tracker.alloc()+cpu_memo_tracker.peaked()=}")
-    #     peaked_low = cpu_memo_tracker.peaked()
-    #     total_low = cpu_memo_tracker.alloc()+cpu_memo_tracker.peaked()
-
-    #     # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-    #     # measuring cpu memory on linux is very tricky, so instead change that it's at least 25%
-    #     # less cpu memory consumed
-    #     diff_bytes = total_normal - total_low
-    #     diff_percent = diff_bytes / total_low
-
-    #     print(f"diff_bytes={diff_bytes}, 1x model size in bytes={total_bytes}, diff_percent={diff_percent}")
-
-    #     assert diff_percent > 0.25, f"should use less CPU memory for low mem, but got total_normal={total_normal} and total_low={total_low}"
-
-    # #@slow
-    # def test_from_pretrained_low_cpu_mem_usage_measuddred(self):
-    #     # test that `low_cpu_mem_usage=True` uses less cpu memory than normal
-
-    #     #mname = "bert-base-uncased"
-    #     mname = "bert-large-uncased"
-
-    #     import tracemalloc
-    #     # 0. warmup - don't measure
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
-    #     del model
-
-    #     # 1. normal cpu mem usage  measurement
-    #     tracemalloc.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
-    #     del model
-    #     current, peak = tracemalloc.get_traced_memory()
-    #     print(f"{current=}, {peak=}, {current+peak=}")
-    #     tracemalloc.stop()
-    #     peaked_normal = peak
-
-    #     # 2. low cpu mem usage measurement
-    #     tracemalloc.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
-    #     del model
-    #     current, peak = tracemalloc.get_traced_memory()
-    #     print(f"{current=}, {peak=}, {current+peak=}")
-    #     tracemalloc.stop()
-    #     peaked_low = peak
-
-    #     # 1. normal cpu mem usage  measurement
-    #     tracemalloc.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
-    #     del model
-    #     current, peak = tracemalloc.get_traced_memory()
-    #     print(f"{current=}, {peak=}, {current+peak=}")
-    #     tracemalloc.stop()
-    #     peaked_normal = peak
-
-    #     # 2. low cpu mem usage measurement
-    #     tracemalloc.start()
-    #     model = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
-    #     del model
-    #     current, peak = tracemalloc.get_traced_memory()
-    #     print(f"{current=}, {peak=}, {current+peak=}")
-    #     tracemalloc.stop()
-    #     peaked_low = peak
-
-    #     assert (
-    #         peaked_low < peaked_normal
-    #     ), "should use less CPU peak memory but got peaked_low={peaked_low} and peaked_normal={peaked_normal}"
-
     def test_from_pretrained_low_cpu_mem_usage_functional(self):
         # test that we can use `low_cpu_mem_usage=True` with normal and sharded models
 
@@ -2839,6 +2485,44 @@ class ModelUtilsTest(TestCasePlus):
         ]
         for mname in mnames:
             _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
+
+    # @slow
+    # XXX: when switching back to slow, move `apt install time` to the github action running this test
+    def test_from_pretrained_low_cpu_mem_usage_measured(self):
+        # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+
+        mname = "bert-base-uncased"
+
+        preamble = "from transformers import AutoModel"
+        one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
+        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
+        print(f"MAX RSS={max_rss_normal}")
+
+        one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
+        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
+        print(f"MAX RSS={max_rss_low_mem}")
+
+        diff_bytes = max_rss_normal - max_rss_low_mem
+        diff_percent = diff_bytes / max_rss_low_mem
+        print(f"diff_bytes={diff_bytes}, diff_percent={diff_percent}")
+        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
+        # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
+        # it's at least 15% less cpu memory consumed
+        assert diff_percent > 0.15, (
+            "should use less CPU memory for low_cpu_mem_usage=True, "
+            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}"
+        )
+
+        # if you want to compare things manually, let's first look at the size of the model in bytes
+        # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
+        # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        # total_bytes = total_numel * 4  # 420MB
+        # del model
+        # Now the diff_bytes should be very close to 420MB, but the reports are inconsistent. The
+        # easiest way to test this is to switch the model and the torch.load to do all the work on
+        # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
+        # functionality to load directly on gpu, this test can be rewritten to use torch's cuda
+        # memory tracking and then we should be able to do a much more precise test.
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
