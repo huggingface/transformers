@@ -345,10 +345,8 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
-
     try:
         return torch.load(checkpoint_file, map_location="cpu")
-
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -423,22 +421,16 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
 # a helper util to find the last sub-module and the param/buffer name
 def find_submodule_and_param_name(model, long_key, start_prefix):
-    # print(f"\n\n!!!{long_key} => {start_prefix}")
-
-    # XXX: Fixme
     if len(start_prefix) > 0 and long_key.startswith(start_prefix):
         long_key = ".".join(long_key.split(".")[1:])
 
     split_key = long_key.split(".")
     submodule = model
     while len(split_key) > 1:
-        # print(f"{split_key[0]}")
         if hasattr(submodule, split_key[0]):
-            # print(f"found {split_key[0]}")
             submodule = getattr(submodule, split_key[0])
             del split_key[0]
         else:
-            # print(f"failed {split_key[0]}")
             submodule = None
             break
     if submodule == model:
@@ -454,23 +446,21 @@ def move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
     # dematerialize param storage for keys that are going to be replaced by state_dict, by
     # putting those on the meta device
     for k in loaded_state_dict_keys:
-        # print(k)
         submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
         if submodule is not None:
-            # print(f"yes {k}")
             # selectively switch to the meta device only those params/buffers that will
             # be next replaced from state_dict. This a complex way to do p.to_("meta")
             # since we have no in-place to_ for tensors.
             new_val = getattr(submodule, param_name)
-            # new_val = torch.ones(1).cuda()
             if isinstance(new_val, torch.nn.Parameter):
                 # isinstance returns False for Params on meta device, so switch after the check
                 new_val = torch.nn.Parameter(new_val.to("meta"))
             else:
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
+        # might be useful in the future
         # else:
-        #     print(f"!!! didn't meta {k}")
+        #     print(f"!!! {k} wasn't moved to meta")
 
 
 def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
@@ -2108,8 +2098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return mismatched_keys
 
         if low_cpu_mem_usage:
-            # XXX: move together with state_dict = None?
-            model_state_dict = None  # state_dict ref count to 0
+            model_state_dict = None  # free references to model's params to allow memory freeing
             move_model_to_meta(model, loaded_keys, start_prefix)
 
         if state_dict is not None:

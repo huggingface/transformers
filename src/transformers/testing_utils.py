@@ -668,6 +668,20 @@ def require_librosa(test_case):
         return test_case
 
 
+def cmd_exists(cmd):
+    return shutil.which(cmd) is not None
+
+
+def require_usr_bin_time(test_case):
+    """
+    Decorator marking a test that requires `/usr/bin/time`
+    """
+    if not cmd_exists("/usr/bin/time"):
+        return unittest.skip("test requires /usr/bin/time")(test_case)
+    else:
+        return test_case
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch, tf or jax is used)
@@ -1181,15 +1195,15 @@ class TestCasePlus(unittest.TestCase):
 
     def python_one_liner_max_rss(self, one_liner_str):
         """
-        runs the passed python one liner (just the code) and returns how much max cpu memory was used to run the
+        Runs the passed python one liner (just the code) and returns how much max cpu memory was used to run the
         program.
 
         Args:
             one_liner_str (`string`):
-                a python program that gets passed to `python -c`
+                a python one liner code that gets passed to `python -c`
 
         Returns:
-            max cpu memory used to run the program in bytes. This value is likely to vary slightly from run to run.
+            max cpu memory bytes used to run the program. This value is likely to vary slightly from run to run.
 
         Requirements:
             this helper needs `/usr/bin/time` to be installed (`apt install time`)
@@ -1198,17 +1212,20 @@ class TestCasePlus(unittest.TestCase):
 
         ```
         one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("t5-large")'
-        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
+        max_rss = self.python_one_liner_max_rss(one_liner_str)
         ```
-
         """
+
+        if not cmd_exists("/usr/bin/time"):
+            raise ValueError("/usr/bin/time is required, install with `apt install time`")
 
         cmd = shlex.split(f"/usr/bin/time -f %M python -c '{one_liner_str}'")
         with CaptureStd() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        max_rss_normal = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
-        # print(f"MAX RSS={max_rss_normal}")
-        return max_rss_normal
+        # returned data is in KB so convert to bytes
+        max_rss = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
+        # print(f"MAX RSS={max_rss}")
+        return max_rss
 
     def tearDown(self):
 
