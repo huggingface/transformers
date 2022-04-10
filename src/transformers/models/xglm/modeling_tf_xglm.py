@@ -83,7 +83,7 @@ def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_
         )
         emb *= _padding_mask
 
-    return tf.Variable(emb, trainable=False, name="embed_positions.weights")
+    return tf.Variable(emb, trainable=False, name="model.embed_positions.weights")
 
 
 def _create_position_ids_from_input_ids(
@@ -609,7 +609,6 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
 class TFXGLMPreTrainedModel(TFPreTrainedModel):
     config_class = XGLMConfig
     base_model_prefix = "model"
-    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
 
     @property
     def dummy_inputs(self):
