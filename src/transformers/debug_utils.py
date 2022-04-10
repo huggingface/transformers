@@ -348,15 +348,15 @@ class DebugOption(ExplicitEnum):
     TPU_METRICS_DEBUG = "tpu_metrics_debug"
 
 
-# pt-1.9 deprecations
-if hasattr(torch.cuda, "memory_reserved"):
-    torch_memory_reserved = torch.cuda.memory_reserved
-else:
-    torch_memory_reserved = torch.cuda.memory_allocated
-if hasattr(torch.cuda, "max_memory_reserved"):
-    torch_max_memory_reserved = torch.cuda.max_memory_reserved
-else:
-    torch_max_memory_reserved = torch.cuda.memory_cached
+# # pt-1.9 deprecations
+# if hasattr(torch.cuda, "memory_reserved"):
+#     torch_memory_reserved = torch.cuda.memory_reserved
+# else:
+#     torch_memory_reserved = torch.cuda.memory_allocated
+# if hasattr(torch.cuda, "max_memory_reserved"):
+#     torch_max_memory_reserved = torch.cuda.max_memory_reserved
+# else:
+#     torch_max_memory_reserved = torch.cuda.memory_cached
 
 
 def see_cpu_memory_usage(message, force=False):
@@ -367,52 +367,52 @@ def see_cpu_memory_usage(message, force=False):
 
     return
 
-    # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
-    gc.collect()
+    # # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
+    # gc.collect()
 
-    # Print message except when distributed but not rank 0
-    print(message)
+    # # Print message except when distributed but not rank 0
+    # print(message)
 
-    print(
-        f"MA {round(torch.cuda.memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
-        Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024),2)} GB \
-        CA {round(torch_memory_reserved() / (1024 * 1024 * 1024),2)} GB \
-        Max_CA {round(torch_max_memory_reserved() / (1024 * 1024 * 1024))} GB "
-    )
+    # print(
+    #     f"MA {round(torch.cuda.memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
+    #     Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024),2)} GB \
+    #     CA {round(torch_memory_reserved() / (1024 * 1024 * 1024),2)} GB \
+    #     Max_CA {round(torch_max_memory_reserved() / (1024 * 1024 * 1024))} GB "
+    # )
 
-    vm_stats = psutil.virtual_memory()
-    used_GB = round(((vm_stats.total - vm_stats.available) / (1024**3)), 2)
-    print(f"CPU Virtual Memory:  used = {used_GB} GB, percent = {vm_stats.percent}%")
+    # vm_stats = psutil.virtual_memory()
+    # used_GB = round(((vm_stats.total - vm_stats.available) / (1024**3)), 2)
+    # print(f"CPU Virtual Memory:  used = {used_GB} GB, percent = {vm_stats.percent}%")
 
-    # get the peak memory to report correct data, so reset the counter for the next call
-    if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
-        torch.cuda.reset_peak_memory_stats()
+    # # get the peak memory to report correct data, so reset the counter for the next call
+    # if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
+    #     torch.cuda.reset_peak_memory_stats()
 
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
 
 
-def see_memory_usage(message, force=False):
-    if not force:
-        return
-    if torch.distributed.is_initialized() and not torch.distributed.get_rank() == 0:
-        return
+# def see_memory_usage(message, force=False):
+#     if not force:
+#         return
+#     if torch.distributed.is_initialized() and not torch.distributed.get_rank() == 0:
+#         return
 
-    # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
-    gc.collect()
+#     # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
+#     gc.collect()
 
-    # Print message except when distributed but not rank 0
-    logger.info(message)
-    logger.info(
-        f"MA {round(torch.cuda.memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
-        Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024),2)} GB \
-        CA {round(torch_memory_reserved() / (1024 * 1024 * 1024),2)} GB \
-        Max_CA {round(torch_max_memory_reserved() / (1024 * 1024 * 1024))} GB "
-    )
+#     # Print message except when distributed but not rank 0
+#     logger.info(message)
+#     logger.info(
+#         f"MA {round(torch.cuda.memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
+#         Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024),2)} GB \
+#         CA {round(torch_memory_reserved() / (1024 * 1024 * 1024),2)} GB \
+#         Max_CA {round(torch_max_memory_reserved() / (1024 * 1024 * 1024))} GB "
+#     )
 
-    vm_stats = psutil.virtual_memory()
-    used_GB = round(((vm_stats.total - vm_stats.available) / (1024**3)), 2)
-    logger.info(f"CPU Virtual Memory:  used = {used_GB} GB, percent = {vm_stats.percent}%")
+#     vm_stats = psutil.virtual_memory()
+#     used_GB = round(((vm_stats.total - vm_stats.available) / (1024**3)), 2)
+#     logger.info(f"CPU Virtual Memory:  used = {used_GB} GB, percent = {vm_stats.percent}%")
 
-    # get the peak memory to report correct data, so reset the counter for the next call
-    if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
-        torch.cuda.reset_peak_memory_stats()
+#     # get the peak memory to report correct data, so reset the counter for the next call
+#     if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
+#         torch.cuda.reset_peak_memory_stats()
