@@ -525,6 +525,30 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings)
 
     @slow
+    def test_sample_xla_generate_simple(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        sentence = "Translate English to German: Today is a beautiful day."
+        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+        expected_output_string = ["Heute ist ein schöner Tag."]
+
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids = model.generate(input_ids, do_sample=True, seed=[42, 0])
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(expected_output_string, output_strings)
+
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            xla_generate = tf.function(model.generate, jit_compile=True)
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids_xla = xla_generate(input_ids, do_sample=True, seed=[42, 0])
+        output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+        self.assertListEqual(expected_output_string, output_strings_xla)
+
+    @slow
     def test_sample_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -540,16 +564,16 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
             "temperature": 0.8,
             "top_k": 500,
             "top_p": 0.9,
+            "seed": [20, 0],  # seed set -> deterministic sampling sequence -> deterministic generation
         }
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
             output_ids = model.generate(input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
-        expected_output_string = ["i love her I really love my heart", "die Transformatoren sind wirklich erstaunlich"]
+        expected_output_string = ["- I really love my way of this.", "die Transformatoren sind wirklich erstaunlich"]
 
         self.assertListEqual(expected_output_string, output_strings)
 
