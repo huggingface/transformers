@@ -598,6 +598,12 @@ class ModelTesterMixin:
         config.output_hidden_states = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    def clear_class_registry(self):
+
+        torch._C._jit_clear_class_registry()
+        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
+        torch.jit._state._clear_class_state()
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
@@ -680,6 +686,8 @@ class ModelTesterMixin:
                         models_equal = False
 
             self.assertTrue(models_equal)
+
+            self.clear_class_registry()
 
     def test_torch_fx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
