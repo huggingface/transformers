@@ -59,6 +59,23 @@ _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
+# TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "mrm8488/mobilebert-finetuned-ner"
+_TOKEN_CLASS_EXPECTED_OUTPUT = "['I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC']"
+_TOKEN_CLASS_EXPECTED_LOSS = 0.03
+
+# QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "csarron/mobilebert-uncased-squad-v2"
+_QA_EXPECTED_OUTPUT = "'a nice puppet'"
+_QA_EXPECTED_LOSS = 3.98
+_QA_TARGET_START_INDEX = 12
+_QA_TARGET_END_INDEX = 13
+
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "lordtt13/emo-mobilebert"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
+_SEQ_CLASS_EXPECTED_LOSS = "4.72"
+
 MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
 
 
@@ -962,9 +979,8 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
-        ...     0
-        >>> )  # Batch size 1
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
+        >>> # Batch size 1
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
@@ -1039,6 +1055,8 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'paris'",
+        expected_loss=0.57,
     )
     def forward(
         self,
@@ -1229,9 +1247,11 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1330,9 +1350,13 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1536,9 +1560,11 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
