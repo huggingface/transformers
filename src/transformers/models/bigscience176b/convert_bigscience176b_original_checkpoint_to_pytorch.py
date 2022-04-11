@@ -37,6 +37,13 @@ WEIGHTS_TO_AVERAGE_ENDSWITH = [
         "post_attention_layernorm.bias",
         "self_attention.dense.bias",
         "mlp.dense_4h_to_h.bias",
+        "ln_f.weight",
+        "ln_f.bias"
+]
+
+WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
+    "dense_4h_to_h",
+    "self_attention.dense.weight",
 ]
 
 def layer_name_mapping(key, file):
@@ -88,15 +95,15 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
                 tensors = temp
             else:
                 for key in tensors.keys():
-                    if any(key.endswidth(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                    if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                         tensors[key] += temp[key]  # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                     else:
-                        cat_dim = 1 if 'dense_4h_to_h' in key else 0  # "dense_4h_to_h" are RowParallelLinear in Megatron-Deepspeed, the other are ColumnParallel
+                        cat_dim = 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0  # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
                         tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)  # We concatenate these weights accross TP ranks
 
         # Divide by the number of TP the weights we want to average
         for key in tensors.keys():
-            if any(key.endswidth(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+            if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                 tensors[key] = tensors[key]/config.pretraining_tp
 
         other_keys = model.load_state_dict(tensors, strict=False)
@@ -108,6 +115,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
 
 
     # Save pytorch-model
+    os.makedirs(pytorch_dump_folder_path, exist_ok=True)
     pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
     pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
     print(f"Save PyTorch model to {pytorch_weights_dump_path}")
