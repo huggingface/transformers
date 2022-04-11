@@ -37,6 +37,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
@@ -49,7 +50,6 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    set_seed,
 )
 from transformers.utils import PaddingStrategy, get_full_repo_name
 
@@ -296,6 +296,12 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
