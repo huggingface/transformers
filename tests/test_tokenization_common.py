@@ -554,37 +554,28 @@ class TokenizerTesterMixin:
                     "mask_token",
                 ]
 
-                try:
-                    vocab = tokenizer.get_vocab()
-                except NotImplementedError:
-                    vocab = None
-                should_test_setters_not_none = (vocab is not None) and (len(vocab) > 0)
-                if should_test_setters_not_none:
-                    token_id_to_test_setters = next(iter(vocab.values()))
-                    token_to_test_setters = tokenizer.convert_ids_to_tokens(
-                        token_id_to_test_setters, skip_special_tokens=False
-                    )
+                vocab = tokenizer.get_vocab()
+                token_id_to_test_setters = next(iter(vocab.values()))
+                token_to_test_setters = tokenizer.convert_ids_to_tokens(
+                    token_id_to_test_setters, skip_special_tokens=False
+                )
 
                 for attr in attributes_list:
                     setattr(tokenizer, attr + "_id", None)
                     self.assertEqual(getattr(tokenizer, attr), None)
                     self.assertEqual(getattr(tokenizer, attr + "_id"), None)
 
-                    if should_test_setters_not_none:
-                        setattr(tokenizer, attr + "_id", token_id_to_test_setters)
-                        self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
-                        self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
+                    setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
 
                 setattr(tokenizer, "additional_special_tokens_ids", [])
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
 
-                if should_test_setters_not_none:
-                    setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
-                    self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
-                    self.assertListEqual(
-                        getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters]
-                    )
+                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
 
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
