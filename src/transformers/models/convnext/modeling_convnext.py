@@ -218,7 +218,7 @@ class ConvNextEncoder(nn.Module):
                 out_channels=out_chs,
                 stride=2 if i > 0 else 1,
                 depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
+                drop_path_rates=drop_path_rates[cur:],
             )
             self.stages.append(stage)
             cur += config.depths[i]
