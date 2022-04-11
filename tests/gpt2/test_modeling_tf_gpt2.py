@@ -506,18 +506,18 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "temperature": 1.5,
             "top_k": 500,
             "top_p": 0.9,
+            "seed": [42, 0],  # seed set -> deterministic sampling sequence -> deterministic generation
         }
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
             output_ids = model.generate(input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         expected_output_string = [
-            "Today is a beautiful day and this makes finding holiday travel easier for you to do other project\nOh",
-            "Yesterday was an enjoyable but especially great note though it certainly upset many Democrats who say",
+            "Today is a beautiful day and we will make you feel very hot/terrific in all",
+            "Yesterday was another solid success as news coverage became standard American domestic television hit.",
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
