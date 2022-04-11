@@ -345,6 +345,7 @@ class TFGenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
     """
+
     seed_generator = tf.random.Generator.from_non_deterministic_state()
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
@@ -2310,10 +2311,7 @@ class TFGenerationMixin:
                 sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=tf.int32)
             next_tokens = tf.squeeze(
                 tf.random.stateless_categorical(
-                    logits=next_tokens_scores,
-                    num_samples=1,
-                    seed=sample_seed,
-                    dtype=tf.int32
+                    logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=tf.int32
                 ),
                 axis=1,
             )
@@ -2332,9 +2330,7 @@ class TFGenerationMixin:
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(
-                    outputs, model_kwargs, cur_len, max_length
-                )
+                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
