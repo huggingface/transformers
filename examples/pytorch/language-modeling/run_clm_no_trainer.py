@@ -258,9 +258,12 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
-            gitignore_path = os.path.join(args.output_dir, ".gitignore")
-            if not os.path.exists(gitignore_path):
-                open(gitignore_path, "a").close()  # Creates a .gitignore
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -545,9 +548,6 @@ def main():
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
-                    if accelerator.is_main_process and args.push_to_hub:
-                        with open(gitignore_path, "a") as gitignore:
-                            gitignore.write(output_dir)
             if completed_steps >= args.max_train_steps:
                 break
 
@@ -594,9 +594,6 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
-            if accelerator.is_main_process and args.push_to_hub:
-                with open(gitignore_path, "a") as gitignore:
-                    gitignore.write(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
