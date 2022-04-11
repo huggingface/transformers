@@ -64,7 +64,7 @@ _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 # TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASS = "dbmdz/bert-large-cased-finetuned-conll03-english"
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
 _TOKEN_CLASS_EXPECTED_OUTPUT = (
     "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', " "'I-LOC'] "
 )
@@ -78,7 +78,7 @@ _QA_TARGET_START_INDEX = 14
 _QA_TARGET_END_INDEX = 15
 
 # SequenceClassification docstring
-_CHECKPOINT_FOR_SEQ_CLASS = "textattack/bert-base-uncased-yelp-polarity"
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/bert-base-uncased-yelp-polarity"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
