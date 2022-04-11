@@ -63,6 +63,26 @@ _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
+# TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', " "'I-LOC'] "
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.01
+
+# QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "deepset/bert-base-cased-squad2"
+_QA_EXPECTED_OUTPUT = "'a nice puppet'"
+_QA_EXPECTED_LOSS = 7.41
+_QA_TARGET_START_INDEX = 14
+_QA_TARGET_END_INDEX = 15
+
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/bert-base-uncased-yelp-polarity"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.01
+
+
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
@@ -1156,7 +1176,12 @@ class BertLMHeadModel(BertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1175,49 +1200,28 @@ class BertLMHeadModel(BertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
-            encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                if the model is configured as a decoder.
-            encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
-                in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be
-                in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100`
-                are ignored (masked), the loss is only computed for the tokens with labels n `[0, ...,
-                config.vocab_size]`
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
-                decoding.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
+            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import BertTokenizer, BertLMHeadModel, BertConfig
-        >>> import torch
-
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-        >>> config = BertConfig.from_pretrained("bert-base-cased")
-        >>> config.is_decoder = True
-        >>> model = BertLMHeadModel.from_pretrained("bert-base-cased", config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -1315,6 +1319,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'paris'",
+        expected_loss=0.88,
     )
     def forward(
         self,
@@ -1517,9 +1523,11 @@ class BertForSequenceClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1716,9 +1724,11 @@ class BertForTokenClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1797,9 +1807,13 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
