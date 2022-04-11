@@ -445,7 +445,6 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
 
-
     def setUp(self):
         self.model_tester = HubertModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True

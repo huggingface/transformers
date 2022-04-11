@@ -652,7 +652,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
 
-
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
