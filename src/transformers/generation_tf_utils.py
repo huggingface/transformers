@@ -1489,6 +1489,11 @@ class TFGenerationMixin:
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
 
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)

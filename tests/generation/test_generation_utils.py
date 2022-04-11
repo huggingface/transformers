@@ -102,7 +102,7 @@ class GenerationTesterMixin:
         diversity_penalty=None,
     ):
         process_kwargs = {
-            "min_length": input_length + 1,
+            "min_length": input_length + 1 if max_length is None else max_length - 1,
             "bad_words_ids": [[1, 0]],
             "no_repeat_ngram_size": 2,
             "repetition_penalty": 1.2,
