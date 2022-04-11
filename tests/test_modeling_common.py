@@ -582,7 +582,7 @@ class ModelTesterMixin:
                     )
 
     @slow
-    def test_torchscript(self):
+    def test_torchscript_simple(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
