@@ -305,7 +305,7 @@ class PretrainedConfig(PushToHubMixin):
         self.label2id = kwargs.pop("label2id", None)
         if self.id2label is not None:
             num_labels = kwargs.pop("num_labels", None)
-            if num_labels is not None:
+            if num_labels is not None and len(self.id2label) != num_labels:
                 raise ValueError(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}."
