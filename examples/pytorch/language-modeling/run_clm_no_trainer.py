@@ -248,7 +248,7 @@ def main():
 
     # If passed along, set the training seed now.
     if args.seed is not None:
-        set_seed(args.seed)
+        set_seed(args.seed, device_specific=True)
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -258,6 +258,9 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
+            gitignore_path = os.path.join(args.output_dir, ".gitignore")
+            if not os.path.exists(gitignore_path):
+                open(gitignore_path, "a").close()  # Creates a .gitignore
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -542,7 +545,9 @@ def main():
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
-
+                    if accelerator.is_main_process and args.push_to_hub:
+                        with open(gitignore_path, "a") as gitignore:
+                            gitignore.write(output_dir)
             if completed_steps >= args.max_train_steps:
                 break
 
@@ -589,6 +594,9 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+            if accelerator.is_main_process and args.push_to_hub:
+                with open(gitignore_path, "a") as gitignore:
+                    gitignore.write(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
