@@ -51,7 +51,6 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    set_seed,
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
