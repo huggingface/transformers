@@ -298,12 +298,7 @@ class PositionwiseFeedForward(nn.Module):
     def __init__(self, in_dim, hidden_dim, kernel_size, dropout):
         super().__init__()
         self.ffn = nn.Sequential(
-            nn.Conv1d(
-                in_dim,
-                hidden_dim,
-                kernel_size=kernel_size,
-                padding=(kernel_size - 1) // 2,
-            ),
+            nn.Conv1d(in_dim, hidden_dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2),
             nn.ReLU(),
             nn.Conv1d(
                 hidden_dim,
