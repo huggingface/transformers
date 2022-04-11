@@ -335,6 +335,12 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -534,16 +540,22 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(args.output_dir)
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
 
-                    # Optionally push to the hub
-                    if args.push_to_hub and accelerator.is_main_process:
-                        feature_extractor.save_pretrained(args.output_dir)
-                        repo.push_to_hub(
-                            commit_message=f"Training in progress, steps {completed_steps}",
-                            blocking=False,
-                            auto_lfs_prune=True,
-                        )
+                    if args.push_to_hub and epoch < args.num_train_epochs - 1:
+                        accelerator.wait_for_everyone()
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                        if accelerator.is_main_process:
+                            feature_extractor.save_pretrained(args.output_dir)
+                            repo.push_to_hub(
+                                commit_message=f"Training in progress {completed_steps} steps",
+                                blocking=False,
+                                auto_lfs_prune=True,
+                            )
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -613,15 +625,21 @@ def main():
         )
         logger.info(f"epoch {epoch}: {eval_metrics}")
 
-        if args.checkpointing_steps == "epoch":
-            accelerator.save_state(args.output_dir)
-
-            # Optionally push to the hub
-            if args.push_to_hub and accelerator.is_main_process:
+        if args.push_to_hub and epoch < args.num_train_epochs - 1:
+            accelerator.wait_for_everyone()
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            if accelerator.is_main_process:
                 feature_extractor.save_pretrained(args.output_dir)
                 repo.push_to_hub(
-                    commit_message=f"Training in progress, epoch {epoch}", blocking=False, auto_lfs_prune=True
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
+
+        if args.checkpointing_steps == "epoch":
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

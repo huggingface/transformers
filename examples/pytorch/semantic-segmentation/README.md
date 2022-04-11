@@ -35,15 +35,10 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch run_semantic_segmentation_no_trainer.py \
-  --output_dir segformer-finetuned-sidewalk \
-  --logging_steps 100 \
-  --saving_steps 100 \
-  --wandb \
-  --push_to_hub
+accelerate launch --output_dir segformer-finetuned-sidewalk --wandb --push_to_hub
 ```
 
-and boom, you're training, possible on multiple GPUs, logging everything to Weights and Biases and regularly pushing your model to the hub :)
+and boom, you're training, possibly on multiple GPUs, logging everything to Weights and Biases and regularly pushing your model to the hub :)
 
 With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](segments/sidewalk-semantic) dataset.
 
@@ -88,7 +83,7 @@ logits = nn.functional.interpolate(outputs.logits.detach().cpu(),
 predicted = logits.argmax(1)
 ```
 
-For visualization of the segmentation maps, we refer to the [example notebook]().
+For visualization of the segmentation maps, we refer to the [example notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SegFormer/Segformer_inference_notebook.ipynb).
 
 ## Important notes
 
