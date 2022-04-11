@@ -28,6 +28,17 @@ from transformers.utils import logging
 
 logging.set_verbosity_info()
 
+WEIGHTS_TO_AVERAGE_ENDSWITH = [
+        "word_embeddings_layernorm.weight",  # "word_embeddings.norm.weight",
+        "word_embeddings_layernorm.bias",  # "word_embeddings.norm.bias",
+        "input_layernorm.weight",
+        "input_layernorm.bias",
+        "post_attention_layernorm.weight",
+        "post_attention_layernorm.bias",
+        "self_attention.dense.bias",
+        "mlp.dense_4h_to_h.bias",
+]
+
 def layer_name_mapping(key, file):
     """ Convert Megatron-DeepSpeed TP/PP weights mapping in transformers PP only"""
     # Handle first and last layers
@@ -43,7 +54,8 @@ def layer_name_mapping(key, file):
         return "ln_f.bias"
 
     # Handle transformer blocks
-    layer_number = int(re.match(r'.*layer_(\d*).*', file))[1]
+    layer_number = int(re.match(r'.*layer_(\d*).*', file)[1])
+    layer_number -= 3
     return f'h.{layer_number}.' + key
 
 
@@ -54,28 +66,45 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
     else:
         config = BigScience176BConfig.from_json_file(bigscience176b_config_file)
     model = BigScience176BModel(config)
+    print(model.state_dict().keys())
 
     file_names = os.listdir(bigscience176b_checkpoint_path)
-    file_names = list(filter(lambda s: s.startswith('layer') and 'model_00' in s, file_names))
+    file_names = list(sorted(filter(lambda s: s.startswith('layer') and 'model_00' in s, file_names)))
 
     for file in file_names:
         tensors = None
+        missing_keys = set()
         for i in range(config.pretraining_tp):
             # load all TP files
             f_name = file.replace('model_00', f'model_0{i}')
-            temp = torch.load(f_name, map_location='cpu')
+            temp = torch.load(os.path.join(bigscience176b_checkpoint_path, f_name), map_location='cpu')
 
             # Rename keys in the transformers names
-            for key in temp.keys():
+            keys = list(temp.keys())
+            for key in keys:
                 temp[layer_name_mapping(key, file)] = temp.pop(key)
 
-            if tensor is None:
-                tensor = temp
+            if tensors is None:
+                tensors = temp
             else:
-                for key in tensor.keys():
-                    cat_dim = 0
-                    tensor[key] = torch.cat([tensor[key], temp[key]], dim=cat_dim)
-        
+                for key in tensors.keys():
+                    if any(key.endswidth(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                        tensors[key] += temp[key]  # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
+                    else:
+                        cat_dim = 1 if 'dense_4h_to_h' in key else 0  # "dense_4h_to_h" are RowParallelLinear in Megatron-Deepspeed, the other are ColumnParallel
+                        tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)  # We concatenate these weights accross TP ranks
+
+        # Divide by the number of TP the weights we want to average
+        for key in tensors.keys():
+            if any(key.endswidth(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                tensors[key] = tensors[key]/config.pretraining_tp
+
+        other_keys = model.load_state_dict(tensors, strict=False)
+        assert not other_keys.unexpected_keys
+        missing_keys = missing_keys - set(other_keys.missing_keys)
+
+    assert not missing_keys
+
 
 
     # Save pytorch-model
