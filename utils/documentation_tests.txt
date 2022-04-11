@@ -5,6 +5,8 @@ docs/source/en/model_doc/tapex.mdx
 src/transformers/generation_utils.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/modeling_beit.py
+src/transformers/models/bert/modeling_bert.py
+src/transformers/models/bert/modeling_tf_bert.py
 src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
@@ -16,6 +18,8 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/mbart/modeling_mbart.py
+src/transformers/models/mobilebert/modeling_mobilebert.py
+src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
