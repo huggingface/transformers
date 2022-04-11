@@ -871,10 +871,10 @@ CNN / Daily Mail), it yields very good results.
 ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
 ... )
 
->>> print(tokenizer.decode(outputs[0]))
-<pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
 counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
-between 1999 and 2002.</s>
+between 1999 and 2002.
 ```
 </pt>
 <tf>
@@ -890,8 +890,8 @@ between 1999 and 2002.</s>
 ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
 ... )
 
->>> print(tokenizer.decode(outputs[0]))
-<pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
 counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
 between 1999 and 2002.
 ```
@@ -943,8 +943,8 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ... )
 >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
 
->>> print(tokenizer.decode(outputs[0]))
-<pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.</s>
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </pt>
 <tf>
@@ -960,8 +960,8 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ... )
 >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
 
->>> print(tokenizer.decode(outputs[0]))
-<pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </tf>
 </frameworkcontent>
@@ -976,16 +976,22 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 
 ```py
 >>> from transformers import pipeline
+>>> from datasets import load_dataset
+>>> import torch
+
+>>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
+
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> dataset = dataset.sort("id")
+>>> audio_file = dataset[0]["audio"]["path"]
 
 >>> audio_classifier = pipeline(
 ...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 ... )
->>> audio_classifier("jfk_moon_speech.wav")
-[{'label': 'calm', 'score': 0.13856211304664612},
- {'label': 'disgust', 'score': 0.13148026168346405},
- {'label': 'happy', 'score': 0.12635163962841034},
- {'label': 'angry', 'score': 0.12439591437578201},
- {'label': 'fearful', 'score': 0.12404385954141617}]
+>>> predictions = audio_classifier(audio_file)
+>>> predictions = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in predictions]
+>>> predictions
+[{'score': 0.1315, 'label': 'calm'}, {'score': 0.1307, 'label': 'neutral'}, {'score': 0.1274, 'label': 'sad'}, {'score': 0.1261, 'label': 'fearful'}, {'score': 0.1242, 'label': 'happy'}]
 ```
 
 The general process for using a model and feature extractor for audio classification is:
@@ -1017,6 +1023,7 @@ The general process for using a model and feature extractor for audio classifica
 >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
 >>> predicted_label = model.config.id2label[predicted_class_ids]
 >>> predicted_label
+'_unknown_'
 ```
 </pt>
 </frameworkcontent>
@@ -1029,10 +1036,15 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 
 ```py
 >>> from transformers import pipeline
+>>> from datasets import load_dataset
+
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> dataset = dataset.sort("id")
+>>> audio_file = dataset[0]["audio"]["path"]
 
 >>> speech_recognizer = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
->>> speech_recognizer("jfk_moon_speech.wav")
-{'text': "PRESENTETE MISTER VICE PRESIDENT GOVERNOR CONGRESSMEN THOMAS SAN O TE WILAN CONGRESSMAN MILLA MISTER WEBB MSTBELL SCIENIS DISTINGUISHED GUESS AT LADIES AND GENTLEMAN I APPRECIATE TO YOUR PRESIDENT HAVING MADE ME AN HONORARY VISITING PROFESSOR AND I WILL ASSURE YOU THAT MY FIRST LECTURE WILL BE A VERY BRIEF I AM DELIGHTED TO BE HERE AND I'M PARTICULARLY DELIGHTED TO BE HERE ON THIS OCCASION WE MEED AT A COLLEGE NOTED FOR KNOWLEGE IN A CITY NOTED FOR PROGRESS IN A STATE NOTED FOR STRAINTH AN WE STAND IN NEED OF ALL THREE"}
+>>> speech_recognizer(audio_file)
+{'text': 'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'}
 ```
 
 The general process for using a model and processor for automatic speech recognition is:
@@ -1063,6 +1075,7 @@ The general process for using a model and processor for automatic speech recogni
 
 >>> transcription = processor.batch_decode(predicted_ids)
 >>> transcription[0]
+'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
 ```
 </pt>
 </frameworkcontent>
