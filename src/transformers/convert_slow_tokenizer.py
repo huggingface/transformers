@@ -19,6 +19,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import warnings
 from typing import Dict, List, Tuple
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -428,6 +429,14 @@ class SpmConverter(Converter):
         with open(self.original_tokenizer.vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
+
+        if self.proto.trainer_spec.byte_fallback:
+            warnings.warn(
+                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                "unknown tokens into a sequence of byte tokens matching the original piece of text."
+            )
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
