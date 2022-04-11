@@ -300,12 +300,7 @@ class PositionwiseFeedForward(nn.Module):
         self.ffn = nn.Sequential(
             nn.Conv1d(in_dim, hidden_dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2),
             nn.ReLU(),
-            nn.Conv1d(
-                hidden_dim,
-                in_dim,
-                kernel_size=kernel_size,
-                padding=(kernel_size - 1) // 2,
-            ),
+            nn.Conv1d(hidden_dim, in_dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2),
         )
         self.layer_norm = nn.LayerNorm(in_dim)
         self.dropout = self.dropout_module = nn.Dropout(dropout)
