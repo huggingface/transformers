@@ -581,28 +581,22 @@ class ModelTesterMixin:
                         [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                     )
 
-    # @slow
+    @slow
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
-    # @slow
+    @slow
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
-    # @slow
+    @slow
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         self._create_and_check_torchscript(config, inputs_dict)
-
-    def clear_class_registry(self):
-
-        torch._C._jit_clear_class_registry()
-        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        torch.jit._state._clear_class_state()
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -686,8 +680,6 @@ class ModelTesterMixin:
                         models_equal = False
 
             self.assertTrue(models_equal)
-
-            self.clear_class_registry()
 
     def test_torch_fx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
