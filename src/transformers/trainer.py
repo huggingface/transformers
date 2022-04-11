@@ -2770,6 +2770,7 @@ class Trainer:
                 self.args.output_dir,
                 clone_from=repo_name,
                 use_auth_token=use_auth_token,
+                private=self.args.hub_private_repo,
             )
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
