@@ -28,7 +28,7 @@ FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FastSpeech2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~FastSpeech2Model`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`FastSpeech2Model`]. It is used to instantiate an
     FastSpeech2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the FastSpeech2
     [fastspeech2](https://huggingface.co/fastspeech2) architecture.
