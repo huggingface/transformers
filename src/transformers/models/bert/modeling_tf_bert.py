@@ -1304,7 +1304,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'p a r i s'",
+        expected_output="'paris'",
         expected_loss=0.88,
     )
     def call(
