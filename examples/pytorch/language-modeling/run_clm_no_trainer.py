@@ -39,6 +39,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
