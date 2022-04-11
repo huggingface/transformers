@@ -46,11 +46,11 @@ FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def lengths_to_padding_mask(lens: torch.LongTensor) -> torch.BoolTensor:
+def lengths_to_padding_mask(lengths: torch.LongTensor) -> torch.BoolTensor:
     # from https://github.com/pytorch/fairseq/blob/main/fairseq/data/data_utils.py
-    bsz, max_lens = lens.size(0), torch.max(lens).item()
-    mask = torch.arange(max_lens).to(lens.device).view(1, max_lens)
-    mask = mask.expand(bsz, -1) >= lens.view(bsz, 1).expand(-1, max_lens)
+    batch_size, max_lengths = lengths.size(0), torch.max(lengths).item()
+    mask = torch.arange(max_lengths).to(lengths.device).view(1, max_lengths)
+    mask = mask.expand(batch_size, -1) >= lengths.view(batch_size, 1).expand(-1, max_lengths)
     return mask
 
 
@@ -447,21 +447,19 @@ class Postnet(nn.Module):
     def __init__(self, in_dim, n_channels, kernel_size, n_layers, dropout):
         super(Postnet, self).__init__()
         self.convolutions = nn.ModuleList()
-        assert kernel_size % 2 == 1
         for i in range(n_layers):
-            cur_layers = (
-                [
-                    nn.Conv1d(
-                        in_dim if i == 0 else n_channels,
-                        n_channels if i < n_layers - 1 else in_dim,
-                        kernel_size=kernel_size,
-                        padding=((kernel_size - 1) // 2),
-                    ),
-                    nn.BatchNorm1d(n_channels if i < n_layers - 1 else in_dim),
-                ]
-                + ([nn.Tanh()] if i < n_layers - 1 else [])
-                + [nn.Dropout(dropout)]
-            )
+            cur_layers = [
+                nn.Conv1d(
+                    in_dim if i == 0 else n_channels,
+                    n_channels if i < n_layers - 1 else in_dim,
+                    kernel_size=kernel_size,
+                    padding=((kernel_size - 1) // 2),
+                ),
+                nn.BatchNorm1d(n_channels if i < n_layers - 1 else in_dim),
+            ]
+            if i < n_layers - 1:
+                cur_layers.append(nn.Tanh())
+            cur_layers.append(nn.Dropout(dropout))
             nn.init.xavier_uniform_(
                 cur_layers[0].weight,
                 nn.init.calculate_gain("tanh" if i < n_layers - 1 else "linear"),
@@ -469,7 +467,8 @@ class Postnet(nn.Module):
             self.convolutions.append(nn.Sequential(*cur_layers))
 
     def forward(self, x):
-        x = x.transpose(1, 2)  # B x T x C -> B x C x T
+        # B x T x C -> B x C x T
+        x = x.transpose(1, 2)
         for conv in self.convolutions:
             x = conv(x)
         return x.transpose(1, 2)
