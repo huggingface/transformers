@@ -740,9 +740,7 @@ class TrainingArguments:
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
-    hub_private_repo: bool = field(
-        default=False, metadata={"help": "Whether the model repository is private or not."}
-    )
+    hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
