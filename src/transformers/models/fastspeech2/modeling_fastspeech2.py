@@ -305,12 +305,12 @@ class PositionwiseFeedForward(nn.Module):
         self.layer_norm = nn.LayerNorm(in_dim)
         self.dropout = self.dropout_module = nn.Dropout(dropout)
 
-    def forward(self, x):
-        # B x T x C
-        residual = x
-        x = self.ffn(x.transpose(1, 2)).transpose(1, 2)
-        x = self.dropout(x)
-        return self.layer_norm(x + residual)
+    def forward(self, hidden):
+        #hidden.shape == (batch_size, seq_length, num_channels)
+        residual = hidden
+        hidden = self.ffn(hidden.transpose(1, 2)).transpose(1, 2)
+        hidden = self.dropout(hidden)
+        return self.layer_norm(hidden + residual)
 
 
 class FFTLayer(nn.Module):
@@ -320,31 +320,32 @@ class FFTLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = PositionwiseFeedForward(embed_dim, hidden_dim, kernel_size, dropout=dropout)
 
-    def forward(self, x, padding_mask=None):
-        # B x T x C
-        residual = x
-        x, _, _ = self.self_attn(x, attention_mask=padding_mask)
-        x = self.layer_norm(x + residual)
-        return self.ffn(x)
+    def forward(self, hidden, padding_mask=None):
+        # hidden.shape == (batch_size, seq_length, num_channels)
+        residual = hidden
+        hidden, _, _ = self.self_attn(hidden, attention_mask=padding_mask)
+        hidden = self.layer_norm(hidden + residual)
+        return self.ffn(hidden)
 
 
 class LengthRegulator(nn.Module):
-    def forward(self, x, durations):
-        # x: B x T x C
-        out_lens = durations.sum(dim=1)
-        max_len = out_lens.max()
-        bsz, seq_len, dim = x.size()
-        out = x.new_zeros((bsz, max_len, dim))
+    def forward(self, hidden, durations):
+        # hidden.shape == (batch_size, seq_length, num_channels)
+        out_lengths = durations.sum(dim=1)
+        max_length = out_lengths.max()
+        batch_size, seq_length, dim = hidden.size()
+        out = hidden.new_zeros((batch_size, max_length, dim))
+        device = hidden.device
 
-        for b in range(bsz):
+        for b in range(batch_size):
             indices = []
-            for t in range(seq_len):
+            for t in range(seq_length):
                 indices.extend([t] * durations[b, t].item())
-            indices = torch.tensor(indices, dtype=torch.long).to(x.device)
-            out_len = out_lens[b].item()
-            out[b, :out_len] = x[b].index_select(0, indices)
+            indices = torch.tensor(indices, dtype=torch.long, device=device)
+            out_len = out_lengths[b].item()
+            out[b, :out_len] = hidden[b].index_select(0, indices)
 
-        return out, out_lens
+        return out, out_lengths
 
 
 class VariancePredictor(nn.Module):
@@ -373,13 +374,15 @@ class VariancePredictor(nn.Module):
         self.ln2 = nn.LayerNorm(config.var_pred_hidden_dim)
         self.proj = nn.Linear(config.var_pred_hidden_dim, 1)
 
-    def forward(self, x):
-        # Input: B x T x C; Output: B x T
-        x = self.conv1(x.transpose(1, 2)).transpose(1, 2)
-        x = self.dropout_module(self.ln1(x))
-        x = self.conv2(x.transpose(1, 2)).transpose(1, 2)
-        x = self.dropout_module(self.ln2(x))
-        return self.proj(x).squeeze(dim=2)
+    def forward(self, hidden):
+        # hidden.shape == (batch_size, seq_length, num_channels)
+        hidden = self.conv1(hidden.transpose(1, 2)).transpose(1, 2)
+        hidden = self.dropout_module(self.ln1(hidden))
+        hidden = self.conv2(hidden.transpose(1, 2)).transpose(1, 2)
+        hidden = self.dropout_module(self.ln2(hidden))
+        out = self.proj(hidden).squeeze(dim=2)
+        # out.shape == (batch_size, seq_length)
+        return out
 
 
 class VarianceAdaptor(nn.Module):
@@ -397,29 +400,29 @@ class VarianceAdaptor(nn.Module):
         self.energy_bins = torch.linspace(config.energy_min, config.energy_max, steps)
         self.embed_energy = nn.Embedding(n_bins, config.encoder_embed_dim)
 
-    def get_pitch_emb(self, x, tgt=None, factor=1.0):
-        out = self.pitch_predictor(x)
-        bins = self.pitch_bins.to(x.device)
-        if tgt is None:
+    def get_pitch_embedding(self, hidden, target=None, factor=1.0):
+        out = self.pitch_predictor(hidden)
+        bins = self.pitch_bins.to(hidden.device)
+        if target is None:
             out = out * factor
-            emb = self.embed_pitch(torch.bucketize(out, bins))
+            pitch_embedding = self.embed_pitch(torch.bucketize(out, bins))
         else:
-            emb = self.embed_pitch(torch.bucketize(tgt, bins))
-        return out, emb
+            pitch_embedding = self.embed_pitch(torch.bucketize(target, bins))
+        return out, pitch_embedding
 
-    def get_energy_emb(self, x, tgt=None, factor=1.0):
-        out = self.energy_predictor(x)
-        bins = self.energy_bins.to(x.device)
-        if tgt is None:
+    def get_energy_embedding(self, hidden, target=None, factor=1.0):
+        out = self.energy_predictor(hidden)
+        bins = self.energy_bins.to(hidden.device)
+        if target is None:
             out = out * factor
-            emb = self.embed_energy(torch.bucketize(out, bins))
+            energy_embedding = self.embed_energy(torch.bucketize(out, bins))
         else:
-            emb = self.embed_energy(torch.bucketize(tgt, bins))
-        return out, emb
+            energy_embedding = self.embed_energy(torch.bucketize(target, bins))
+        return out, energy_embedding
 
     def forward(
         self,
-        x,
+        hidden,
         padding_mask,
         durations=None,
         pitches=None,
@@ -428,19 +431,19 @@ class VarianceAdaptor(nn.Module):
         p_factor=1.0,
         e_factor=1.0,
     ):
-        # x: B x T x C
-        log_dur_out = self.duration_predictor(x)
+        # hidden.shape == (batch_size, seq_length, num_channels)
+        log_dur_out = self.duration_predictor(hidden)
         dur_out = torch.clamp(torch.round((torch.exp(log_dur_out) - 1) * d_factor).long(), min=0)
         dur_out.masked_fill_(padding_mask, 0)
 
-        pitch_out, pitch_emb = self.get_pitch_emb(x, pitches, p_factor)
-        x = x + pitch_emb
-        energy_out, energy_emb = self.get_energy_emb(x, energies, e_factor)
-        x = x + energy_emb
+        pitch_out, pitch_embedding = self.get_pitch_embedding(hidden, pitches, p_factor)
+        hidden = hidden + pitch_embedding
+        energy_out, energy_embedding = self.get_energy_embedding(hidden, energies, e_factor)
+        hidden = hidden + energy_embedding
 
-        x, out_lens = self.length_regulator(x, dur_out if durations is None else durations)
+        hidden, out_lens = self.length_regulator(hidden, dur_out if durations is None else durations)
 
-        return x, out_lens, log_dur_out, pitch_out, energy_out
+        return hidden, out_lens, log_dur_out, pitch_out, energy_out
 
 
 class Postnet(nn.Module):
@@ -466,12 +469,12 @@ class Postnet(nn.Module):
             )
             self.convolutions.append(nn.Sequential(*cur_layers))
 
-    def forward(self, x):
-        # B x T x C -> B x C x T
-        x = x.transpose(1, 2)
+    def forward(self, hidden):
+        # hidden.shape == (batch_size, seq_length, num_channels)
+        hidden = hidden.transpose(1, 2)
         for conv in self.convolutions:
-            x = conv(x)
-        return x.transpose(1, 2)
+            hidden = conv(hidden)
+        return hidden.transpose(1, 2)
 
 
 class FastSpeech2Encoder(nn.Module):
@@ -556,47 +559,47 @@ class FastSpeech2Encoder(nn.Module):
         return_dict=False,
         **kwargs,
     ):
-        x = self.embed_tokens(input_ids)
+        hidden = self.embed_tokens(input_ids)
 
         enc_padding_mask = input_ids.eq(self.padding_idx)
-        x += self.pos_emb_alpha * self.embed_positions(enc_padding_mask)
-        x = self.dropout_module(x)
+        hidden = hidden + self.pos_emb_alpha * self.embed_positions(enc_padding_mask)
+        hidden = self.dropout_module(hidden)
 
-        attention_mask = _expand_mask(1 - enc_padding_mask.int(), x.dtype)
+        attention_mask = _expand_mask(1 - enc_padding_mask.int(), hidden.dtype)
 
         for layer in self.encoder_fft_layers:
-            x = layer(x, attention_mask)
+            hidden = layer(hidden, attention_mask)
 
         if self.embed_speaker is not None:
             if speaker is None:
                 raise ValueError("`speaker` cannot be `None` for multi-speaker FastSpeech2.")
-            bsz, seq_len, _ = x.size()
-            emb = self.embed_speaker(speaker).expand(bsz, seq_len, -1)
-            x = self.spk_emb_proj(torch.cat([x, emb], dim=2))
+            batch_size, seq_length, _ = hidden.size()
+            speaker_embedding = self.embed_speaker(speaker).expand(batch_size, seq_length, -1)
+            hidden = self.spk_emb_proj(torch.cat([hidden, speaker_embedding], dim=2))
 
-        x, out_lens, log_dur_out, pitch_out, energy_out = self.var_adaptor(
-            x, enc_padding_mask, durations, pitches, energies
+        hidden, out_lengths, log_dur_out, pitch_out, energy_out = self.var_adaptor(
+            hidden, enc_padding_mask, durations, pitches, energies
         )
 
-        dec_padding_mask = lengths_to_padding_mask(out_lens)
-        attention_mask = _expand_mask(1 - dec_padding_mask.int(), x.dtype)
+        dec_padding_mask = lengths_to_padding_mask(out_lengths)
+        attention_mask = _expand_mask(1 - dec_padding_mask.int(), hidden.dtype)
 
-        x += self.dec_pos_emb_alpha * self.embed_positions(dec_padding_mask)
+        hidden = hidden + self.dec_pos_emb_alpha * self.embed_positions(dec_padding_mask)
 
         for layer in self.decoder_fft_layers:
-            x = layer(x, attention_mask)
+            hidden = layer(hidden, attention_mask)
 
-        x = self.out_proj(x)
+        hidden = self.out_proj(hidden)
         if self.postnet is not None:
-            x = x + self.postnet(x)
+            hidden = hidden + self.postnet(hidden)
         if self.std is not None:
-            x = x * self.std.view(1, 1, -1).expand_as(x)
+            hidden = hidden * self.std.view(1, 1, -1).expand_as(hidden)
         if self.mean is not None:
-            x = x + self.mean.view(1, 1, -1).expand_as(x)
+            hidden = hidden + self.mean.view(1, 1, -1).expand_as(hidden)
 
         if not return_dict:
-            return tuple([x, out_lens, log_dur_out, pitch_out, energy_out])
-        return FastSpeech2ModelOutput(x, out_lens, log_dur_out, pitch_out, energy_out)
+            return tuple([hidden, out_lengths, log_dur_out, pitch_out, energy_out])
+        return FastSpeech2ModelOutput(hidden, out_lengths, log_dur_out, pitch_out, energy_out)
 
 
 class FastSpeech2PreTrainedModel(PreTrainedModel):
