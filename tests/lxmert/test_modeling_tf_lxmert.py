@@ -272,6 +272,8 @@ class TFLxmertModelTester(object):
 
         if return_obj_labels:
             inputs_dict["obj_labels"] = obj_labels
+        else:
+            config.task_obj_predict = False
 
         return config, inputs_dict
 
@@ -486,135 +488,31 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             check_hidden_states_output(config, inputs_dict, model_class)
 
-    def test_pt_tf_model_equivalence(self):
-        from transformers import is_torch_available
-
-        if not is_torch_available():
-            return
-
+    def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
         import torch
 
-        import transformers
+        pt_inputs_dict = {}
+        for key, value in tf_inputs_dict.items():
 
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
-                return_obj_labels="PreTraining" in model_class.__name__
-            )
+            if isinstance(value, dict):
+                pt_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
+            elif isinstance(value, (list, tuple)):
+                pt_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
+            elif type(key) == bool:
+                pt_inputs_dict[key] = value
+            elif key == "input_values":
+                pt_inputs_dict[key] = torch.from_numpy(value.numpy()).to(torch.float32)
+            elif key == "pixel_values":
+                pt_inputs_dict[key] = torch.from_numpy(value.numpy()).to(torch.float32)
+            elif key == "input_features":
+                pt_inputs_dict[key] = torch.from_numpy(value.numpy()).to(torch.float32)
+            # other general float inputs
+            elif tf_inputs_dict[key].dtype.is_floating:
+                pt_inputs_dict[key] = torch.from_numpy(value.numpy()).to(torch.float32)
+            else:
+                pt_inputs_dict[key] = torch.from_numpy(value.numpy()).to(torch.long)
 
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
-            pt_model_class = getattr(transformers, pt_model_class_name)
-
-            config.output_hidden_states = True
-            config.task_obj_predict = False
-
-            tf_model = model_class(config)
-            pt_model = pt_model_class(config)
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
-            )
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
-
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
-            pt_model.eval()
-
-            # Delete obj labels as we want to compute the hidden states and not the loss
-
-            if "obj_labels" in inputs_dict:
-                del inputs_dict["obj_labels"]
-
-            def torch_type(key):
-                if key in ("visual_feats", "visual_pos"):
-                    return torch.float32
-                else:
-                    return torch.long
-
-            def recursive_numpy_convert(iterable):
-                return_dict = {}
-                for key, value in iterable.items():
-                    if isinstance(value, dict):
-                        return_dict[key] = recursive_numpy_convert(value)
-                    else:
-                        if isinstance(value, (list, tuple)):
-                            return_dict[key] = (
-                                torch.from_numpy(iter_value.numpy()).to(torch_type(key)) for iter_value in value
-                            )
-                        else:
-                            return_dict[key] = torch.from_numpy(value.numpy()).to(torch_type(key))
-                return return_dict
-
-            pt_inputs_dict = recursive_numpy_convert(self._prepare_for_class(inputs_dict, model_class))
-
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
-
-            with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
-            tf_hidden_states = tfo[0].numpy()
-            pt_hidden_states = pto[0].numpy()
-
-            tf_nans = np.copy(np.isnan(tf_hidden_states))
-            pt_nans = np.copy(np.isnan(pt_hidden_states))
-
-            pt_hidden_states[tf_nans] = 0
-            tf_hidden_states[tf_nans] = 0
-            pt_hidden_states[pt_nans] = 0
-            tf_hidden_states[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
-            # Debug info (remove when fixed)
-            if max_diff >= 2e-2:
-                print("===")
-                print(model_class)
-                print(config)
-                print(inputs_dict)
-                print(pt_inputs_dict)
-            self.assertLessEqual(max_diff, 6e-2)
-
-            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                import os
-
-                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
-                torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
-
-                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
-                tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
-
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
-            pt_model.eval()
-            pt_inputs_dict = dict(
-                (name, torch.from_numpy(key.numpy()).to(torch.long))
-                for name, key in self._prepare_for_class(inputs_dict, model_class).items()
-            )
-
-            for key, value in pt_inputs_dict.items():
-                if key in ("visual_feats", "visual_pos"):
-                    pt_inputs_dict[key] = value.to(torch.float32)
-                else:
-                    pt_inputs_dict[key] = value.to(torch.long)
-
-            with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class))
-            tfo = tfo[0].numpy()
-            pto = pto[0].numpy()
-            tf_nans = np.copy(np.isnan(tfo))
-            pt_nans = np.copy(np.isnan(pto))
-
-            pto[tf_nans] = 0
-            tfo[tf_nans] = 0
-            pto[pt_nans] = 0
-            tfo[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tfo - pto))
-            self.assertLessEqual(max_diff, 6e-2)
+        return pt_inputs_dict
 
     def test_save_load(self):
         for model_class in self.all_model_classes:

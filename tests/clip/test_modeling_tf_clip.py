@@ -23,7 +23,7 @@ from importlib import import_module
 
 import requests
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
@@ -31,7 +31,6 @@ from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_ten
 
 
 if is_tf_available():
-    import numpy as np
     import tensorflow as tf
 
     from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
@@ -496,130 +495,6 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
                 assert isinstance(model, tf.keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
-
-    # overwrite from common since CLIPModel/TFCLIPModel return CLIPOutput/TFCLIPOutput
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import torch
-
-        import transformers
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
-            pt_model_class = getattr(transformers, pt_model_class_name)
-
-            config.output_hidden_states = True
-
-            tf_model = model_class(config)
-            pt_model = pt_model_class(config)
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
-            )
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
-
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
-            pt_model.eval()
-            pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    pt_inputs_dict[name] = key
-                elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                elif name == "pixel_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
-
-            with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
-
-            self.assertEqual(len(tfo), len(pto), "Output lengths differ between TF and PyTorch")
-            for tf_output, pt_output in zip(tfo.to_tuple(), pto.to_tuple()):
-
-                if not (isinstance(tf_output, tf.Tensor) and isinstance(pt_output, torch.Tensor)):
-                    continue
-
-                tf_out = tf_output.numpy()
-                pt_out = pt_output.numpy()
-
-                self.assertEqual(tf_out.shape, pt_out.shape, "Output component shapes differ between TF and PyTorch")
-
-                if len(tf_out.shape) > 0:
-
-                    tf_nans = np.copy(np.isnan(tf_out))
-                    pt_nans = np.copy(np.isnan(pt_out))
-
-                    pt_out[tf_nans] = 0
-                    tf_out[tf_nans] = 0
-                    pt_out[pt_nans] = 0
-                    tf_out[pt_nans] = 0
-
-                max_diff = np.amax(np.abs(tf_out - pt_out))
-                self.assertLessEqual(max_diff, 4e-2)
-
-            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
-                torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
-
-                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
-                tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
-
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
-            pt_model.eval()
-            pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    key = np.array(key, dtype=bool)
-                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
-                elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                elif name == "pixel_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
-
-            with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(len(tfo), len(pto), "Output lengths differ between TF and PyTorch")
-            for tf_output, pt_output in zip(tfo.to_tuple(), pto.to_tuple()):
-
-                if not (isinstance(tf_output, tf.Tensor) and isinstance(pt_output, torch.Tensor)):
-                    continue
-
-                tf_out = tf_output.numpy()
-                pt_out = pt_output.numpy()
-
-                self.assertEqual(tf_out.shape, pt_out.shape, "Output component shapes differ between TF and PyTorch")
-
-                if len(tf_out.shape) > 0:
-                    tf_nans = np.copy(np.isnan(tf_out))
-                    pt_nans = np.copy(np.isnan(pt_out))
-
-                    pt_out[tf_nans] = 0
-                    tf_out[tf_nans] = 0
-                    pt_out[pt_nans] = 0
-                    tf_out[pt_nans] = 0
-
-                max_diff = np.amax(np.abs(tf_out - pt_out))
-                self.assertLessEqual(max_diff, 4e-2)
 
     @slow
     def test_model_from_pretrained(self):

@@ -28,7 +28,7 @@ import numpy as np
 
 from transformers import ViTMAEConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow, torch_device
+from transformers.testing_utils import require_tf, require_vision, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -363,140 +363,20 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import torch
-
-        import transformers
+    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
 
         # make masks reproducible
         np.random.seed(2)
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        num_patches = int((config.image_size // config.patch_size) ** 2)
+        num_patches = int((tf_model.config.image_size // tf_model.config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        pt_noise = torch.from_numpy(noise).to(device=torch_device)
         tf_noise = tf.constant(noise)
 
-        def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
+        # Add `noise` argument.
+        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
+        tf_inputs_dict["noise"] = tf_noise
 
-            pt_inputs_dict = {}
-            for name, key in tf_inputs_dict.items():
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-
-            return pt_inputs_dict
-
-        def check_outputs(tf_outputs, pt_outputs, model_class, names):
-            """
-            Args:
-                model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                    TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
-                    debugging easier and faster.
-
-                names: A string, or a tuple of strings. These specify what tf_outputs/pt_outputs represent in the model outputs.
-                    Currently unused, but in the future, we could use this information to make the error message clearer
-                    by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
-            """
-
-            # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
-            if type(tf_outputs) in [tuple, list]:
-                self.assertEqual(type(tf_outputs), type(pt_outputs))
-                self.assertEqual(len(tf_outputs), len(pt_outputs))
-                if type(names) == tuple:
-                    for tf_output, pt_output, name in zip(tf_outputs, pt_outputs, names):
-                        check_outputs(tf_output, pt_output, model_class, names=name)
-                elif type(names) == str:
-                    for idx, (tf_output, pt_output) in enumerate(zip(tf_outputs, pt_outputs)):
-                        check_outputs(tf_output, pt_output, model_class, names=f"{names}_{idx}")
-                else:
-                    raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
-            elif isinstance(tf_outputs, tf.Tensor):
-                self.assertTrue(isinstance(pt_outputs, torch.Tensor))
-
-                tf_outputs = tf_outputs.numpy()
-                if isinstance(tf_outputs, np.float32):
-                    tf_outputs = np.array(tf_outputs, dtype=np.float32)
-                pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-                tf_nans = np.isnan(tf_outputs)
-                pt_nans = np.isnan(pt_outputs)
-
-                pt_outputs[tf_nans] = 0
-                tf_outputs[tf_nans] = 0
-                pt_outputs[pt_nans] = 0
-                tf_outputs[pt_nans] = 0
-
-                max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-                # Set a higher tolerance (2e-5) here than the one in the common test (1e-5).
-                # TODO: A deeper look to decide the best (common) tolerance for the test to be strict but not too flaky.
-                self.assertLessEqual(max_diff, 2e-5)
-            else:
-                raise ValueError(
-                    f"`tf_outputs` should be a `tuple` or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
-                )
-
-        def check_pt_tf_models(tf_model, pt_model):
-            # we are not preparing a model with labels because of the formation
-            # of the ViT MAE model
-
-            # send pytorch model to the correct device
-            pt_model.to(torch_device)
-
-            # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-            pt_model.eval()
-
-            pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
-
-            # send pytorch inputs to the correct device
-            pt_inputs_dict = {
-                k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-            }
-
-            # Original test: check without `labels`
-            with torch.no_grad():
-                pt_outputs = pt_model(**pt_inputs_dict, noise=pt_noise)
-            tf_outputs = tf_model(tf_inputs_dict, noise=tf_noise)
-
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-            self.assertEqual(tf_keys, pt_keys)
-            check_outputs(tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=tf_keys)
-
-        for model_class in self.all_model_classes:
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # Output all for aggressive testing
-            config.output_hidden_states = True
-            if self.has_attentions:
-                config.output_attentions = True
-
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
-            pt_model_class = getattr(transformers, pt_model_class_name)
-
-            tf_model = model_class(config)
-            pt_model = pt_model_class(config)
-
-            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
-
-            check_pt_tf_models(tf_model, pt_model)
-
-            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
-                torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
-
-                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
-                tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
-
-            check_pt_tf_models(tf_model, pt_model)
+        super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
     # overwrite from common since TFViTMAEForPretraining outputs loss along with
     # logits and mask indices. loss and mask indicies are not suitable for integration
