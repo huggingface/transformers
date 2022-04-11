@@ -805,11 +805,11 @@ class ViltModel(ViltPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        batch_size, seq_length = input_shape
+        text_batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+            attention_mask = torch.ones(((text_batch_size, seq_length)), device=device)
 
         if pixel_values is not None and image_embeds is not None:
             raise ValueError("You cannot specify both pixel_values and image_embeds at the same time")
@@ -817,7 +817,7 @@ class ViltModel(ViltPreTrainedModel):
             raise ValueError("You have to specify either pixel_values or image_embeds")
 
         image_batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeds.shape[0]
-        if image_batch_size != batch_size:
+        if image_batch_size != text_batch_size:
             raise ValueError("The text inputs and image inputs need to have the same batch size")
         if pixel_mask is None:
             pixel_mask = torch.ones((image_batch_size, self.config.image_size, self.config.image_size), device=device)
