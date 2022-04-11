@@ -148,6 +148,7 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unit
     test_inputs_embeds = False
     test_model_common_attributes = False
     test_gradient_checkpointing = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)

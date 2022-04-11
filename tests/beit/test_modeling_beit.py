@@ -192,7 +192,6 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     )
 
     test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
 

@@ -238,7 +238,6 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     )
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = True
     test_mismatched_shapes = False
 

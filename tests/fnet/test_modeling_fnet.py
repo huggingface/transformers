@@ -284,7 +284,6 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     # Skip Tests
     test_pruning = False
-    test_torchscript = False
     test_head_masking = False
     test_pruning = False
 

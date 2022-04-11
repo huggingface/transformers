@@ -413,7 +413,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -652,7 +651,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(

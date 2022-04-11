@@ -229,7 +229,6 @@ class SqueezeBertModelTest(ModelTesterMixin, unittest.TestCase):
         else None
     )
     test_pruning = False
-    test_torchscript = True
     test_resize_embeddings = True
     test_head_masking = False
 
