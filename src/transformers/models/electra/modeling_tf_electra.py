@@ -1163,8 +1163,8 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         checkpoint="google/electra-small-generator",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        mask="[mask]",
-        expected_output="'paris'",
+        mask="[MASK]",
+        expected_output="'p a r i s'",
         expected_loss=1.22,
     )
     def call(
@@ -1565,13 +1565,13 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="deepset/electra-base-squad2",
+        checkpoint="Gozdi/electra-base-finetuned-coqa",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         qa_target_start_index=11,
         qa_target_end_index=12,
-        expected_output="'a nice puppet'",
-        expected_loss=2.64,
+        expected_output="'jim henson was a nice puppet'",
+        expected_loss=1.99,
     )
     def call(
         self,

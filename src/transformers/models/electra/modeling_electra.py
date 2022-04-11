@@ -1097,16 +1097,22 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         >>> from transformers import ElectraForPreTraining, ElectraTokenizerFast
         >>> import torch
 
-        >>> discriminator = ElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
-        >>> tokenizer = ElectraTokenizerFast.from_pretrained("google/electra-small-discriminator")
+        >>> discriminator = ElectraForPreTraining.from_pretrained("google/electra-base-discriminator")
+        >>> tokenizer = ElectraTokenizerFast.from_pretrained("google/electra-base-discriminator")
+
         >>> sentence = "The quick brown fox jumps over the lazy dog"
         >>> fake_sentence = "The quick brown fox fake over the lazy dog"
-        >>> fake_tokens = tokenizer.tokenize(fake_sentence)
+
+        >>> fake_tokens = tokenizer.tokenize(fake_sentence, add_special_tokens=True)
         >>> fake_inputs = tokenizer.encode(fake_sentence, return_tensors="pt")
         >>> discriminator_outputs = discriminator(fake_inputs)
         >>> predictions = torch.round((torch.sign(discriminator_outputs[0]) + 1) / 2)
-        >>> [print("%7s" % token, end="") for token in fake_tokens]
-        >>> [print("%7s" % int(prediction), end="") for prediction in predictions.squeeze().tolist()]
+
+        >>> fake_tokens
+        ['[CLS]', 'the', 'quick', 'brown', 'fox', 'fake', 'over', 'the', 'lazy', 'dog', '[SEP]']
+
+        >>> predictions.squeeze().tolist()
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1180,7 +1186,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         checkpoint="google/electra-small-generator",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        mask="[mask]",
+        mask="[MASK]",
         expected_output="'paris'",
         expected_loss=1.22,
     )
@@ -1352,7 +1358,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         qa_target_start_index=11,
         qa_target_end_index=12,
         expected_output="'a nice puppet'",
-        expected_loss=2.6383,
+        expected_loss=2.64,
     )
     def forward(
         self,
