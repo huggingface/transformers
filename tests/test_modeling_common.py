@@ -598,6 +598,13 @@ class ModelTesterMixin:
         config.output_hidden_states = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
+    def clear_torch_jit_class_registry(self):
+
+        torch._C._jit_clear_class_registry()
+        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
+        torch.jit._state._clear_class_state()
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
@@ -678,6 +685,10 @@ class ModelTesterMixin:
                         models_equal = False
 
             self.assertTrue(models_equal)
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_torch_fx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
