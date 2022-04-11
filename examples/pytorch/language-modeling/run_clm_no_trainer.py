@@ -248,7 +248,7 @@ def main():
 
     # If passed along, set the training seed now.
     if args.seed is not None:
-        set_seed(args.seed, device_specific=True)
+        set_seed(args.seed)
 
     # Handle the repository creation
     if accelerator.is_main_process:
