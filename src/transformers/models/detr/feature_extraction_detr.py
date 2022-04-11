@@ -306,6 +306,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info["segments_info"]], dtype=np.int64)
             target["area"] = np.asarray([ann["area"] for ann in ann_info["segments_info"]], dtype=np.float32)
 
+        if isinstance(image, Image.Image):
+            image = self.to_numpy_array(image)
+
         return image, target
 
     def _resize(self, image, size, target=None, max_size=None):
