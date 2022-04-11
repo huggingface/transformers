@@ -1523,7 +1523,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION ,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
@@ -1724,7 +1724,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION ,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
