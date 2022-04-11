@@ -78,9 +78,9 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
     file_names = os.listdir(bigscience176b_checkpoint_path)
     file_names = list(sorted(filter(lambda s: s.startswith('layer') and 'model_00' in s, file_names)))
 
+    missing_keys = None
     for file in file_names:
         tensors = None
-        missing_keys = set()
         for i in range(config.pretraining_tp):
             # load all TP files
             f_name = file.replace('model_00', f'model_0{i}')
@@ -108,7 +108,10 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
 
         other_keys = model.load_state_dict(tensors, strict=False)
         assert not other_keys.unexpected_keys
-        missing_keys = missing_keys - set(other_keys.missing_keys)
+        if missing_keys is None:
+            missing_keys = set(other_keys.missing_keys)
+        else:
+            missing_keys = missing_keys.intersection(set(other_keys.missing_keys))
 
     assert not missing_keys
 
