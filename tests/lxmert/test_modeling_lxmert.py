@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-import transformers
 from transformers import LxmertConfig, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
