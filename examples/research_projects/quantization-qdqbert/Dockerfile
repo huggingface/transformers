@@ -23,6 +23,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 RUN python3 -m pip install --no-cache-dir --ignore-installed pycuda
 RUN python3 -m pip install --no-cache-dir \
     pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+RUN python3 -m pip install --no-cache-dir onnxruntime-gpu==1.11
 
 WORKDIR /workspace
 COPY . transformers/
