@@ -1802,7 +1802,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             model(model.dummy_inputs)  # build the network with dummy inputs
 
-        assert os.path.isfile(resolved_archive_file), f"Error retrieving file {resolved_archive_file}"
+        if not os.path.isfile(resolved_archive_file):
+            raise OSError(f"Error retrieving file {resolved_archive_file}")
+
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
@@ -2103,7 +2105,8 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif isinstance(inputs, (tuple, list)):
             hidden_states = inputs[0]
             cls_index = inputs[1] if len(inputs) > 1 else None
-            assert len(inputs) <= 2, "Too many inputs."
+            if len(inputs) > 2:
+                raise ValueError("Too many inputs.")
         else:
             hidden_states = inputs.get("hidden_states")
             cls_index = inputs.get("cls_index", None)
