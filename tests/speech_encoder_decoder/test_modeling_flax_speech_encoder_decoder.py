@@ -539,6 +539,12 @@ class FlaxEncoderDecoderMixin:
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
 
+        # check `add_adapter` works as expected
+        config.add_adapter = True
+        self.assertTrue(config.add_adapter)
+        self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
+        self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
