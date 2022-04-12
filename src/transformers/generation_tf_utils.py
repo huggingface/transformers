@@ -34,7 +34,7 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from .tf_utils import set_tensor_by_indices_to_value, shape_list
+from .tf_utils import shape_list
 from .utils import ModelOutput, logging
 
 
@@ -952,8 +952,7 @@ class TFGenerationMixin:
                     [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
-
-                scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
+                scores = tf.where(eos_token_indices_mask, -float("inf"), scores)
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
@@ -969,8 +968,8 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = set_tensor_by_indices_to_value(
-                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
             if bad_words_ids is not None:
@@ -983,8 +982,8 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = set_tensor_by_indices_to_value(
-                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
             assert shape_list(scores) == [batch_size * num_beams, vocab_size]
@@ -2950,7 +2949,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         top_k = min(max(top_k, min_tokens_to_keep), logits_shape[-1])  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = logits < tf.math.top_k(logits, k=top_k)[0][..., -1, None]
-        logits = set_tensor_by_indices_to_value(logits, indices_to_remove, filter_value)
+        logits = tf.where(indices_to_remove, filter_value, logits)
     if top_p < 1.0:
         sorted_indices = tf.argsort(logits, direction="DESCENDING")
         sorted_logits = tf.gather(
@@ -2979,7 +2978,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
-        logits = set_tensor_by_indices_to_value(logits, indices_to_remove, filter_value)
+        logits = tf.where(indices_to_remove, filter_value, logits)
     return logits
 
 
