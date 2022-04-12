@@ -1490,6 +1490,34 @@ class ModelTesterMixin:
 
     # Don't copy this method to model specific test file!
     # TODO: remove this method once the issues are all fixed!
+    def _make_attention_mask_non_null(self, inputs_dict):
+        """Make sure no sequence has all zeros as attention mask"""
+
+        for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
+            if k in inputs_dict:
+                attention_mask = inputs_dict[k]
+
+                # Make sure no all 0s attention masks - to avoid failure at this moment.
+                # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
+                # TODO: remove this line once a fix regarding large negative values for attention mask is done.
+                attention_mask = torch.cat(
+                    [torch.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], dim=-1
+                )
+
+                # Here we make the first sequence with all 0s as attention mask.
+                # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
+                # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
+                # TODO: enable this block once the large negative values thing is cleaned up.
+                # (see https://github.com/huggingface/transformers/issues/14859)
+                # attention_mask = torch.cat(
+                #     [torch.zeros_like(attention_mask[:1], dtype=attention_mask.dtype), attention_mask[1:]],
+                #     dim=0
+                # )
+
+                inputs_dict[k] = attention_mask
+
+    # Don't copy this method to model specific test file!
+    # TODO: remove this method once the issues are all fixed!
     def _postprocessing_to_ignore_test_cases(self, tf_outputs, pt_outputs, model_class):
         """For temporarily ignoring some failed test cases (issues to be fixed)"""
 
@@ -1625,7 +1653,7 @@ class ModelTesterMixin:
             elif key == "input_features":
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
             # other general float inputs
-            elif tensor.is_floating_point:
+            elif tensor.is_floating_point():
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
             else:
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
@@ -1692,7 +1720,7 @@ class ModelTesterMixin:
                 inputs_dict,
                 model_class,
                 # Not all models accept "labels" in the forward pass (yet :) )
-                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+                return_labels=True if "labels" in inspect.signature(model_class.forward).parameters.keys() else False,
             )
 
             # make sure only tf inputs are forward that actually exist in function args
