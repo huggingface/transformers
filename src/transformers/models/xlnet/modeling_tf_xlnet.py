@@ -639,7 +639,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
-        assert input_mask is None or attention_mask is None, (
+        if input_mask is not None and attention_mask is not None:
+            raise ValueError(
             "You can only use one of input_mask (uses 1 for padding) "
             "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         )
