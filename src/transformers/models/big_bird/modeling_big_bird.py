@@ -3000,7 +3000,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             # setting lengths logits to `-inf`
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
-                token_type_ids = (~logits_mask).long()
+                token_type_ids = torch.ones(logits_mask.size(), dtype=int) - logits_mask
             logits_mask = logits_mask
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
@@ -3063,5 +3063,5 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         # q_lengths -> (bz, 1)
         mask = torch.arange(0, maxlen).to(q_lengths.device)
         mask.unsqueeze_(0)  # -> (1, maxlen)
-        mask = mask < q_lengths
+        mask = torch.where(mask < q_lengths, 1, 0)
         return mask
