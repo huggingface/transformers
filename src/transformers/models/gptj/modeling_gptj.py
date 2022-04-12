@@ -781,8 +781,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss="",
-        expected_output="",
     )
     def forward(
         self,
