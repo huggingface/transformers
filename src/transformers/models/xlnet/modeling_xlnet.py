@@ -169,28 +169,17 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert (
-                len(pointer) == array.shape[0]
-            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
+            if len(pointer) != array.shape[0]:
+                raise ValueError(f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched")
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
-                try:
-                    assert (
-                        p_i.shape == arr_i.shape
-                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
-                except AssertionError as e:
-                    e.args += (p_i.shape, arr_i.shape)
-                    raise
+                if p_i.shape == arr_i.shape:
+                    raise ValueError(f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched")
                 logger.info(f"Initialize PyTorch weight {name} for layer {i}")
                 p_i.data = torch.from_numpy(arr_i)
         else:
-            try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
+            if pointer.shape == array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
             logger.info(f"Initialize PyTorch weight {name}")
             pointer.data = torch.from_numpy(array)
         tf_weights.pop(name, None)
@@ -1139,8 +1128,11 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
-        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
-        "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
+        if input_mask is not None and attention_mask is not None:
+            raise ValueError(
+             "You can only use one of input_mask (uses 1 for padding) "
+             "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
+            )
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
         if input_mask is not None and perm_mask is not None:
