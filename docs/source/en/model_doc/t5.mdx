@@ -191,7 +191,7 @@ ignored. The code example below illustrates all of this.
 ... )
 >>> labels = target_encoding.input_ids
 
->>> # replace padding token id's of the labels by -100
+>>> # replace padding token id's of the labels by -100 so it's ignored by the loss
 >>> labels = torch.tensor(labels)
 >>> labels[labels == tokenizer.pad_token_id] = -100
 
