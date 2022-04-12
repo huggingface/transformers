@@ -15,6 +15,7 @@ src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/glpn/modeling_glpn.py
+src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/marian/modeling_marian.py
@@ -24,6 +25,7 @@ src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/reformer/modeling_reformer.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
