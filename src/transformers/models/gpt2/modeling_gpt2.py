@@ -40,13 +40,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    SequenceSummary,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
+from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,

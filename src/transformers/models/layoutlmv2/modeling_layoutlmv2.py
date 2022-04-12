@@ -31,7 +31,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,

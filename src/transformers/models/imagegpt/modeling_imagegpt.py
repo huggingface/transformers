@@ -38,7 +38,8 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
