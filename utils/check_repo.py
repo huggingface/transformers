@@ -31,7 +31,7 @@ from transformers.utils import ENV_VARS_TRUE_VALUES
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source"
+PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [

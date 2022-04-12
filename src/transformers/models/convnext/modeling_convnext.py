@@ -14,8 +14,6 @@
 # limitations under the License.
 """ PyTorch ConvNext model."""
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -23,14 +21,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
+    ImageClassifierOutputWithNoAttention,
 )
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_convnext import ConvNextConfig
 
 
@@ -52,66 +49,6 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",
     # See all ConvNext models at https://huggingface.co/models?filter=convnext
 ]
-
-
-@dataclass
-class ConvNextEncoderOutput(ModelOutput):
-    """
-    Class for [`ConvNextEncoder`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ConvNextModelOutput(ModelOutput):
-    """
-    Class for [`ConvNextModel`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
-            Global average pooling of the last feature map followed by a layernorm.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ConvNextClassifierOutput(ModelOutput):
-    """
-    Class for [`ConvNextForImageClassification`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Stochastic depth implementation
@@ -302,7 +239,7 @@ class ConvNextEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return ConvNextEncoderOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
@@ -383,7 +320,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ConvNextModelOutput,
+        output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -413,7 +350,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return ConvNextModelOutput(
+        return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -446,7 +383,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ConvNextClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -491,7 +428,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ConvNextClassifierOutput(
+        return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
