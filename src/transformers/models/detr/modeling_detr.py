@@ -488,7 +488,9 @@ class DetrAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads}).")
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1711,7 +1713,9 @@ class DetrMaskHeadSmallConv(nn.Module):
         super().__init__()
 
         if dim % 8 != 0:
-            raise ValueError("The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8")
+            raise ValueError(
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+            )
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
 

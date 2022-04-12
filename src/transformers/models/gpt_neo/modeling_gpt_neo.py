@@ -117,7 +117,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
         if pointer.shape != array.shape:
             raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched {name}")
-    
+
         print(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
 

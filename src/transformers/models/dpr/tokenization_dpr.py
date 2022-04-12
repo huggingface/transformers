@@ -235,7 +235,9 @@ class CustomDPRReaderTokenizerMixin:
         n_passages = len(titles)
         questions = questions if not isinstance(questions, str) else [questions] * n_passages
         if len(titles) != len(texts):
-            raise ValueError(f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts.")
+            raise ValueError(
+                f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+            )
         encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {

@@ -184,7 +184,7 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
             array = np.transpose(array)
-        
+
         if pointer.shape != array.shape:
             raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
 

@@ -887,7 +887,9 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         self.num_vars = config.num_codevectors_per_group
 
         if config.codevector_dim % self.num_groups != 0:
-            raise ValueError(f"`config.codevector_dim {config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation")
+            raise ValueError(
+                f"`config.codevector_dim {config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
+            )
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(

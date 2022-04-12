@@ -152,9 +152,13 @@ class LEDEncoderSelfAttention(nn.Module):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
         if attention_window % 2 != 0:
-            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}")
+            raise ValueError(
+                f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+            )
         if attention_window <= 0:
-            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}")
+            raise ValueError(
+                f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+            )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -220,7 +224,9 @@ class LEDEncoderSelfAttention(nn.Module):
             self.num_heads,
             self.one_sided_attn_window_size * 2 + 1,
         ]:
-            raise ValueError(f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}")
+            raise ValueError(
+                f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+            )
 
         # compute local attention probs from global attention keys and contact over window dim
         if is_global_attn:
@@ -254,7 +260,9 @@ class LEDEncoderSelfAttention(nn.Module):
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != self.num_heads:
-                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -661,7 +669,9 @@ class LEDEncoderSelfAttention(nn.Module):
             max_num_global_attn_indices,
             seq_len,
         ]:
-            raise ValueError(f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}.")
+            raise ValueError(
+                f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}."
+            )
 
         global_attn_scores = global_attn_scores.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -684,7 +694,9 @@ class LEDEncoderSelfAttention(nn.Module):
         # apply layer head masking
         if layer_head_mask is not None:
             if layer_head_mask.size() != self.num_heads:
-                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
                 batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
@@ -704,7 +716,9 @@ class LEDEncoderSelfAttention(nn.Module):
             max_num_global_attn_indices,
             self.head_dim,
         ]:
-            raise ValueError(f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}.")
+            raise ValueError(
+                f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
+            )
 
         global_attn_probs = global_attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
         global_attn_output = global_attn_output.view(
@@ -764,7 +778,9 @@ class LEDDecoderAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads}).")
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
@@ -837,7 +853,9 @@ class LEDDecoderAttention(nn.Module):
             tgt_len,
             src_len,
         ):
-            raise ValueError(f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}")
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
             if attention_mask.size() != (
@@ -846,14 +864,18 @@ class LEDDecoderAttention(nn.Module):
                 tgt_len,
                 src_len,
             ):
-                raise ValueError(f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}")
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         if layer_head_mask is not None:
             if layer_head_mask.size() != self.num_heads:
-                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -876,7 +898,9 @@ class LEDDecoderAttention(nn.Module):
             tgt_len,
             self.head_dim,
         ):
-            raise ValueError(f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}")
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+            )
 
         attn_output = (
             attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1624,9 +1648,9 @@ class LEDEncoder(LEDPreTrainedModel):
         else:
             if len(config.attention_window) != config.num_hidden_layers:
                 raise ValueError(
-                "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
-                f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
-            )
+                    "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
+                    f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
+                )
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
@@ -1816,7 +1840,9 @@ class LEDEncoder(LEDPreTrainedModel):
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
             if head_mask.size()[0] != len(self.layers):
-                raise ValueError(f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -2070,7 +2096,9 @@ class LEDDecoder(LEDPreTrainedModel):
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
                 if attn_mask.size()[0] != len(self.layers):
-                    raise ValueError(f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:

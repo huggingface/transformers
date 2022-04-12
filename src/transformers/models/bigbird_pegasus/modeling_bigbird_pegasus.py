@@ -1918,7 +1918,9 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
             if head_mask.size()[0] != len(self.layers):
-                raise ValueError(f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -2000,7 +2002,9 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
-            raise ValueError(f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}.")
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+            )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -2244,7 +2248,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
                 if attn_mask.size()[0] != len(self.layers):
-                    raise ValueError(f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:

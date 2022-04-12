@@ -138,7 +138,9 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # Read the causal mask dimension (seqlen). [max_sequence_length, hidden_size]
     n_positions = pos_embeddings.size(0)
     if n_positions != config.n_positions:
-        raise ValueError(f"pos_embeddings.max_sequence_length={n_positions} and config.n_positions={config.n_positions} don't match")
+        raise ValueError(
+            f"pos_embeddings.max_sequence_length={n_positions} and config.n_positions={config.n_positions} don't match"
+        )
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 

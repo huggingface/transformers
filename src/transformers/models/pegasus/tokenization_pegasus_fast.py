@@ -114,7 +114,9 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
         if additional_special_tokens is not None:
             if not isinstance(additional_special_tokens, list):
-                raise TypeError(f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}")
+                raise TypeError(
+                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                )
 
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
@@ -155,7 +157,9 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
 
         if all_special_ids != set(range(len(self.additional_special_tokens) + 3)):
-            raise ValueError(f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}")
+            raise ValueError(
+                f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+            )
 
         return [1 if x in all_special_ids else 0 for x in seq]
 
