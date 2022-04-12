@@ -319,7 +319,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
-        for outputs in model_outputs:
+        for idx, outputs in enumerate(model_outputs):
             items = outputs[key].numpy()
             stride = outputs.pop("stride", None)
             if stride is not None:
@@ -328,6 +328,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # because of padding, that's why
                 # we need to reconstruct this information
                 # This won't work with left padding (which doesn't exist right now)
+
+                # Hack
+                right = 0 if idx == len(model_outputs) - 1 else right
                 right_n = total_n - right
                 items = items[:, left:right_n]
             final_items.append(items)
