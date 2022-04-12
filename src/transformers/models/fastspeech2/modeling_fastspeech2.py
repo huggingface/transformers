@@ -24,11 +24,18 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...file_utils import (  # add_code_sample_docstrings,; add_start_docstrings,; add_start_docstrings_to_model_forward,; replace_return_docstrings,
+from ...file_utils import (
     ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
 )
-from ...modeling_utils import (  # apply_chunking_to_forward,; find_pruneable_heads_and_indices,; prune_linear_layer,
+from ...modeling_utils import (
     PreTrainedModel,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
 )
 from ...utils import logging
 from .configuration_fastspeech2 import FastSpeech2Config
@@ -46,8 +53,8 @@ FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from https://github.com/pytorch/fairseq/blob/main/fairseq/data/data_utils.py
 def lengths_to_padding_mask(lengths: torch.LongTensor) -> torch.BoolTensor:
-    # from https://github.com/pytorch/fairseq/blob/main/fairseq/data/data_utils.py
     batch_size, max_lengths = lengths.size(0), torch.max(lengths).item()
     mask = torch.arange(max_lengths).to(lengths.device).view(1, max_lengths)
     mask = mask.expand(batch_size, -1) >= lengths.view(batch_size, 1).expand(-1, max_lengths)
@@ -55,14 +62,14 @@ def lengths_to_padding_mask(lengths: torch.LongTensor) -> torch.BoolTensor:
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_length: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, target_length, source_length]`.
     """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
+    batch_size, source_length = mask.size()
+    target_length = target_length if target_length is not None else source_length
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_length, source_length).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -306,7 +313,7 @@ class PositionwiseFeedForward(nn.Module):
         self.dropout = self.dropout_module = nn.Dropout(dropout)
 
     def forward(self, hidden):
-        #hidden.shape == (batch_size, seq_length, num_channels)
+        # hidden.shape == (batch_size, seq_length, num_channels)
         residual = hidden
         hidden = self.ffn(hidden.transpose(1, 2)).transpose(1, 2)
         hidden = self.dropout(hidden)
