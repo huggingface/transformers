@@ -423,6 +423,12 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        smp_save_partial (`bool`, *optional*, defaults to `False`):
+            If True, saves checkpoints partially. `"smp_save_partial"` can only be used with Sagemaker Model Parallel library.
+        smp_load_partial (`bool`, *optional*, defaults to `False`):
+            If True, loads partial checkpoints. `"smp_load_partial"` can only be used with Sagemaker Model Parallel library.
+        smp_tensor_parallel_full_model (`bool`, *optional*, defaults to `False`):
+            If True, apply tensor paralellism for the full model. `"smp_tensor_parallel_full_model"` can only be used with Sagemaker Model Parallel library.
     """
 
     output_dir: str = field(
@@ -750,6 +756,10 @@ class TrainingArguments:
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
     )
+    smp_save_partial: bool = field(default=False, metadata={"help": "Save checkpoints partially for SMP."})
+    smp_load_partial: bool = field(default=False, metadata={"help": "Load partial checkpoints for SMP."})
+    smp_tensor_parallel_full_model: bool = field(default=False, metadata={"help": "Enables tensor parallelism for full model in SMP."})
+
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -985,6 +995,19 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        if (self.smp_save_partial or self.smp_load_partial) and not is_sagemaker_mp_enabled():
+            raise ValueError(f"smp_save_partial and smp_load_partial can only be used with Sagemaker Model Parallel library.")
+
+        if (is_sagemaker_mp_enabled() and not self.smp_save_partial and smp.state.cfg.shard_optimizer_state ):
+            warnings.warn("Optimizer sharding can only be used with partial checkpointing. Switching to partial checkpointing.")
+            self.smp_save_partial = True
+
+        if (is_sagemaker_mp_enabled() and self.smp_save_partial and self.load_best_model_at_end ):
+            self.smp_load_partial = True
+
+        if (is_sagemaker_mp_enabled() and (not self.smp_save_partial) and (self.save_strategy != IntervalStrategy.NO)):
+            warnings.warn("Saving weights but not the optimizer state.")
+
     def __str__(self):
         self_as_dict = asdict(self)
 
@@ -1218,7 +1241,10 @@ class TrainingArguments:
             return self.local_process_index == 0
         else:
             if is_sagemaker_mp_enabled():
-                return smp.rank() == 0
+                if self.smp_save_partial:
+                    return smp.rdp_rank() == 0
+                else:
+                    return smp.rank() == 0
             else:
                 return self.process_index == 0
 
