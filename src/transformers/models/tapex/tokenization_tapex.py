@@ -168,7 +168,8 @@ class IndexedRowTableLinearize:
         """
         Given a table, TableLinearize aims at converting it into a flatten sequence with special symbols.
         """
-        assert "header" in table_content and "rows" in table_content, self.PROMPT_MESSAGE
+        if "header" not in table_content and "rows" not in table_content:
+            raise KeyError(self.PROMPT_MESSAGE)
         # process header
         table_str = self.process_header(table_content["header"]) + " "
         # process rows
