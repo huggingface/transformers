@@ -14,8 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT-J model."""
 
-from typing import Tuple
-
+from typing import Tuple, Optional, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -522,18 +521,18 @@ class GPTJModel(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.tensor] = None,
+        past_key_values: Optional[torch.tensor] = None,
+        attention_mask: Optional[torch.tensor] = None,
+        token_type_ids: Optional[torch.tensor] = None,
+        position_ids: Optional[torch.tensor] = None,
+        head_mask: Optional[torch.tensor] = None,
+        inputs_embeds: Optional[torch.tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.tensor], BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -775,19 +774,19 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.tensor] = None,
+        past_key_values: Optional[torch.tensor] = None,
+        attention_mask: Optional[torch.tensor] = None,
+        token_type_ids: Optional[torch.tensor] = None,
+        position_ids: Optional[torch.tensor] = None,
+        head_mask: Optional[torch.tensor] = None,
+        inputs_embeds: Optional[torch.tensor] = None,
+        labels: Optional[torch.tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.tensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -897,19 +896,19 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.tensor] = None,
+        past_key_values: Optional[torch.tensor] = None,
+        attention_mask: Optional[torch.tensor] = None,
+        token_type_ids: Optional[torch.tensor] = None,
+        position_ids: Optional[torch.tensor] = None,
+        head_mask: Optional[torch.tensor] = None,
+        inputs_embeds: Optional[torch.tensor] = None,
+        labels: Optional[torch.tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.tensor], SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1023,18 +1022,18 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.tensor] = None,
+        attention_mask: Optional[torch.tensor] = None,
+        token_type_ids: Optional[torch.tensor] = None,
+        position_ids: Optional[torch.tensor] = None,
+        head_mask: Optional[torch.tensor] = None,
+        inputs_embeds: Optional[torch.tensor] = None,
+        start_positions: Optional[torch.tensor] = None,
+        end_positions: Optional[torch.tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.tensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
