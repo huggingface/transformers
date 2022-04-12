@@ -33,12 +33,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_gpt_neox"] = [
         "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTNeoXForMaskedLM",
         "GPTNeoXForCausalLM",
-        "GPTNeoXForMultipleChoice",
-        "GPTNeoXForQuestionAnswering",
-        "GPTNeoXForSequenceClassification",
-        "GPTNeoXForTokenClassification",
         "GPTNeoXLayer",
         "GPTNeoXModel",
         "GPTNeoXPreTrainedModel",
@@ -58,16 +53,10 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoXForMaskedLM,
             GPTNeoXForCausalLM,
-            GPTNeoXForMultipleChoice,
-            GPTNeoXForQuestionAnswering,
-            GPTNeoXForSequenceClassification,
-            GPTNeoXForTokenClassification,
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
-            load_tf_weights_in_gpt_neox,
         )
 
 
