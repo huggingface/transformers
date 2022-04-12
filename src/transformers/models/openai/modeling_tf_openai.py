@@ -65,9 +65,8 @@ class TFAttention(tf.keras.layers.Layer):
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
-        assert (
-            n_state % config.n_head == 0
-        ), f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
+        if n_state % config.n_head != 0:
+            raise ValueError(f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}")
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -860,9 +859,8 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
                 batch_size, sequence_length = shape_list(input_ids)[:2]
             else:
                 batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            assert (
-                self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and batch_size != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]
