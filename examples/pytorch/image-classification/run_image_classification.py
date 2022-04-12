@@ -217,6 +217,7 @@ def main():
                 data_dir=data_args.train_dir,
                 cache_dir=model_args.cache_dir,
                 task="image-classification",
+                split="train",
             )
         if data_args.validation_dir is not None:
             dataset_dict["validation"] = load_dataset(
@@ -224,6 +225,7 @@ def main():
                 data_dir=data_args.validation_dir,
                 cache_dir=model_args.cache_dir,
                 task="image-classification",
+                split="validation",
             )
         dataset = DatasetDict(dataset_dict)
 
