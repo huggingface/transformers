@@ -835,11 +835,7 @@ class LEDDecoderAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ):
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
             )
@@ -875,11 +871,7 @@ class LEDDecoderAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ):
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
             )
