@@ -850,7 +850,7 @@ class LEDDecoderAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         if layer_head_mask is not None:
-            if layer_head_mask.size() != self.num_heads:
+            if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
                 )
