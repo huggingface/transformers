@@ -1400,7 +1400,7 @@ class BigBirdAttention(nn.Module):
                 output_attentions,
             )
         else:
-            if encoder_hidden_states is None:
+            if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
             self_outputs = self.self(
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions

@@ -190,7 +190,7 @@ class LEDEncoderSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        if embed_dim == self.embed_dim:
+        if embed_dim != self.embed_dim:
             raise ValueError(f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}")
 
         # normalize query
