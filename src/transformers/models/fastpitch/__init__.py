@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -38,8 +37,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_fastpitch import FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP, FastPitchConfig
     from .tokenization_fastpitch import FastPitchTokenizer
@@ -53,7 +50,6 @@ if TYPE_CHECKING:
             FastPitchModel,
             FastPitchPreTrainedModel,
         )
-
 
 
 else:

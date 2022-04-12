@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    fastpitch,
     albert,
     auto,
     bart,
@@ -54,6 +53,7 @@ from . import (
     dpt,
     electra,
     encoder_decoder,
+    fastpitch,
     flaubert,
     fnet,
     fsmt,

@@ -117,7 +117,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.fastpitch": ["FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastPitchConfig", "FastPitchTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -191,6 +190,7 @@ _import_structure = {
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
+    "models.fastpitch": ["FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastPitchConfig", "FastPitchTokenizer"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
@@ -644,13 +644,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.fastpitch"].extend(
-        [
-            "FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FastPitchModel",
-            "FastPitchPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -986,6 +979,13 @@ if is_torch_available():
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
+    _import_structure["models.fastpitch"].extend(
+        [
+            "FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastPitchModel",
+            "FastPitchPreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2519,7 +2519,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.fastpitch import FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP, FastPitchConfig, FastPitchTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2587,6 +2586,7 @@ if TYPE_CHECKING:
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
+    from .models.fastpitch import FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP, FastPitchConfig, FastPitchTokenizer
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
@@ -2812,7 +2812,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.fastpitch import FastPitchTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2827,6 +2826,7 @@ if TYPE_CHECKING:
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
+        from .models.fastpitch import FastPitchTokenizerFast
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
@@ -2924,11 +2924,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.fastpitch import (
-            FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FastPitchModel,
-            FastPitchPreTrainedModel,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3260,6 +3255,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encoder_decoder import EncoderDecoderModel
+        from .models.fastpitch import FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST, FastPitchModel, FastPitchPreTrainedModel
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
