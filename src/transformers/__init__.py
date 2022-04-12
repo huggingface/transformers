@@ -647,16 +647,8 @@ if is_torch_available():
     _import_structure["models.fastpitch"].extend(
         [
             "FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FastPitchForMaskedLM",
-            "FastPitchForCausalLM",
-            "FastPitchForMultipleChoice",
-            "FastPitchForQuestionAnswering",
-            "FastPitchForSequenceClassification",
-            "FastPitchForTokenClassification",
-            "FastPitchLayer",
             "FastPitchModel",
             "FastPitchPreTrainedModel",
-            "load_tf_weights_in_fastpitch",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2934,16 +2926,8 @@ if TYPE_CHECKING:
 
         from .models.fastpitch import (
             FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FastPitchForMaskedLM,
-            FastPitchForCausalLM,
-            FastPitchForMultipleChoice,
-            FastPitchForQuestionAnswering,
-            FastPitchForSequenceClassification,
-            FastPitchForTokenClassification,
-            FastPitchLayer,
             FastPitchModel,
             FastPitchPreTrainedModel,
-            load_tf_weights_in_fastpitch,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
