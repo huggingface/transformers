@@ -74,12 +74,9 @@ if is_torch_available():
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
-        MODEL_WITH_LM_HEAD_MAPPING,
     )
     from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -250,40 +247,6 @@ class AutoModelTest(unittest.TestCase):
             model.save_pretrained(tmp_dir)
             model = AutoModel.from_pretrained(tmp_dir)
             self.assertIsInstance(model, FunnelBaseModel)
-
-    def test_parents_and_children_in_mappings(self):
-        # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
-        # by the parents and will return the wrong configuration type when using auto models
-
-        mappings = (
-            MODEL_MAPPING,
-            MODEL_FOR_PRETRAINING_MAPPING,
-            MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-            MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
-            MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-            MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-            MODEL_WITH_LM_HEAD_MAPPING,
-            MODEL_FOR_CAUSAL_LM_MAPPING,
-            MODEL_FOR_MASKED_LM_MAPPING,
-            MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        )
-
-        for mapping in mappings:
-            mapping = tuple(mapping.items())
-            for index, (child_config, child_model) in enumerate(mapping[1:]):
-                for parent_config, parent_model in mapping[: index + 1]:
-                    assert not issubclass(
-                        child_config, parent_config
-                    ), f"{child_config.__name__} is child of {parent_config.__name__}"
-
-                    # Tuplify child_model and parent_model since some of them could be tuples.
-                    if not isinstance(child_model, (list, tuple)):
-                        child_model = (child_model,)
-                    if not isinstance(parent_model, (list, tuple)):
-                        parent_model = (parent_model,)
-
-                    for child, parent in [(a, b) for a in child_model for b in parent_model]:
-                        assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
 
     def test_from_pretrained_dynamic_model_local(self):
         try:

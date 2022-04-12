@@ -151,19 +151,6 @@ class AutoTokenizerTest(unittest.TestCase):
             ):
                 _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")
 
-    def test_parents_and_children_in_mappings(self):
-        # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
-        # by the parents and will return the wrong configuration type when using auto models
-
-        mappings = (TOKENIZER_MAPPING,)
-
-        for mapping in mappings:
-            mapping = tuple(mapping.items())
-            for index, (child_config, _) in enumerate(mapping[1:]):
-                for parent_config, _ in mapping[: index + 1]:
-                    with self.subTest(msg=f"Testing if {child_config.__name__} is child of {parent_config.__name__}"):
-                        self.assertFalse(issubclass(child_config, parent_config))
-
     def test_model_name_edge_cases_in_mappings(self):
         # tests: https://github.com/huggingface/transformers/pull/13251
         # 1. models with `-`, e.g. xlm-roberta -> xlm_roberta
