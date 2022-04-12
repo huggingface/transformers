@@ -40,6 +40,7 @@ from .generation_utils import GenerationMixin
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -331,7 +332,7 @@ def get_checkpoint_shard_files(
             )
         except HTTPError:
             raise EnvironmentError(
-                f"We couldn't connect to 'https://huggingface.co/' to load {shard_filename}. You should try again "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try again "
                 "after checking your internet connection."
             )
 
@@ -1486,12 +1487,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Please refer to the mirror site for more information.
             _fast_init(`bool`, *optional*, defaults to `True`):
                 Whether or not to disable fast initialization.
-            low_cpu_mem_usage(`bool``, *optional*, defaults to `False`):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
-                This is an experimental feature and a subject to change at any moment.
-            torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
-                will be automatically derived from the model's weights.
 
                 <Tip warning={true}>
 
@@ -1501,6 +1496,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
+            low_cpu_mem_usage(`bool`, *optional*, defaults to `False`):
+                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                This is an experimental feature and a subject to change at any moment.
+            torch_dtype (`str` or `torch.dtype`, *optional*):
+                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
+                will be automatically derived from the model's weights.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -1749,7 +1750,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
                     f"{FLAX_WEIGHTS_NAME}.\n"
@@ -1791,7 +1792,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
-            if not is_sharded:
+            if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
             # set dtype to instantiate the model under:
@@ -1822,7 +1823,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if is_sharded:
                     loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
                 else:
-                    state_dict = load_state_dict(resolved_archive_file)
                     loaded_state_dict_keys = [k for k in state_dict.keys()]
                     del state_dict  # free CPU memory - will reload again later
 
@@ -2102,8 +2102,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return retrieved_modules
 
-    @classmethod
-    def _load_pretrained_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
+    @staticmethod
+    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
@@ -2158,16 +2158,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             resolved_archive_file = [resolved_archive_file]
 
         for archive_file in resolved_archive_file:
-            state_dict = torch.load(resolved_archive_file, map_location="cpu")
+            state_dict = torch.load(archive_file, map_location="cpu")
 
             # materialize state_dict entries one by one on CPU
             for k in loaded_state_dict_keys:
-                submodule, param_name = find_submodule_and_param_name(model, k)
-                if submodule is not None:
-                    new_val = state_dict[k]
-                    if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                        new_val = torch.nn.Parameter(new_val)
-                    setattr(submodule, param_name, new_val)
+                if k in state_dict:
+                    submodule, param_name = find_submodule_and_param_name(model, k)
+                    if submodule is not None:
+                        param_dtype = getattr(submodule, param_name).dtype
+                        new_val = state_dict[k].to(param_dtype)
+                        if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                            new_val = torch.nn.Parameter(new_val)
+                        setattr(submodule, param_name, new_val)
 
             del state_dict
 

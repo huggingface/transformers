@@ -108,6 +108,7 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
+    "hf-doc-builder>=0.2.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -150,7 +151,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3",
+    "tokenizers>=0.11.1,!=0.11.3,<0.13",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -283,12 +284,13 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -304,7 +306,7 @@ extras["all"] = (
 )
 
 # Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = []
+extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
@@ -383,7 +385,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
