@@ -50,16 +50,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_fastpitch import (
             FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FastPitchForMaskedLM,
-            FastPitchForCausalLM,
-            FastPitchForMultipleChoice,
-            FastPitchForQuestionAnswering,
-            FastPitchForSequenceClassification,
-            FastPitchForTokenClassification,
-            FastPitchLayer,
             FastPitchModel,
             FastPitchPreTrainedModel,
-            load_tf_weights_in_fastpitch,
         )
 
 
