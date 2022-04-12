@@ -39,11 +39,10 @@ class GPTNeoXTokenizer(GPT2Tokenizer):
     """
     Construct a GPTNeoX tokenizer.
 
-    [`~GPTNeoXTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`~GPTNeoXTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end tokenization: punctuation splitting and
+    wordpiece.
 
-    Refer to superclass [`GPT2Tokenzer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`GPT2Tokenzer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

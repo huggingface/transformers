@@ -642,15 +642,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.gpt_neox"].extend(
-        [
-            "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTNeoXForCausalLM",
-            "GPTNeoXLayer",
-            "GPTNeoXModel",
-            "GPTNeoXPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1057,6 +1048,15 @@ if is_torch_available():
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
+        ]
+    )
+    _import_structure["models.gpt_neox"].extend(
+        [
+            "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoXForCausalLM",
+            "GPTNeoXLayer",
+            "GPTNeoXModel",
+            "GPTNeoXPreTrainedModel",
         ]
     )
     _import_structure["models.gptj"].extend(
