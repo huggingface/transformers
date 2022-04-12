@@ -18,8 +18,12 @@ limitations under the License.
 
 This directory contains a script, `run_image_classification.py`, that showcases how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT]((https://huggingface.co/docs/transformers/main/en/model_doc/convnext)), [ResNet]((https://huggingface.co/docs/transformers/main/en/model_doc/resnet)), [Swin Transformer]((https://huggingface.co/docs/transformers/main/en/model_doc/swin))...) using PyTorch. It can be used to fine-tune models on both well-known datasets (like [CIFAR-10](https://huggingface.co/datasets/cifar10), [Fashion MNIST](https://huggingface.co/datasets/fashion_mnist), ...) as well as on your own custom data.
 
+This page includes 2 sections:
+- [Using datasets from the hub](#using-datasets-from-🤗-hub)
+- [Using your own data](#using-your-own-data).
 
-## Using datasets from 🤗 `datasets`
+
+## Using datasets from 🤗 `Hub`
 
 Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
 
@@ -84,7 +88,7 @@ python run_image_classification.py \
     --do_eval
 ```
 
-Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature which will automatically turn the folders into a 🤗 Dataset object.
+Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature which will automatically turn the folders into 🤗 Dataset objects.
 
 #### 💡 The above will split the train dir into training and evaluation sets
   - To control the split amount, use the `--train_val_split` flag.
@@ -123,7 +127,7 @@ dataset.push_to_hub("name_of_your_dataset", private=True)
 
 and that's it! You can now simply train your model simply by setting the `--dataset_name` argument to the name of your dataset on the hub.
 
-## Sharing your model on 🤗 Hub
+# Sharing your model on 🤗 Hub
 
 0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
 
