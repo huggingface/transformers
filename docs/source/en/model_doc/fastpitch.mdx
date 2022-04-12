@@ -14,17 +14,26 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The FastPitch model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The FastPitch model was proposed in [FASTPITCH: PARALLEL TEXT-TO-SPEECH WITH PITCH PREDICTION](https://arxiv.org/pdf/2006.06873.pdf)  by Adrian Łancucki. 
+What type of model is Fast Pitch? It is a Mel spectrogram generator (part of a speech to text model engine) that mainly comprises of two Feed Forward Transformer stacks.
+Fast Pitch is used to transform text to a spectrogram to be used in wave form generation in speech synthesis.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*
+We present FastPitch, a fully-parallel text-to-speech model
+based on FastSpeech, conditioned on fundamental frequency
+contours. The model predicts pitch contours during inference.
+By altering these predictions, the generated speech can be more expressive, better match the semantic of the utterance, and in the end more engaging to the listener. 
+Uniformly increasing or decreasing pitch with FastPitch generates speech that resembles the voluntary modulation of voice. 
+Conditioning on frequency contours improves the overall quality of synthesized speech, making it comparable to state-of-the-art.
+It does not introduce an overhead, and FastPitch retains the favorable, fully-parallel Transformer architecture, with over 900× real-time factor for mel-spectrogram synthesis of a typical utterance.
+*
 
 Tips:
+To reiterate this is a mel spectrogram generator, to leverage this model in your own TTS Pipeline you will need a vocoder e.g WaveGlow or HifiGan.
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [ArEnSc](<https://huggingface.co/ArEnSc). The original code can be found [here](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/FastPitch).
 
 ## FastPitchConfig
 
