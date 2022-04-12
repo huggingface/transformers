@@ -632,7 +632,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         tokens_to_add = []
         for token in new_tokens:
-            assert isinstance(token, str)
+            if not isinstance(token, str):
+                raise TypeError("tokens should be of type str")
+
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
