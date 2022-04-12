@@ -18,17 +18,22 @@ import json
 import logging
 import math
 import os
-from pickletools import ArgumentDescriptor
-import random
 from pathlib import Path
 
 import datasets
+import torch
 from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
+from torchvision.transforms import (
+    CenterCrop,
+    Compose,
+    Normalize,
+    RandomHorizontalFlip,
+    RandomResizedCrop,
+    Resize,
+    ToTensor,
+)
 from tqdm.auto import tqdm
-
-import torch
-from torchvision.transforms import Compose, Normalize, ToTensor, Resize, CenterCrop, RandomResizedCrop, RandomHorizontalFlip
 
 import transformers
 from accelerate import Accelerator
@@ -36,15 +41,13 @@ from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     AutoConfig,
-    AutoModelForImageClassification,
     AutoFeatureExtractor,
-    PretrainedConfig,
+    AutoModelForImageClassification,
     SchedulerType,
     get_scheduler,
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
-
 
 
 logger = logging.getLogger(__name__)
@@ -60,22 +63,27 @@ def parse_args():
         default="cifar10",
         help="The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private, dataset).",
     )
+    parser.add_argument("--train_dir", type=str, default=None, help="A folder containing the training data.")
+    parser.add_argument("--validation_dir", type=str, default=None, help="A folder containing the validation data.")
     parser.add_argument(
-        "--train_dir", type=str, default=None, help="A folder containing the training data."
+        "--max_train_samples",
+        type=int,
+        default=None,
+        help="For debugging purposes or quicker training, truncate the number of training examples to this "
+        "value if set.",
     )
     parser.add_argument(
-        "--validation_dir", type=str, default=None, help="A folder containing the validation data."
+        "--max_eval_samples",
+        type=int,
+        default=None,
+        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+        "value if set.",
     )
     parser.add_argument(
-        "--max_train_samples", type=int, default=None, help="For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
-    )
-    parser.add_argument(
-        "--max_eval_samples", type=int, default=None, help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
-    )
-    parser.add_argument(
-        "--train_val_split", type=float, default=0.15, help="Percent to split off of train for validation",
+        "--train_val_split",
+        type=float,
+        default=0.15,
+        help="Percent to split off of train for validation",
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -259,7 +267,13 @@ def main():
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=len(labels), i2label=id2label, label2id=label2id, finetuning_task="image-classification")
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path,
+        num_labels=len(labels),
+        i2label=id2label,
+        label2id=label2id,
+        finetuning_task="image-classification",
+    )
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
     model = AutoModelForImageClassification.from_pretrained(
         args.model_name_or_path,
@@ -291,9 +305,7 @@ def main():
 
     def preprocess_train(example_batch):
         """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [
-            train_transforms(image.convert("RGB")) for image in example_batch["image"]
-        ]
+        example_batch["pixel_values"] = [train_transforms(image.convert("RGB")) for image in example_batch["image"]]
         return example_batch
 
     def preprocess_val(example_batch):
@@ -307,9 +319,7 @@ def main():
         # Set the training transforms
         train_dataset = dataset["train"].with_transform(preprocess_train)
         if args.max_eval_samples is not None:
-            dataset["validation"] = (
-                dataset["validation"].shuffle(seed=args.seed).select(range(args.max_eval_samples))
-            )
+            dataset["validation"] = dataset["validation"].shuffle(seed=args.seed).select(range(args.max_eval_samples))
         # Set the validation transforms
         eval_dataset = dataset["validation"].with_transform(preprocess_val)
 
@@ -318,12 +328,12 @@ def main():
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         labels = torch.tensor([example["labels"] for example in examples])
         return {"pixel_values": pixel_values, "labels": labels}
-    
+
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=args.per_device_train_batch_size
     )
     eval_dataloader = DataLoader(eval_dataset, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size)
-    
+
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     no_decay = ["bias", "LayerNorm.weight"]

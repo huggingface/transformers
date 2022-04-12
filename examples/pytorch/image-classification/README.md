@@ -154,3 +154,45 @@ python run_image_classification.py \
     --push_to_hub_model_id <name-your-model> \
     ...
 ```
+
+## PyTorch version, no Trainer
+
+Based on the script [`run_image_classification_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification_no_trainer.py).
+
+Like `run_image_classification.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on an image classification task. The main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+
+It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
+the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
+after installing it:
+
+```bash
+pip install accelerate
+```
+
+You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you can launch training with
+
+```bash
+accelerate launch run_image_classification_trainer.py
+```
+
+This command is the same and will work for:
+
+- a CPU-only setup
+- a setup with one GPU
+- a distributed training with several GPUs (single or multi node)
+- a training on TPUs
+
+Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
