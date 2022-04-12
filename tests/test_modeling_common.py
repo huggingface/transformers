@@ -1686,7 +1686,7 @@ class ModelTesterMixin:
         if tf_loss is not None:
             tf_outputs.loss = tf.math.reduce_mean(tf_loss)
 
-        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
+        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
