@@ -761,6 +761,7 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
             )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
+        # `LogitNormalization` should always be the last logit processor, when present
         if renormalize_logits is True:
             processors.append(LogitNormalization())
         return processors
