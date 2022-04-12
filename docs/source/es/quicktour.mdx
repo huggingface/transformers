@@ -118,9 +118,9 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
 
 ```py
->>> import datasets
+>>> from datasets import load_dataset, Audio
 
->>> dataset = datasets.load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
 Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coincide con la frecuencia de muestreo con la que se entrenó `facebook/wav2vec2-base-960h`.
