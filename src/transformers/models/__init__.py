@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    fastpitch,
     albert,
     auto,
     bart,

@@ -117,6 +117,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.fastpitch": ["FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastPitchConfig", "FastPitchTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -440,6 +441,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.fastpitch"].append("FastPitchTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -641,6 +643,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.fastpitch"].extend(
+        [
+            "FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastPitchForMaskedLM",
+            "FastPitchForCausalLM",
+            "FastPitchForMultipleChoice",
+            "FastPitchForQuestionAnswering",
+            "FastPitchForSequenceClassification",
+            "FastPitchForTokenClassification",
+            "FastPitchLayer",
+            "FastPitchModel",
+            "FastPitchPreTrainedModel",
+            "load_tf_weights_in_fastpitch",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2509,6 +2527,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.fastpitch import FASTPITCH_PRETRAINED_CONFIG_ARCHIVE_MAP, FastPitchConfig, FastPitchTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2801,6 +2820,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.fastpitch import FastPitchTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2911,6 +2931,20 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.fastpitch import (
+            FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastPitchForMaskedLM,
+            FastPitchForCausalLM,
+            FastPitchForMultipleChoice,
+            FastPitchForQuestionAnswering,
+            FastPitchForSequenceClassification,
+            FastPitchForTokenClassification,
+            FastPitchLayer,
+            FastPitchModel,
+            FastPitchPreTrainedModel,
+            load_tf_weights_in_fastpitch,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
