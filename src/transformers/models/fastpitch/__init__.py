@@ -33,16 +33,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_fastpitch"] = [
         "FASTPITCH_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FastPitchForMaskedLM",
-        "FastPitchForCausalLM",
-        "FastPitchForMultipleChoice",
-        "FastPitchForQuestionAnswering",
-        "FastPitchForSequenceClassification",
-        "FastPitchForTokenClassification",
-        "FastPitchLayer",
         "FastPitchModel",
         "FastPitchPreTrainedModel",
-        "load_tf_weights_in_fastpitch",
     ]
 
 
