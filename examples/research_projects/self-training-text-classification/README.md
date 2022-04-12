@@ -1,6 +1,6 @@
 # Self-training
 
-This is an implementation of the self-training algorithm (without task augmentation) in the [EMNLP 2021](https://2021.emnlp.org/) paper: [STraTA: Self-Training with Task Augmentation for Better Few-shot Learning](https://arxiv.org/abs/2109.06270).
+This is an implementation of the self-training algorithm (without task augmentation) in the [EMNLP 2021](https://2021.emnlp.org/) paper: [STraTA: Self-Training with Task Augmentation for Better Few-shot Learning](https://arxiv.org/abs/2109.06270). Please check out https://github.com/google-research/google-research/tree/master/STraTA for the original codebase.
 
 **Note**: The code can be used as a tool for automatic data labeling.
 
@@ -11,7 +11,6 @@ This is an implementation of the self-training algorithm (without task augmentat
       * [Running self-training with a base model](#running-self-training-with-a-base-model)
       * [Hyperparameters for self-training](#hyperparameters-for-self-training)
       * [Distributed training](#distributed-training)
-      * [Practical recommendations](#practical-recommendations)
    * [Demo](#demo)
    * [How to cite](#how-to-cite)
 
