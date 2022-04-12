@@ -1231,10 +1231,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
-
-        >>> embedding_layer = model.resize_token_embeddings(
-        ...     len(tokenizer)
-        >>> )  # Update the model embeddings with the new vocabulary size
+        >>> # Update the model embeddings with the new vocabulary size
+        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]
@@ -1350,6 +1348,8 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         checkpoint="microsoft/DialogRPT-updown",
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_0'",
+        expected_loss=5.28,
     )
     def forward(
         self,
@@ -1477,12 +1477,16 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    # fmt: off
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
+        checkpoint="brad1141/gpt2-finetuned-comp2",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=0.25,
+        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
     )
+    # fmt: on
     def forward(
         self,
         input_ids=None,
