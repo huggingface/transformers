@@ -638,7 +638,7 @@ if is_torch_available():
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
     _import_structure["models.albert"].extend(
@@ -1693,7 +1693,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
-    _import_structure["pytorch_utils"] = []
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
     _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -2956,7 +2956,7 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
         )
         from .generation_utils import top_k_top_p_filtering
-        from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
+        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -3831,6 +3831,7 @@ if TYPE_CHECKING:
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
         )
+        from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
         # Trainer
         from .trainer import Trainer
