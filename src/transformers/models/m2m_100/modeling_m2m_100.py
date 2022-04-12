@@ -830,8 +830,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                         output_attentions=output_attentions,
                     )
 
-                if not skip_the_layer:
-                    hidden_states = layer_outputs[0]
+                hidden_states = layer_outputs[0]
 
             if skip_the_layer:
                 layer_outputs = (None, None)
@@ -1084,8 +1083,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         use_cache=use_cache,
                     )
 
-                if not skip_the_layer:
-                    hidden_states = layer_outputs[0]
+                hidden_states = layer_outputs[0]
 
             if skip_the_layer:
                 continue
