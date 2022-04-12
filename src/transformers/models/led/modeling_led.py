@@ -67,7 +67,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -150,12 +151,10 @@ class LEDEncoderSelfAttention(nn.Module):
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}")
+        if attention_window <= 0:
+            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}")
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -187,9 +186,8 @@ class LEDEncoderSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        if embed_dim == self.embed_dim:
+            raise ValueError(f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}")
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -216,12 +214,13 @@ class LEDEncoderSelfAttention(nn.Module):
         # pad local attention probs
         attn_scores += diagonal_mask
 
-        assert list(attn_scores.size()) == [
+        if list(attn_scores.size()) != [
             batch_size,
             seq_len,
             self.num_heads,
             self.one_sided_attn_window_size * 2 + 1,
-        ], f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        ]:
+            raise ValueError(f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}")
 
         # compute local attention probs from global attention keys and contact over window dim
         if is_global_attn:
@@ -254,9 +253,8 @@ class LEDEncoderSelfAttention(nn.Module):
         )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != self.num_heads:
+                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
             attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -287,7 +285,8 @@ class LEDEncoderSelfAttention(nn.Module):
                 attn_probs, value_vectors, self.one_sided_attn_window_size
             )
 
-        assert attn_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
+        if attn_output.size() != (batch_size, seq_len, self.num_heads, self.head_dim):
+            raise ValueError("Unexpected size")
         attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
 
         # compute value for global attention and overwrite to attention output
@@ -423,10 +422,10 @@ class LEDEncoderSelfAttention(nn.Module):
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
-        assert (
-            seq_len % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
-        assert query.size() == key.size()
+        if seq_len % (window_overlap * 2) != 0:
+            raise ValueError(f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}")
+        if query.size() != key.size():
+            raise ValueError(f"query size {query.size()} and key size {key.size()} do not match.")
 
         chunks_count = seq_len // window_overlap - 1
 
@@ -657,11 +656,12 @@ class LEDEncoderSelfAttention(nn.Module):
         # compute attn scores
         global_attn_scores = torch.bmm(global_query_vectors_only_global, global_key_vectors.transpose(1, 2))
 
-        assert list(global_attn_scores.size()) == [
+        if list(global_attn_scores.size()) != [
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             seq_len,
-        ], f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}."
+        ]:
+            raise ValueError(f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}.")
 
         global_attn_scores = global_attn_scores.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -683,9 +683,8 @@ class LEDEncoderSelfAttention(nn.Module):
 
         # apply layer head masking
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != self.num_heads:
+                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
             global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
                 batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
@@ -700,11 +699,12 @@ class LEDEncoderSelfAttention(nn.Module):
         # global attn output
         global_attn_output = torch.bmm(global_attn_probs, global_value_vectors)
 
-        assert list(global_attn_output.size()) == [
+        if list(global_attn_output.size()) != [
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             self.head_dim,
-        ], f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
+        ]:
+            raise ValueError(f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}.")
 
         global_attn_probs = global_attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
         global_attn_output = global_attn_output.view(
@@ -763,9 +763,8 @@ class LEDDecoderAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads}).")
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
@@ -833,27 +832,28 @@ class LEDDecoderAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
+        if attn_weights.size() != (
             bsz * self.num_heads,
             tgt_len,
             src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        ):
+            raise ValueError(f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}")
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
+            if attention_mask.size() != (
                 bsz,
                 1,
                 tgt_len,
                 src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            ):
+                raise ValueError(f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}")
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != self.num_heads:
+                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -871,11 +871,12 @@ class LEDDecoderAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
+        if attn_output.size() != (
             bsz * self.num_heads,
             tgt_len,
             self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        ):
+            raise ValueError(f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}")
 
         attn_output = (
             attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1615,11 +1616,14 @@ class LEDEncoder(LEDPreTrainedModel):
         self.max_source_positions = config.max_encoder_position_embeddings
 
         if isinstance(config.attention_window, int):
-            assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
-            assert config.attention_window > 0, "`config.attention_window` has to be positive"
+            if config.attention_window % 2 != 0:
+                raise ValueError("`config.attention_window` has to be an even value")
+            if config.attention_window <= 0:
+                raise ValueError("`config.attention_window` has to be positive")
             config.attention_window = [config.attention_window] * config.num_hidden_layers  # one value per layer
         else:
-            assert len(config.attention_window) == config.num_hidden_layers, (
+            if len(config.attention_window) != config.num_hidden_layers:
+                raise ValueError(
                 "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
                 f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
             )
@@ -1667,7 +1671,8 @@ class LEDEncoder(LEDPreTrainedModel):
             else max(self.config.attention_window)
         )
 
-        assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(f"`attention_window` should be an even value. Given {attention_window}")
         input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
         batch_size, seq_len = input_shape[:2]
 
@@ -1810,9 +1815,8 @@ class LEDEncoder(LEDPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -2065,9 +2069,8 @@ class LEDDecoder(LEDPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}.")
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
