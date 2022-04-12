@@ -357,7 +357,7 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if args.config_name:
-        config = AutoConfig.from_pretrained(args.model_name_or_path)
+        config = AutoConfig.from_pretrained(args.config_name)
     elif args.model_name_or_path:
         config = AutoConfig.from_pretrained(args.model_name_or_path)
     else:
