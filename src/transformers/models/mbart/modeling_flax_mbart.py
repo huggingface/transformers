@@ -226,7 +226,8 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray
     """
     prev_output_tokens = np.array(input_ids).copy()
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
 
     # replace possible -100 values in labels by `pad_token_id`
     prev_output_tokens = np.where(prev_output_tokens == -100, pad_token_id, input_ids)
