@@ -440,7 +440,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
         return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
 
     @add_start_docstrings(SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
