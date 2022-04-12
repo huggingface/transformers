@@ -525,7 +525,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             return None
 
         # mems is not None
-        assert len(hids) == len(mems), "len(hids) != len(mems)"
+        if len(hids) != len(mems):
+            raise ValueError("len(hids) != len(mems)")
 
         # There are `mlen + qlen` steps that can be cached into mems
         new_mems = []
@@ -935,9 +936,8 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
         self.sample_softmax = config.sample_softmax
-        assert (
-            self.sample_softmax <= 0
-        ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+        if self.sample_softmax > 0:
+            raise ValueError("Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310")
 
         self.crit = TFAdaptiveSoftmaxMask(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
@@ -1135,9 +1135,8 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 batch_size, sequence_length = shape_list(input_ids)[:2]
             else:
                 batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            assert (
-                self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and batch_size != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]
