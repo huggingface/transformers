@@ -340,7 +340,8 @@ def convert_pt_checkpoint_to_tf(
         np_tf = tfo[0].numpy()
         diff = np.amax(np.abs(np_pt - np_tf))
         print(f"Max absolute difference between models outputs {diff}")
-        assert diff <= 2e-2, f"Error, model absolute difference is >2e-2: {diff}"
+        if diff > 2e-2:
+            raise ValueError(f"Error, model absolute difference is >2e-2: {diff}")
 
     # Save pytorch-model
     print(f"Save TensorFlow model to {tf_dump_path}")
