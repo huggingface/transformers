@@ -76,7 +76,12 @@ class DataTrainingArguments:
     them on the command line.
     """
 
-    dataset_name: Optional[str] = field(metadata={"help": "Name of a dataset from the hub."})
+    dataset_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
+        },
+    )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
