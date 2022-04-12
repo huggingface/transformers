@@ -891,9 +891,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        if getattr(self.config, "tie_word_embeddings", True):
+            output_embeddings = self.get_output_embeddings()
+            if output_embeddings is not None:
+                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
@@ -1792,7 +1793,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
-            if not is_sharded:
+            if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
             # set dtype to instantiate the model under:
@@ -2162,13 +2163,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # materialize state_dict entries one by one on CPU
             for k in loaded_state_dict_keys:
-                submodule, param_name = find_submodule_and_param_name(model, k)
-                if submodule is not None:
-                    param_dtype = getattr(submodule, param_name).dtype
-                    new_val = state_dict[k].to(param_dtype)
-                    if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                        new_val = torch.nn.Parameter(new_val)
-                    setattr(submodule, param_name, new_val)
+                if k in state_dict:
+                    submodule, param_name = find_submodule_and_param_name(model, k)
+                    if submodule is not None:
+                        param_dtype = getattr(submodule, param_name).dtype
+                        new_val = state_dict[k].to(param_dtype)
+                        if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                            new_val = torch.nn.Parameter(new_val)
+                        setattr(submodule, param_name, new_val)
 
             del state_dict
 

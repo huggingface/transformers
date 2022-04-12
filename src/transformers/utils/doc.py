@@ -207,7 +207,8 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = torch.tensor([14]), torch.tensor([15])
+    >>> target_start_index = torch.tensor([{qa_target_start_index}])
+    >>> target_end_index = torch.tensor([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = outputs.loss
@@ -667,7 +668,8 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
+    >>> target_start_index = tf.constant([{qa_target_start_index}])
+    >>> target_end_index = tf.constant([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = tf.math.reduce_mean(outputs.loss)
@@ -721,9 +723,10 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> logits = model(**inputs).logits
 
     >>> # retrieve index of {mask}
-    >>> mask_token_index = tf.where(inputs.input_ids == tokenizer.mask_token_id)[0][1]
+    >>> mask_token_index = tf.where((inputs.input_ids == tokenizer.mask_token_id)[0])
+    >>> selected_logits = tf.gather_nd(logits[0], indices=mask_token_index)
 
-    >>> predicted_token_id = tf.math.argmax(logits[0, mask_token_index], axis=-1)
+    >>> predicted_token_id = tf.math.argmax(selected_logits, axis=-1)
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
     ```
@@ -1054,6 +1057,8 @@ def add_code_sample_docstrings(
     output_type=None,
     config_class=None,
     mask="[MASK]",
+    qa_target_start_index=14,
+    qa_target_end_index=15,
     model_cls=None,
     modality=None,
     expected_output="",
@@ -1078,6 +1083,8 @@ def add_code_sample_docstrings(
             processor_class=processor_class,
             checkpoint=checkpoint,
             mask=mask,
+            qa_target_start_index=qa_target_start_index,
+            qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
         )

@@ -890,7 +890,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -1100,7 +1099,7 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     is_encoder_decoder = False
 
@@ -1128,7 +1127,7 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
 class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetEncoder,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     is_encoder_decoder = False
 
