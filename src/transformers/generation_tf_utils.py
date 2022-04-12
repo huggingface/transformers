@@ -968,7 +968,9 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
+                )
 
             if bad_words_ids is not None:
                 # calculate a list of banned tokens according to bad words
@@ -980,7 +982,9 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
+                )
 
             assert shape_list(scores) == [batch_size * num_beams, vocab_size]
 
