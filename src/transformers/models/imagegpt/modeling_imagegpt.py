@@ -136,11 +136,8 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         if len(name) > 1 and name[1] == "attn" or name[-1] == "wtet" or name[-1] == "sos" or name[-1] == "wte":
             pass  # array is used to initialize only part of the pointer so sizes won't match
         else:
-            try:
-                assert pointer.shape == array.shape
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
 
         logger.info("Initialize PyTorch weight {}".format(name))
 
