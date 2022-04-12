@@ -168,9 +168,8 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.num_attention_heads = num_attention_heads
         self.conv_kernel_size = config.conv_kernel_size
 
-        assert (
-            config.hidden_size % self.num_attention_heads == 0
-        ), "hidden_size should be divisible by num_attention_heads"
+        if config.hidden_size % self.num_attention_heads != 0:
+            raise ValueError("hidden_size should be divisible by num_attention_heads")
 
         self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size

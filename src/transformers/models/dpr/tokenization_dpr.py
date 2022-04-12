@@ -234,9 +234,10 @@ class CustomDPRReaderTokenizerMixin:
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
         questions = questions if not isinstance(questions, str) else [questions] * n_passages
-        assert len(titles) == len(
-            texts
-        ), f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+        if len(titles) != len(texts):
+            raise ValueError(
+                f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+            )
         encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {
@@ -347,9 +348,11 @@ class CustomDPRReaderTokenizerMixin:
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []
         for (start_index, end_index), score in scores:
-            assert start_index <= end_index, f"Wrong span indices: [{start_index}:{end_index}]"
+            if start_index > end_index:
+                raise ValueError(f"Wrong span indices: [{start_index}:{end_index}]")
             length = end_index - start_index + 1
-            assert length <= max_answer_length, f"Span is too long: {length} > {max_answer_length}"
+            if length > max_answer_length:
+                raise ValueError(f"Span is too long: {length} > {max_answer_length}")
             if any(
                 [
                     start_index <= prev_start_index <= prev_end_index <= end_index

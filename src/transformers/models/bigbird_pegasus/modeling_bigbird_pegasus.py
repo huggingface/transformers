@@ -83,7 +83,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -287,8 +288,11 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         to_seq_length = from_seq_length = seqlen
         from_block_size = to_block_size = self.block_size
 
-        assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
-        assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
+        if from_seq_length % from_block_size != 0:
+            raise ValueError("Query sided sequence length must be multiple of block size")
+
+        if to_seq_length % to_block_size != 0:
+            raise ValueError("Key/Value sided sequence length must be multiple of block size")
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -904,9 +908,8 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
@@ -980,11 +983,11 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length not in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
-        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
+        if from_seq_length not in plan_from_length:
+            raise ValueError("Error from sequence length not in plan!")
 
         # Total number of blocks in the mmask
         num_blocks = from_seq_length // from_block_size
@@ -1914,9 +1917,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1997,9 +2001,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
-        assert (
-            seq_length % block_size == 0
-        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+            )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -2242,9 +2247,10 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:

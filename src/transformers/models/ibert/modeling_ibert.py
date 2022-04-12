@@ -228,9 +228,8 @@ class IBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        assert (
-            self.position_embedding_type == "absolute"
-        ), "I-BERT only supports 'absolute' for `config.position_embedding_type`"
+        if self.position_embedding_type != "absolute":
+            raise ValueError("I-BERT only supports 'absolute' for `config.position_embedding_type`")
 
         self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant)
 
@@ -429,7 +428,8 @@ class IBertIntermediate(nn.Module):
             quant_mode=self.quant_mode,
             per_channel=True,
         )
-        assert config.hidden_act == "gelu", "I-BERT only supports 'gelu' for `config.hidden_act`"
+        if config.hidden_act != "gelu":
+            raise ValueError("I-BERT only supports 'gelu' for `config.hidden_act`")
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode, force_dequant=config.force_dequant)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 

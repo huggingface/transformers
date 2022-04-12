@@ -412,7 +412,8 @@ class DetrSinePositionEmbedding(nn.Module):
         self.scale = scale
 
     def forward(self, pixel_values, pixel_mask):
-        assert pixel_mask is not None, "No pixel mask provided"
+        if pixel_mask is None:
+            raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
@@ -486,9 +487,10 @@ class DetrAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1254,7 +1256,8 @@ class DetrModel(DetrPreTrainedModel):
         # get final feature map and downsampled mask
         feature_map, mask = features[-1]
 
-        assert mask is not None, "Backbone does not return downsampled pixel mask"
+        if mask is None:
+            raise ValueError("Backbone does not return downsampled pixel mask")
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         projected_feature_map = self.input_projection(feature_map)
@@ -1709,9 +1712,10 @@ class DetrMaskHeadSmallConv(nn.Module):
     def __init__(self, dim, fpn_dims, context_dim):
         super().__init__()
 
-        assert (
-            dim % 8 == 0
-        ), "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+        if dim % 8 != 0:
+            raise ValueError(
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+            )
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
 
@@ -1897,7 +1901,8 @@ class DetrLoss(nn.Module):
         Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
         [nb_target_boxes]
         """
-        assert "logits" in outputs, "No logits were found in the outputs"
+        if "logits" not in outputs:
+            raise KeyError("No logits were found in the outputs")
         src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
@@ -1935,7 +1940,8 @@ class DetrLoss(nn.Module):
         Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
         are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
-        assert "pred_boxes" in outputs, "No predicted boxes found in outputs"
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
@@ -1957,7 +1963,8 @@ class DetrLoss(nn.Module):
 
         Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
         """
-        assert "pred_masks" in outputs, "No predicted masks found in outputs"
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
 
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
@@ -2002,7 +2009,8 @@ class DetrLoss(nn.Module):
             "boxes": self.loss_boxes,
             "masks": self.loss_masks,
         }
-        assert loss in loss_map, f"Loss {loss} not supported"
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
@@ -2097,7 +2105,8 @@ class DetrHungarianMatcher(nn.Module):
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        assert class_cost != 0 or bbox_cost != 0 or giou_cost != 0, "All costs of the Matcher can't be 0"
+        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
     def forward(self, outputs, targets):

@@ -130,13 +130,8 @@ def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
             array = np.transpose(array)
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
+        if pointer.shape != array.shape:
+            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
@@ -425,7 +420,8 @@ class MegatronBertLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = MegatronBertAttention(config)
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.intermediate = MegatronBertIntermediate(config)
@@ -461,9 +457,10 @@ class MegatronBertLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise AttributeError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -1354,7 +1351,8 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        if self.config.pad_token_id is None:
+            raise ValueError("The PAD token should be defined for generation")
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device

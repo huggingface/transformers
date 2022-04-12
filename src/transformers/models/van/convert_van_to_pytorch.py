@@ -139,7 +139,8 @@ def convert_weight_and_push(
         module_transfer(x)
         our_model = copy_parameters(from_model, our_model)
 
-    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+    if not torch.allclose(from_model(x), our_model(x).logits):
+        raise ValueError("The model logits don't match the original one.")
 
     checkpoint_name = name
     print(checkpoint_name)
