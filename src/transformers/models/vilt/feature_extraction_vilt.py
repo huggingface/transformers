@@ -14,8 +14,8 @@
 # limitations under the License.
 """Feature extractor class for ViLT."""
 
-from typing import List, Optional, Union
 import warnings
+from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
