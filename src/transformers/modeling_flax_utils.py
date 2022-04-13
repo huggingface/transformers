@@ -666,16 +666,16 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # raise a warning if any of the parameters are not in jnp.float32
         if len(fp16_params) > 0:
             logger.warning(
-                f"Some of the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"in float16 precision:\n{fp16_params}\n"
+                f"Some of the weights of {model.__class__.__name__} were initialized in float16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{fp16_params}\n"
                 "You should probably UPCAST the model weights to float32 if this was not intended. "
                 "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
 
         if len(bf16_params) > 0:
             logger.warning(
-                f"Some of the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"in bfloat16 precision:\n{bf16_params}\n"
+                f"Some of the weights of {model.__class__.__name__} were initialized in bfloat16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{bf16_params}\n"
                 "You should probably UPCAST the model weights to float32 if this was not intended. "
                 "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
