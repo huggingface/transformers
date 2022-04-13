@@ -26,7 +26,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         
         # TODO design a test that loads both tokenizers and gets a dataset from datasets to compare the tokenizations
         
-        This code is not device agnostic --> figure out what to do?
+        This code is not device agnostic --> figure out what to do? / for now I am adding some decorators to check whether the data/tokenizers exists
     """
 
     def setUp(self):
