@@ -75,9 +75,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    assert (
-        hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+    if hf_shape == value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+        )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -147,28 +148,32 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -188,41 +193,47 @@ def load_adapter(full_name, value, adapter, unused_weights):
         if "proj_ln" in full_name:
             # has to be layer norm
             if "bias" in name:
-                assert (
-                    value.shape == adapter.proj_layer_norm.bias.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.bias.data.shape} was found."
+                if value.shape != adapter.proj_layer_norm.bias.data.shape:
+                    raise ValueError(
+                        f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.bias.data.shape} was found."
+                    )
                 adapter.proj_layer_norm.bias.data = value
                 logger.info(f"Adapter proj layer norm bias was initialized from {full_name}.")
             if "weight" in name:
-                assert (
-                    value.shape == adapter.proj_layer_norm.weight.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.weight.data.shape} was found."
+                if value.shape != adapter.proj_layer_norm.weight.data.shape:
+                    raise ValueError(
+                        f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.weight.data.shape} was found."
+                    )
                 adapter.proj_layer_norm.weight.data = value
         else:
             # has to be projection layer
             if "bias" in name:
-                assert (
-                    value.shape == adapter.proj.bias.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj.bias.data.shape} was found."
+                if value.shape != adapter.proj.bias.data.shape:
+                    raise ValueError(
+                        f"{full_name} has size {value.shape}, but {adapter.proj.bias.data.shape} was found."
+                    )
                 adapter.proj.bias.data = value
                 logger.info(f"Adapter proj layer bias was initialized from {full_name}.")
             if "weight" in name:
-                assert (
-                    value.shape == adapter.proj.weight.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj.weight.data.shape} was found."
+                if value.shape != adapter.proj.weight.data.shape:
+                    raise ValueError(
+                        f"{full_name} has size {value.shape}, but {adapter.proj.weight.data.shape} was found."
+                    )
                 adapter.proj.weight.data = value
                 logger.info(f"Adapter proj layer weight was initialized from {full_name}.")
     elif isinstance(layer_id, int):
         if "bias" in name:
-            assert (
-                value.shape == adapter.layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.bias.data.shape} was found."
+            if value.shape != adapter.layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.bias.data.shape} was found."
+                )
             adapter.layers[layer_id].conv.bias.data = value
             logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == adapter.layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.weight.data.shape} was found."
+            if value.shape != adapter.layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.weight.data.shape} was found."
+                )
             adapter.layers[layer_id].conv.weight.data = value
             logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
     else:

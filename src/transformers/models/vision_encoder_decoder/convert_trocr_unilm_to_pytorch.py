@@ -212,8 +212,11 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         )
 
     if "stage1" not in checkpoint_url:
-        assert logits.shape == expected_shape, "Shape of logits not as expected"
-        assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
+        if logits.shape != expected_shape:
+            raise ValueError("Shape of logits not as expected")
+
+        if not torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3):
+            raise ValueError("First elements of logits not as expected")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")

@@ -111,7 +111,8 @@ class LegacyIndex(Index):
         self._index_initialized = False
 
     def _resolve_path(self, index_path, filename):
-        assert os.path.isdir(index_path) or is_remote_url(index_path), "Please specify a valid `index_path`."
+        if not os.path.isdir(index_path) and not is_remote_url(index_path):
+            raise FileNotFoundError("Please specify a valid `index_path`.")
         archive_file = os.path.join(index_path, filename)
         try:
             # Load from URL or cache if already cached
@@ -143,9 +144,8 @@ class LegacyIndex(Index):
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
         with open(resolved_meta_path, "rb") as metadata_file:
             self.index_id_to_db_id = pickle.load(metadata_file)
-        assert (
-            len(self.index_id_to_db_id) == self.index.ntotal
-        ), "Deserialized index_id_to_db_id should match faiss index size"
+        if len(self.index_id_to_db_id) != self.index.ntotal:
+            raise ValueError("Deserialized index_id_to_db_id should match faiss index size")
 
     def is_initialized(self):
         return self._index_initialized

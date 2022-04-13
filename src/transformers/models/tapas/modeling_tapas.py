@@ -1332,9 +1332,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        labels.shape[0] == float_answer.shape[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    if labels.shape[0] != float_answer.shape[0]:
+                        raise ValueError("Make sure the answers are a FloatTensor of shape (batch_size,)")
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1384,9 +1383,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            labels.shape[0] == aggregation_labels.shape[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        if labels.shape[0] != aggregation_labels.shape[0]:
+                            raise ValueError(
+                                "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                            )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
@@ -1413,7 +1413,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
                 if self.config.use_answer_as_supervision:
                     if numeric_values is not None and numeric_values_scale is not None:
-                        assert numeric_values.shape == numeric_values_scale.shape
+                        if numeric_values.shape != numeric_values_scale.shape:
+                            raise ValueError("numeric_values and numeric_values_scale must be of the same shape.")
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
                             float_answer,
@@ -1744,9 +1745,11 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     batch_shape = torch.as_tensor(
         batch_shape, dtype=torch.long
     )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
-    assert len(batch_shape.size()) == 1
+    if len(batch_shape.size()) != 1:
+        raise ValueError("batch_shape must be a rank 1 tensor vector.")
     num_segments = torch.as_tensor(num_segments)  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
-    assert len(num_segments.size()) == 0
+    if len(num_segments.size()) != 0:
+        raise ValueError("num_segments must be a rank 0 tensor.")
 
     indices = torch.arange(
         start=0, end=num_segments, device=num_segments.device

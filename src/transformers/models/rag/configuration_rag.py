@@ -125,9 +125,8 @@ class RagConfig(PretrainedConfig):
             vocab_size=vocab_size,
             **kwargs,
         )
-        assert (
-            "question_encoder" in kwargs and "generator" in kwargs
-        ), "Config has to be initialized with question_encoder and generator config"
+        if "question_encoder" not in kwargs or "generator" not in kwargs:
+            raise KeyError("Config has to be initialized with question_encoder and generator config")
         question_encoder_config = kwargs.pop("question_encoder")
         question_encoder_model_type = question_encoder_config.pop("model_type")
         decoder_config = kwargs.pop("generator")

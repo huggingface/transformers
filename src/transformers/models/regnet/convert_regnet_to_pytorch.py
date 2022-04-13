@@ -106,7 +106,8 @@ class FakeRegNetVisslWrapper(nn.Module):
         feature_blocks.append(("conv1", model.stem))
         # - get all the feature blocks
         for k, v in model.trunk_output.named_children():
-            assert k.startswith("block"), f"Unexpected layer name {k}"
+            if not k.startswith("block"):
+                raise ValueError(f"Unexpected layer name {k}")
             block_index = len(feature_blocks) + 1
             feature_blocks.append((f"res{block_index}", v))
 
@@ -197,7 +198,8 @@ def convert_weight_and_push(
     if "seer" in name and "in1k" in name:
         our_output = our_outputs.hidden_states[-1]
 
-    assert torch.allclose(from_output, our_output), "The model logits don't match the original one."
+    if not torch.allclose(from_output, our_output):
+        raise ValueError("The model logits don't match the original one.")
 
     if push_to_hub:
         our_model.push_to_hub(

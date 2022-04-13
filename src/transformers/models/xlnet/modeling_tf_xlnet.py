@@ -641,9 +641,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # data mask: input mask & perm mask
         if input_mask is not None and attention_mask is not None:
             raise ValueError(
-            "You can only use one of input_mask (uses 1 for padding) "
-            "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
-        )
+                "You can only use one of input_mask (uses 1 for padding) "
+                "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
+            )
         if input_mask is None and attention_mask is not None:
             one_cst = tf.constant(1.0)
             input_mask = 1.0 - tf.cast(attention_mask, dtype=one_cst.dtype)

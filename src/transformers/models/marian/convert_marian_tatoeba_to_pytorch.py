@@ -56,7 +56,8 @@ class TatoebaConverter:
     """
 
     def __init__(self, save_dir="marian_converted"):
-        assert Path(DEFAULT_REPO).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
+        if not Path(DEFAULT_REPO).exists():
+            raise FileNotFoundError("need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git")
         self.download_lang_info()
         self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json"))
         self.alpha3_to_alpha2 = {}
@@ -98,7 +99,8 @@ class TatoebaConverter:
 
     def get_tags(self, code, name):
         if len(code) == 2:
-            assert "languages" not in name, f"{code}: {name}"
+            if "languages" in name:
+                raise KeyError(f"{code}: {name}")
             return [code]
         elif self.is_group(code, name):
             group = self.expand_group_to_two_letter_codes(code)
@@ -135,7 +137,8 @@ class TatoebaConverter:
         """
         model_dir_url = f"{TATOEBA_MODELS_URL}/{model_dict['release']}"
         long_pair = model_dict["_name"].split("-")
-        assert len(long_pair) == 2, f"got a translation pair {model_dict['_name']} that doesn't appear to be a pair"
+        if len(long_pair) != 2:
+            raise ValueError(f"got a translation pair {model_dict['_name']} that doesn't appear to be a pair")
         short_src = self.alpha3_to_alpha2.get(long_pair[0], long_pair[0])
         short_tgt = self.alpha3_to_alpha2.get(long_pair[1], long_pair[1])
         model_dict["_hf_model_id"] = f"opus-mt-{short_src}-{short_tgt}"

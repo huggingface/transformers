@@ -323,9 +323,10 @@ class TFT5Attention(tf.keras.layers.Layer):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
+                )
             real_seq_length += shape_list(past_key_value[0])[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else shape_list(key_value_states)[1]
@@ -541,7 +542,8 @@ class TFT5Block(tf.keras.layers.Layer):
     ):
 
         if past_key_value is not None:
-            assert self.is_decoder, "Only decoder can use `past_key_values`"
+            if not self.is_decoder:
+                raise TypeError("Only decoder can use `past_key_values`")
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
@@ -671,7 +673,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
+            if self.embed_tokens is None:
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -899,15 +902,17 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
+            )
 
         start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
         start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
         shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
             shifted_input_ids == -100,
@@ -1582,8 +1587,10 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     tf.gather(layer_past_state, beam_idx, axis=0),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+            if reordered_layer_past_states[0].shape == layer_past_states[0].shape:
+                raise ValueError("reordered_layer_past_states[0].shape != layer_past_states[0].shape")
+            if len(reordered_layer_past_states) != len(layer_past_states):
+                raise ValueError("len(reordered_layer_past_states) != len(layer_past_states)")
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past

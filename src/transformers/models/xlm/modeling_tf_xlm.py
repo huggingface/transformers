@@ -107,7 +107,10 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     # assert shape_list(mask) == [bs, slen]
     if tf.executing_eagerly():
         tf.debugging.assert_equal(shape_list(mask), [bs, slen])
-        assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+        if causal is True and shape_list(attn_mask) != [bs, slen, slen]:
+            raise ValueError(
+                f"If causal is True, attn_mask must be of shape {(bs, slen, slen)}, got {shape_list(attn_mask)}."
+            )
 
     return mask, attn_mask
 
@@ -121,7 +124,8 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         self.dim = dim
         self.n_heads = n_heads
         self.output_attentions = config.output_attentions
-        assert self.dim % self.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError("dim must be divisible by n_heads.")
 
         self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
         self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")

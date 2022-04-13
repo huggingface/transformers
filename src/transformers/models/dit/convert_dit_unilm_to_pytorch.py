@@ -181,7 +181,8 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     # verify logits
     expected_shape = [1, 16] if "rvlcdip" in checkpoint_url else [1, 196, 8192]
-    assert logits.shape == torch.Size(expected_shape), "Shape of logits not as expected"
+    if logits.shape != torch.Size(expected_shape):
+        raise ValueError("Shape of logits not as expected")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")

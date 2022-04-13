@@ -299,11 +299,12 @@ class SqueezeBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        assert config.embedding_size == config.hidden_size, (
-            "If you want embedding_size != intermediate hidden_size, "
-            "please insert a Conv1d layer to adjust the number of channels "
-            "before the first SqueezeBertModule."
-        )
+        if config.embedding_size != config.hidden_size:
+            raise ValueError(
+                "If you want embedding_size != intermediate hidden_size, "
+                "please insert a Conv1d layer to adjust the number of channels "
+                "before the first SqueezeBertModule."
+            )
 
         self.layers = nn.ModuleList(SqueezeBertModule(config) for _ in range(config.num_hidden_layers))
 
@@ -323,7 +324,8 @@ class SqueezeBertEncoder(nn.Module):
             head_mask_is_all_none = True
         else:
             head_mask_is_all_none = False
-        assert head_mask_is_all_none is True, "head_mask is not yet supported in the SqueezeBert implementation."
+        if head_mask_is_all_none is False:
+            raise ValueError("head_mask is not yet supported in the SqueezeBert implementation.")
 
         # [batch_size, sequence_length, hidden_size] --> [batch_size, hidden_size, sequence_length]
         hidden_states = hidden_states.permute(0, 2, 1)

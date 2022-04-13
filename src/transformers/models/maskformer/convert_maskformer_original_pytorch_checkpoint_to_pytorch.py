@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
+from xml.dom import ValidationErr
 
 import torch
 import torchvision.transforms as T
@@ -584,17 +585,17 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_e
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
 
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-3
-            ), "The backbone features are not the same."
+            if not torch.allclose(original_model_feature, our_model_feature, atol=1e-3):
+                raise ValueError("The backbone features are not the same.")
 
         original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
         )
 
-        assert torch.allclose(
+        if not torch.allclose(
             original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4
-        ), "The pixel decoder feature are not the same"
+        ):
+            raise ValueError("The pixel decoder feature are not the same")
 
         # let's test the full model
         original_model_out = original_model([{"image": x.squeeze(0)}])
@@ -605,9 +606,8 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_e
 
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        assert torch.allclose(
-            original_segmentation, our_segmentation, atol=1e-3
-        ), "The segmentation image is not the same."
+        if not torch.allclose(original_segmentation, our_segmentation, atol=1e-3):
+            raise ValueError("The segmentation image is not the same.")
 
         logger.info("✅ Test passed!")
 

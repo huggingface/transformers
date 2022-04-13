@@ -396,7 +396,8 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     True` else after `sep_token_id`.
     """
 
-    assert shape_list(sep_token_indices)[1] == 2, "`input_ids` should have two dimensions"
+    if shape_list(sep_token_indices)[1] != 2:
+        raise ValueError("`input_ids` should have two dimensions")
     question_end_index = tf.reshape(sep_token_indices, (input_ids_shape[0], 3, 2))[:, 0, 1][:, None]
     # bool attention mask with True in locations of global attention
     attention_mask = tf.expand_dims(tf.range(input_ids_shape[1]), axis=0)
@@ -539,7 +540,8 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Both input_ids and inputs_embeds can't be None.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -699,12 +701,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(
+                f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+            )
+        if attention_window <= 0:
+            raise ValueError(
+                f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+            )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -1627,14 +1631,17 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         if isinstance(config.attention_window, int):
-            assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
-            assert config.attention_window > 0, "`config.attention_window` has to be positive"
+            if config.attention_window % 2 != 0:
+                raise ValueError("`config.attention_window` has to be an even value")
+            if config.attention_window <= 0:
+                raise ValueError("`config.attention_window` has to be positive")
             config.attention_window = [config.attention_window] * config.num_hidden_layers  # one value per layer
         else:
-            assert len(config.attention_window) == config.num_hidden_layers, (
-                "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
-                f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
-            )
+            if len(config.attention_window) != config.num_hidden_layers:
+                raise ValueError(
+                    "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
+                    f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
+                )
 
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
@@ -1784,7 +1791,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             self.attention_window if isinstance(self.attention_window, int) else max(self.attention_window)
         )
 
-        assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(f"`attention_window` should be an even value. Given {attention_window}")
 
         input_shape = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)
         batch_size, seq_len = input_shape[:2]

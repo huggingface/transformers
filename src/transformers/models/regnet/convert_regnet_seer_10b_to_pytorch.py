@@ -82,7 +82,8 @@ class FakeRegNetVisslWrapper(nn.Module):
         feature_blocks.append(("conv1", model.stem))
         # - get all the feature blocks
         for k, v in model.trunk_output.named_children():
-            assert k.startswith("block"), f"Unexpected layer name {k}"
+            if not k.startswith("block"):
+                raise ValueError(f"Unexpected layer name {k}")
             block_index = len(feature_blocks) + 1
             feature_blocks.append((f"res{block_index}", v))
 
@@ -226,7 +227,8 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             converted_state_dict[dest_key] = from_state_dict[key]
             not_used_keys.remove(key)
         # check that all keys have been updated
-        assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
+        if len(not_used_keys) != 0:
+            raise ValueError(f"Some keys where not used {','.join(not_used_keys)}")
 
         logger.info(f"The following keys were not used: {','.join(not_used_keys)}")
 

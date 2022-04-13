@@ -23,6 +23,7 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
+from multiprocessing.sharedctypes import Value
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -258,7 +259,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
             logger.info(f"counting file {path} ...")
-        assert os.path.exists(path), f"Input file {path} not found"
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Input file {path} not found")
 
         sents = []
         with open(path, "r", encoding="utf-8") as f:
@@ -333,7 +335,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
             logger.info(f"encoding file {path} ...")
-        assert os.path.exists(path), f"Output file {path} not found"
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Output file {path} not found")
         encoded = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
@@ -383,8 +386,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             token: The token to move to a specific position in the vocab.
             target_idx: The position where the token should be moved to.
         """
-        assert token in self.added_tokens_encoder, "Token which should be moved has to be an added token"
-        assert token not in self.idx2sym, "Token which should be moved is already in vocab"
+        if token not in self.added_tokens_encoder:
+            raise ValueError("Token which should be moved has to be an added token")
+        if token in self.idx2sym:
+            raise ValueError("Token which should be moved is already in vocab")
 
         # Insert sym into vocab
         self.idx2sym.insert(target_idx, token)
@@ -435,7 +440,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
-        assert 0 <= idx < len(self), f"Index {idx} out of vocabulary range"
+        if 0 > idx or idx > len(self):
+            raise IndexError(f"Index {idx} out of vocabulary range")
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):

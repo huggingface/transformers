@@ -639,7 +639,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
-            assert len(lang2id) == len(id2lang)
+            if len(lang2id) != len(id2lang):
+                raise ValueError("lang2id and id2lang must be of the same length.")
 
         self.ja_word_tokenizer = None
         self.zh_word_tokenizer = None

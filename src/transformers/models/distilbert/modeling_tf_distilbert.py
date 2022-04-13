@@ -107,7 +107,8 @@ class TFEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Both input_ids and inputs_embeds can't be None.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -134,7 +135,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.output_attentions = config.output_attentions
 
-        assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
+        if self.dim % self.n_heads != 0:
+            raise ValueError(f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}")
 
         self.q_lin = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="q_lin"
@@ -242,9 +244,8 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.activation = config.activation
         self.output_attentions = config.output_attentions
 
-        assert (
-            config.dim % config.n_heads == 0
-        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
+        if config.dim % config.n_heads != 0:
+            raise ValueError(f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}")
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
@@ -318,11 +319,13 @@ class TFTransformer(tf.keras.layers.Layer):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+                if len(layer_outputs) != 2:
+                    raise ValueError(f"Incorrect number of outputs {len(layer_outputs)} instead of 2")
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1, f"Incorrect number of outputs {len(layer_outputs)} instead of 1"
+                if len(layer_outputs) != 1:
+                    raise ValueError(f"Incorrect number of outputs {len(layer_outputs)} instead of 1")
 
         # Add last layer
         if output_hidden_states:
@@ -992,7 +995,8 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
+        if config.num_labels != 2:
+            raise ValueError(f"Incorrect number of labels {config.num_labels} instead of 2")
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @unpack_inputs

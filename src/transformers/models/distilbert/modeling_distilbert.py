@@ -143,7 +143,11 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError(
+                f"self.dim must be divisible by num_heads (got `self.dim`: {self.dim}"
+                f" and `n_heads`: {self.n_heads})."
+            )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -255,7 +259,11 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        assert config.dim % config.n_heads == 0
+        if config.dim % config.n_heads != 0:
+            raise ValueError(
+                f"config.dim must be divisible by config.n_heads (got `config.dim`: {config.dim}"
+                f" and `config.n_heads`: {config.n_heads})."
+            )
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)

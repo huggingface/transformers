@@ -132,8 +132,10 @@ if __name__ == "__main__":
     src_file = Path(args.src)
     dest_dir = f"converted-{src_file.name}" if args.dest is None else args.dest
     dest_dir = Path(dest_dir)
-    assert src_file.exists()
-    assert (
-        args.type is not None
-    ), "Please specify the component type of the DPR model to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
+    if not src_file.exists():
+        raise FileNotFoundError("src_file does not exist!")
+    if args.type is None:
+        raise ValueError(
+            "Please specify the component type of the DPR model to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
+        )
     convert(args.type, src_file, dest_dir)

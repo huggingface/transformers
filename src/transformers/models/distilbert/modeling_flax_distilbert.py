@@ -305,7 +305,8 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f"sa_output must of type tuple, got {type(sa_output)}.")
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 

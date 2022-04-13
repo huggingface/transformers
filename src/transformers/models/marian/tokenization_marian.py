@@ -157,13 +157,15 @@ class MarianTokenizer(PreTrainedTokenizer):
             separate_vocabs=separate_vocabs,
             **kwargs,
         )
-        assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
+        if not Path(source_spm).exists():
+            raise FileNotFoundError(f"cannot find spm source {source_spm}")
 
         self.separate_vocabs = separate_vocabs
         self.encoder = load_json(vocab)
         if self.unk_token not in self.encoder:
             raise KeyError("<unk> token must be in vocab")
-        assert self.pad_token in self.encoder
+        if self.pad_token not in self.encoder:
+            raise KeyError("<pad> token must be in vocab")
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)

@@ -16,6 +16,7 @@
 """TFRAG model implementation."""
 
 from dataclasses import dataclass
+from multiprocessing.sharedctypes import Value
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -321,9 +322,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         # by the value of the flag `is_generator` that we need to set correctly.
         question_encoder = kwargs_question_encoder.pop("model", None)
         if question_encoder is None:
-            assert (
-                question_encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+            if question_encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+                )
 
             from ..auto.modeling_tf_auto import TFAutoModel
 
@@ -343,9 +345,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         generator = kwargs_generator.pop("generator", None)
         if generator is None:
-            assert (
-                generator_pretrained_model_name_or_path is not None
-            ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+            if generator_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+                )
 
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
@@ -493,16 +496,16 @@ class TFRagModel(TFRagPreTrainedModel):
         load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an question_encoder and a generator has to be provided."
+        if config is None or (question_encoder is None or generator is None):
+            raise ValueError("Either a configuration or an question_encoder and a generator has to be provided.")
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
                 question_encoder.config, generator.config, **kwargs
             )
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise TypeError(f"config: {config} has to be of type {self.config_class}")
         super().__init__(config, **kwargs)
 
         if question_encoder is None:
@@ -520,9 +523,10 @@ class TFRagModel(TFRagPreTrainedModel):
 
         self.retriever = retriever
         if self.retriever is not None:
-            assert isinstance(
-                retriever, RagRetriever
-            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            if not isinstance(retriever, RagRetriever):
+                raise TypeError(
+                    f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+                )
             self.retriever = retriever
 
         self.question_encoder = question_encoder
@@ -576,9 +580,8 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> input_ids = input_dict["input_ids"]
         >>> outputs = model(input_ids)
         ```"""
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        if "decoder_cached_states" in kwargs:
+            raise ValueError("Please use past_key_values to cache intermediate outputs")  # from modeling_tf_bart.py
 
         # aliasing to minimize code changing
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -632,23 +635,28 @@ class TFRagModel(TFRagPreTrainedModel):
                 )
 
             else:
-                assert (
-                    context_input_ids is not None
-                ), "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                if context_input_ids is None:
+                    raise ValueError(
+                        "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                    )
+                if context_attention_mask is None:
+                    raise ValueError(
+                        "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                    )
+                if doc_scores is None:
+                    raise ValueError(
+                        "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                    )
 
-        assert (
-            doc_scores is not None
-        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        if doc_scores is None:
+            raise ValueError(
+                "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+            )
 
-        assert (
-            doc_scores.shape[1] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        if doc_scores.shape[1] % n_docs != 0:
+            raise ValueError(
+                f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+            )
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -723,9 +731,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         retriever: Optional = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        if config is None and (question_encoder is None and generator is None):
+            raise ValueError("Either a configuration or an encoder and a generator has to be provided.")
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -907,9 +914,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        if "decoder_cached_states" in kwargs:
+            raise ValueError("Please use past_key_values to cache intermediate outputs")  # from modeling_tf_bart.py
 
         do_marginalize = do_marginalize if do_marginalize else self.config.do_marginalize
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -940,7 +946,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         loss = None
         logits = outputs.logits
         if labels is not None:
-            assert decoder_input_ids is not None
+            if decoder_input_ids is None:
+                raise ValueError("decoder_input_ids can't be None.")
             loss = self.get_nll(
                 outputs.logits,
                 outputs.doc_scores,
@@ -1149,9 +1156,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             )
             doc_scores = tf.squeeze(doc_scores, axis=1)
 
-        assert (
-            context_input_ids.shape[0] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        if context_input_ids.shape[0] % n_docs != 0:
+            raise ValueError(
+                f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+            )
 
         batch_size = context_input_ids.shape[0] // n_docs
 
@@ -1286,12 +1294,14 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         if start_token_id is None:
             start_token_id = self.generator.config.decoder_start_token_id
-            assert (
-                start_token_id is not None
-            ), "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as generator, see Bart docs for more information"
+            if start_token_id is None:
+                raise ValueError(
+                    "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as generator, see Bart docs for more information"
+                )
 
         pad_token_id = self.generator.config.pad_token_id
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
 
         shifted_input_ids = tf.cast(input_ids, tf.int32)
         start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), start_token_id)
@@ -1370,9 +1380,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         retriever: Optional = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        if config is None and (question_encoder is None and generator is None):
+            raise ValueError("Either a configuration or an encoder and a generator has to be provided.")
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -1497,9 +1506,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        if "decoder_cached_states" in kwargs:
+            raise ValueError("Please use past_key_values to cache intermediate outputs")  # from modeling_tf_bart.py
 
         exclude_bos_score = exclude_bos_score if exclude_bos_score else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -1595,7 +1603,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         target = tf.expand_dims(target, axis=1)  # n_docs dimension
         target = tf.expand_dims(target, axis=-1)  # logits dimension
         target = tf.repeat(target, n_docs, axis=1)
-        assert len(target.shape) == len(rag_logprobs.shape)
+        if len(target.shape) != len(rag_logprobs.shape):
+            raise ValueError("len(target.shape) != len(rag_logprobs.shape)")
 
         # last-axis gathering only - use 2D-reshape-trick for Torch's style nD gathering
         def torch_gather(param, id_tensor):
@@ -1703,9 +1712,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        assert (
-            input_ids is not None or context_input_ids is not None
-        ), " At least one of input_ids or context_input_ids must be given"
+        if input_ids is None or context_input_ids is None:
+            raise ValueError(" At least one of input_ids or context_input_ids must be given")
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
@@ -1745,12 +1753,14 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 new_input_ids = tf.tile(input_ids[index : index + 1], (num_candidates, 1))
                 outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             else:  # input_ids is None, need context_input_ids/mask and doc_scores
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                if context_attention_mask is None:
+                    raise ValueError(
+                        "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                    )
+                if doc_scores is None:
+                    raise ValueError(
+                        "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                    )
 
                 individual_input_ids = tf.tile(
                     generator_input_ids, (num_candidates, 1)

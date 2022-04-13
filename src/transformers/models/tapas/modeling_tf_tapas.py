@@ -201,7 +201,8 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Both input_ids and inputs_embeds can't be None, please provide one.")
         if input_ids is not None:
             input_shape = shape_list(input_ids)
         else:
@@ -1435,9 +1436,8 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        shape_list(labels)[0] == shape_list(float_answer)[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    if shape_list(labels)[0] == shape_list(float_answer)[0]:
+                        raise ValueError("Make sure the answers are a FloatTensor of shape (batch_size,)")
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1488,9 +1488,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        if shape_list(labels)[0] == shape_list(aggregation_labels)[0]:
+                            raise ValueError(
+                                "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                            )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
@@ -1516,7 +1517,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
                 if self.config.use_answer_as_supervision:
                     if numeric_values is not None and numeric_values_scale is not None:
-                        assert shape_list(numeric_values) == shape_list(numeric_values_scale)
+                        if shape_list(numeric_values) != shape_list(numeric_values_scale):
+                            raise ValueError(
+                                "Make sure the numeric_values and numeric_values_scale are of the same size."
+                            )
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
                             float_answer,

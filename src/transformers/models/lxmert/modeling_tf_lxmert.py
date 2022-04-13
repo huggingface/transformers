@@ -222,7 +222,8 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Both input_ids and inputs_embeds can't be None.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -252,7 +253,8 @@ class TFLxmertAttention(tf.keras.layers.Layer):
             )
 
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(f"config.hidden_size must be divisible by config.num_attention_heads.")
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 

@@ -85,7 +85,9 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     if padding_mask is not None:
         mask = padding_mask
     else:
-        assert lengths.max().item() <= slen
+        if lengths.max().item() > slen:
+            raise ValueError(f"Maximum value in lengths is {lengths.max().item()}, cannot exceed {slen}.")
+
         mask = alen < lengths[:, None]
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
@@ -96,8 +98,10 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         attn_mask = mask
 
     # sanity check
-    assert mask.size() == (bs, slen)
-    assert causal is False or attn_mask.size() == (bs, slen, slen)
+    if mask.size() != (bs, slen):
+        raise ValueError(f"mask must be of size {(bs, slen)}")
+    if causal is True and attn_mask.size() != (bs, slen, slen):
+        raise ValueError(f"If causal is True, attn_mask must be of size {(bs, slen, slen)}")
 
     return mask, attn_mask
 
@@ -112,7 +116,8 @@ class MultiHeadAttention(nn.Module):
         self.dim = dim
         self.n_heads = n_heads
         self.dropout = config.attention_dropout
-        assert self.dim % self.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError(f"dim must be divisible by n_heads.")
 
         self.q_lin = nn.Linear(dim, dim)
         self.k_lin = nn.Linear(dim, dim)
@@ -425,7 +430,8 @@ class XLMModel(XLMPreTrainedModel):
         self.n_layers = config.n_layers
         self.dropout = config.dropout
         self.attention_dropout = config.attention_dropout
-        assert self.dim % self.n_heads == 0, "transformer dim must be a multiple of n_heads"
+        if self.dim % self.n_heads != 0:
+            raise ValueError("transformer dim must be a multiple of n_heads")
 
         # embeddings
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, self.dim)
@@ -522,8 +528,10 @@ class XLMModel(XLMPreTrainedModel):
         # mask = input_ids != self.pad_index
 
         # check inputs
-        assert lengths.size(0) == bs
-        assert lengths.max().item() <= slen
+        if lengths.size(0) != bs:
+            raise ValueError(f"lengths is of length {lengths.size(0)}, should of length {bs}.")
+        if lengths.max().item() > slen:
+            raise ValueError(f"Maximum value in lengths is {lengths.max().item()}, cannot exceed {slen}.")
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
         # if src_enc is not None:
@@ -539,12 +547,14 @@ class XLMModel(XLMPreTrainedModel):
         if position_ids is None:
             position_ids = self.position_ids[:, :slen]
         else:
-            assert position_ids.size() == (bs, slen)  # (slen, bs)
+            if position_ids.size() != (bs, slen):  # (slen, bs)
+                raise ValueError(f"position_ids must be of size {(bs, slen)}")
             # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
-            assert langs.size() == (bs, slen)  # (slen, bs)
+            if langs.size() != (bs, slen):  # (slen, bs)
+                raise ValueError(f"langs must be of size {(bs, slen)}.")
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed

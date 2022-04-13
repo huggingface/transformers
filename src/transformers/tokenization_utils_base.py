@@ -805,7 +805,7 @@ class SpecialTokensMixin:
                 if key == "additional_special_tokens":
                     if not isinstance(value, (list, tuple)):
                         raise TypeError(f"Value {value} is not a list or tuple")
-                    
+
                     if all(isinstance(t, (str, AddedToken)) for t in value):
                         raise TypeError("One of the tokens is not a string or an AddedToken")
 

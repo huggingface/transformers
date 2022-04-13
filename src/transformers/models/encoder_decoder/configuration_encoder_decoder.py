@@ -74,9 +74,8 @@ class EncoderDecoderConfig(PretrainedConfig):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert (
-            "encoder" in kwargs and "decoder" in kwargs
-        ), "Config has to be initialized with encoder and decoder config"
+        if "encoder" not in kwargs or "decoder" not in kwargs:
+            raise KeyError("Config has to be initialized with encoder and decoder config")
         encoder_config = kwargs.pop("encoder")
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")

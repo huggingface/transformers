@@ -380,9 +380,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if do_cached_attention:
-            assert (
-                sequence_length == 1
-            ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            if sequence_length != 1:
+                raise ValueError(
+                    f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+                )
             past_buckets = past_buckets_states[0]
             past_states = past_buckets_states[1]
 
@@ -451,12 +452,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # free memory
         del hidden_states
 
-        assert (
-            query_key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        if query_key_vectors.shape[-1] != self.attention_head_size:
+            raise ValueError(
+                f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
+            )
+
+        if value_vectors.shape[-1] != self.attention_head_size:
+            raise ValueError(
+                f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+            )
 
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
             use_cache and past_buckets_states[1] is not None
@@ -475,9 +479,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 # make sure buckets has correct shape for LSH attention
                 buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes * sequence_length)
 
-            assert (
-                int(buckets.shape[-1]) == num_hashes * sequence_length
-            ), f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+            if int(buckets.shape[-1]) != num_hashes * sequence_length:
+                raise ValueError(
+                    f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+                )
 
             sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
                 sequence_length, buckets, num_hashes
@@ -505,9 +510,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
             if self.chunk_length is None:
-                assert (
-                    self.num_chunks_before == 0 and self.num_chunks_after == 0
-                ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+                if self.num_chunks_before != 0 or self.num_chunks_after != 0:
+                    raise ValueError(
+                        "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+                    )
         elif do_cached_attention and past_buckets is not None:
             # use max sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx
@@ -572,12 +578,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # free memory
             del logits
 
-        assert out_vectors.shape == (
+        if out_vectors.shape != (
             batch_size,
             self.num_attention_heads,
             sequence_length,
             self.attention_head_size,
-        ), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
+        ):
+            raise ValueError(
+                "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
+            )
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -612,18 +621,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
         if isinstance(self.num_buckets, int):
-            assert (
-                self.num_buckets % 2 == 0
-            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+            if self.num_buckets % 2 != 0:
+                raise ValueError(
+                    f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+                )
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for bucket_factor in self.num_buckets:
-                assert (
-                    bucket_factor % 2 == 0
-                ), f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
+                if bucket_factor % 2 != 0:
+                    raise ValueError(f"The number of buckets should be even, but `num_bucket`: {bucket_factor}")
                 rotation_size = rotation_size + bucket_factor
                 num_buckets = num_buckets * bucket_factor
 
@@ -886,12 +895,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        assert bucket_idx.shape == (
+        if bucket_idx.shape == (
             batch_size,
             self.num_attention_heads,
             num_hashes,
             sequence_length,
-        ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
+        ):
+            raise ValueError(
+                f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
+            )
 
         # find indices of new bucket indices
         relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
@@ -922,15 +934,21 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             batch_size, self.num_attention_heads, num_hashes, -1
         )
 
-        assert (
+        if (
             relevant_hidden_states.shape[2]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+        ):
+            raise ValueError(
+                f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+            )
 
-        assert (
+        if (
             relevant_bucket_idx_chunk.shape[-1]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+        ):
+            raise ValueError(
+                f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+            )
 
         return relevant_hidden_states, relevant_bucket_idx_chunk, query_buckets
 
@@ -1054,9 +1072,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if use_cache and past_buckets_states[1] is not None:
-            assert (
-                past_buckets_states[0] is None
-            ), "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching hidden_states_and_buckets."
+            if past_buckets_states[0] is not None:
+                raise ValueError(
+                    "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching hidden_states_and_buckets."
+                )
             key_value_hidden_states = self._retrieve_relevant_hidden_states(
                 past_buckets_states[1], self.chunk_length, self.num_chunks_before
             )
@@ -1081,20 +1100,26 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert (
-            query_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        if query_vectors.shape[-1] != self.attention_head_size:
+            raise ValueError(
+                f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
+            )
+
+        if key_vectors.shape[-1] != self.attention_head_size:
+            raise ValueError(
+                f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
+            )
+
+        if value_vectors.shape[-1] != self.attention_head_size:
+            raise ValueError(
+                f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+            )
 
         if self.chunk_length is None:
-            assert (
-                self.num_chunks_before == 0 and self.num_chunks_after == 0
-            ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+            if self.num_chunks_before != 0 or self.num_chunks_after != 0:
+                raise ValueError(
+                    "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+                )
 
         # normalize key vectors
         key_vectors = key_vectors / torch.sqrt(
@@ -1192,12 +1217,15 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         if not do_standard_self_attention:
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
-        assert out_vectors.shape == (
+        if out_vectors.shape == (
             batch_size,
             self.num_attention_heads,
             sequence_length,
             self.attention_head_size,
-        )
+        ):
+            raise ValueError(
+                f"out_vectors must be of shape {(batch_size,self.num_attention_heads,sequence_length,self.attention_head_size)}."
+            )
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -1514,9 +1542,10 @@ class ReformerLayer(nn.Module):
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
-        assert (
-            self.training
-        ), "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+        if not self.training:
+            raise ValueError(
+                "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+            )
 
         with torch.enable_grad():
             next_attn_output.requires_grad = True
@@ -1671,7 +1700,8 @@ class _ReversibleFunction(Function):
                 buckets=buckets,
             )
 
-        assert all_buckets == (), "buckets have to be empty after backpropagation"
+        if all_buckets != ():
+            raise ValueError("buckets have to be empty after backpropagation")
         grad_hidden_states = torch.cat([output.grad_attn_output, output.grad_hidden_states], dim=-1)
 
         # num of return vars has to match num of forward() args
@@ -1964,9 +1994,8 @@ class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        assert (
-            self.config.num_hidden_layers > 0
-        ), "`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']"
+        if self.config.num_hidden_layers <= 0:
+            raise ValueError("`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']")
 
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
@@ -2027,12 +2056,14 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert (
-            len(input_shape) == 2
-        ), f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+        if len(input_shape) != 2:
+            raise ValueError(
+                f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+            )
 
         if past_buckets_states is not None:
-            assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."
+            if self.training:
+                raise ValueError("`past_buckets_states` can only be used for inference, not for training`.")
 
         # prepare head mask
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers, is_attention_chunked=True)
@@ -2175,13 +2206,16 @@ class ReformerModel(ReformerPreTrainedModel):
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
-        assert (
-            "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
-        assert (
-            "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not {config.lsh_num_chunks_after}."
+        if not config.is_decoder:
+            raise TypeError("If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`.")
+        if "local" in self.config.attn_layers and config.local_num_chunks_after != 0:
+            raise ValueError(
+                f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
+            )
+        if "lsh" in self.config.attn_layers and config.lsh_num_chunks_after != 0:
+            raise ValueError(
+                f"If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not {config.lsh_num_chunks_after}."
+            )
 
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
@@ -2296,9 +2330,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+        if config.is_decoder:
+            raise TypeError(
+                "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+            )
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 

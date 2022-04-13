@@ -90,13 +90,15 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 old_attribute = attribute
 
             if attribute == "weight":
-                assert old_model.weight.shape == model.weight.shape, "Shapes have to match!"
+                if old_model.weight.shape != model.weight.shape:
+                    raise ValueError("Shapes have to match!")
                 model.weight = old_model.weight
                 logger.info(f"{attribute} is initialized.")
                 is_key_init = True
                 break
             elif attribute == "bias":
-                assert old_model.bias.shape == model.bias.shape, "Shapes have to match!"
+                if old_model.bias.shape != model.bias.shape:
+                    raise ValueError("Shapes have to match!")
                 model.bias = old_model.bias
                 logger.info(f"{attribute} is initialized")
                 is_key_init = True
@@ -119,10 +121,10 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 is_key_init = True
                 break
             elif attribute == "position_embeddings":
-                assert (
-                    model.position_embeddings.weight.shape[-1] == old_model.embed_positions.weight.shape[-1]
-                ), "Hidden size has to match"
-                assert model.position_embeddings.weight.shape[0] == 512, "We want 512 position_embeddings."
+                if model.position_embeddings.weight.shape[-1] != old_model.embed_positions.weight.shape[-1]:
+                    raise ValueError("Hidden size has to match")
+                if model.position_embeddings.weight.shape[0] != 512:
+                    raise ValueError("We want 512 position_embeddings.")
                 model.position_embeddings.weight = nn.Parameter(old_model.embed_positions.weight[:512, :])
                 is_key_init = True
                 break

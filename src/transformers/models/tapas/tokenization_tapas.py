@@ -24,7 +24,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Type, Union
 
 import numpy as np
 
@@ -580,7 +580,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                 then the answer_coordinates must be a list of lists of strings (each list corresponding to a single
                 table-question pair).
         """
-        assert isinstance(table, pd.DataFrame), "Table must be of type pd.DataFrame"
+        if not isinstance(table, pd.DataFrame):
+            raise TypeError("Table must be of type pd.DataFrame")
 
         # Input type checking for clearer error
         valid_query = False
@@ -1597,7 +1598,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         for (column_index, row_index), relations in cell_indices_to_relations.items():
             relation_set_index = 0
             for relation in relations:
-                assert relation.value >= Relation.EQ.value
+                if relation.value < Relation.EQ.value:
+                    raise ValueError(f"relation.value must be greater than or equal to {Relation.EQ.value}.")
                 relation_set_index += 2 ** (relation.value - Relation.EQ.value)
             for cell_token_index in self._get_cell_token_indexes(column_ids, row_ids, column_index, row_index):
                 numeric_relations[cell_token_index] = relation_set_index
@@ -2313,7 +2315,8 @@ def _process_date_pattern(dp):
     for field, field_regex in _FIELD_TO_REGEX:
         regex = regex.replace(field, field_regex)
     # Make sure we didn't miss any of the fields.
-    assert "%" not in regex, regex
+    if "%" in regex:
+        raise ValueError("regex pattern {regex} contains %.")
     return pattern, mask, re.compile("^" + regex + "$")
 
 
@@ -2607,7 +2610,8 @@ def get_numeric_sort_key_fn(numeric_values):
 
     for numeric_value in numeric_values:
         value = _get_value_as_primitive_value(numeric_value)
-        assert isinstance(value, tuple)
+        if not isinstance(value, tuple):
+            raise ValueError(f"value must of type tuple, got {type(value)} instead.")
         for tuple_index, inner_value in enumerate(value):
             if inner_value is None:
                 valid_indexes.discard(tuple_index)
@@ -2653,7 +2657,8 @@ def _consolidate_numeric_values(row_index_to_values, min_consolidation_fraction,
         if count == max_count:
             valid_types.add(value_type)
     if len(valid_types) > 1:
-        assert DATE_TYPE in valid_types
+        if DATE_TYPE not in valid_types:
+            raise TypeError(f"{DATE_TYPE} not in valid_types {valid_types}.")
         max_type = DATE_TYPE
     else:
         max_type = next(iter(valid_types))

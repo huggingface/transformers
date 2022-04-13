@@ -650,31 +650,56 @@ class TFGenerationMixin:
         else:
             batch_size = 1
 
-        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
-        assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
-        assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
-        assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
-        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
-        assert temperature > 0, "`temperature` should be strictly positive."
-        assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
-        assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
-        assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
-        assert input_ids is not None or (
-            isinstance(bos_token_id, int) and bos_token_id >= 0
-        ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
-        assert pad_token_id is None or (
-            isinstance(pad_token_id, int) and (pad_token_id >= 0)
-        ), "`pad_token_id` should be a positive integer."
-        assert (eos_token_id is None) or (
-            isinstance(eos_token_id, int) and (eos_token_id >= 0)
-        ), "`eos_token_id` should be a positive integer."
-        assert length_penalty > 0, "`length_penalty` should be strictly positive."
-        assert (
-            isinstance(num_return_sequences, int) and num_return_sequences > 0
-        ), "`num_return_sequences` should be a strictly positive integer."
-        assert (
-            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
-        ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
+        if not isinstance(max_length, int) and max_length <= 0:
+            raise ValueError("`max_length` should be a strictly positive integer.")
+
+        if not isinstance(min_length, int) and min_length < 0:
+            raise ValueError("`min_length` should be a positive integer.")
+
+        if not isinstance(do_sample, bool):
+            raise TypeError("`do_sample` should be a boolean.")
+
+        if not isinstance(early_stopping, bool):
+            raise TypeError("`early_stopping` should be a boolean.")
+
+        if not isinstance(num_beams, int) and num_beams <= 0:
+            raise ValueError("`num_beams` should be a strictly positive integer.")
+
+        if temperature <= 0:
+            raise ValueError("`temperature` should be strictly positive.")
+
+        if not isinstance(top_k, int) and top_k < 0:
+            raise ValueError("`top_k` should be a positive integer.")
+
+        if 0 > top_p or top_p > 1:
+            raise ValueError("`top_p` should be between 0 and 1.")
+
+        if repetition_penalty < 1.0:
+            raise ValueError("`repetition_penalty` should be >= 1.")
+
+        if input_ids is None and not isinstance(bos_token_id, int) and bos_token_id < 0:
+            raise ValueError("If input_ids is not defined, `bos_token_id` should be a positive integer.")
+
+        if pad_token_id is not None and not isinstance(pad_token_id, int) and not pad_token_id < 0:
+            raise ValueError("`pad_token_id` should be a positive integer.")
+
+        if (eos_token_id is not None) and not isinstance(eos_token_id, int) and eos_token_id < 0:
+            raise ValueError("`eos_token_id` should be a positive integer.")
+
+        if length_penalty <= 0:
+            raise ValueError("`length_penalty` should be strictly positive.")
+
+        if not isinstance(num_return_sequences, int) and num_return_sequences <= 0:
+            raise ValueError("`num_return_sequences` should be a strictly positive integer.")
+
+        if (
+            bad_words_ids is not None
+            and not isinstance(bad_words_ids, list)
+            and not isinstance(bad_words_ids[0], list)
+        ):
+            raise ValueError(
+                "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
+            )
 
         # This block corresponds to the following line in `generation_tf_utils`:
         #   "input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))"
@@ -683,25 +708,28 @@ class TFGenerationMixin:
         #   2. There is no shape checking in PT.
         # In both PT/TF, if `input_ids` is `None`, we try to create it as it is for a text model.
         if input_ids is None:
-            assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
-                "you should either supply a context to complete as `input_ids` input "
-                "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
-            )
+            if not isinstance(bos_token_id, int) and bos_token_id < 0:
+                raise ValueError(
+                    "you should either supply a context to complete as `input_ids` input "
+                    "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
+                )
             input_ids = tf.fill((batch_size, 1), bos_token_id)
 
         # not allow to duplicate outputs when greedy decoding
         if do_sample is False:
             if num_beams == 1:
                 # no_beam_search greedy generation conditions
-                assert (
-                    num_return_sequences == 1
-                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+                if num_return_sequences != 1:
+                    raise ValueError(
+                        "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+                    )
 
             else:
                 # beam_search greedy generation conditions
-                assert (
-                    num_beams >= num_return_sequences
-                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+                if num_beams < num_return_sequences:
+                    raise ValueError(
+                        "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+                    )
 
         # create attention mask if necessary
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
@@ -735,11 +763,16 @@ class TFGenerationMixin:
             if decoder_start_token_id is None:
                 decoder_start_token_id = bos_token_id
 
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), f"{self} should have a 'get_encoder' function defined"
-            assert callable(self.get_encoder), f"{self.get_encoder} should be a method"
+            if decoder_start_token_id is None:
+                raise ValueError(
+                    "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+                )
+
+            if not hasattr(self, "get_encoder"):
+                raise AttributeError(f"{self} should have a 'get_encoder' function defined")
+
+            if not callable(self.get_encoder):
+                raise TypeError(f"{self.get_encoder} should be a method")
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
@@ -781,9 +814,10 @@ class TFGenerationMixin:
             )
             cur_len = 1
 
-            assert (
-                batch_size == encoder_outputs[0].shape[0]
-            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+            if batch_size == encoder_outputs[0].shape[0]:
+                raise ValueError(
+                    f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+                )
 
             # expand encoder_outputs
             encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
@@ -791,9 +825,10 @@ class TFGenerationMixin:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
-        assert (
-            cur_len < max_length
-        ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+        if cur_len >= max_length:
+            raise ValueError(
+                f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+            )
 
         return self._generate_beam_search(
             input_ids,
@@ -986,7 +1021,10 @@ class TFGenerationMixin:
                     tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
-            assert shape_list(scores) == [batch_size * num_beams, vocab_size]
+            if shape_list(scores) != [batch_size * num_beams, vocab_size]:
+                raise ValueError(
+                    f"scores should be of shape {[batch_size * num_beams, vocab_size]}, got {shape_list(scores)} instead."
+                )
 
             if do_sample:
                 _scores = scores + tf.broadcast_to(
@@ -1023,7 +1061,11 @@ class TFGenerationMixin:
 
                 next_scores, next_tokens = tf.math.top_k(next_scores, k=2 * num_beams, sorted=True)
 
-            assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
+            if not (shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]):
+                raise ValueError(
+                    f"next_scores and next_tokens should be of shape {[batch_size, 2 * num_beams]}, "
+                    "got {shape_list(next_scores)} and {shape_list(next_scores)} instead."
+                )
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -1051,12 +1093,13 @@ class TFGenerationMixin:
 
                 # if we are done with this sentence
                 if done[batch_idx]:
-                    assert (
-                        len(generated_hyps[batch_idx]) >= num_beams
-                    ), f"Batch can only be done if at least {num_beams} beams have been generated."
-                    assert (
-                        eos_token_id is not None and pad_token_id is not None
-                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
+                    if len(generated_hyps[batch_idx]) < num_beams:
+                        raise ValueError(f"Batch can only be done if at least {num_beams} beams have been generated.")
+
+                    if eos_token_id is None and pad_token_id is None:
+                        raise ValueError(
+                            "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
+                        )
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
 
@@ -1095,16 +1138,21 @@ class TFGenerationMixin:
                 )
 
                 # update next beam content
-                assert len(next_sent_beam) == num_beams, "Beam should always be full"
+                if len(next_sent_beam) != num_beams:
+                    raise ValueError("Beam should always be full")
+
                 next_batch_beam.extend(next_sent_beam)
-                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+                if len(next_batch_beam) != num_beams * (batch_idx + 1):
+                    raise ValueError("len(next_batch_beam) != num_beams * (batch_idx + 1)")
 
             # stop when we are done with each sentence
             if all(done):
                 break
 
             # sanity check / prepare next batch
-            assert len(next_batch_beam) == batch_size * num_beams
+            if len(next_batch_beam) != batch_size * num_beams:
+                raise ValueError("len(next_batch_beam) != batch_size * num_beams")
+
             beam_scores = tf.convert_to_tensor([x[0] for x in next_batch_beam], dtype=tf.float32)
             beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
             beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
@@ -1163,21 +1211,22 @@ class TFGenerationMixin:
                 best_hyp = sorted_hyps.pop()[1]
                 sent_lengths_list.append(len(best_hyp))
                 best.append(best_hyp)
-        assert output_batch_size == len(
-            best
-        ), f"Output batch size {output_batch_size} must match output beam hypotheses {len(best)}"
+        if output_batch_size != len(best):
+            raise ValueError(f"Output batch size {output_batch_size} must match output beam hypotheses {len(best)}")
 
         sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
 
         # shorter batches are filled with pad_token
         if tf.reduce_min(sent_lengths).numpy() != tf.reduce_max(sent_lengths).numpy():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            if pad_token_id is None:
+                raise ValueError("`Pad_token_id` has to be defined")
             sent_max_len = min(tf.reduce_max(sent_lengths).numpy() + 1, max_length)
             decoded_list = []
 
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
-                assert sent_lengths[i] == shape_list(hypo)[0]
+                if sent_lengths[i] != shape_list(hypo)[0]:
+                    raise ValueError("sent_lengths[i] != shape_list(hypo)[0]")
                 # if sent_length is max_len do not pad
                 if sent_lengths[i] == sent_max_len:
                     decoded_slice = hypo
@@ -1200,7 +1249,8 @@ class TFGenerationMixin:
             decoded = tf.stack(decoded_list)
         else:
             # none of the hypotheses have an eos_token
-            assert (len(hypo) == max_length for hypo in best)
+            if not all(len(hypo) == max_length for hypo in best):
+                raise ValueError("One of the hypotheses is not of length max_length.")
             decoded = tf.stack(best)
 
         if return_dict_in_generate:
@@ -2946,9 +2996,8 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
         banned_tokens_slice = []
 
         for banned_token_seq in bad_words_ids:
-            assert (
-                len(banned_token_seq) > 0
-            ), f"Banned words token sequences { bad_words_ids} cannot have an empty list"
+            if len(banned_token_seq) <= 0:
+                raise ValueError(f"Banned words token sequences { bad_words_ids} cannot have an empty list")
 
             if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
                 # if tokens do not match continue
