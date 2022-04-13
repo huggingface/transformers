@@ -266,26 +266,11 @@ def top_k_top_p_filtering(*args, **kwargs):
     requires_backends(top_k_top_p_filtering, ["torch"])
 
 
-class Conv1D(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-def apply_chunking_to_forward(*args, **kwargs):
-    requires_backends(apply_chunking_to_forward, ["torch"])
-
-
-def prune_layer(*args, **kwargs):
-    requires_backends(prune_layer, ["torch"])
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -4780,6 +4765,21 @@ def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
 
 def get_scheduler(*args, **kwargs):
     requires_backends(get_scheduler, ["torch"])
+
+
+class Conv1D(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def apply_chunking_to_forward(*args, **kwargs):
+    requires_backends(apply_chunking_to_forward, ["torch"])
+
+
+def prune_layer(*args, **kwargs):
+    requires_backends(prune_layer, ["torch"])
 
 
 class Trainer(metaclass=DummyObject):
