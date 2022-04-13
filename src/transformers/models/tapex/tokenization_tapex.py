@@ -258,9 +258,9 @@ class TapexTokenizer(PreTrainedTokenizer):
             Maximum number of characters per cell when linearizing a table. If this number is exceeded, truncation
             takes place.
         drop_rows_to_fit (`bool`, *optional*, defaults to `False`):
-            Whether to truncate the table to a maximum length specified with the argument `max_length` or to the
-            maximum acceptable input length for the model if that argument is not provided. This will randomly drop
-            unrelated rows based on the `answer` provided.
+            Whether to truncate the table to a maximum length specified with the argument `max_length` in the
+            `__call__` method of the tokenizer or to the maximum acceptable input length for the model if that argument
+            is not provided. This will randomly drop unrelated rows based on the `answer` provided.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
