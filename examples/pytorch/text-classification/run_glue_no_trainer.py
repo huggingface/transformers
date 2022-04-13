@@ -430,7 +430,7 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("glue_no_trainer", args)
+        accelerator.init_trackers("glue_no_trainer", vars(args))
 
     # Get the metric function
     if args.task_name is not None:

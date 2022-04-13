@@ -723,7 +723,7 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("clm_no_trainer", args)
+        accelerator.init_trackers("clm_no_trainer", vars(args))
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps

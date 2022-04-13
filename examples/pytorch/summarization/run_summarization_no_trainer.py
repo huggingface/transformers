@@ -548,7 +548,7 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("summarization_no_trainer", args)
+        accelerator.init_trackers("summarization_no_trainer", vars(args))
 
     # Metric
     metric = load_metric("rouge")

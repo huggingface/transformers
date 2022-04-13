@@ -545,7 +545,7 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("clm_no_trainer", args)
+        accelerator.init_trackers("clm_no_trainer", vars(args))
 
     # Metrics
     metric = load_metric("seqeval")
