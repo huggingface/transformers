@@ -59,10 +59,6 @@
     title: Converting TensorFlow Checkpoints
   - local: serialization
     title: Export 🤗 Transformers models
-  - local: performance
-    title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
-  - local: parallelism
-    title: Model Parallelism
   - local: benchmarks
     title: Benchmarks
   - local: migration
@@ -84,7 +80,7 @@
   - local: fast_tokenizers
     title: "Using tokenizers from 🤗 Tokenizers"
   - local: performance
-    title: Performance and Scalability
+    title: Performance and scalability
   - local: perf_train_gpu_one
     title: Training on one GPU
   - local: perf_train_gpu_many
