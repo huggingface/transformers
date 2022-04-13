@@ -131,7 +131,6 @@ class BigScienceTokenizationTest(unittest.TestCase):
         input_text = list(sample_data.values())
 
         output_tokens = list(map(tokenizer.encode, input_text))
-        # predicted_text = list(map(tokenizer.decode, output_tokens, clean_up_tokenization_spaces=False))
         predicted_text = list(map(lambda x : tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
         self.assertListEqual(predicted_text, input_text)
     
@@ -149,7 +148,6 @@ class BigScienceTokenizationTest(unittest.TestCase):
         input_text = list(sample_data.values())
 
         output_tokens = list(map(tokenizer.encode, input_text))
-        # predicted_text = list(map(tokenizer.decode, output_tokens, clean_up_tokenization_spaces=False))
         predicted_text = list(map(lambda x : tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
         self.assertListEqual(predicted_text, input_text) 
 
