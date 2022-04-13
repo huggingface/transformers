@@ -23,7 +23,7 @@ jobs:
         id: cache
         with:
           path: ~/.cache/pip
-          key: v1-tests_model_like
+          key: v1-tests_model_like-${{ hashFiles('setup.py') }}
           restore-keys: |
             v1-tests_model_like-${{ hashFiles('setup.py') }}
             v1-tests_model_like
