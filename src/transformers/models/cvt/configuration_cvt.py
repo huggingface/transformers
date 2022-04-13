@@ -28,7 +28,7 @@ CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CvtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~CvtModel`]. It is used to instantiate an Cvt
+    This is the configuration class to store the configuration of a [`CvtModel`]. It is used to instantiate a Cvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Cvt [msft/cvt](https://huggingface.co/msft/cvt)
     architecture.
