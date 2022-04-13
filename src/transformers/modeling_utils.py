@@ -450,9 +450,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             else:
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
-        # might be useful in the future
-        # else:
-        #     print(f"!!! {k} wasn't moved to meta")
 
 
 def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
