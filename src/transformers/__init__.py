@@ -320,6 +320,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
     "pipelines": [
@@ -1681,6 +1682,14 @@ if is_torch_available():
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.yolos"].extend(
+        [
+            "YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "YolosForObjectDetection",
+            "YolosModel",
+            "YolosPreTrainedModel",
+        ]
+    )
     _import_structure["models.yoso"].extend(
         [
             "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2696,6 +2705,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     # Pipelines
@@ -3830,6 +3840,12 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.yolos import (
+            YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            YolosForObjectDetection,
+            YolosModel,
+            YolosPreTrainedModel,
         )
         from .models.yoso import (
             YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
