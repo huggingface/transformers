@@ -888,7 +888,7 @@ class SpecialTokensMixin:
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
-                if not (isinstance(value, (list, tuple)) or all(isinstance(t, (str, AddedToken)) for t in value)):
+                if not (isinstance(value, (list, tuple)) and all(isinstance(t, (str, AddedToken)) for t in value)):
                     raise TypeError(f"Tokens {value} for key {key} should all be str or AddedToken instances")
 
                 added_tokens += self.add_tokens(value, special_tokens=True)
