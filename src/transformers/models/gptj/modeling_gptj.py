@@ -36,9 +36,18 @@ from .configuration_gptj import GPTJConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
+_CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
 _CONFIG_FOR_DOC = "GPTJConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
+
+_CHECKPOINT_FOR_QA = "ydshieh/tiny-random-gptj-for-question-answering"
+_QA_EXPECTED_OUTPUT = "' was Jim Henson?Jim Henson was a n'"
+_QA_EXPECTED_LOSS = 3.13
+
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/tiny-random-gptj-for-sequence-classification"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.76
+
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
@@ -892,9 +901,11 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1017,9 +1028,11 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
