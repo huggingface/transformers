@@ -65,6 +65,7 @@ class FunnelModelTester:
         activation_dropout=0.0,
         max_position_embeddings=512,
         type_vocab_size=3,
+        initializer_std=0.02,  # Set to a smaller value, so we can keep the small error threshold (1e-5) in the test
         num_labels=3,
         num_choices=4,
         scope=None,
@@ -94,6 +95,7 @@ class FunnelModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.initializer_std = initializer_std
 
         # Used in the tests to check the size of the first attention layer
         self.num_attention_heads = n_head
@@ -154,6 +156,7 @@ class FunnelModelTester:
             activation_dropout=self.activation_dropout,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
+            initializer_std=self.initializer_std,
         )
 
     def create_and_check_model(

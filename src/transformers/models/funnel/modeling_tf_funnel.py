@@ -84,7 +84,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
+        self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
@@ -94,7 +94,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             self.weight = self.add_weight(
                 name="weight",
                 shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(initializer_range=self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
         super().build(input_shape)
