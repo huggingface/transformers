@@ -676,12 +676,7 @@ def main():
         accelerator.print(f"epoch {epoch}:", eval_metric)
         if args.with_tracking:
             accelerator.log(
-                {
-                    "seqeval": eval_metric,
-                    "train_loss": total_loss,
-                    "epoch": epoch,
-                },
-                step=completed_steps,
+                {"seqeval": eval_metric, "train_loss": total_loss, "epoch": epoch, "step": completed_steps},
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:

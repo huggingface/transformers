@@ -889,11 +889,12 @@ def main():
             "squad_v2" if args.version_2_with_negative else "squad": eval_metric,
             "train_loss": total_loss,
             "epoch": epoch,
+            "step": completed_steps,
         }
     if args.do_predict:
         log["squad_v2_predict" if args.version_2_with_negative else "squad_predict"] = predict_metric
 
-        accelerator.log(log, step=completed_steps)
+        accelerator.log(log)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

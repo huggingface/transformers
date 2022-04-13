@@ -666,7 +666,8 @@ def main():
         if args.with_tracking:
             result["train_loss"] = total_loss
             result["epoch"] = epoch
-            accelerator.log(result, step=completed_steps)
+            result["step"] = completed_steps
+            accelerator.log(result)
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()

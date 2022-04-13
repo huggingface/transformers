@@ -520,8 +520,8 @@ def main():
                     "accuracy" if args.task_name is not None else "glue": eval_metric,
                     "train_loss": total_loss,
                     "epoch": epoch,
+                    "step": completed_steps,
                 },
-                step=completed_steps,
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:

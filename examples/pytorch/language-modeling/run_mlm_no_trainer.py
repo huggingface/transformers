@@ -618,12 +618,7 @@ def main():
 
         if args.with_tracking:
             accelerator.log(
-                {
-                    "perplexity": perplexity,
-                    "train_loss": total_loss,
-                    "epoch": epoch,
-                },
-                step=completed_steps,
+                {"perplexity": perplexity, "train_loss": total_loss, "epoch": epoch, "step": completed_steps},
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
