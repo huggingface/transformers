@@ -33,7 +33,7 @@ from ...utils import TensorType, is_torch_available, logging
 
 if is_torch_available():
     import torch
-    
+
     if torch.__version__ < (1, 10, 0):
         warnings.warn(
             f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
