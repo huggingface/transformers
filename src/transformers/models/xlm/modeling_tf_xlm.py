@@ -263,7 +263,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         self.n_layers = config.n_layers
         self.max_position_embeddings = config.max_position_embeddings
         self.embed_init_std = config.embed_init_std
-        assert self.dim % self.n_heads == 0, "transformer dim must be a multiple of n_heads"
+        if self.dim % self.n_heads != 0:
+            raise ValueError("transformer dim must be a multiple of n_heads")
 
         # embeddings
         self.dropout = tf.keras.layers.Dropout(config.dropout)

@@ -19,7 +19,6 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
-from .tf_utils import set_tensor_by_indices_to_value
 from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
@@ -221,7 +220,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         # generate is not XLA - compileable anyways
         if cur_len < self.min_length:
             eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
-            scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
+            scores = tf.where(eos_token_id_mask, float("-inf"), scores)
 
         return scores
 
@@ -339,9 +338,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
         return scores
 
@@ -397,9 +394,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
         return scores
 

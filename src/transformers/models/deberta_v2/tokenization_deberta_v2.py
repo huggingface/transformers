@@ -292,7 +292,8 @@ class SPMTokenizer:
         self.vocab_file = vocab_file
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
-        assert os.path.exists(vocab_file)
+        if not os.path.exists(vocab_file):
+            raise FileNotFoundError(f"{vocab_file} does not exist!")
         spm.load(vocab_file)
         bpe_vocab_size = spm.GetPieceSize()
         # Token map
