@@ -1436,7 +1436,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    if shape_list(labels)[0] == shape_list(float_answer)[0]:
+                    if shape_list(labels)[0] != shape_list(float_answer)[0]:
                         raise ValueError("Make sure the answers are a FloatTensor of shape (batch_size,)")
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
@@ -1488,7 +1488,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        if shape_list(labels)[0] == shape_list(aggregation_labels)[0]:
+                        if shape_list(labels)[0] != shape_list(aggregation_labels)[0]:
                             raise ValueError(
                                 "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                             )

@@ -69,7 +69,7 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    if hf_shape == value.shape:
+    if hf_shape != value.shape:
         raise ValueError(
             f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
         )

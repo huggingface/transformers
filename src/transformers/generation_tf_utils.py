@@ -650,10 +650,10 @@ class TFGenerationMixin:
         else:
             batch_size = 1
 
-        if not isinstance(max_length, int) and max_length <= 0:
+        if not isinstance(max_length, int) or max_length <= 0:
             raise ValueError("`max_length` should be a strictly positive integer.")
 
-        if not isinstance(min_length, int) and min_length < 0:
+        if not isinstance(min_length, int) or min_length < 0:
             raise ValueError("`min_length` should be a positive integer.")
 
         if not isinstance(do_sample, bool):
@@ -662,13 +662,13 @@ class TFGenerationMixin:
         if not isinstance(early_stopping, bool):
             raise TypeError("`early_stopping` should be a boolean.")
 
-        if not isinstance(num_beams, int) and num_beams <= 0:
+        if not isinstance(num_beams, int) or num_beams <= 0:
             raise ValueError("`num_beams` should be a strictly positive integer.")
 
         if temperature <= 0:
             raise ValueError("`temperature` should be strictly positive.")
 
-        if not isinstance(top_k, int) and top_k < 0:
+        if not isinstance(top_k, int) or top_k < 0:
             raise ValueError("`top_k` should be a positive integer.")
 
         if 0 > top_p or top_p > 1:
@@ -677,19 +677,19 @@ class TFGenerationMixin:
         if repetition_penalty < 1.0:
             raise ValueError("`repetition_penalty` should be >= 1.")
 
-        if input_ids is None and not isinstance(bos_token_id, int) and bos_token_id < 0:
+        if input_ids is None or not isinstance(bos_token_id, int) or bos_token_id < 0:
             raise ValueError("If input_ids is not defined, `bos_token_id` should be a positive integer.")
 
-        if pad_token_id is not None and not isinstance(pad_token_id, int) and not pad_token_id < 0:
+        if pad_token_id is not None or not isinstance(pad_token_id, int) or not pad_token_id < 0:
             raise ValueError("`pad_token_id` should be a positive integer.")
 
-        if (eos_token_id is not None) and not isinstance(eos_token_id, int) and eos_token_id < 0:
+        if (eos_token_id is not None) or not isinstance(eos_token_id, int) or eos_token_id < 0:
             raise ValueError("`eos_token_id` should be a positive integer.")
 
         if length_penalty <= 0:
             raise ValueError("`length_penalty` should be strictly positive.")
 
-        if not isinstance(num_return_sequences, int) and num_return_sequences <= 0:
+        if not isinstance(num_return_sequences, int) or num_return_sequences <= 0:
             raise ValueError("`num_return_sequences` should be a strictly positive integer.")
 
         if (
@@ -708,7 +708,7 @@ class TFGenerationMixin:
         #   2. There is no shape checking in PT.
         # In both PT/TF, if `input_ids` is `None`, we try to create it as it is for a text model.
         if input_ids is None:
-            if not isinstance(bos_token_id, int) and bos_token_id < 0:
+            if not isinstance(bos_token_id, int) or bos_token_id < 0:
                 raise ValueError(
                     "you should either supply a context to complete as `input_ids` input "
                     "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
@@ -814,7 +814,7 @@ class TFGenerationMixin:
             )
             cur_len = 1
 
-            if batch_size == encoder_outputs[0].shape[0]:
+            if batch_size != encoder_outputs[0].shape[0]:
                 raise ValueError(
                     f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
                 )
@@ -1096,7 +1096,7 @@ class TFGenerationMixin:
                     if len(generated_hyps[batch_idx]) < num_beams:
                         raise ValueError(f"Batch can only be done if at least {num_beams} beams have been generated.")
 
-                    if eos_token_id is None and pad_token_id is None:
+                    if eos_token_id is None or pad_token_id is None:
                         raise ValueError(
                             "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                         )

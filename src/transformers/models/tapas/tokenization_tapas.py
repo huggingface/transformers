@@ -24,7 +24,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Type, Union
+from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
 import numpy as np
 

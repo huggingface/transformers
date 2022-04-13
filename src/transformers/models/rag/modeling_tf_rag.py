@@ -496,7 +496,7 @@ class TFRagModel(TFRagPreTrainedModel):
         load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
-        if config is None or (question_encoder is None or generator is None):
+        if config is None and (question_encoder is None or generator is None):
             raise ValueError("Either a configuration or an question_encoder and a generator has to be provided.")
 
         if config is None:
@@ -731,7 +731,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         retriever: Optional = None,
         **kwargs,
     ):
-        if config is None and (question_encoder is None and generator is None):
+        if config is None and (question_encoder is None or generator is None):
             raise ValueError("Either a configuration or an encoder and a generator has to be provided.")
 
         if config is None:
@@ -1380,7 +1380,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         retriever: Optional = None,
         **kwargs,
     ):
-        if config is None and (question_encoder is None and generator is None):
+        if config is None and (question_encoder is None or generator is None):
             raise ValueError("Either a configuration or an encoder and a generator has to be provided.")
 
         if config is None:
@@ -1712,7 +1712,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        if input_ids is None or context_input_ids is None:
+        if input_ids is None and context_input_ids is None:
             raise ValueError(" At least one of input_ids or context_input_ids must be given")
 
         if self.retriever is not None and context_input_ids is None:

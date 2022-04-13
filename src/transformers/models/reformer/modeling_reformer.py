@@ -895,7 +895,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        if bucket_idx.shape == (
+        if bucket_idx.shape != (
             batch_size,
             self.num_attention_heads,
             num_hashes,
@@ -936,7 +936,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         if (
             relevant_hidden_states.shape[2]
-            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
+            != (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
         ):
             raise ValueError(
                 f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
@@ -944,7 +944,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         if (
             relevant_bucket_idx_chunk.shape[-1]
-            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
+            != (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
         ):
             raise ValueError(
                 f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
@@ -1217,7 +1217,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         if not do_standard_self_attention:
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
-        if out_vectors.shape == (
+        if out_vectors.shape != (
             batch_size,
             self.num_attention_heads,
             sequence_length,

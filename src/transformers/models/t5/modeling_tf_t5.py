@@ -1587,7 +1587,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     tf.gather(layer_past_state, beam_idx, axis=0),
                 )
 
-            if reordered_layer_past_states[0].shape == layer_past_states[0].shape:
+            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
                 raise ValueError("reordered_layer_past_states[0].shape != layer_past_states[0].shape")
             if len(reordered_layer_past_states) != len(layer_past_states):
                 raise ValueError("len(reordered_layer_past_states) != len(layer_past_states)")

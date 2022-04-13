@@ -173,12 +173,12 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 raise ValueError(f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched")
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
-                if p_i.shape == arr_i.shape:
+                if p_i.shape != arr_i.shape:
                     raise ValueError(f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched")
                 logger.info(f"Initialize PyTorch weight {name} for layer {i}")
                 p_i.data = torch.from_numpy(arr_i)
         else:
-            if pointer.shape == array.shape:
+            if pointer.shape != array.shape:
                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
             logger.info(f"Initialize PyTorch weight {name}")
             pointer.data = torch.from_numpy(array)

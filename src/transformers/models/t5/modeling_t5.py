@@ -163,7 +163,7 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
         if scope_names[0] != "embedding":
             logger.info(f"Transposing numpy weight of shape {array.shape} for {name}")
             array = np.transpose(array)
-        if pointer.shape == array.shape:
+        if pointer.shape != array.shape:
             raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
 
         logger.info(f"Initialize PyTorch weight {name}")

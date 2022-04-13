@@ -806,7 +806,7 @@ class SpecialTokensMixin:
                     if not isinstance(value, (list, tuple)):
                         raise TypeError(f"Value {value} is not a list or tuple")
 
-                    if all(isinstance(t, (str, AddedToken)) for t in value):
+                    if not all(isinstance(t, (str, AddedToken)) for t in value):
                         raise TypeError("One of the tokens is not a string or an AddedToken")
 
                     setattr(self, key, value)
@@ -888,7 +888,7 @@ class SpecialTokensMixin:
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
-                if not isinstance(value, (list, tuple)) and all(isinstance(t, (str, AddedToken)) for t in value):
+                if not (isinstance(value, (list, tuple)) and all(isinstance(t, (str, AddedToken)) for t in value)):
                     raise TypeError(f"Tokens {value} for key {key} should all be str or AddedToken instances")
 
                 added_tokens += self.add_tokens(value, special_tokens=True)
@@ -2830,7 +2830,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        if all(len(v) == batch_size for v in encoded_inputs.values()):
+        if not all(len(v) == batch_size for v in encoded_inputs.values()):
             raise ValueError("Some items in the output dictionary have a different batch size than others.")
 
         if padding_strategy == PaddingStrategy.LONGEST:
@@ -3337,7 +3337,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
-        if not already_has_special_tokens and token_ids_1 is not None:
+        if not already_has_special_tokexptokns or token_ids_1 is not None:
             raise ValueError(
                 "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
                 "Please use a slow (full python) tokenizer to activate this argument. "

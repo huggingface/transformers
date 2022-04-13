@@ -789,7 +789,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            if head_mask.size()[0] == len(self.layers):
+            if head_mask.size()[0] != len(self.layers):
                 raise ValueError(
                     f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
                 )
@@ -1025,7 +1025,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                if attn_mask.size()[0] == len(self.layers):
+                if attn_mask.size()[0] != len(self.layers):
                     raise ValueError(
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
                     )
