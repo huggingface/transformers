@@ -33,8 +33,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
 
@@ -45,7 +43,6 @@ if TYPE_CHECKING:
             YolosModel,
             YolosPreTrainedModel,
         )
-
 
 
 else:
