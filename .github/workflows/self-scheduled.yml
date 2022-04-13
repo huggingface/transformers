@@ -1,5 +1,11 @@
 name: Self-hosted runner (scheduled)
 
+# Note that each job's dependencies go into a corresponding docker file.
+#
+# For example for `run_all_tests_torch_cuda_extensions_gpu` the docker image is
+# `huggingface/transformers-pytorch-deepspeed-latest-gpu`, which can be found at
+# `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
+
 on:
   repository_dispatch:
   schedule:
