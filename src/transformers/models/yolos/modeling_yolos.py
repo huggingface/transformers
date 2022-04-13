@@ -96,6 +96,7 @@ class YolosEmbeddings(nn.Module):
         )
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.interpolation = InterpolateInitialPositionEmbeddings(config)
         self.config = config
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -110,11 +111,73 @@ class YolosEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings, det_tokens), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        # this might require interpolation of the existing position embeddings
+        position_embeddings = self.interpolation(self.position_embeddings, (height, width))
+
+        embeddings = embeddings + position_embeddings
 
         embeddings = self.dropout(embeddings)
 
         return embeddings
+
+
+class InterpolateInitialPositionEmbeddings(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def forward(self, pos_embed, img_size=(800, 1344)) -> torch.Tensor:
+        cls_pos_embed = pos_embed[:, 0, :]
+        cls_pos_embed = cls_pos_embed[:, None]
+        det_pos_embed = pos_embed[:, -self.config.num_detection_tokens :, :]
+        patch_pos_embed = pos_embed[:, 1 : -self.config.num_detection_tokens, :]
+        patch_pos_embed = patch_pos_embed.transpose(1, 2)
+        B, E, Q = patch_pos_embed.shape
+
+        patch_height, patch_width = (
+            self.config.image_size[0] // self.config.patch_size,
+            self.config.image_size[1] // self.config.patch_size,
+        )
+        patch_pos_embed = patch_pos_embed.view(B, E, patch_height, patch_width)
+
+        H, W = img_size
+        new_patch_heigth, new_patch_width = H // self.config.patch_size, W // self.config.patch_size
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed, size=(new_patch_heigth, new_patch_width), mode="bicubic", align_corners=False
+        )
+        patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
+        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
+        return scale_pos_embed
+
+
+class InterpolateMidPositionEmbeddings(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def forward(self, pos_embed, img_size=(800, 1344)) -> torch.Tensor:
+        cls_pos_embed = pos_embed[:, :, 0, :]
+        cls_pos_embed = cls_pos_embed[:, None]
+        det_pos_embed = pos_embed[:, :, -self.config.num_detection_tokens :, :]
+        patch_pos_embed = pos_embed[:, :, 1 : -self.config.num_detection_tokens, :]
+        patch_pos_embed = patch_pos_embed.transpose(2, 3)
+        D, B, E, Q = patch_pos_embed.shape
+
+        patch_height, patch_width = (
+            self.config.mid_pe_size[0] // self.config.patch_size,
+            self.config.mid_pe_size[1] // self.config.patch_size,
+        )
+        patch_pos_embed = patch_pos_embed.view(D * B, E, patch_height, patch_width)
+        height, width = img_size
+        new_patch_height, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed, size=(new_patch_height, new_patch_width), mode="bicubic", align_corners=False
+        )
+        patch_pos_embed = (
+            patch_pos_embed.flatten(2).transpose(1, 2).contiguous().view(D, B, new_patch_height * new_patch_width, E)
+        )
+        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=2)
+        return scale_pos_embed
 
 
 # Based on timm implementation, which can be found here:
@@ -366,9 +429,13 @@ class YolosEncoder(nn.Module):
             else None
         )
 
+        self.interpolation = InterpolateMidPositionEmbeddings(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
+        height,
+        width,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -376,6 +443,8 @@ class YolosEncoder(nn.Module):
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        interpolated_mid_position_embeddings = self.interpolation(self.mid_position_embeddings, (height, width))
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -403,7 +472,7 @@ class YolosEncoder(nn.Module):
 
             if self.config.use_mid_position_embeddings:
                 if i < (self.config.num_hidden_layers - 1):
-                    hidden_states = hidden_states + self.mid_position_embeddings[i]
+                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -548,6 +617,8 @@ class YolosModel(YolosPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
+            height=pixel_values.shape[-2],
+            width=pixel_values.shape[-1],
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
