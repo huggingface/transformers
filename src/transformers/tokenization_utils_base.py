@@ -806,9 +806,9 @@ class SpecialTokensMixin:
                     if not isinstance(value, (list, tuple)):
                         raise TypeError(f"Value {value} is not a list or tuple")
 
-                    if not all(isinstance(t, (str, AddedToken)) for t in value):
-                        raise TypeError("One of the tokens is not a string or an AddedToken")
-
+                    assert all(
+                        isinstance(t, (str, AddedToken)) for t in value
+                    ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
@@ -880,22 +880,21 @@ class SpecialTokensMixin:
 
         added_tokens = 0
         for key, value in special_tokens_dict.items():
-            if key not in self.SPECIAL_TOKENS_ATTRIBUTES:
-                raise ValueError(f"Key {key} is not a special token")
+            assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
-                if not (isinstance(value, (list, tuple)) and all(isinstance(t, (str, AddedToken)) for t in value)):
-                    raise TypeError(f"Tokens {value} for key {key} should all be str or AddedToken instances")
-
+                assert isinstance(value, (list, tuple)) and all(
+                    isinstance(t, (str, AddedToken)) for t in value
+                ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
-                if not isinstance(value, (str, AddedToken)):
-                    raise TypeError(f"Token {value} for key {key} should be a str or an AddedToken instance")
-
+                assert isinstance(
+                    value, (str, AddedToken)
+                ), f"Token {value} for key {key} should be a str or an AddedToken instance"
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
@@ -2830,8 +2829,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        if not all(len(v) == batch_size for v in encoded_inputs.values()):
-            raise ValueError("Some items in the output dictionary have a different batch size than others.")
+        assert all(
+            len(v) == batch_size for v in encoded_inputs.values()
+        ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in required_input)
@@ -3337,13 +3337,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
-        if not already_has_special_tokens or token_ids_1 is not None:
-            raise ValueError(
-                "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
-                "Please use a slow (full python) tokenizer to activate this argument. "
-                "Or set `return_special_tokens_mask=True` when calling the encoding method "
-                "to get the special tokens mask in any tokenizer. "
-            )
+        assert already_has_special_tokens and token_ids_1 is None, (
+            "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
+            "Please use a slow (full python) tokenizer to activate this argument. "
+            "Or set `return_special_tokens_mask=True` when calling the encoding method "
+            "to get the special tokens mask in any tokenizer. "
+        )
 
         all_special_ids = self.all_special_ids  # cache the property
 
