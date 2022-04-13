@@ -173,10 +173,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return dict(self.encoder, **self.added_tokens_encoder)
 
     def init_backend(self, phonemizer_lang: str):
-        """Initiaizes the backend 
+        """Initiaizes the backend
 
         Args:
-            phonemizer_lang (str): language to be used 
+            phonemizer_lang (str): language to be used
         """
         requires_backends(self, "phonemizer")
         from phonemizer.backend import BACKENDS
