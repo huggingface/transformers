@@ -55,14 +55,6 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class TapexTruncationStrategy(ExplicitEnum):
-    """
-    Possible values for the `truncation` argument in [`~TapasTokenizer.__call__`]. Useful for tab-completion in an IDE.
-    """
-
-    DROP_ROWS_TO_FIT = "drop_rows_to_fit"
-
-
 class TokenizerStrategy(ExplicitEnum):
 
     TOKENIZE_SOURCE = "tokenize_source"
@@ -86,9 +78,6 @@ TAPEX_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 Activates and controls truncation. Accepts the following values:
 
-                - `'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided. This will truncate
-                  row by row, removing rows from the table.
                 - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will
                   truncate token by token, removing a token from the longest sequence in the pair if a pair of
@@ -268,6 +257,10 @@ class TapexTokenizer(PreTrainedTokenizer):
         max_cell_length (`int`, *optional*, defaults to 15):
             Maximum number of characters per cell when linearizing a table. If this number is exceeded, truncation
             takes place.
+        drop_rows_to_fit (`bool`, *optional*, defaults to `False`):
+            Whether to truncate the table to a maximum length specified with the argument `max_length` or to the
+            maximum acceptable input length for the model if that argument is not provided. This will randomly drop
+            unrelated rows based on the `answer` provided.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -291,6 +284,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         add_prefix_space=False,
         max_cell_length=15,
+        drop_rows_to_fit=False,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -317,6 +311,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
             max_cell_length=max_cell_length,
+            drop_rows_to_fit=drop_rows_to_fit,
             **kwargs,
         )
 
@@ -339,6 +334,7 @@ class TapexTokenizer(PreTrainedTokenizer):
 
         # additional properties
         self.max_cell_length = max_cell_length
+        self.drop_rows_to_fit = drop_rows_to_fit
         self.table_linearize = IndexedRowTableLinearize()
 
         # property to decide using which call function
@@ -832,9 +828,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         if answer is None:
             answer = [None] * len(table)
         for _table, _query, _answer in zip(table, query, answer):
-            text = self.prepare_table_query(
-                _table, _query, _answer, truncation_strategy=truncation_strategy, max_length=max_length
-            )
+            text = self.prepare_table_query(_table, _query, _answer, max_length=max_length)
 
             if self.do_lower_case:
                 text = text.lower()
@@ -883,7 +877,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Optional[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
@@ -986,9 +980,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        text = self.prepare_table_query(
-            table, query, answer, truncation_strategy=truncation_strategy, max_length=max_length
-        )
+        text = self.prepare_table_query(table, query, answer, max_length=max_length)
 
         # if necessary, perform lower case
         if self.do_lower_case:
@@ -1199,7 +1191,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: str,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
@@ -1346,7 +1338,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         table,
         query,
         answer=None,
-        truncation_strategy=Union[str, TruncationStrategy, TapexTruncationStrategy],
         max_length=None,
     ):
         """
@@ -1364,7 +1355,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             # always truncate table cells based on self.max_cell_length
             # optionally truncate rows if truncation_strategy is set to it
             self.truncate_table_cells(table_content, query, answer)
-            if truncation_strategy == TapexTruncationStrategy.DROP_ROWS_TO_FIT:
+            if self.drop_rows_to_fit:
                 self.truncate_table_rows(table_content, query, answer, max_length=max_length)
 
             # step 3: linearize table
