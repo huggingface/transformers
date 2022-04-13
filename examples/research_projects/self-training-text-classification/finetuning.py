@@ -12,9 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-#!/usr/bin/env python
-# coding=utf-8
 """Fine-tuning the library models for sequence classification."""
 
 import argparse
@@ -25,7 +22,7 @@ import math
 import os
 import random
 import shutil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 
 import datasets
 import numpy as np
@@ -35,7 +32,6 @@ from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import accelerate
 from transformers import (
     AdamW,
     AutoConfig,
@@ -46,10 +42,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.configuration_utils import PretrainedConfig
 from transformers.file_utils import ExplicitEnum
-from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import IntervalStrategy
 
 

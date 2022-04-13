@@ -12,9 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-#!/usr/bin/env python
-# coding=utf-8
 """Self-training for sequence classification."""
 
 import argparse
@@ -23,7 +20,7 @@ import json
 import logging
 import os
 import shutil
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import datasets
 from datasets import load_dataset
