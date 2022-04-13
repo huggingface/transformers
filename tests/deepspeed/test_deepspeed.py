@@ -34,8 +34,8 @@ from transformers.testing_utils import (
     get_gpu_count,
     mockenv_context,
     require_deepspeed,
-    require_torch_gpu,
     require_optuna,
+    require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
