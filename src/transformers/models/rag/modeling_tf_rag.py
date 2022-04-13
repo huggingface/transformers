@@ -16,7 +16,6 @@
 """TFRAG model implementation."""
 
 from dataclasses import dataclass
-from multiprocessing.sharedctypes import Value
 from typing import List, Optional, Tuple
 
 import numpy as np

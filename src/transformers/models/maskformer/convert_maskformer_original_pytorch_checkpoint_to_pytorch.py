@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
-from xml.dom import ValidationErr
 
 import torch
 import torchvision.transforms as T

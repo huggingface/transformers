@@ -254,7 +254,7 @@ class TFLxmertAttention(tf.keras.layers.Layer):
 
         self.num_attention_heads = config.num_attention_heads
         if config.hidden_size % config.num_attention_heads != 0:
-            raise ValueError(f"config.hidden_size must be divisible by config.num_attention_heads.")
+            raise ValueError("config.hidden_size must be divisible by config.num_attention_heads.")
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 

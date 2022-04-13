@@ -117,7 +117,7 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.dropout = config.attention_dropout
         if self.dim % self.n_heads != 0:
-            raise ValueError(f"dim must be divisible by n_heads.")
+            raise ValueError("dim must be divisible by n_heads.")
 
         self.q_lin = nn.Linear(dim, dim)
         self.k_lin = nn.Linear(dim, dim)
