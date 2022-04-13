@@ -72,7 +72,7 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
         cls_token (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
-            Classification Token at the output of the last layer of the model.
+            Classification token at the output of the last layer of the model.
     """
 
     last_hidden_state: torch.FloatTensor = None
