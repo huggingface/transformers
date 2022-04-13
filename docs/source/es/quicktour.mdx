@@ -93,11 +93,11 @@ El pipeline descarga y almacena en caché el [modelo preentrenado](https://huggi
 Para más de un enunciado, entrega una lista al [`pipeline`] que devolverá una lista de diccionarios:
 
 ```py
->>> resultados = clasificador(["Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.", "Esperamos que odies lo mucho que te gusta 😈."])
+>>> resultados = clasificador(["Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.", "No me gusta esta comida."])
 >>> for resultado in resultados:
 ...     print(f"label: {resultado['label']}, con score: {round(resultado['score'], 4)}")
 label: POS, con score: 0.9917
-label: NEG, con score: 0.9981
+label: NEG, con score: 0.9979
 ```
 
 El [`pipeline`] también puede iterar sobre un dataset entero. Comienza instalando la biblioteca [🤗 Datasets](https://huggingface.co/docs/datasets/):
