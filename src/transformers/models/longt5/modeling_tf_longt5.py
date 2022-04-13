@@ -979,15 +979,16 @@ LONGT5_START_DOCSTRING = r"""
 LONGT5_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so you
-            should be able to pad the inputs on the right or the left.
+            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so
+            you should be able to pad the inputs on the right or the left.
 
             Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `inputs` for pretraining take a look at [LONGT5 Training](./longt5#training).
+            To know more on how to prepare `inputs` for pretraining take a look at [LONGT5
+            Training](./longt5#training).
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for sequence to sequence training. LONGT5 uses the `pad_token_id` as the starting token for
             `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last `decoder_input_ids`
@@ -1063,13 +1064,14 @@ LONGT5_INPUTS_DOCSTRING = r"""
 LONGT5_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so you
-            should be able to pad the inputs on the right or the left.
+            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so
+            you should be able to pad the inputs on the right or the left.
 
             Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
-            To know more on how to prepare `inputs` for pre-training take a look at [LONGT5 Training](./longt5#training).
+            To know more on how to prepare `inputs` for pre-training take a look at [LONGT5
+            Training](./longt5#training).
         attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 

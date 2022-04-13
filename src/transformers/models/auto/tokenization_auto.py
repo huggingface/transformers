@@ -54,8 +54,6 @@ else:
                 ),
             ),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
-        ],
-        [
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),

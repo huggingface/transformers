@@ -18,14 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    _LazyModule,
-    is_flax_available,
-    ,
-    is_tf_available,
-    ,
-    is_torch_available,
-)
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -82,7 +75,11 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
+        from .modeling_flax_longt5 import (
+            FlaxLongT5ForConditionalGeneration,
+            FlaxLongT5Model,
+            FlaxLongT5PreTrainedModel,
+        )
 
 
 else:
