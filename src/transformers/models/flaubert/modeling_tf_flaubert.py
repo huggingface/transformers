@@ -295,7 +295,8 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         self.dim = dim
         self.n_heads = n_heads
         self.output_attentions = config.output_attentions
-        assert self.dim % self.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError("dim must be divisible by n_heads.")
 
         self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
         self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")

@@ -541,7 +541,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         if input_ids is None and inputs_embeds is None:
-            raise ValueError("Both input_ids and inputs_embeds can't be None.")
+            raise ValueError("Both input_ids and inputs_embeds can't be None")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
