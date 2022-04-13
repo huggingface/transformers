@@ -36,7 +36,8 @@ a crucial component in existing Vision Transformers, can be safely removed in ou
 Tips:
 
 
-- Cvt models are regular Vision Transformers, but trained with convolutions. It outperform the [original model (ViT)](vit) 
+- CvT models are regular Vision Transformers, but trained with convolutions. They outperform the [original model (ViT)](vit) 
+
   when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
   fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace [`ViTFeatureExtractor`] by [`CvtFeatureExtractor`] and [`ViTForImageClassification`] by [`CvtForImageClassification`]).
 - The available checkpoints are either (1) pre-trained on [ImageNet-22k](http://www.image-net.org/) (a collection of
