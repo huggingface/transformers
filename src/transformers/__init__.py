@@ -134,6 +134,8 @@ _import_structure = {
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
+    "models.data2vec_vision": ["DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
+    "models.data2vec_vision": ["DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -727,6 +729,26 @@ if is_torch_available():
             "BeitForSemanticSegmentation",
             "BeitModel",
             "BeitPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec_vision"].extend(
+        [
+            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Data2VecVisionForImageClassification",
+            "Data2VecVisionForMaskedImageModeling",
+            "Data2VecVisionForSemanticSegmentation",
+            "Data2VecVisionModel",
+            "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec_vision"].extend(
+        [
+            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Data2VecVisionForImageClassification",
+            "Data2VecVisionForMaskedImageModeling",
+            "Data2VecVisionForSemanticSegmentation",
+            "Data2VecVisionModel",
+            "Data2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -2287,6 +2309,22 @@ if is_flax_available():
             "FlaxBeitPreTrainedModel",
         ]
     )
+    _import_structure["models.data2vec_vision"].extend(
+        [
+            "FlaxData2VecVisionForImageClassification",
+            "FlaxData2VecVisionForMaskedImageModeling",
+            "FlaxData2VecVisionModel",
+            "FlaxData2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec_vision"].extend(
+        [
+            "FlaxData2VecVisionForImageClassification",
+            "FlaxData2VecVisionForMaskedImageModeling",
+            "FlaxData2VecVisionModel",
+            "FlaxData2VecVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -2523,6 +2561,8 @@ if TYPE_CHECKING:
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
+    from .models.data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
+    from .models.data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
@@ -3036,6 +3076,22 @@ if TYPE_CHECKING:
             BeitForSemanticSegmentation,
             BeitModel,
             BeitPreTrainedModel,
+        )
+        from .models.data2vec_vision import (
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForMaskedImageModeling,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
+        )
+        from .models.data2vec_vision import (
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForMaskedImageModeling,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -5,6 +5,8 @@ from timm.models import create_model
 import modeling_finetune  # noqa: F401
 #from .convert_beit_unilm_to_pytorch import create_rename_keys, read_in_q_k_v
 from transformers import BeitFeatureExtractor, BeitConfig, BeitForImageClassification
+from transformers.models.beit.convert_beit_unilm_to_pytorch import read_in_q_k_v, create_rename_keys
+
 from PIL import Image
 
 
@@ -414,120 +416,6 @@ def load_model(args):
     load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
 
     return model
-
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, has_lm_head=False, is_semantic=False):
-    prefix = "backbone." if is_semantic else ""
-
-    rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight")
-        )
-        rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias")
-        )
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.weight", f"beit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.bias", f"beit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.weight", f"beit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.bias", f"beit.encoder.layer.{i}.output.dense.bias"))
-
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            (f"{prefix}cls_token", "beit.embeddings.cls_token"),
-            (f"{prefix}patch_embed.proj.weight", "beit.embeddings.patch_embeddings.projection.weight"),
-            (f"{prefix}patch_embed.proj.bias", "beit.embeddings.patch_embeddings.projection.bias"),
-        ]
-    )
-
-    if has_lm_head:
-        # mask token + shared relative position bias + layernorm
-        rename_keys.extend(
-            [
-                ("mask_token", "beit.embeddings.mask_token"),
-                (
-                    "rel_pos_bias.relative_position_bias_table",
-                    "beit.encoder.relative_position_bias.relative_position_bias_table",
-                ),
-                (
-                    "rel_pos_bias.relative_position_index",
-                    "beit.encoder.relative_position_bias.relative_position_index",
-                ),
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-            ]
-        )
-    elif is_semantic:
-        # semantic segmentation classification heads
-        rename_keys.extend(
-            [
-                ("decode_head.conv_seg.weight", "decode_head.classifier.weight"),
-                ("decode_head.conv_seg.bias", "decode_head.classifier.bias"),
-                ("auxiliary_head.conv_seg.weight", "auxiliary_head.classifier.weight"),
-                ("auxiliary_head.conv_seg.bias", "auxiliary_head.classifier.bias"),
-            ]
-        )
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("fc_norm.weight", "beit.pooler.layernorm.weight"),
-                ("fc_norm.bias", "beit.pooler.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
-
-    return rename_keys
-
-
-# we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, has_lm_head=False, is_semantic=False):
-    for i in range(config.num_hidden_layers):
-        prefix = "backbone." if is_semantic else ""
-        # queries, keys and values
-        in_proj_weight = state_dict.pop(f"{prefix}blocks.{i}.attn.qkv.weight")
-        q_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.q_bias")
-        v_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.v_bias")
-
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
-
-        # gamma_1 and gamma_2
-        # we call them lambda because otherwise they are renamed when using .from_pretrained
-        gamma_1 = state_dict.pop(f"{prefix}blocks.{i}.gamma_1")
-        gamma_2 = state_dict.pop(f"{prefix}blocks.{i}.gamma_2")
-
-        state_dict[f"beit.encoder.layer.{i}.lambda_1"] = gamma_1
-        state_dict[f"beit.encoder.layer.{i}.lambda_2"] = gamma_2
-
-        # relative_position bias table + index
-        if not has_lm_head:
-            # each layer has its own relative position bias
-            table = state_dict.pop(f"{prefix}blocks.{i}.attn.relative_position_bias_table")
-            index = state_dict.pop(f"{prefix}blocks.{i}.attn.relative_position_index")
-
-            state_dict[
-                f"beit.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"
-            ] = table
-            state_dict[
-                f"beit.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"
-            ] = index
 
 config = BeitConfig()
 

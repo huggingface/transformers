@@ -3,8 +3,8 @@ import torch
 import argparse
 from timm.models import create_model
 import modeling_finetune  # noqa: F401
-from transformers import BeitFeatureExtractor
-from transformers import Data2VecVisionConfig, Data2VecVisionForImageClassification
+#from .convert_beit_unilm_to_pytorch import create_rename_keys, read_in_q_k_v
+from transformers import BeitFeatureExtractor, BeitConfig, BeitForImageClassification
 from PIL import Image
 
 
@@ -422,27 +422,27 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_before.bias"))
+        rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
+        rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.weight", f"data2vec_vision.encoder.layer.{i}.attention.output.dense.weight")
+            (f"{prefix}blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight")
         )
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.bias", f"data2vec_vision.encoder.layer.{i}.attention.output.dense.bias")
+            (f"{prefix}blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias")
         )
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.weight", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.bias", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.weight", f"data2vec_vision.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.bias", f"data2vec_vision.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
+        rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))
+        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.weight", f"beit.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.bias", f"beit.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.weight", f"beit.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.bias", f"beit.encoder.layer.{i}.output.dense.bias"))
 
     # projection layer + position embeddings
     rename_keys.extend(
         [
-            (f"{prefix}cls_token", "data2vec_vision.embeddings.cls_token"),
-            (f"{prefix}patch_embed.proj.weight", "data2vec_vision.embeddings.patch_embeddings.projection.weight"),
-            (f"{prefix}patch_embed.proj.bias", "data2vec_vision.embeddings.patch_embeddings.projection.bias"),
+            (f"{prefix}cls_token", "beit.embeddings.cls_token"),
+            (f"{prefix}patch_embed.proj.weight", "beit.embeddings.patch_embeddings.projection.weight"),
+            (f"{prefix}patch_embed.proj.bias", "beit.embeddings.patch_embeddings.projection.bias"),
         ]
     )
 
@@ -450,14 +450,14 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
         # mask token + shared relative position bias + layernorm
         rename_keys.extend(
             [
-                ("mask_token", "data2vec_vision.embeddings.mask_token"),
+                ("mask_token", "beit.embeddings.mask_token"),
                 (
                     "rel_pos_bias.relative_position_bias_table",
-                    "data2vec_vision.encoder.relative_position_bias.relative_position_bias_table",
+                    "beit.encoder.relative_position_bias.relative_position_bias_table",
                 ),
                 (
                     "rel_pos_bias.relative_position_index",
-                    "data2vec_vision.encoder.relative_position_bias.relative_position_index",
+                    "beit.encoder.relative_position_bias.relative_position_index",
                 ),
                 ("norm.weight", "layernorm.weight"),
                 ("norm.bias", "layernorm.bias"),
@@ -477,8 +477,8 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
         # layernorm + classification head
         rename_keys.extend(
             [
-                ("fc_norm.weight", "data2vec_vision.pooler.layernorm.weight"),
-                ("fc_norm.bias", "data2vec_vision.pooler.layernorm.bias"),
+                ("fc_norm.weight", "beit.pooler.layernorm.weight"),
+                ("fc_norm.bias", "beit.pooler.layernorm.bias"),
                 ("head.weight", "classifier.weight"),
                 ("head.bias", "classifier.bias"),
             ]
@@ -496,25 +496,25 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False, is_semantic=False):
         q_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.q_bias")
         v_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.v_bias")
 
-        state_dict[f"data2vec_vision.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
             : config.hidden_size, :
         ]
-        state_dict[f"data2vec_vision.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"data2vec_vision.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
         ]
-        state_dict[f"data2vec_vision.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict[f"data2vec_vision.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
         # gamma_1 and gamma_2
         # we call them lambda because otherwise they are renamed when using .from_pretrained
         gamma_1 = state_dict.pop(f"{prefix}blocks.{i}.gamma_1")
         gamma_2 = state_dict.pop(f"{prefix}blocks.{i}.gamma_2")
 
-        state_dict[f"data2vec_vision.encoder.layer.{i}.lambda_1"] = gamma_1
-        state_dict[f"data2vec_vision.encoder.layer.{i}.lambda_2"] = gamma_2
+        state_dict[f"beit.encoder.layer.{i}.lambda_1"] = gamma_1
+        state_dict[f"beit.encoder.layer.{i}.lambda_2"] = gamma_2
 
         # relative_position bias table + index
         if not has_lm_head:
@@ -523,13 +523,13 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False, is_semantic=False):
             index = state_dict.pop(f"{prefix}blocks.{i}.attn.relative_position_index")
 
             state_dict[
-                f"data2vec_vision.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"
+                f"beit.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"
             ] = table
             state_dict[
-                f"data2vec_vision.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"
+                f"beit.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"
             ] = index
 
-config = Data2VecVisionConfig()
+config = BeitConfig()
 
 # intermediate fine-tuning on ImageNet-22k
 config.use_relative_position_bias = True
@@ -564,7 +564,7 @@ orig_model.eval()
 with torch.no_grad():
     orig_model_output = orig_model(pixel_values)
     
-hf_model = Data2VecVisionForImageClassification(config)
+hf_model =BeitForImageClassification(config)
 hf_model.eval()
 
 state_dict = orig_model.state_dict()

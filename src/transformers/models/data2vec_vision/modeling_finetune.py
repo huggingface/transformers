@@ -131,7 +131,6 @@ class Attention(nn.Module):
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))
 
-        print("fsq attn 1", attn.abs().sum())
         if self.relative_position_bias_table is not None:
             relative_position_bias = \
                 self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
@@ -143,13 +142,10 @@ class Attention(nn.Module):
         if rel_pos_bias is not None:
             attn = attn + rel_pos_bias
 
-        print("fsq attn 3", attn.abs().sum())
-        
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, -1)
-        print("fsq attn x", x.abs().sum())
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -365,15 +361,11 @@ class VisionTransformer(nn.Module):
         if self.pos_embed is not None:
             x = x + self.pos_embed
         x = self.pos_drop(x)
-        print("fsq x out after pos", x.abs().sum())
 
         rel_pos_bias = self.rel_pos_bias() if self.rel_pos_bias is not None else None
         layer_xs = []
         for i, blk in enumerate(self.blocks):
             x, _ = blk(x, rel_pos_bias=rel_pos_bias)  # B x T x C
-            print(f"fsq x out {i} after pos", x.abs().sum())
-            if i > 0:
-                break
             layer_xs.append(x)
 
         if self.learn_layer_weights:
