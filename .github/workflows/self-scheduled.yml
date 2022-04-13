@@ -209,10 +209,6 @@ jobs:
         working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Install dependencies
-        run: |
-              pip install .[optuna]
-
       - name: Re-compile DeepSpeed
         working-directory: /workspace
         run: |
