@@ -16,8 +16,6 @@
 
 
 import collections.abc
-import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -289,6 +287,7 @@ class CvtSelfOutput(nn.Module):
     The residual connection is defined in CvtLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
+
     def __init__(self, embed_dim, drop_rate):
         super().__init__()
         self.dense = nn.Linear(embed_dim, embed_dim)
@@ -386,6 +385,7 @@ class CvtLayer(nn.Module):
     """
     CvtLayer composed by attention layers, normalization and multi-layer perceptrons (mlps).
     """
+
     def __init__(
         self,
         num_heads,
