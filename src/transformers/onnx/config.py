@@ -628,7 +628,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
 
         encoder_sequence = "past_encoder_sequence"
-        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_sequence + sequence"
+        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
 
         for i in range(min_num_layers):
             inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
