@@ -80,7 +80,7 @@ def rename_key(name):
     if "det_token" in name:
         name = name.replace("det_token", "embeddings.det_token")
     if "mid_pos_embed" in name:
-        name = name.replace("mid_pos_embed", "embeddings.mid_position_embeddings")
+        name = name.replace("mid_pos_embed", "encoder.mid_position_embeddings")
     if "pos_embed" in name:
         name = name.replace("pos_embed", "embeddings.position_embeddings")
     if "patch_embed.proj" in name:

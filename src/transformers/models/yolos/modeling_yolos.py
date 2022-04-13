@@ -95,16 +95,6 @@ class YolosEmbeddings(nn.Module):
             torch.zeros(1, num_patches + config.num_detection_tokens + 1, config.hidden_size)
         )
 
-        self.mid_position_embeddings = nn.Parameter(
-            torch.zeros(
-                config.num_hidden_layers - 1,
-                1,
-                1
-                + (config.mid_pe_size[0] * config.mid_pe_size[1] // config.patch_size**2)
-                + config.num_detection_tokens,
-                config.hidden_size,
-            )
-        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -361,6 +351,21 @@ class YolosEncoder(nn.Module):
         self.layer = nn.ModuleList([YolosLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+        self.mid_position_embeddings = (
+            nn.Parameter(
+                torch.zeros(
+                    config.num_hidden_layers - 1,
+                    1,
+                    1
+                    + (config.mid_pe_size[0] * config.mid_pe_size[1] // config.patch_size**2)
+                    + config.num_detection_tokens,
+                    config.hidden_size,
+                )
+            )
+            if config.use_mid_position_embeddings
+            else None
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -395,6 +400,10 @@ class YolosEncoder(nn.Module):
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
+
+            if self.config.use_mid_position_embeddings:
+                if i < (self.config.num_hidden_layers - 1):
+                    hidden_states = hidden_states + self.mid_position_embeddings[i]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)

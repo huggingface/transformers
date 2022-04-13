@@ -68,6 +68,8 @@ class YolosConfig(PretrainedConfig):
             The number of detection tokens.
         mid_pe_size (`List[int]`, *optional*, defaults to `[512, 864]`):
             The size of the grid for the mid-layer position encodings.
+        use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to use the mid-layer position encodings.
 
     Example:
 
@@ -103,6 +105,7 @@ class YolosConfig(PretrainedConfig):
         qkv_bias=True,
         num_detection_tokens=100,
         mid_pe_size=[512, 864],
+        use_mid_position_embeddings=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -122,3 +125,4 @@ class YolosConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.num_detection_tokens = num_detection_tokens
         self.mid_pe_size = mid_pe_size
+        self.use_mid_position_embeddings = use_mid_position_embeddings
