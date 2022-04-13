@@ -1362,6 +1362,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[ignore_key]
 
         from .utils import is_sagemaker_mp_enabled
+
         if is_sagemaker_mp_enabled():
             # Do not shard checkpoints when sagemaker model parallel is enabled
             output_model_file = os.path.join(save_directory, WEIGHTS_NAME)

@@ -1171,10 +1171,10 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-
         if resume_from_checkpoint is not None:
             if self.args.smp_load_partial:
                 import glob
+
                 # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
                 checkpoint_file_exists = glob.glob(os.path.join(resume_from_checkpoint, WEIGHTS_NAME) + "_*")
             else:
@@ -1288,7 +1288,9 @@ class Trainer:
         model = self._wrap_model(self.model_wrapped)
 
         if resume_from_checkpoint is not None and is_sagemaker_mp_enabled():
-            state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
+            state_dict = smp.load(
+                os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial
+            )
             model.load_state_dict(state_dict)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -1563,6 +1565,7 @@ class Trainer:
             best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
             if self.args.smp_load_partial:
                 import glob
+
                 # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
                 smp_checkpoint_file_exists = glob.glob(best_model_path + "_*")
 
@@ -1750,7 +1753,12 @@ class Trainer:
             else:
                 opt_state_dict = self.optimizer.state_dict()
             if self.args.should_save or smp.state.cfg.shard_optimizer_state:
-                smp.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME), partial=self.args.smp_save_partial, v3=smp.state.cfg.shard_optimizer_state)
+                smp.save(
+                    opt_state_dict,
+                    os.path.join(output_dir, OPTIMIZER_NAME),
+                    partial=self.args.smp_save_partial,
+                    v3=smp.state.cfg.shard_optimizer_state,
+                )
                 # Save it and the scheduler on the main process
                 if self.args.should_save:
                     with warnings.catch_warnings(record=True) as caught_warnings:
@@ -1830,14 +1838,13 @@ class Trainer:
 
         if self.args.smp_load_partial:
             import glob
+
             # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
             checkpoint_file_exists = glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
         else:
             checkpoint_file_exists = os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
 
-        if checkpoint_file_exists and os.path.isfile(
-            os.path.join(checkpoint, SCHEDULER_NAME)
-        ):
+        if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
@@ -1854,8 +1861,12 @@ class Trainer:
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 if is_sagemaker_mp_enabled():
+
                     def opt_load_hook(mod, opt):
-                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial))
+                        opt.load_state_dict(
+                            smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial)
+                        )
+
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
                     self.optimizer.load_state_dict(
