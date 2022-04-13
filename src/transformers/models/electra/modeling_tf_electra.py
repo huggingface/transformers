@@ -1160,9 +1160,12 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="google/electra-small-generator",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[MASK]",
+        expected_output="'paris'",
+        expected_loss=1.22,
     )
     def call(
         self,
@@ -1269,9 +1272,11 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="bhadresh-savani/electra-base-emotion",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'joy'",
+        expected_loss=0.06,
     )
     def call(
         self,
@@ -1478,9 +1483,11 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['B-LOC', 'B-ORG', 'O', 'O', 'O', 'O', 'O', 'B-LOC', 'O', 'B-LOC', 'I-LOC']",
+        expected_loss=0.11,
     )
     def call(
         self,
@@ -1558,9 +1565,13 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="bhadresh-savani/electra-base-squad2",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=11,
+        qa_target_end_index=12,
+        expected_output="'a nice puppet'",
+        expected_loss=2.64,
     )
     def call(
         self,
