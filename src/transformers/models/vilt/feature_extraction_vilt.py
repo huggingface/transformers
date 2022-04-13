@@ -15,6 +15,7 @@
 """Feature extractor class for ViLT."""
 
 from typing import List, Optional, Union
+import warnings
 
 import numpy as np
 from PIL import Image
@@ -32,6 +33,12 @@ from ...utils import TensorType, is_torch_available, logging
 
 if is_torch_available():
     import torch
+    
+    if torch.__version__ < (1, 10, 0):
+        warnings.warn(
+            f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
+            "ViltFeatureExtractor. Please upgrade torch."
+        )
 
 logger = logging.get_logger(__name__)
 
