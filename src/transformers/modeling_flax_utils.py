@@ -657,6 +657,20 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
+        # dictionary of key: bools that establish whether each parameter is in jnp.float32
+        param_dtypes = jax.tree_map(lambda x: x.dtype != jnp.float32, state)
+        # extract keys of parameters not in jnp.float32
+        downcast_params = [k for k in param_dtypes if param_dtypes[k]]
+
+        # raise a warning if any of the parameters are not in jnp.float32
+        if len(downcast_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"in a precision other than float32:\n{0}\n"
+                "You should probably UPCAST the model weights to float32 to be able to use it for predictions and inference. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
+            )
+
         # set correct parameters
         model.params = unflatten_dict(state)
 
