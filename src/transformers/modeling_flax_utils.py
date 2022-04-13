@@ -657,17 +657,26 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
-        # dictionary of key: bools that establish whether each parameter is in jnp.float32
-        param_dtypes = jax.tree_map(lambda x: x.dtype != jnp.float32, state)
+        # dictionary of key: dtypes for the model params
+        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
         # extract keys of parameters not in jnp.float32
-        downcast_params = [k for k in param_dtypes if param_dtypes[k]]
+        fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
+        bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]
 
         # raise a warning if any of the parameters are not in jnp.float32
-        if len(downcast_params) > 0:
+        if len(fp16_params) > 0:
             logger.warning(
                 f"Some of the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"in a precision other than float32:\n{0}\n"
-                "You should probably UPCAST the model weights to float32 to be able to use it for predictions and inference. "
+                f"in float16 precision:\n{fp16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
+            )
+
+        if len(bf16_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"in bfloat16 precision:\n{bf16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
                 "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
 
