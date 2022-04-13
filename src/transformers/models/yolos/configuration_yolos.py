@@ -56,7 +56,7 @@ class YolosConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `224`):
+        image_size (`List[int]`, *optional*, defaults to `[512, 864]`):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to `16`):
             The size (resolution) of each patch.
@@ -97,7 +97,7 @@ class YolosConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
-        image_size=224,
+        image_size=[512, 864],
         patch_size=16,
         num_channels=3,
         qkv_bias=True,

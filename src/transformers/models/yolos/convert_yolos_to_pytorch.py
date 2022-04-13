@@ -24,8 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-
-from transformers import DetrFeatureExtractor, YolosConfig, YolosModel
+from transformers import DetrFeatureExtractor, YolosConfig, YolosForObjectDetection
 from transformers.utils import logging
 
 
@@ -33,95 +32,105 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
-    rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"yolos.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"yolos.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"yolos.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"yolos.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"yolos.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"yolos.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"yolos.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"yolos.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"yolos.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"yolos.encoder.layer.{i}.output.dense.bias"))
+def get_yolos_config(yolos_name):
+    config = YolosConfig()
 
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "yolos.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "yolos.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "yolos.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "yolos.embeddings.position_embeddings"),
-        ]
-    )
+    # size of the architecture
+    if "yolos_s" in yolos_name:
+        config.hidden_size = 384
+        config.intermediate_size = 1536
+        config.num_hidden_layers = 12
+        config.num_attention_heads = 6
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-                ("pre_logits.fc.weight", "pooler.dense.weight"),
-                ("pre_logits.fc.bias", "pooler.dense.bias"),
-            ]
-        )
+    config.num_labels = 91
+    repo_id = "datasets/huggingface/label-files"
+    filename = "coco-detection-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
-        # if just the base model, we should remove "yolos" from all keys that start with "yolos"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("yolos") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "yolos.layernorm.weight"),
-                ("norm.bias", "yolos.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
-
-    return rename_keys
+    return config
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config, base_model=False):
     for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "yolos."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
         ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
+def rename_key(name):
+    if "backbone" in name:
+        name = name.replace("backbone", "yolos")
+    if "cls_token" in name:
+        name = name.replace("cls_token", "embeddings.cls_token")
+    if "det_token" in name:
+        name = name.replace("det_token", "embeddings.det_token")
+    if "mid_pos_embed" in name:
+        name = name.replace("mid_pos_embed", "embeddings.mid_position_embeddings")
+    if "pos_embed" in name:
+        name = name.replace("pos_embed", "embeddings.position_embeddings")
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+    if "blocks" in name:
+        name = name.replace("blocks", "encoder.layer")
+    if "attn.proj" in name:
+        name = name.replace("attn.proj", "attention.output.dense")
+    if "attn" in name:
+        name = name.replace("attn", "attention.self")
+    if "norm1" in name:
+        name = name.replace("norm1", "layernorm_before")
+    if "norm2" in name:
+        name = name.replace("norm2", "layernorm_after")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+    if "class_embed" in name:
+        name = name.replace("class_embed", "class_labels_classifier")
+    if "bbox_embed" in name:
+        name = name.replace("bbox_embed", "bbox_predictor")
+    if "yolos.norm" in name:
+        name = name.replace("yolos.norm", "yolos.layernorm")
+
+    return name
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
+def convert_state_dict(orig_state_dict, model):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+
+        if "qkv" in key:
+            key_split = key.split(".")
+            layer_num = int(key_split[2])
+            dim = model.yolos.encoder.layer[layer_num].attention.attention.all_head_size
+            if "weight" in key:
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
+                    dim : dim * 2, :
+                ]
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+            else:
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
+        else:
+            orig_state_dict[rename_key(key)] = val
+
+    return orig_state_dict
 
 
 # We will verify our results on an image of cute cats
@@ -132,39 +141,30 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_yolos_checkpoint(yolos_name, pytorch_dump_folder_path):
+def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
     """
+    config = get_yolos_config(yolos_name)
 
-    # define default Yolos configuration
-    config = YolosConfig()
-    
-    # size of the architecture
-    if "yolos_s" in yolos_name:
-        config.hidden_size = 384
-        config.intermediate_size = 1536
-        config.num_hidden_layers = 12
-        config.num_attention_heads = 6
-
-    # load state_dict of original model, remove and rename some keys
-    state_dict = torch.load(yolos_name, map_location="cpu")["model"]
-    rename_keys = create_rename_keys(config)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config)
+    # load original state_dict
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # load HuggingFace model
-    model = YolosModel(config).eval()
-    model.load_state_dict(state_dict)
+    model = YolosForObjectDetection(config)
+    model.eval()
+    new_state_dict = convert_state_dict(state_dict, model)
+    model.load_state_dict(new_state_dict)
 
     # Check outputs on an image, prepared by DetrFeatureExtractor
     feature_extractor = DetrFeatureExtractor(size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
+    logits = outputs.logits
 
     # TODO assert logits
+    print("Shape of logits:", logits.shape)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {yolos_name} to {pytorch_dump_folder_path}")
@@ -182,9 +182,10 @@ if __name__ == "__main__":
         type=str,
         help="Name of the YOLOS model you'd like to convert.",
     )
+    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the original state dict.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()
-    convert_yolos_checkpoint(args.yolos_name, args.pytorch_dump_folder_path)
+    convert_yolos_checkpoint(args.yolos_name, args.checkpoint_path, args.pytorch_dump_folder_path)

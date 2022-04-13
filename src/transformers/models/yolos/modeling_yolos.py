@@ -91,9 +91,11 @@ class YolosEmbeddings(nn.Module):
             embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.zeros(1, num_patches + config.num_detection_tokens + 1, config.hidden_size)
+        )
 
-        self.mid_pos_embed = nn.Parameter(
+        self.mid_position_embeddings = nn.Parameter(
             torch.zeros(
                 config.num_hidden_layers - 1,
                 1,
@@ -114,7 +116,8 @@ class YolosEmbeddings(nn.Module):
 
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        det_tokens = self.det_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings, det_tokens), dim=1)
 
         # add positional encoding to each token
         embeddings = embeddings + self.position_embeddings
@@ -151,10 +154,10 @@ class PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
+        # if height != self.image_size[0] or width != self.image_size[1]:
+        #     raise ValueError(
+        #         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+        #     )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -582,14 +585,15 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         super().__init__(config)
 
         # YOLOS encoder model
-        self.model = YolosModel(config)
+        self.yolos = YolosModel(config, add_pooling_layer=False)
 
         # Object detection heads
-        self.class_labels_classifier = nn.Linear(
-            config.d_model, config.num_labels + 1
-        )  # We add one for the "no object" class
+        # We add one for the "no object" class
+        self.class_labels_classifier = YolosMLPPredictionHead(
+            input_dim=config.hidden_size, hidden_dim=config.hidden_size, output_dim=config.num_labels + 1, num_layers=3
+        )
         self.bbox_predictor = YolosMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            input_dim=config.hidden_size, hidden_dim=config.hidden_size, output_dim=4, num_layers=3
         )
 
         # Initialize weights and apply final processing
@@ -608,11 +612,6 @@ class YolosForObjectDetection(YolosPreTrainedModel):
     def forward(
         self,
         pixel_values,
-        pixel_mask=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -649,14 +648,9 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # First, sent images through YOLOS base model to obtain encoder + decoder outputs
-        outputs = self.model(
+        # First, sent images through YOLOS base model to obtain hidden states
+        outputs = self.yolos(
             pixel_values,
-            pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -719,12 +713,6 @@ class YolosForObjectDetection(YolosPreTrainedModel):
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
             last_hidden_state=outputs.last_hidden_state,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
         )
 
 
