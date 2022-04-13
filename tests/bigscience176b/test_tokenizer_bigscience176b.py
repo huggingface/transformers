@@ -18,15 +18,19 @@ class BigScienceTokenizationTest(unittest.TestCase):
         using Megatron-LM. For now:
             - Read the tokenized text (.bin file) + the raw text
             - Load a tokenizer from the hub (fast tokenizer or python tokenizer)
+        You need to install tokenizers following this readme:
+            - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
         
         Tokenizer used during training:
             - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
         Tokenizer that has been pushed to the hub:
-            - https://huggingface.co/bigscience/tokenizer/
+            - https://huggingface.co/bigscience/tokenizer/ -> We do not use it
         
         # TODO design a test that loads both tokenizers and gets a dataset from datasets to compare the tokenizations
         
         This code is not device agnostic --> figure out what to do? / for now I am adding some decorators to check whether the data/tokenizers exists
+    
+        # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
     """
 
     def setUp(self):
@@ -35,6 +39,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         self.path_bin_data = "/home/thomwolf/bigscience/megatron-debug/preprocessed_dataset_text_document"
         self.path_json_dataset = "/home/thomwolf/bigscience/megatron-debug/train_dataset.jsonl"
         self.path_local_tokenizer = "/home/younes/Desktop/Work/data/megatron-debug/bigscience176b-tokenizer"
+        # self.path_local_tokenizer = "bigscience/tokenizer"
         self.NB_SENTENCES = 2
     
     def file_exists(self):
@@ -91,7 +96,8 @@ class BigScienceTokenizationTest(unittest.TestCase):
         mmapdataset = MMapIndexedDataset(self.path_bin_data)
 
         computed_tokens = list(map(tokenizer.encode, input_text))
-        _ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens)) # if this passes then the tests pass
+        self.assertListEqual([m.tolist() for m in  mmapdataset[:self.NB_SENTENCES]], computed_tokens)
+        #_ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens)) # if this passes then the tests pass
         # self.assertListEqual(computed_tokens, mmapdataset[:self.NB_SENTENCES])
 
         decoded_tokens = list(map(tokenizer.decode, mmapdataset[:self.NB_SENTENCES]))
@@ -99,6 +105,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
 
         
     @unittest.skipUnless(file_exists and local_tokenizer_exists, "requires data stored in the local machine!")
+    @unittest.skip(reason="To run with the correct env")
     def test_local_tokenizer_with_bin_data(self):
         """
             Tests the tokenizer available on the hub:
@@ -113,7 +120,8 @@ class BigScienceTokenizationTest(unittest.TestCase):
         mmapdataset = MMapIndexedDataset(self.path_bin_data)
 
         computed_tokens_with_local_tokenizer = list(map(local_tokenizer.encode, input_text))
-        _ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens_with_local_tokenizer))
+        # _ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens_with_local_tokenizer))
+        self.assertListEqual([m.tolist() for m in  mmapdataset[:self.NB_SENTENCES]], computed_tokens_with_local_tokenizer)
 
         decoded_tokens_with_local_tokenizer = list(map(local_tokenizer.decode, mmapdataset[:self.NB_SENTENCES]))
         self.assertListEqual(decoded_tokens_with_local_tokenizer, input_text)
@@ -135,6 +143,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         self.assertListEqual(predicted_text, input_text)
     
     @unittest.skipUnless(local_tokenizer_exists, "requires tokenizer stored in the local machine!")
+    @unittest.skip(reason="To run with the correct env")
     def test_encodings_from_xnli_dataset_with_local_tokenizer(self):
         """
             Tests the tokenizer downloaded from here:
@@ -150,6 +159,21 @@ class BigScienceTokenizationTest(unittest.TestCase):
         output_tokens = list(map(tokenizer.encode, input_text))
         predicted_text = list(map(lambda x : tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
         self.assertListEqual(predicted_text, input_text) 
+    
+    @unittest.skip(reason="skipping this test bc of env issues (see slack) - You have to install tokenizers 0.12.0 before")
+    def test_encodings_on_xlmi(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer)
+        local_tokenizer = AutoTokenizer.from_pretrained(self.path_local_tokenizer)
+
+        ds = load_dataset("xnli", "all_languages", split="test", streaming=True)
+        
+        sample_data = next(iter(ds))['premise'] # pick up one data
+        input_text = list(sample_data.values())
+
+        tokens = tokenizer.batch_encode_plus(input_text)
+        tokens_local = local_tokenizer.batch_encode_plus(input_text)
+
+        self.assertListEqual(tokens, tokens_local)
 
 
 if __name__ == '__main__':
