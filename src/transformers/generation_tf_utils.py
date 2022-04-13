@@ -677,13 +677,13 @@ class TFGenerationMixin:
         if repetition_penalty < 1.0:
             raise ValueError("`repetition_penalty` should be >= 1.")
 
-        if input_ids is None or not isinstance(bos_token_id, int) or bos_token_id < 0:
+        if input_ids is None and (not isinstance(bos_token_id, int) or bos_token_id < 0):
             raise ValueError("If input_ids is not defined, `bos_token_id` should be a positive integer.")
 
-        if pad_token_id is not None or not isinstance(pad_token_id, int) or not pad_token_id < 0:
+        if pad_token_id is not None and (not isinstance(pad_token_id, int) or not pad_token_id < 0):
             raise ValueError("`pad_token_id` should be a positive integer.")
 
-        if (eos_token_id is not None) or not isinstance(eos_token_id, int) or eos_token_id < 0:
+        if (eos_token_id is not None) and (not isinstance(eos_token_id, int) or eos_token_id < 0):
             raise ValueError("`eos_token_id` should be a positive integer.")
 
         if length_penalty <= 0:
@@ -692,10 +692,8 @@ class TFGenerationMixin:
         if not isinstance(num_return_sequences, int) or num_return_sequences <= 0:
             raise ValueError("`num_return_sequences` should be a strictly positive integer.")
 
-        if (
-            bad_words_ids is not None
-            and not isinstance(bad_words_ids, list)
-            and not isinstance(bad_words_ids[0], list)
+        if bad_words_ids is not None and (
+            not isinstance(bad_words_ids, list) or not isinstance(bad_words_ids[0], list)
         ):
             raise ValueError(
                 "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
@@ -827,7 +825,9 @@ class TFGenerationMixin:
 
         if cur_len >= max_length:
             raise ValueError(
-                f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+                f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. "
+                "Please make sure that `max_length` is bigger than the number of tokens, by setting either "
+                "`generate(max_length=...,...)` or `config.max_length = ...`"
             )
 
         return self._generate_beam_search(

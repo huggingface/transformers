@@ -439,7 +439,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
-        if 0 > idx or idx > len(self):
+        if 0 > idx or idx >= len(self):
             raise IndexError(f"Index {idx} out of vocabulary range")
         return self.idx2sym[idx]
 
