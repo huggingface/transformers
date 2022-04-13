@@ -54,6 +54,20 @@ else:
                 ),
             ),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
+        ],
+        [
+            ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
+            ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
+            ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
+            ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "longt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            )
             (
                 "barthez",
                 (

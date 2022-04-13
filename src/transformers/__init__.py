@@ -291,6 +291,7 @@ _import_structure = {
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
+    "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
     "models.trajectory_transformer": [
@@ -1619,6 +1620,16 @@ else:
             "TrajectoryTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.longt5"].extend(
+        [
+            "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LongT5EncoderModel",
+            "LongT5ForConditionalGeneration",
+            "LongT5Model",
+            "LongT5PreTrainedModel",
+            "load_tf_weights_in_longt5",
+        ]
+    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2292,6 +2303,15 @@ else:
             "TFT5PreTrainedModel",
         ]
     )
+    _import_structure["models.longt5"].extend(
+        [
+            "TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLongT5EncoderModel",
+            "TFLongT5ForConditionalGeneration",
+            "TFLongT5Model",
+            "TFLongT5PreTrainedModel",
+        ]
+    )
     _import_structure["models.tapas"].extend(
         [
             "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2592,6 +2612,9 @@ else:
     )
     _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
+    _import_structure["models.longt5"].extend(
+        ["FlaxLongT5ForConditionalGeneration", "FlaxLongT5Model", "FlaxLongT5PreTrainedModel"]
+    )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -2843,6 +2866,7 @@ if TYPE_CHECKING:
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+    from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
     from .models.trajectory_transformer import (
@@ -3952,6 +3976,14 @@ if TYPE_CHECKING:
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
         )
+        from .models.longt5 import (
+            LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LongT5EncoderModel,
+            LongT5ForConditionalGeneration,
+            LongT5Model,
+            LongT5PreTrainedModel,
+            load_tf_weights_in_longt5,
+        )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             AdaptiveEmbedding,
@@ -4506,6 +4538,13 @@ if TYPE_CHECKING:
             TFT5Model,
             TFT5PreTrainedModel,
         )
+        from .models.longt5 import (
+            TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLongT5EncoderModel,
+            TFLongT5ForConditionalGeneration,
+            TFLongT5Model,
+            TFLongT5PreTrainedModel,
+        )
         from .models.tapas import (
             TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFTapasForMaskedLM,
@@ -4739,6 +4778,7 @@ if TYPE_CHECKING:
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel

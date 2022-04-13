@@ -117,6 +117,7 @@ from . import (
     squeezebert,
     swin,
     t5,
+    longt5,
     tapas,
     tapex,
     trajectory_transformer,
