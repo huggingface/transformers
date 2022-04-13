@@ -2524,9 +2524,12 @@ class ModelUtilsTest(TestCasePlus):
         # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
         # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
         # it's at least 15% less cpu memory consumed
-        assert diff_percent > 0.15, (
+
+        self.assertGreater(
+            diff_percent,
+            0.15,
             "should use less CPU memory for low_cpu_mem_usage=True, "
-            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}"
+            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
         )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
