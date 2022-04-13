@@ -1224,7 +1224,6 @@ class TestCasePlus(unittest.TestCase):
             execute_subprocess_async(cmd, env=self.get_env())
         # returned data is in KB so convert to bytes
         max_rss = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
-        # print(f"MAX RSS={max_rss}")
         return max_rss
 
     def tearDown(self):
