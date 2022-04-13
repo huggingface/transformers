@@ -447,8 +447,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
             batch, seqlen = common_inputs["input_ids"].shape
             # Not using the same length for past_key_values
-            past_key_values_length = seqlen + 2
+            past_key_values_length = 1
             shape = (
+                2,
                 batch,
                 self.num_attention_heads,
                 past_key_values_length,
@@ -457,12 +458,12 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
             if "attention_mask" in common_inputs:
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                    [common_inputs["attention_mask"], torch.ones(batch, seqlen + past_key_values_length, dtype=torch.int64)], dim=1
                 )
 
             common_inputs["past_key_values"] = []
             for _ in range(self.num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+                common_inputs["past_key_values"].append(torch.zeros(shape, dtype=torch.float32))
 
         return common_inputs
 
@@ -481,12 +482,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
         name = "past_key_values" if direction == "inputs" else "present"
         for i in range(self.num_layers):
-            inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-            inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+            inputs_or_outputs[f"{name}.{i}"] = {1: "batch", 3: "past_sequence + sequence"}
 
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
-        flattened_output[f"{name}.{idx}.key"] = t[0]
-        flattened_output[f"{name}.{idx}.value"] = t[1]
+        flattened_output[f"{name}.{idx}"] = t
 
     def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> Dict[str, Any]:
         flattened_output = {}
@@ -629,7 +628,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
 
         encoder_sequence = "past_encoder_sequence"
-        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
+        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_sequence + sequence"
 
         for i in range(min_num_layers):
             inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
