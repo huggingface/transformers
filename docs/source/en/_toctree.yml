@@ -89,6 +89,8 @@
     title: Training on one GPU
   - local: perf_train_gpu_many
     title: Training on many GPUs
+  - local: perf_hardware
+    title: Custom hardware for training
   - local: testing
     title: Testing
   - local: pr_checks
