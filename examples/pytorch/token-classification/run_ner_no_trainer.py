@@ -19,6 +19,7 @@ without using a Trainer.
 """
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -33,6 +34,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
@@ -46,7 +48,6 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    set_seed,
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
@@ -276,6 +277,12 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -639,7 +646,10 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{completed_steps}")
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -662,7 +672,6 @@ def main():
                 references=refs,
             )  # predictions and preferences are expected to be a nested list of labels, not label_ids
 
-        # eval_metric = metric.compute()
         eval_metric = compute_metrics()
         accelerator.print(f"epoch {epoch}:", eval_metric)
         if args.with_tracking:
@@ -686,7 +695,10 @@ def main():
                 )
 
         if args.checkpointing_steps == "epoch":
-            accelerator.save_state(f"epoch_{epoch}")
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -696,6 +708,9 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump({"eval_accuracy": eval_metric["accuracy"], "train_loss": float(loss.cpu().detach().numpy())}, f)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -145,7 +146,8 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
     # Load weights from TF model
     init_vars = tf.saved_model.load(tf_path).variables if is_trivia_qa else tf.train.list_variables(tf_path)
 
-    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
+    if len(init_vars) <= 0:
+        raise ValueError("Loaded trained variables cannot be empty.")
 
     pt_names = list(model.state_dict().keys())
 
@@ -460,8 +462,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         to_seq_length = from_seq_length = seqlen
         from_block_size = to_block_size = self.block_size
 
-        assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
-        assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
+        if from_seq_length % from_block_size != 0:
+            raise ValueError("Query sided sequence length must be multiple of block size")
+
+        if to_seq_length % to_block_size != 0:
+            raise ValueError("Key/Value sided sequence length must be multiple of block size")
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -1077,9 +1082,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
@@ -1153,11 +1157,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length not in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
-        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
+        if from_seq_length not in plan_from_length:
+            raise ValueError("Error from sequence length not in plan!")
 
         # Total number of blocks in the mmask
         num_blocks = from_seq_length // from_block_size
@@ -1397,9 +1401,8 @@ class BigBirdAttention(nn.Module):
                 output_attentions,
             )
         else:
-            assert (
-                encoder_hidden_states is None
-            ), "BigBird cannot be used as a decoder when config.attention_type != 'original_full'"
+            if encoder_hidden_states is not None:
+                raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
             self_outputs = self.self(
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
@@ -1451,7 +1454,8 @@ class BigBirdLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = BigBirdAttention(config)
         self.intermediate = BigBirdIntermediate(config)
         self.output = BigBirdOutput(config)
@@ -2183,9 +2187,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
-        assert (
-            seq_length % block_size == 0
-        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+            )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -2454,7 +2459,8 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        if self.config.pad_token_id is None:
+            raise ValueError("The PAD token should be defined for generation")
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
@@ -2994,7 +3000,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             # setting lengths logits to `-inf`
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
-                token_type_ids = (~logits_mask).long()
+                token_type_ids = torch.ones(logits_mask.size(), dtype=int) - logits_mask
             logits_mask = logits_mask
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
@@ -3057,5 +3063,5 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         # q_lengths -> (bz, 1)
         mask = torch.arange(0, maxlen).to(q_lengths.device)
         mask.unsqueeze_(0)  # -> (1, maxlen)
-        mask = mask < q_lengths
+        mask = torch.where(mask < q_lengths, 1, 0)
         return mask
