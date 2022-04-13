@@ -540,6 +540,43 @@ class TokenizerTesterMixin:
                 for attr in attributes_list:
                     self.assertTrue(hasattr(tokenizer, attr))
 
+    def test_tokenizers_common_ids_setters(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                ]
+
+                vocab = tokenizer.get_vocab()
+                token_id_to_test_setters = next(iter(vocab.values()))
+                token_to_test_setters = tokenizer.convert_ids_to_tokens(
+                    token_id_to_test_setters, skip_special_tokens=False
+                )
+
+                for attr in attributes_list:
+                    setattr(tokenizer, attr + "_id", None)
+                    self.assertEqual(getattr(tokenizer, attr), None)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), None)
+
+                    setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
+
+                setattr(tokenizer, "additional_special_tokens_ids", [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+
+                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
+
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
