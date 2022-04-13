@@ -441,7 +441,7 @@ class CvtOutput(nn.Module):
 
 class CvtLayer(nn.Module):
     """
-    CvtLayer composed by attention layers, normalization and mlps
+    CvtLayer composed by attention layers, normalization and multi-layer perceptrons (mlps).
     """
 
     def __init__(
