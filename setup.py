@@ -288,6 +288,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["integrations"]
 )
 
 extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")

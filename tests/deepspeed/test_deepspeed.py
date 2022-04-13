@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     mockenv_context,
     require_deepspeed,
     require_torch_gpu,
+    require_optuna,
     require_torch_multi_gpu,
     slow,
 )
@@ -363,6 +364,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
+    @require_optuna
     def test_hyperparameter_search(self):
         with mockenv_context(**self.dist_env_1_gpu):
 
