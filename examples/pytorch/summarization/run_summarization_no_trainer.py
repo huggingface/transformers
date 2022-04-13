@@ -277,7 +277,7 @@ def parse_args():
     )
     parser.add_argument(
         "--with_tracking",
-        required=False,
+        action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()
