@@ -582,7 +582,7 @@ class ModelTesterMixin:
                     )
 
     @slow
-    def test_torchscript(self):
+    def test_torchscript_simple(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
@@ -598,6 +598,13 @@ class ModelTesterMixin:
         config.output_hidden_states = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
+    def clear_torch_jit_class_registry(self):
+
+        torch._C._jit_clear_class_registry()
+        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
+        torch.jit._state._clear_class_state()
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
@@ -610,19 +617,21 @@ class ModelTesterMixin:
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class)
 
+            main_input_name = model_class.main_input_name
+
             try:
                 if model.config.is_encoder_decoder:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    input_ids = inputs["input_ids"]
+                    main_input = inputs[main_input_name]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
                     traced_model = torch.jit.trace(
-                        model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
                 else:
-                    input_ids = inputs["input_ids"]
-                    traced_model = torch.jit.trace(model, input_ids)
+                    main_input = inputs[main_input_name]
+                    traced_model = torch.jit.trace(model, main_input)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -678,6 +687,10 @@ class ModelTesterMixin:
                         models_equal = False
 
             self.assertTrue(models_equal)
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_torch_fx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -259,6 +259,7 @@ class FlaxGenerationMixin:
         ```"""
         # set init values
         max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -269,6 +270,11 @@ class FlaxGenerationMixin:
 
         if decoder_start_token_id is None and self.config.is_encoder_decoder:
             raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
@@ -389,7 +395,6 @@ class FlaxGenerationMixin:
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
-        min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         forced_bos_token_id = (
             forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id

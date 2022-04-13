@@ -58,9 +58,8 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
         chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         _stride_left = 0 if i == 0 else stride_left
-        is_last = i + step >= inputs_len
+        is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
-
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": (chunk.shape[0], _stride_left, _stride_right), **processed}
 

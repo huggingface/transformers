@@ -23,6 +23,7 @@ https://huggingface.co/models?filter=fill-mask
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -38,6 +39,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
@@ -49,7 +51,6 @@ from transformers import (
     DataCollatorForLanguageModeling,
     SchedulerType,
     get_scheduler,
-    set_seed,
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
@@ -208,7 +209,7 @@ def parse_args():
     )
     parser.add_argument(
         "--with_tracking",
-        required=False,
+        action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()
@@ -237,7 +238,7 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all") if args.with_tracking else Accelerator()
+    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -268,6 +269,12 @@ def main():
             else:
                 repo_name = args.hub_model_id
             repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -457,9 +464,11 @@ def main():
     train_dataset = tokenized_datasets["train"]
     eval_dataset = tokenized_datasets["validation"]
 
-    # Log a few random samples from the training set:
-    for index in random.sample(range(len(train_dataset)), 3):
-        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+    # Conditional for small test subsets
+    if len(train_dataset) > 3:
+        # Log a few random samples from the training set:
+        for index in random.sample(range(len(train_dataset)), 3):
+            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -522,7 +531,10 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("clm_no_trainer", args)
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("mlm_no_trainer", experiment_config)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -581,7 +593,10 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{completed_steps}")
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -606,12 +621,7 @@ def main():
 
         if args.with_tracking:
             accelerator.log(
-                {
-                    "perplexity": perplexity,
-                    "train_loss": total_loss,
-                    "epoch": epoch,
-                },
-                step=completed_steps,
+                {"perplexity": perplexity, "train_loss": total_loss, "epoch": epoch, "step": completed_steps},
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
@@ -625,7 +635,10 @@ def main():
                 )
 
         if args.checkpointing_steps == "epoch":
-            accelerator.save_state(f"epoch_{epoch}")
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -635,6 +648,9 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump({"perplexity": perplexity}, f)
 
 
 if __name__ == "__main__":

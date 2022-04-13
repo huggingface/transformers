@@ -2200,7 +2200,7 @@ class Trainer:
     ) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")]
+        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
 
         for path in glob_checkpoints:
             if use_mtime:
@@ -2770,6 +2770,7 @@ class Trainer:
                 self.args.output_dir,
                 clone_from=repo_name,
                 use_auth_token=use_auth_token,
+                private=self.args.hub_private_repo,
             )
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
