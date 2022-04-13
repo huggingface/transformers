@@ -880,7 +880,8 @@ class SpecialTokensMixin:
 
         added_tokens = 0
         for key, value in special_tokens_dict.items():
-            assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
+            if key not in self.SPECIAL_TOKENS_ATTRIBUTES:
+                raise ValueError(f"Key {key} is not a special token")
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
@@ -892,9 +893,8 @@ class SpecialTokensMixin:
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
-                assert isinstance(
-                    value, (str, AddedToken)
-                ), f"Token {value} for key {key} should be a str or an AddedToken instance"
+                if not isinstance(value, (str, AddedToken)):
+                    raise TypeError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
