@@ -35,7 +35,7 @@ jobs:
         run: |
           pip install --upgrade pip!=21.3
           sudo apt -y update && sudo apt install -y libsndfile1-dev
-          pip install .[dev]
+          pip install .[dev] -U
       - name: Create model files
         run: |
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model

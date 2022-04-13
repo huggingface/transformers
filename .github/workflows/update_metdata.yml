@@ -25,7 +25,7 @@ jobs:
 
       - name: Setup environment
         run: |
-          pip install git+https://github.com/huggingface/transformers#egg=transformers[dev]
+          pip install git+https://github.com/huggingface/transformers#egg=transformers[dev] -U
 
       - name: Update metadata
         run: |

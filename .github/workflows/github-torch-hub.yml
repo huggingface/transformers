@@ -33,7 +33,7 @@ jobs:
       run: |
         pip install --upgrade pip
         # install torch-hub specific dependencies
-        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub]
+        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub] -U
         # no longer needed
         pip uninstall -y transformers
 
