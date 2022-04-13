@@ -118,9 +118,9 @@ Create a [`pipeline`] with the task you want to solve for and the model you want
 Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset:
 
 ```py
->>> import datasets
+>>> from datasets import load_dataset
 
->>> dataset = datasets.load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
 You can pass a whole dataset pipeline:

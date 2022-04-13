@@ -177,7 +177,6 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False
-    test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
