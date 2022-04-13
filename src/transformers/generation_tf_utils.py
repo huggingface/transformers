@@ -2131,7 +2131,7 @@ class TFGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        seed: Optional[Sequence[int, int]] = None,
+        seed: Optional[Tuple[int, int]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2645,8 +2645,8 @@ class TFGenerationMixin:
             sequences,
             scores,
             is_sent_finished,
-            model_kwargs,
             input_ids_length,
+            model_kwargs,
         ):
             """
             Beam Search termination condition function -- halts the generation loop if any of these conditions becomes
@@ -2674,8 +2674,8 @@ class TFGenerationMixin:
             sequences,
             scores,
             is_sent_finished,
-            model_kwargs,
             input_ids_length,
+            model_kwargs,
             intermediary_running_sequences=None,
         ):
             """
@@ -2851,8 +2851,8 @@ class TFGenerationMixin:
                 next_sequences,
                 next_scores,
                 next_is_sent_finished,
-                next_model_kwargs,
                 next_input_ids_length,
+                next_model_kwargs,
             )
 
         # 5. run generation
@@ -2869,8 +2869,8 @@ class TFGenerationMixin:
             sequences,
             scores,
             is_sent_finished,
-            model_kwargs,
             input_ids_length,
+            model_kwargs,
         ) = beam_search_body_fn(
             cur_len,
             running_sequences,
@@ -2878,8 +2878,8 @@ class TFGenerationMixin:
             sequences,
             scores,
             is_sent_finished,
-            model_kwargs,
             input_ids_length,
+            model_kwargs,
         )
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
@@ -2891,8 +2891,8 @@ class TFGenerationMixin:
             sequences,
             scores,
             is_sent_finished,
-            model_kwargs,
             input_ids_length,
+            model_kwargs,
         ):
             maximum_iterations = max_length - cur_len
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _, _ = tf.while_loop(
@@ -2905,8 +2905,8 @@ class TFGenerationMixin:
                     sequences,
                     scores,
                     is_sent_finished,
-                    model_kwargs,
                     input_ids_length,
+                    model_kwargs,
                 ),
                 maximum_iterations=maximum_iterations,
             )
