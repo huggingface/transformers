@@ -485,7 +485,10 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("clm_no_trainer", vars(args))
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("clm_no_trainer", experiment_config)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
