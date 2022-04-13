@@ -17,11 +17,13 @@ In this section we have a look at a few tricks to reduce the memory footprint an
 
 |Method|Speed|Memory|
 |:-----|:----|:-----|
-|Gradient accumulation| No | Yes |
-|Gradient checkpointing| No| Yes |
-|Mixed precision training| Yes | (No) |
-|Batch size| Yes | Yes |
-|Optimizer choice| (No) | Yes |
+| Gradient accumulation | No | Yes |
+| Gradient checkpointing | No| Yes |
+| Mixed precision training | Yes | (No) |
+| Batch size | Yes | Yes |
+| Optimizer choice | Yes | Yes |
+| DataLoader | Yes | No |
+| DeepSpeed Zero | No | Yes |
 
 A bracket means that it might not be strictly the case but is usually either not a main concern or negligable. Before we start make sure you have installed the following libraries:
 
@@ -647,8 +649,6 @@ Activation:
     TrainingArguments(deepspeed="/path/to/ds_config.json")
     ```
 - Deployment in Notebooks: see this [guide](main_classes/deepspeed#deployment-in-notebooks).
-
-- `accelerate`:  use: ... (XXX: Sylvain/Leandro?) _CUSTOM CONFIG NOT SUPPORTED, YET_
 
 - Custom training loop: This is somewhat complex but you can study how this is implemented in [HF Trainer](
 https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) - simply search for `deepspeed` in the code.
