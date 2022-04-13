@@ -81,27 +81,14 @@
     title: "How to add a model to 🤗 Transformers?"
   - local: add_new_pipeline
     title: "How to add a pipeline to 🤗 Transformers?"
-<<<<<<< HEAD:docs/source/en/_toctree.yml
-=======
   - local: fast_tokenizers
     title: "Using tokenizers from 🤗 Tokenizers"
   - local: performance
     title: Performance and Scalability
-  - local: parallelism
-    title: Model Parallelism
   - local: perf_train_gpu_one
     title: Training on one GPU
   - local: perf_train_gpu_many
-<<<<<<< HEAD:docs/source/en/_toctree.yml
-<<<<<<< HEAD:docs/source/en/_toctree.yml
-    title: Performance: Training on many GPUs
->>>>>>> fc54ebf1d (link the new docs):docs/source/_toctree.yml
-=======
-    title: Performance - Training on many GPUs
->>>>>>> 3095c547e (no :):docs/source/_toctree.yml
-=======
     title: Training on many GPUs
->>>>>>> 71d882980 (remove files not used anymore or will be added later):docs/source/_toctree.yml
   - local: testing
     title: Testing
   - local: pr_checks
