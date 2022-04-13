@@ -33,7 +33,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         self.path_tokenizer = "bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles"
         self.path_bin_data = "/home/thomwolf/bigscience/megatron-debug/preprocessed_dataset_text_document"
         self.path_json_dataset = "/home/thomwolf/bigscience/megatron-debug/train_dataset.jsonl"
-        self.nb_sentences = 2
+        self.NB_SENTENCES = 2
     
     def file_exists(self):
         return os.path.isfile(self.path_bin_data+'.idx') and os.path.isfile(self.path_bin_data+'.bin') and os.path.isfile(self.path_json_dataset)
@@ -71,18 +71,18 @@ class BigScienceTokenizationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer)
 
         with open(self.path_json_dataset) as f:
-            input_text = [json.loads(line)['text']+tokenizer.eos_token for line in f][:self.nb_sentences]
+            input_text = [json.loads(line)['text']+tokenizer.eos_token for line in f][:self.NB_SENTENCES]
         
         mmapdataset = MMapIndexedDataset(self.path_bin_data)
         computed_tokens = list(map(tokenizer.encode, input_text))
-        _ = list(map(np.testing.assert_equal, mmapdataset[:self.nb_sentences], computed_tokens)) # if this passes then the tests pass
-        # self.assertListEqual(computed_tokens, mmapdataset[:self.nb_sentences])
+        _ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens)) # if this passes then the tests pass
+        # self.assertListEqual(computed_tokens, mmapdataset[:self.NB_SENTENCES])
 
-        decoded_tokens = list(map(tokenizer.decode, mmapdataset[:self.nb_sentences]))
+        decoded_tokens = list(map(tokenizer.decode, mmapdataset[:self.NB_SENTENCES]))
         self.assertListEqual(decoded_tokens, input_text)
 
     def test_encodings_from_dataset(self):
-        # TODO
+        # TODO: get a multilingual dataset and test the tokenizers
         pass    
 
 
