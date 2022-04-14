@@ -318,7 +318,7 @@ class OnnxConfig(ABC):
                 dummy_input = dummy_input * num_choices
                 tokenized_input = preprocessor(dummy_input, text_pair=dummy_input)
                 for k, v in tokenized_input.items():
-                    tokenized_input[k] = [v[i: i + num_choices] for i in range(0, len(v), num_choices)]
+                    tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
                 return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
             return dict(preprocessor(dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
