@@ -632,3 +632,31 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
         ]
         self.assertListEqual(results, expected_results)
+
+    @slow
+    @require_torch
+    def test_large_model_pt_tapex(self):
+        model_id = "microsoft/tapex-large-finetuned-wtq"
+        table_querier = pipeline(
+            "table-question-answering",
+            model=model_id,
+        )
+        data = {
+            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+            "Age": ["56", "45", "59"],
+            "Number of movies": ["87", "53", "69"],
+            "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+        }
+        queries = [
+            "How many movies has George Clooney played in?",
+            "How old is Mr Clooney ?",
+            "What's the date of birth of Leonardo ?",
+        ]
+        results = table_querier(data, queries, sequential=True)
+
+        expected_results = [
+            {"answer": " 69"},
+            {"answer": " 59"},
+            {"answer": " 10 june 1996"},
+        ]
+        self.assertListEqual(results, expected_results)
