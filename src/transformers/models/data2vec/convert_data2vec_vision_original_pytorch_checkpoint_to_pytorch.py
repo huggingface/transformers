@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-import torch
 import argparse
 import json
+
+import torch
+from PIL import Image
+
+from huggingface_hub import hf_hub_download
 from timm.models import create_model
 from transformers import (
     BeitFeatureExtractor,
     Data2VecVisionConfig,
-    Data2VecVisionModel,
     Data2VecVisionForImageClassification,
+    Data2VecVisionModel,
 )
-from huggingface_hub import hf_hub_download
-
-from PIL import Image
 
 
 def create_rename_keys(config, has_lm_head=False, is_semantic=False, hf_prefix="data2vec."):

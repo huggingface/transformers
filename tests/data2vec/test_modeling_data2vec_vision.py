@@ -37,7 +37,10 @@ if is_torch_available():
         Data2VecVisionForSemanticSegmentation,
         Data2VecVisionModel,
     )
-    from transformers.models.data2vec.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.data2vec.modeling_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+        to_2tuple,
+    )
 
 
 if is_vision_available():
@@ -181,7 +184,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -252,10 +257,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if (
-                model_class in [*get_values(MODEL_MAPPING)]
-                or not model_class.supports_gradient_checkpointing
-            ):
+            if model_class in [*get_values(MODEL_MAPPING)] or not model_class.supports_gradient_checkpointing:
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
@@ -416,12 +418,16 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(torch_device)
+        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

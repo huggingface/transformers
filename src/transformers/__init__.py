@@ -170,7 +170,13 @@ _import_structure = {
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
-    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig", "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
+    "models.data2vec": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecAudioConfig",
+        "Data2VecTextConfig",
+        "Data2VecVisionConfig",
+    ],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
@@ -2560,7 +2566,13 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig, DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
+    from .models.data2vec import (
+        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecAudioConfig,
+        Data2VecTextConfig,
+        Data2VecVisionConfig,
+    )
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.decision_transformer import (

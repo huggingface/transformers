@@ -751,8 +751,8 @@ class Data2VecVisionPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of the final
-    hidden states of the patch tokens) e.g. for ImageNet.
+    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of
+    the final hidden states of the patch tokens) e.g. for ImageNet.
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )

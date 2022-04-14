@@ -34,7 +34,7 @@ _import_structure = {
     "configuration_data2vec_vision": [
         "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecVisionConfig",
-        "Data2VecVisionOnnxConfig"
+        "Data2VecVisionOnnxConfig",
     ],
 }
 
@@ -75,7 +75,11 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecTextOnnxConfig,
     )
-    from .configuration_data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig, Data2VecVisionOnnxConfig
+    from .configuration_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecVisionConfig,
+        Data2VecVisionOnnxConfig,
+    )
 
     if is_torch_available():
         from .modeling_data2vec_audio import (
