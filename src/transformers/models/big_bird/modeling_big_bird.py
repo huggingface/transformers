@@ -2397,6 +2397,8 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'here'",
+        expected_loss=19.02,
     )
     def forward(
         self,
@@ -2496,7 +2498,12 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2536,25 +2543,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import BigBirdTokenizer, BigBirdForCausalLM, BigBirdConfig
-        >>> import torch
-
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
-        >>> config = BigBirdConfig.from_pretrained("google/bigbird-roberta-base")
-        >>> config.is_decoder = True
-        >>> model = BigBirdForCausalLM.from_pretrained("google/bigbird-roberta-base", config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
@@ -2664,9 +2653,11 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="l-yohai/bigbird-roberta-base-mnli",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_0'",
+        expected_loss=1.16,
     )
     def forward(
         self,
@@ -2858,9 +2849,12 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="vumichien/token-classification-bigbird-roberta-base",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
+        "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']",
+        expected_loss=0.54,
     )
     def forward(
         self,
@@ -2957,9 +2951,13 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base-trivia-itc",
+        checkpoint="abhinavkulkarni/bigbird-roberta-base-finetuned-squad",
         output_type=BigBirdForQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=13,
+        qa_target_end_index=14,
+        expected_output="'nice puppet'",
+        expected_loss=0.65,
     )
     def forward(
         self,

@@ -801,13 +801,13 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
         >>> model = AlbertForPreTraining.from_pretrained("albert-base-v2")
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
-        ...     0
-        >>> )  # Batch size 1
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
+        >>> # Batch size 1
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
         >>> sop_logits = outputs.sop_logits
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -919,6 +919,8 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'reims'",
+        expected_loss=0,
     )
     def forward(
         self,
@@ -996,9 +998,11 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="textattack/albert-base-v2-imdb",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_1'",
+        expected_loss=0.12,
     )
     def forward(
         self,
@@ -1103,9 +1107,12 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="vumichien/tiny-albert",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_1', "
+        "'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1']",
+        expected_loss=0.66,
     )
     def forward(
         self,
@@ -1184,9 +1191,13 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="twmkn9/albert-base-v2-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=12,
+        qa_target_end_index=13,
+        expected_output="'a nice puppet'",
+        expected_loss=7.36,
     )
     def forward(
         self,
