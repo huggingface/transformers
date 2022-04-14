@@ -134,8 +134,6 @@ _import_structure = {
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
-    "models.data2vec_vision": ["DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
-    "models.data2vec_vision": ["DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -172,7 +170,7 @@ _import_structure = {
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
-    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
+    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig", "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
@@ -731,26 +729,6 @@ if is_torch_available():
             "BeitPreTrainedModel",
         ]
     )
-    _import_structure["models.data2vec_vision"].extend(
-        [
-            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Data2VecVisionForImageClassification",
-            "Data2VecVisionForMaskedImageModeling",
-            "Data2VecVisionForSemanticSegmentation",
-            "Data2VecVisionModel",
-            "Data2VecVisionPreTrainedModel",
-        ]
-    )
-    _import_structure["models.data2vec_vision"].extend(
-        [
-            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Data2VecVisionForImageClassification",
-            "Data2VecVisionForMaskedImageModeling",
-            "Data2VecVisionForSemanticSegmentation",
-            "Data2VecVisionModel",
-            "Data2VecVisionPreTrainedModel",
-        ]
-    )
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -890,6 +868,7 @@ if is_torch_available():
         [
             "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Data2VecAudioForAudioFrameClassification",
             "Data2VecAudioForCTC",
             "Data2VecAudioForSequenceClassification",
@@ -904,6 +883,10 @@ if is_torch_available():
             "Data2VecTextForTokenClassification",
             "Data2VecTextModel",
             "Data2VecTextPreTrainedModel",
+            "Data2VecVisionForImageClassification",
+            "Data2VecVisionForSemanticSegmentation",
+            "Data2VecVisionModel",
+            "Data2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2309,22 +2292,6 @@ if is_flax_available():
             "FlaxBeitPreTrainedModel",
         ]
     )
-    _import_structure["models.data2vec_vision"].extend(
-        [
-            "FlaxData2VecVisionForImageClassification",
-            "FlaxData2VecVisionForMaskedImageModeling",
-            "FlaxData2VecVisionModel",
-            "FlaxData2VecVisionPreTrainedModel",
-        ]
-    )
-    _import_structure["models.data2vec_vision"].extend(
-        [
-            "FlaxData2VecVisionForImageClassification",
-            "FlaxData2VecVisionForMaskedImageModeling",
-            "FlaxData2VecVisionModel",
-            "FlaxData2VecVisionPreTrainedModel",
-        ]
-    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -2561,8 +2528,6 @@ if TYPE_CHECKING:
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
-    from .models.data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
-    from .models.data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
@@ -2595,7 +2560,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
+    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig, DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.decision_transformer import (
@@ -3077,22 +3042,6 @@ if TYPE_CHECKING:
             BeitModel,
             BeitPreTrainedModel,
         )
-        from .models.data2vec_vision import (
-            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecVisionForImageClassification,
-            Data2VecVisionForMaskedImageModeling,
-            Data2VecVisionForSemanticSegmentation,
-            Data2VecVisionModel,
-            Data2VecVisionPreTrainedModel,
-        )
-        from .models.data2vec_vision import (
-            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecVisionForImageClassification,
-            Data2VecVisionForMaskedImageModeling,
-            Data2VecVisionForSemanticSegmentation,
-            Data2VecVisionModel,
-            Data2VecVisionPreTrainedModel,
-        )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BertForMaskedLM,
@@ -3207,6 +3156,7 @@ if TYPE_CHECKING:
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
             Data2VecAudioForSequenceClassification,
@@ -3221,6 +3171,9 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
