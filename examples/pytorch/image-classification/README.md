@@ -125,7 +125,9 @@ dataset.push_to_hub("name_of_your_dataset")
 dataset.push_to_hub("name_of_your_dataset", private=True)
 ```
 
-and that's it! You can now simply train your model simply by setting the `--dataset_name` argument to the name of your dataset on the hub.
+and that's it! You can now simply train your model simply by setting the `--dataset_name` argument to the name of your dataset on the hub (as explained in [Using datasets from the hub](#using-datasets-from-🤗-hub)).
+
+More on this can also be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
 
 # Sharing your model on 🤗 Hub
 
