@@ -1566,10 +1566,11 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
 
 LONGT5_START_DOCSTRING = r"""
-    The LONGT5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long Sequences
+    ](https://arxiv.org/abs/2112.07916) by Mandy Guo,  Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo Ni,
+    Yun-Hsuan Sung and Yinfei Yang. It's an encoder decoder transformer pre-trained in a text-to-text denoising
+    generative setting. LongT5 model enables using one of the two different efficient attention mechanisms - (1) Local
+    attention, or (2) Transient-Global attention.
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
