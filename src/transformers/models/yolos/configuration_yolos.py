@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,6 +70,20 @@ class YolosConfig(PretrainedConfig):
             The size of the grid for the mid-layer position encodings.
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
+        auxiliary_loss (`bool`, *optional*, defaults to `False`):
+            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+        class_cost (`float`, *optional*, defaults to 1):
+            Relative weight of the classification error in the Hungarian matching cost.
+        bbox_cost (`float`, *optional*, defaults to 5):
+            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
+        giou_cost (`float`, *optional*, defaults to 2):
+            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
+            Relative weight of the L1 bounding box loss in the object detection loss.
+        giou_loss_coefficient (`float`, *optional*, defaults to 2):
+            Relative weight of the generalized IoU loss in the object detection loss.
+        eos_coefficient (`float`, *optional*, defaults to 0.1):
+            Relative classification weight of the 'no-object' class in the object detection loss.
 
     Example:
 
@@ -98,7 +112,6 @@ class YolosConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=[512, 864],
         patch_size=16,
         num_channels=3,
@@ -106,6 +119,13 @@ class YolosConfig(PretrainedConfig):
         num_detection_tokens=100,
         mid_pe_size=[512, 864],
         use_mid_position_embeddings=True,
+        auxiliary_loss=False,
+        class_cost=1,
+        bbox_cost=5,
+        giou_cost=2,
+        bbox_loss_coefficient=5,
+        giou_loss_coefficient=2,
+        eos_coefficient=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -126,3 +146,12 @@ class YolosConfig(PretrainedConfig):
         self.num_detection_tokens = num_detection_tokens
         self.mid_pe_size = mid_pe_size
         self.use_mid_position_embeddings = use_mid_position_embeddings
+        self.auxiliary_loss = auxiliary_loss
+        # Hungarian matcher
+        self.class_cost = class_cost
+        self.bbox_cost = bbox_cost
+        self.giou_cost = giou_cost
+        # Loss coefficients
+        self.bbox_loss_coefficient = bbox_loss_coefficient
+        self.giou_loss_coefficient = giou_loss_coefficient
+        self.eos_coefficient = eos_coefficient

@@ -163,15 +163,12 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     outputs = model(pixel_values)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
 
-    # TODO assert logits
-    print("Shape of logits:", logits.shape)
-    print("Actual logits:", logits[0,:3,:3])
     expected_slice_logits = torch.tensor(
-        [[-24.0252, -10.3027, -14.8291], [-42.0404, -16.8196, -27.4314], [-27.2727, -11.8149, -18.7139]]
+        [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]]
     )
-    assert torch.allclose(logits[0, :3, :3], expected_slice_logits)
     expected_slice_boxes = torch.tensor([[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]])
-    assert torch.allclose(pred_boxes[0, :3, :3], expected_slice_boxes)
+    assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
+    assert torch.allclose(pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {yolos_name} to {pytorch_dump_folder_path}")
