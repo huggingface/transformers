@@ -18,7 +18,7 @@
 import copy
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -124,7 +124,7 @@ def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int =
     pad_len = -x.shape[dim] % block_len
     pad = [(0, 0)] * x.ndim
     pad[dim] = (0, pad_len)
-    pad = sum(pad, ())
+    pad = sum(pad[::-1], ())
     x = nn.functional.pad(x, pad=pad, mode="constant", value=pad_value)
     return x
 
@@ -139,6 +139,62 @@ def _split_into_blocks(x: torch.Tensor, block_len: int, dim: int) -> torch.Tenso
     num_blocks = x.shape[dim] // block_len
     output_shape = x.shape[:dim] + (num_blocks, block_len) + x.shape[(dim + 1) :]
     return x.reshape(output_shape)
+
+
+def _concatenate_3_blocks(x: torch.Tensor, block_dim: int, sequence_dim: int, pad_value: int = 0) -> torch.Tensor:
+    """Concatenate three consecutive block for each input block for local attentiont.
+
+    For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
+    """
+    num_blocks = x.shape[block_dim]
+
+    pad = [(0, 0)] * x.ndim
+    pad[block_dim] = (1, 1)
+    pad = sum(pad[::-1], ())
+    # [batch_size, num_blocks, block_len] -> [batch_size, num_blocks + 2, block_len]
+    x = nn.functional.pad(x, pad=pad, mode="constant", value=pad_value)
+
+    blocks_list: List[torch.Tensor] = []
+    for i in range(3):
+        # We use indexing approach here:
+        # https://numpy.org/doc/stable/user/basics.indexing.html#dealing-with-variable-numbers-of-indices-within-programs
+        indices = [slice(0, None)] * x.ndim
+        indices[block_dim] = slice(i, i + num_blocks)
+        indices = tuple(indices)
+        blocks_list.append(x[indices])
+    return torch.cat(blocks_list, dim=sequence_dim)  # [batch_size, num_blocks, 3 * block_len, ...]
+
+
+def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
+    """Makes 3-blocked relative position ids for local attention."""
+    position_ids = torch.arange(3 * block_len, dtype=torch.int32)
+    center_position_ids = position_ids[block_len:-block_len]
+    relative_position_ids = position_ids.unsqueeze(0) - center_position_ids.unsqueeze(1)  # [block_len, 3 * block_len]
+    return relative_position_ids
+
+
+def _mask_local_attention_mask(local_attention_mask: torch.Tensor, block_len: int) -> torch.Tensor:
+    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
+    relative_position_ids = _make_3block_relative_position_ids(block_len)
+    locality_mask = torch.abs(relative_position_ids) < block_len
+    locality_mask = locality_mask[None, None, :, :]
+    return torch.logical_and(local_attention_mask, locality_mask)
+
+
+def _get_local_attention_mask(attention_mask: torch.Tensor, block_len: int, device: torch.device) -> torch.Tensor:
+    """Prepare attention mask to be applied for a local attention."""
+    _blocked_attention_mask = _split_into_blocks(
+        attention_mask, block_len, dim=1
+    )  # [batch_size, num_blocks, block_len]
+    # [batch_size, num_block, 3 * block_len]
+    _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_dim=1, sequence_dim=2)
+
+    _blocked_attention_mask = _blocked_attention_mask.unsqueeze(-1)
+    _3blocked_attention_mask = _3blocked_attention_mask.unsqueeze(-2)
+    # [batch_size, num_block, block_len, 3 * block_len]
+    local_attention_mask = torch.logical_and(_blocked_attention_mask, _3blocked_attention_mask)
+    local_attention_mask = _mask_local_attention_mask(local_attention_mask, block_len)
+    return local_attention_mask.unsqueeze(1).to(device)  # [batch_size, 1, num_block, block_len, 3 * block_len]
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LongT5
@@ -554,23 +610,24 @@ class LongT5LocalAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length):
+    def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
         context_position = torch.arange(
-            query_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+            block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
         )[:, None]
         memory_position = torch.arange(
-            key_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+            3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
         )[None, :]
-        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position = memory_position - context_position  # (block_length, 3 * block_length)
         relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
+            relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        values = self.relative_attention_bias(relative_position_bucket)  # (block_length, 3 * block_length, num_heads)
+        # (1, 1, num_heads, block_length, 3 * block_length)
+        values = values.permute([2, 0, 1]).unsqueeze(0).unsqueeze(0)
         return values
 
     def forward(
@@ -595,15 +652,13 @@ class LongT5LocalAttention(nn.Module):
             ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-
         def shape(states):
             """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim)
 
         def unshape(states):
             """reshape"""
-            return states.view(batch_size, -1, self.inner_dim)
+            return states.contiguous().view(batch_size, -1, self.inner_dim)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
             """projects hidden states correctly to key/query states"""
@@ -642,28 +697,32 @@ class LongT5LocalAttention(nn.Module):
         key_states = _split_into_blocks(key_states, self.block_len, dim=1)
         value_states = _split_into_blocks(value_states, self.block_len, dim=1)
 
+        # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
+        key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
+        value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
+
         # Compute scores
         scores = torch.einsum(
             "bnqhd,bnkhd->bnhqk", query_states, key_states
-        )  # (batch_size, num_block, n_heads, block_len, block_len)
+        )  # (batch_size, num_block, n_heads, block_len, 3 * block_len)
 
         if position_bias is None:
+            # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, 1, self.n_heads, self.block_len, 3 * self.block_len), device=scores.device, dtype=scores.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length)
-
+                position_bias = self.compute_bias(self.block_len)
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+                position_bias = position_bias + mask
 
         scores += position_bias
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
@@ -689,12 +748,12 @@ class LongT5LocalAttention(nn.Module):
         return outputs
 
 
-class LongT5LayerLocalAttention(nn.Module):
-    """Local attention used in encoder"""
+class LongT5LayerLocalSelfAttention(nn.Module):
+    """Local self attention used in encoder"""
 
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.LocalAttention = LongT5LocalAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.LocalSelfAttention = LongT5LocalAttention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -709,7 +768,7 @@ class LongT5LayerLocalAttention(nn.Module):
         output_attentions=False,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.local_attention(
+        attention_output = self.LocalSelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
@@ -799,7 +858,7 @@ class LongT5Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
-        attention_layer = LongT5LayerSelfAttention if config.is_decoder else LongT5LayerLocalAttention
+        attention_layer = LongT5LayerSelfAttention if config.is_decoder else LongT5LayerLocalSelfAttention
         self.layer = nn.ModuleList()
         self.layer.append(attention_layer(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
@@ -1006,13 +1065,15 @@ class LongT5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Stack with T5->LongT5
 class LongT5Stack(LongT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
+
+        self.local_radius = config.local_radius
+        self.block_len = self.local_radius + 1
 
         self.block = nn.ModuleList(
             [LongT5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
@@ -1132,7 +1193,13 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
+        # We use local attention in encoder self-attention, otherwise standard self & cross attentions are used
+        if self.is_decoder:
+            extended_attention_mask = self.get_extended_attention_mask(
+                attention_mask, input_shape, inputs_embeds.device
+            )
+        else:
+            extended_attention_mask = _get_local_attention_mask(attention_mask, self.block_len, inputs_embeds.device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
