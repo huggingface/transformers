@@ -36,11 +36,20 @@ def get_yolos_config(yolos_name):
     config = YolosConfig()
 
     # size of the architecture
-    if "yolos_s" in yolos_name:
+    if "yolos_t" in yolos_name:
+        config.hidden_size = 192
+        config.intermediate_size = 768
+        config.num_hidden_layers = 12
+        config.num_attention_heads = 3
+        config.image_size = [800, 1333]
+        config.use_mid_position_embeddings = False
+    elif "yolos_s" in yolos_name:
         config.hidden_size = 384
         config.intermediate_size = 1536
         config.num_hidden_layers = 12
         config.num_attention_heads = 6
+    elif "yolos_b" in yolos_name:
+        config.image_size = [800, 1333]
 
     config.num_labels = 91
     repo_id = "datasets/huggingface/label-files"
@@ -141,7 +150,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_path):
+def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
     """
@@ -163,10 +172,24 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     outputs = model(pixel_values)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
 
-    expected_slice_logits = torch.tensor(
-        [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]]
-    )
-    expected_slice_boxes = torch.tensor([[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]])
+    expected_slice_logits, expected_slice_boxes = None, None
+    if yolos_name == "yolos_ti":
+        expected_slice_logits = torch.tensor(
+            [[-43.3948, -14.6000, -19.4968], [-27.2291, -7.9266, -10.7180], [-44.8437, -22.2187, -34.0474]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.4408, 0.0750, 0.8582], [0.5009, 0.4857, 1.0000], [0.1724, 0.2022, 0.2394]]
+        )
+    elif yolos_name == "yolos_s_200_pre":
+        expected_slice_logits = torch.tensor(
+            [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]]
+        )
+    else:
+        raise ValueError(f"Unknown yolos_name: {yolos_name}")
+    
     assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     assert torch.allclose(pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
@@ -176,9 +199,10 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    print("Pushing to the hub...")
-    feature_extractor.push_to_hub("nielsr/yolos-s")
-    model.push_to_hub("nielsr/yolos-s")
+    if push_to_hub:
+        print("Pushing to the hub...")
+        feature_extractor.push_to_hub("nielsr/yolos-s")
+        model.push_to_hub("nielsr/yolos-s")
 
 
 if __name__ == "__main__":
@@ -188,12 +212,15 @@ if __name__ == "__main__":
         "--yolos_name",
         default="yolos_s_200_pre",
         type=str,
-        help="Name of the YOLOS model you'd like to convert.",
+        help="Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre'",
     )
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the original state dict.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the HuggingFace hub."
+    )
 
     args = parser.parse_args()
-    convert_yolos_checkpoint(args.yolos_name, args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_yolos_checkpoint(args.yolos_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)

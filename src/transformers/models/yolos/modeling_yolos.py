@@ -469,7 +469,7 @@ class YolosEncoder(nn.Module):
             else None
         )
 
-        self.interpolation = InterpolateMidPositionEmbeddings(config)
+        self.interpolation = InterpolateMidPositionEmbeddings(config) if config.use_mid_position_embeddings else None
 
     def forward(
         self,
@@ -484,7 +484,8 @@ class YolosEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        interpolated_mid_position_embeddings = self.interpolation(self.mid_position_embeddings, (height, width))
+        if self.config.use_mid_position_embeddings:
+            interpolated_mid_position_embeddings = self.interpolation(self.mid_position_embeddings, (height, width))
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
