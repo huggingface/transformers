@@ -117,6 +117,16 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
 
+    @require_torch
+    def test_small_model_long_context_cls(self):
+        question_answerer = pipeline(
+            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+        )
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris. " * 100
+        )
+        self.assertEqual(nested_simplify(outputs), {"answer": "Paris", "end": 2786, "score": 0.0, "start": 2781})
+
     @require_tf
     def test_small_model_tf(self):
         question_answerer = pipeline(
