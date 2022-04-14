@@ -199,7 +199,10 @@ def parse_args():
 
     if args.push_to_hub:
         assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
-
+    if args.with_tracking:
+        assert (
+            args.output_dir is not None
+        ), "Need an `output_dir` to create a folder for supported Trackers when `--with_tracking` is passed."
     return args
 
 
