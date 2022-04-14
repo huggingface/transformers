@@ -136,6 +136,10 @@ class ModelArguments:
         metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
+    ctc_zero_infinity: bool = field(
+        default=False,
+        metadata={"help": "Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`."},
+    )
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
     )
@@ -502,9 +506,9 @@ def main():
         if data_args.max_predict_samples is not None:
             raw_datasets["predict"] = raw_datasets["predict"].select(range(data_args.max_predict_samples))
 
+    lang_list = next(iter(raw_datasets.values())).features["lang_id"].names
     if not is_text_target:
         label_list = next(iter(raw_datasets.values())).features[target_column_name].names
-        lang_list = next(iter(raw_datasets.values())).features["lang_id"].names
         num_labels = len(label_list)
 
     # 2. We remove some special characters from the datasets
@@ -616,6 +620,7 @@ def main():
                 "mask_feature_length": model_args.mask_feature_length,
                 "gradient_checkpointing": training_args.gradient_checkpointing,
                 "layerdrop": model_args.layerdrop,
+                "ctc_zero_infinity": model_args.ctc_zero_infinity,
                 "ctc_loss_reduction": model_args.ctc_loss_reduction,
                 "activation_dropout": model_args.activation_dropout,
             }
@@ -837,11 +842,17 @@ def main():
             average_metrics = defaultdict(list)
             for lang_id in range(len(lang_list)):
                 lang_name = lang_list[lang_id]
-                lang_dataset = vectorized_datasets["predict"].filter(lambda example: example["lang"] == lang_id)
+                with training_args.main_process_first(desc="per-language dataset filter"):
+                    lang_dataset = vectorized_datasets["predict"].filter(
+                        lambda lang: lang == lang_id,
+                        num_proc=num_workers,
+                        input_columns=["lang"],
+                    )
                 lang_metrics = trainer.evaluate(lang_dataset)
+                redundant_metrics = ["eval_runtime", "eval_samples_per_second", "eval_steps_per_second", "eval_epoch"]
                 for metric_name, value in lang_metrics.items():
                     average_metrics[metric_name].append(value)
-                    if metric_name not in ["eval_runtime", "eval_samples_per_second", "eval_steps_per_second"]:
+                    if metric_name not in redundant_metrics:
                         metrics[f"{metric_name}_{lang_name}"] = value
             for metric_name, value in average_metrics.items():
                 metrics[metric_name] = np.mean(value)
