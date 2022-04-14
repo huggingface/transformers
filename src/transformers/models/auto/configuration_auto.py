@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
         ("glpn", "GLPNConfig"),
@@ -38,6 +39,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextConfig"),
         ("van", "VanConfig"),
         ("resnet", "ResNetConfig"),
+        ("regnet", "RegNetConfig"),
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -134,7 +136,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
-        # Add archive maps here
+        # Add archive maps here)
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -142,6 +144,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -226,6 +229,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("tapex", "TAPEX"),
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),
         ("glpn", "GLPN"),
@@ -234,6 +238,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("convnext", "ConvNext"),
         ("van", "VAN"),
         ("resnet", "ResNet"),
+        ("regnet", "RegNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),

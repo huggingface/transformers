@@ -34,7 +34,7 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from .tf_utils import set_tensor_by_indices_to_value, shape_list
+from .tf_utils import shape_list
 from .utils import ModelOutput, logging
 
 
@@ -952,8 +952,7 @@ class TFGenerationMixin:
                     [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
-
-                scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
+                scores = tf.where(eos_token_indices_mask, -float("inf"), scores)
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
@@ -969,8 +968,8 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = set_tensor_by_indices_to_value(
-                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
             if bad_words_ids is not None:
@@ -983,8 +982,8 @@ class TFGenerationMixin:
                         [True if token in banned_tokens_slice else False for token in range(vocab_size)]
                     )
 
-                scores = set_tensor_by_indices_to_value(
-                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                scores = tf.where(
+                    tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
             assert shape_list(scores) == [batch_size * num_beams, vocab_size]
@@ -1489,6 +1488,11 @@ class TFGenerationMixin:
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
 
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
@@ -2510,6 +2514,7 @@ class TFGenerationMixin:
 
         # 3. init tensors to use for "xla-compileable" generate function
         batch_size, num_beams, cur_len = input_ids.shape
+        input_ids_length = cur_len
 
         # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
         sequences = tf.TensorArray(
@@ -2564,7 +2569,14 @@ class TFGenerationMixin:
         # 4. define "xla-compile-able" stop-condition and auto-regressive function
         # define stop-condition and auto-regressive function
         def beam_search_cond_fn(
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
+            input_ids_length,
         ):
             """
             Beam Search termination condition function -- halts the generation loop if any of these conditions becomes
@@ -2593,7 +2605,7 @@ class TFGenerationMixin:
             scores,
             is_sent_finished,
             model_kwargs,
-            input_ids_length=1,
+            input_ids_length,
             intermediary_running_sequences=None,
         ):
             """
@@ -2750,9 +2762,11 @@ class TFGenerationMixin:
 
                 # if we don't cache past key values we need the whole input
                 if model_kwargs.get("past", None) is None:
-                    input_ids_length = cur_len + 1
+                    next_input_ids_length = cur_len + 1
                     # let's throw out `past` since we don't want `None` tensors
                     model_kwargs.pop("past", None)
+                else:
+                    next_input_ids_length = 1
 
             # 9. Prepare the `tf.TensorArray` for the next iteration
             next_sequences = sequences.unstack(tf.transpose(next_sequences_seq_last, perm=[2, 0, 1]))
@@ -2768,6 +2782,7 @@ class TFGenerationMixin:
                 next_scores,
                 next_is_sent_finished,
                 next_model_kwargs,
+                next_input_ids_length,
             )
 
         # 5. run generation
@@ -2776,8 +2791,7 @@ class TFGenerationMixin:
             beam_search_body_fn, intermediary_running_sequences=intermediary_running_sequences
         )
 
-        # 1st generation step has to be run before to initialize `past`
-        beam_search_body_fn_first_iter = partial(beam_search_body_fn, input_ids_length=cur_len)
+        # 1st generation step has to be run before to initialize `past` (if active)
         (
             cur_len,
             running_sequences,
@@ -2786,20 +2800,44 @@ class TFGenerationMixin:
             scores,
             is_sent_finished,
             model_kwargs,
-        ) = beam_search_body_fn_first_iter(
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+            input_ids_length,
+        ) = beam_search_body_fn(
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
+            input_ids_length,
         )
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
         # NOT yield EOS token though)
         if beam_search_cond_fn(
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
+            input_ids_length,
         ):
             maximum_iterations = max_length - cur_len
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _ = tf.while_loop(
+            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _, _ = tf.while_loop(
                 beam_search_cond_fn,
                 beam_search_body_fn,
-                (cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs),
+                (
+                    cur_len,
+                    running_sequences,
+                    running_scores,
+                    sequences,
+                    scores,
+                    is_sent_finished,
+                    model_kwargs,
+                    input_ids_length,
+                ),
                 maximum_iterations=maximum_iterations,
             )
 
@@ -2945,7 +2983,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         top_k = min(max(top_k, min_tokens_to_keep), logits_shape[-1])  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = logits < tf.math.top_k(logits, k=top_k)[0][..., -1, None]
-        logits = set_tensor_by_indices_to_value(logits, indices_to_remove, filter_value)
+        logits = tf.where(indices_to_remove, filter_value, logits)
     if top_p < 1.0:
         sorted_indices = tf.argsort(logits, direction="DESCENDING")
         sorted_logits = tf.gather(
@@ -2974,7 +3012,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
-        logits = set_tensor_by_indices_to_value(logits, indices_to_remove, filter_value)
+        logits = tf.where(indices_to_remove, filter_value, logits)
     return logits
 
 

@@ -1,0 +1,7 @@
+accelerate
+datasets >= 1.8.0
+protobuf
+scikit-learn
+scipy
+sentencepiece != 0.1.92
+torch >= 1.3
