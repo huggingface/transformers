@@ -59,9 +59,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-# Image SemanticSegmentation docstring
-_IMAGE_SEGMENTATION_CHECKPOINT = "microsoft/beit-base-finetuned-ade-640-640"
-
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/beit-base-patch16-224",
     # See all BEiT models at https://huggingface.co/models?filter=beit
@@ -1203,7 +1200,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SemanticSegmenterOutput]:
-        f"""
+        r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
@@ -1220,8 +1217,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
-        >>> model = BeitForSemanticSegmentation.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

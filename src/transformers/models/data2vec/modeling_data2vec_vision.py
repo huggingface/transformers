@@ -56,10 +56,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-# Semantic segmantation docstring
-_IMAGE_SEGMENTATION_CHECKPOINT = "facebook/data2vec-vision-base"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "remote control, remote"
 
 DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/data2vec-vision-base-ft1k",
@@ -1074,7 +1071,7 @@ class Data2VecVisionFCNHead(nn.Module):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_beit.BeitForSemanticSegmentation with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_beit.BeitForSemanticSegmentation with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,microsoft/beit-base-finetuned-ade-640-640->facebook/data2vec-vision-base,beit->data2vec_vision
 class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__(config)
@@ -1130,7 +1127,7 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SemanticSegmenterOutput]:
-        f"""
+        r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
@@ -1147,8 +1144,8 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = Data2VecVisionFeatureExtractor.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
-        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
+        >>> feature_extractor = Data2VecVisionFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
+        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
