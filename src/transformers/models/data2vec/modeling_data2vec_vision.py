@@ -30,7 +30,6 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
-    MaskedLMOutput,
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -743,104 +742,6 @@ class Data2VecVisionPooler(nn.Module):
             pooled_output = hidden_states[:, 0]
 
         return pooled_output
-
-
-@add_start_docstrings(
-    "Data2VecVision Model transformer with a 'language' modeling head on top (to predict visual tokens).",
-    DATA2VEC_VISION_START_DOCSTRING,
-)
-# Copied from transformers.models.beit.modeling_beit.BeitForMaskedImageModeling with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision,microsoft/beit-base-patch16-224-pt22k->facebook/data2vec-vision-base-ft
-class Data2VecVisionForMaskedImageModeling(Data2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionConfig) -> None:
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.data2vec_vision = Data2VecVisionModel(config, add_pooling_layer=False)
-
-        # Classifier head
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, Data2VecVisionForMaskedImageModeling
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft")
-        >>> model = Data2VecVisionForMaskedImageModeling.from_pretrained("facebook/data2vec-vision-base-ft")
-
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, logits = outputs.loss, outputs.logits
-        >>> list(logits.shape)
-        [1, 196, 8192]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.data2vec_vision(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        prediction_scores = self.lm_head(sequence_output[:, 1:])
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 @add_start_docstrings(
