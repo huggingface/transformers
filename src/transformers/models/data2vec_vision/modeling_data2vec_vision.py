@@ -65,7 +65,6 @@ DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.beit.modeling_beit.BeitModelOutputWithPooling with Beit->Data2VecVision
 class Data2VecVisionModelOutputWithPooling(BaseModelOutputWithPooling):
@@ -639,9 +638,9 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_beit.BeitModel with BEIT->DATA2VEC_VISION,Beit->Data2VecVision
+# Copied from transformers.models.beit.modeling_beit.BeitModel with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,True->False
 class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = True) -> None:
+    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False) -> None:
         super().__init__(config)
         self.config = config
 
@@ -727,7 +726,7 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
 
 # Copied from transformers.models.beit.modeling_beit.BeitPooler with Beit->Data2VecVision
 class Data2VecVisionPooler(nn.Module):
-    def __init__(self, config: Data2VecVisionModel) -> None:
+    def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__()
         self.layernorm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
@@ -751,7 +750,7 @@ class Data2VecVisionPooler(nn.Module):
 )
 # Copied from transformers.models.beit.modeling_beit.BeitForMaskedImageModeling with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision,microsoft/beit-base-patch16-224-pt22k->facebook/data2vec-vision-base-ft
 class Data2VecVisionForMaskedImageModeling(Data2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionModel) -> None:
+    def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -852,7 +851,7 @@ class Data2VecVisionForMaskedImageModeling(Data2VecVisionPreTrainedModel):
 )
 # Copied from transformers.models.beit.modeling_beit.BeitForImageClassification with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision
 class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionModel) -> None:
+    def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
