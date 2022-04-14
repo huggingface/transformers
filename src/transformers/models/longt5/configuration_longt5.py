@@ -69,7 +69,10 @@ class LongT5Config(PretrainedConfig):
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. LongT5v1.1 uses the
-            `"gated-gelu"` feed forward projection. Original LongT5 uses `"relu"`.
+            `"gated-gelu"` feed forward projection. Original LongT5 implementation uses `"gated-gelu"`.
+        encoder_attention_type (`string`, *optional*, defaults to `"local"`):
+            Type of encoder attention to be used. Should be one of `"local"` or `"transient-global"`, which are
+            supported by LongT5 implementation.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
@@ -94,6 +97,7 @@ class LongT5Config(PretrainedConfig):
         initializer_factor=1.0,
         feed_forward_proj="relu",
         is_encoder_decoder=True,
+        encoder_attention_type="local",
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
@@ -115,6 +119,9 @@ class LongT5Config(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
+        if encoder_attention_type not in ["local", "transient-global"]:
+            raise
+        self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
         super().__init__(
             pad_token_id=pad_token_id,
