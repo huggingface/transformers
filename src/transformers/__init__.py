@@ -3186,6 +3186,7 @@ if TYPE_CHECKING:
             Data2VecVisionForImageClassification,
             Data2VecVisionForSemanticSegmentation,
             Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
