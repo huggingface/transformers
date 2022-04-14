@@ -37,11 +37,10 @@ if is_torch_available():
     from transformers import (
         MODEL_MAPPING,
         Data2VecVisionForImageClassification,
-        Data2VecVisionForMaskedImageModeling,
         Data2VecVisionForSemanticSegmentation,
         Data2VecVisionModel,
     )
-    from transformers.models.data2vec_vision.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.data2vec.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
@@ -138,17 +137,6 @@ class Data2VecVisionModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
-    def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
-        model = Data2VecVisionForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        # expected sequence length = num_patches
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, self.vocab_size))
-
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
         model = Data2VecVisionForImageClassification(config)
@@ -186,7 +174,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (Data2VecVisionModel, Data2VecVisionForImageClassification, Data2VecVisionForMaskedImageModeling, Data2VecVisionForSemanticSegmentation)
+        (Data2VecVisionModel, Data2VecVisionForImageClassification, Data2VecVisionForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
@@ -243,8 +231,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            # we don't test Data2VecVisionForMaskedImageModeling
-            if model_class in [*get_values(MODEL_MAPPING), Data2VecVisionForMaskedImageModeling]:
+            if model_class in [*get_values(MODEL_MAPPING)]:
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
@@ -269,9 +256,8 @@ class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            # we don't test Data2VecVisionForMaskedImageModeling
             if (
-                model_class in [*get_values(MODEL_MAPPING), Data2VecVisionForMaskedImageModeling]
+                model_class in [*get_values(MODEL_MAPPING)]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -440,32 +426,6 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         return (
             BeitFeatureExtractor.from_pretrained("microsoft/data2vec_vision-base-patch16-224") if is_vision_available() else None
         )
-
-    @slow
-    def test_inference_masked_image_modeling_head(self):
-        model = Data2VecVisionForMaskedImageModeling.from_pretrained("facebook/data2vec-vision-base-ft").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(torch_device)
-
-        # prepare bool_masked_pos
-        bool_masked_pos = torch.ones((1, 196), dtype=torch.bool).to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
-        logits = outputs.logits
-
-        # verify the logits
-        expected_shape = torch.Size((1, 196, 8192))
-        self.assertEqual(logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2))
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):

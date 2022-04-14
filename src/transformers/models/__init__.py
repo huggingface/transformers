@@ -23,8 +23,6 @@ from . import (
     barthez,
     bartpho,
     beit,
-    data2vec_vision,
-    data2vec_vision,
     bert,
     bert_generation,
     bert_japanese,

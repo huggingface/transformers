@@ -56,7 +56,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBartModel"),
         ("beit", "BeitModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
-        ("data2vec-vision", "Data2VecVisionModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
         ("canine", "CanineModel"),
@@ -293,7 +292,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
-        ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         (
@@ -325,7 +323,6 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
         ("beit", "BeitForSemanticSegmentation"),
-        ("data2vec-vision", "Data2VecVisionForSemanticSegmentation"),
         ("data2vec-vision", "Data2VecVisionForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
         ("dpt", "DPTForSemanticSegmentation"),
