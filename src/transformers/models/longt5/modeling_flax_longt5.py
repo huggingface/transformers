@@ -735,32 +735,7 @@ class FlaxLongT5LocalAttention(nn.Module):
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
 
-        # for fast decoding causal attention mask should be shifted
-        causal_attention_mask_shift = (
-            self.variables["cache"]["cache_index"] if (self.has_variable("cache", "cached_key") and self.causal) else 0
-        )
-        # create causal attention_mask; attention_mask has to be defined when model is causal
-        if self.causal:
-            causal_attention_mask = make_causal_mask(attention_mask, dtype="bool")
-
-            # fast decoding for generate requires special attention_mask
-            if self.has_variable("cache", "cached_key"):
-                max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-                causal_attention_mask = jax.lax.dynamic_slice(
-                    causal_attention_mask,
-                    (0, 0, causal_attention_mask_shift, 0),
-                    (1, 1, seq_length, max_decoder_length),
-                )
-
-            # broadcast causal attention mask & attention mask to fit for merge
-            causal_attention_mask = jnp.broadcast_to(
-                causal_attention_mask, (batch_size,) + causal_attention_mask.shape[1:]
-            )
-            attention_mask = jnp.broadcast_to(
-                jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_attention_mask.shape
-            )
-            attention_mask = combine_masks(attention_mask, causal_attention_mask)
-        elif attention_mask is not None:
+        if attention_mask is not None:
             attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
 
         # replace masked positions with -10_000
@@ -773,9 +748,7 @@ class FlaxLongT5LocalAttention(nn.Module):
 
         if position_bias is None:
             # compute position bias (only for first layer)
-            position_bias = self._create_position_bias(
-                key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
-            )
+            position_bias = self._create_position_bias(self.block_len, attention_mask)
 
             if attention_mask is not None:
                 position_bias = position_bias + attention_mask

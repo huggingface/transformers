@@ -54,6 +54,8 @@ class LongT5Config(PretrainedConfig):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
+        local_radius (`int`, *optional*, defaults to 127)
+            Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -84,6 +86,7 @@ class LongT5Config(PretrainedConfig):
         num_layers=6,
         num_decoder_layers=None,
         num_heads=8,
+        local_radius=127,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
@@ -105,6 +108,7 @@ class LongT5Config(PretrainedConfig):
             num_decoder_layers if num_decoder_layers is not None else self.num_layers
         )  # default = symmetry
         self.num_heads = num_heads
+        self.local_radius = local_radius
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
