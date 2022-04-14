@@ -2548,7 +2548,6 @@ class Trainer:
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
         # samplers has been rounded to a multiple of batch_size, so we truncate.
         if all_losses is not None:
-            print(all_losses)
             all_losses = all_losses[:num_samples]
         if all_preds is not None:
             all_preds = nested_truncate(all_preds, num_samples)
