@@ -36,6 +36,8 @@ from torchvision.transforms import (
 
 import transformers
 from transformers import (
+    CONFIG_MAPPING,
+    FEATURE_EXTRACTOR_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
@@ -67,6 +69,12 @@ def pil_loader(path: str):
         im = Image.open(f)
         return im.convert("RGB")
 
+def count_parameters(model):
+    s = 0
+    for p in model.parameters():
+        s+= p.numel()
+        print(type(p), p.numel(), " total:", s)
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 @dataclass
 class DataTrainingArguments:
@@ -118,8 +126,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
 
-    model_name_or_path: str = field(
-        default="google/vit-base-patch16-224-in21k",
+    model_name_or_path: Optional[str] = field(
+        #default="google/vit-base-patch16-224-in21k",
+        default=None,
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     model_type: Optional[str] = field(
@@ -233,30 +242,59 @@ def main():
         """Computes accuracy on a batch of predictions"""
         return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
 
-    config = AutoConfig.from_pretrained(
-        model_args.config_name or model_args.model_name_or_path,
-        num_labels=len(labels),
-        label2id=label2id,
-        id2label=id2label,
-        finetuning_task="image-classification",
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
-    model = AutoModelForImageClassification.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
+    if model_args.config_name or model_args.model_name_or_path:
+        config = AutoConfig.from_pretrained(
+            model_args.config_name or model_args.model_name_or_path,
+            num_labels=len(labels),
+            label2id=label2id,
+            id2label=id2label,
+            finetuning_task="image-classification",
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    else:
+        config = CONFIG_MAPPING[model_args.model_type](label2id=label2id)
+        config.update({"num_labels" : len(labels), "label2id" : label2id, 
+                       "id2label" : id2label, "finetuning_task" : "image-classification"})
+        logger.warning("You are instantiating a new config instance from scratch.")
+        #if model_args.config_overrides is not None:
+        #    logger.info(f"Overriding config: {model_args.config_overrides}")
+        #    config.update_from_string(model_args.config_overrides)
+        #    logger.info(f"New config: {config}")
+
+    if model_args.model_name_or_path:
+        model = AutoModelForImageClassification.from_pretrained(
+            model_args.model_name_or_path,
+            from_tf=bool(".ckpt" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,  
+        )
+    else:
+        logger.info("Training new model from scratch")
+        model = AutoModelForImageClassification.from_config(config)
+    if model_args.feature_extractor_name or model_args.model_name_or_path:
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            model_args.feature_extractor_name or model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    else:
+        FEATURE_EXTRACTOR_TYPES = {
+            conf.model_type: feature_extractor_class
+            for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
+        }
+        feature_extractor = FEATURE_EXTRACTOR_TYPES[model_args.model_type]()
+        logger.info("Feature extractor from MAPPING")
+
+
+    print(model)
+    print("Total parameters", count_parameters(model))
+    print(config)
+    print(feature_extractor)
 
     # Define torchvision transforms to be applied to each image.
     normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
