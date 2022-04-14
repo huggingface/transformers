@@ -28,12 +28,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "fastspeech2": "https://huggingface.co/fastspeech2/resolve/main/vocab.txt",
+        "fastspeech2-ljspeech": "https://huggingface.co/jaketae/fastspeech2-ljspeech/resolve/main/vocab.txt",
+        "fastspeech2-commonvoice": "https://huggingface.co/jaketae/fastspeech2-commonvoice/resolve/main/vocab.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "fastspeech2": 1024,
+    "fastspeech2-ljspeech": 1024,
+    "fastspeech2-commonvoice": 1024,
 }
 
 
