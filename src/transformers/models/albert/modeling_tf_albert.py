@@ -871,7 +871,6 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
 
         >>> prediction_logits = outputs.prediction_logits
         >>> sop_logits = outputs.sop_logits
-
         ```"""
 
         outputs = self.albert(
