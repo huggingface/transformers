@@ -2190,15 +2190,6 @@ else:
             "TFLongformerSelfAttention",
         ]
     )
-    _import_structure["models.longt5"].extend(
-        [
-            "TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFLongT5EncoderModel",
-            "TFLongT5ForConditionalGeneration",
-            "TFLongT5Model",
-            "TFLongT5PreTrainedModel",
-        ]
-    )
     _import_structure["models.lxmert"].extend(
         [
             "TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST",
