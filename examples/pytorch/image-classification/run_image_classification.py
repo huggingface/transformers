@@ -22,7 +22,7 @@ from typing import Optional
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset
+from datasets import load_dataset
 from PIL import Image
 from torchvision.transforms import (
     CenterCrop,
@@ -210,24 +210,17 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
-        dataset_dict = {}
+        data_files = {}
         if data_args.train_dir is not None:
-            dataset_dict["train"] = load_dataset(
-                "imagefolder",
-                data_dir=data_args.train_dir,
-                cache_dir=model_args.cache_dir,
-                task="image-classification",
-                split="train",
-            )
+            data_files["train"] = os.path.join(data_args.train_dir, "**")
         if data_args.validation_dir is not None:
-            dataset_dict["validation"] = load_dataset(
-                "imagefolder",
-                data_dir=data_args.validation_dir,
-                cache_dir=model_args.cache_dir,
-                task="image-classification",
-                split="validation",
-            )
-        dataset = DatasetDict(dataset_dict)
+            data_files["validation"] = os.path.join(data_args.validation_dir, "**")
+        dataset = load_dataset(
+            "imagefolder",
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            task="image-classification",
+        )
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
