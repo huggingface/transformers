@@ -209,8 +209,8 @@ class InterpolateMidPositionEmbeddings(nn.Module):
         D, B, E, Q = patch_pos_embed.shape
 
         patch_height, patch_width = (
-            self.config.mid_pe_size[0] // self.config.patch_size,
-            self.config.mid_pe_size[1] // self.config.patch_size,
+            self.config.image_size[0] // self.config.patch_size,
+            self.config.image_size[1] // self.config.patch_size,
         )
         patch_pos_embed = patch_pos_embed.view(D * B, E, patch_height, patch_width)
         height, width = img_size
@@ -460,7 +460,7 @@ class YolosEncoder(nn.Module):
                     config.num_hidden_layers - 1,
                     1,
                     1
-                    + (config.mid_pe_size[0] * config.mid_pe_size[1] // config.patch_size**2)
+                    + (config.image_size[0] * config.image_size[1] // config.patch_size**2)
                     + config.num_detection_tokens,
                     config.hidden_size,
                 )

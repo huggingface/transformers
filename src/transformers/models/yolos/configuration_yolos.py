@@ -66,8 +66,6 @@ class YolosConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         num_detection_tokens (`int`, *optional*, defaults to `100`):
             The number of detection tokens.
-        mid_pe_size (`List[int]`, *optional*, defaults to `[512, 864]`):
-            The size of the grid for the mid-layer position encodings.
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
@@ -117,7 +115,6 @@ class YolosConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         num_detection_tokens=100,
-        mid_pe_size=[512, 864],
         use_mid_position_embeddings=True,
         auxiliary_loss=False,
         class_cost=1,
@@ -144,7 +141,6 @@ class YolosConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.num_detection_tokens = num_detection_tokens
-        self.mid_pe_size = mid_pe_size
         self.use_mid_position_embeddings = use_mid_position_embeddings
         self.auxiliary_loss = auxiliary_loss
         # Hungarian matcher

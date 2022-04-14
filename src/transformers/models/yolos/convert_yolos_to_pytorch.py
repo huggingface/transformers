@@ -55,7 +55,6 @@ def get_yolos_config(yolos_name):
         config.num_attention_heads = 6
     elif "yolos_b" in yolos_name:
         config.image_size = [800, 1344]
-        config.mid_pe_size = [800, 1344]
 
     config.num_labels = 91
     repo_id = "datasets/huggingface/label-files"
