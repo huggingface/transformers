@@ -2904,6 +2904,11 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+        # Cancel any async push in progress if blocking=True. The commits will all be pushed together.
+        if blocking and self.push_in_progress is not None and not self.push_in_progress.is_done:
+            self.push_in_progress._process.kill()
+            self.push_in_progress = None
+
         git_head_commit_url = self.repo.push_to_hub(
             commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
         )
