@@ -176,6 +176,10 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    print("Pushing to the hub...")
+    feature_extractor.push_to_hub("nielsr/yolos-s")
+    model.push_to_hub("nielsr/yolos-s")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

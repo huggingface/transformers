@@ -335,11 +335,13 @@ def prepare_img():
 class YolosModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        # TODO rename nielsr to organization
+        return AutoFeatureExtractor.from_pretrained("nielsr/yolos-s") if is_vision_available() else None
 
     @slow
     def test_inference_object_detection_head(self):
-        model = YolosForObjectDetection.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        # TODO rename nielsr to organization
+        model = YolosForObjectDetection.from_pretrained("nielsr/yolos-s").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -347,12 +349,18 @@ class YolosModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(inputs.pixel_values)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = torch.Size((1, 100, 92))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expected_slice_logits = torch.tensor(
+            [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]],
+            device=torch_device,
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
