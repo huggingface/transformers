@@ -238,7 +238,6 @@ _import_structure = {
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
-    "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
@@ -1259,16 +1258,6 @@ else:
             "LongT5ForConditionalGeneration",
             "LongT5Model",
             "LongT5PreTrainedModel",
-        ]
-    )
-    _import_structure["models.longt5"].extend(
-        [
-            "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LongT5EncoderModel",
-            "LongT5ForConditionalGeneration",
-            "LongT5Model",
-            "LongT5PreTrainedModel",
-            "load_tf_weights_in_longt5",
         ]
     )
     _import_structure["models.luke"].extend(

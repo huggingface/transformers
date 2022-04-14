@@ -57,10 +57,7 @@ _CHECKPOINT_FOR_DOC = "Stancld/LongT5-Local-Base"
 # for the pretrained weights provided with the models
 ####################################################
 # TODO: Update before the merge
-LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Stancld/LongT5-Local-Base",
-    "Stancld/LongT5-Local-Large"
-]
+LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = ["Stancld/LongT5-Local-Base", "Stancld/LongT5-Local-Large"]
 
 
 ####################################################
