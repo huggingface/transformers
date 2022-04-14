@@ -359,3 +359,16 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # Run the following to convert checkpoints
+    #  python ./convert_data2vec_vision_original_pytorch_checkpoint_to_pytorch.py \
+    #          --beit_checkpoint ./pretrained_base.pt \
+    #          --hf_checkpoint_name "./data2vec-vision-base"
+    #  python ./convert_data2vec_vision_original_pytorch_checkpoint_to_pytorch.py \
+    #          --beit_checkpoint ./finetuned_base.pt \
+    #          --hf_checkpoint_name "./data2vec-vision-base-ft1k"
+    #  python ./convert_data2vec_vision_original_pytorch_checkpoint_to_pytorch.py \
+    #          --beit_checkpoint ./pretrained_large.pt \
+    #          --hf_checkpoint_name "./data2vec-vision-large"
+    #  python ./convert_data2vec_vision_original_pytorch_checkpoint_to_pytorch.py \
+    #          --beit_checkpoint ./finetuned_large.pt \
+    #          --hf_checkpoint_name "./data2vec-vision-large-ft1k"
