@@ -18,18 +18,18 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Loading cache.
+      - name: Install dependencies
+        run: |
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
+
+      - name: Load cached virtual environment
         uses: actions/cache@v2
         id: cache
         with:
           path: ~/venv/
           key: v2-tests_model_like-${{ hashFiles('setup.py') }}
 
-      - name: Install dependencies
-        run: |
-          sudo apt -y update && sudo apt install -y libsndfile1-dev
-
-      - name: Create Virtual Environment on Cache Miss
+      - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           python -m venv ~/venv && . ~/venv/bin/activate
