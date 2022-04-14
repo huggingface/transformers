@@ -452,7 +452,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
-def _load_state_dict_into_meta_model(model, state_dict, start_prefix, loaded_state_dict_keys):
+def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
     params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
@@ -2143,7 +2143,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if low_cpu_mem_usage:
                     error_msgs += _load_state_dict_into_meta_model(
-                        model_to_load, state_dict, start_prefix, loaded_keys
+                        model_to_load, state_dict, loaded_keys, start_prefix
                     )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
@@ -2209,6 +2209,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+    @staticmethod
+    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file, start_prefix=""):
+        """
+        This is an experimental function that loads the model using ~1.x model size CPU memory
+
+        Before you call it do:
+
+        1. save which state_dict keys are available
+        2. drop state_dict before model is created, since the latter takes 1x model size memory
+
+        Here then we continue:
+
+        3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        """
+
+        _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
+        state_dict = load_state_dict(resolved_archive_file)
+        error_msgs = _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix)
+        return error_msgs
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):
