@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -267,7 +268,11 @@ class OnnxExportTestCaseV2(TestCase):
         else:
             raise ValueError(f"Unsupported model input name: {model.main_input_name}")
 
-        with NamedTemporaryFile("w") as output:
+        # "w" mode on Windows opens the file, so torch.onnx.export will crash because the file is already open while
+        # attempting to open the file, resulting in a PermissionDenied
+        # This workaround makes sure the file is not deleted on close and handle the file's lifetime by hand.
+        with NamedTemporaryFile("w", delete=False) as output:
+            output.close()
             try:
                 onnx_inputs, onnx_outputs = export(
                     preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
@@ -280,6 +285,7 @@ class OnnxExportTestCaseV2(TestCase):
                     onnx_outputs,
                     onnx_config.atol_for_validation,
                 )
+                os.unlink(output.name)
             except (RuntimeError, ValueError) as e:
                 self.fail(f"{name}, {feature} -> {e}")
 
