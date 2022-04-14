@@ -36,20 +36,26 @@ def get_yolos_config(yolos_name):
     config = YolosConfig()
 
     # size of the architecture
-    if "yolos_t" in yolos_name:
+    if "yolos_ti" in yolos_name:
         config.hidden_size = 192
         config.intermediate_size = 768
         config.num_hidden_layers = 12
         config.num_attention_heads = 3
         config.image_size = [800, 1333]
         config.use_mid_position_embeddings = False
+    elif yolos_name == "yolos_s_dWr":
+        config.hidden_size = 330
+        config.num_hidden_layers = 14
+        config.num_attention_heads = 6
+        config.intermediate_size = 1320
     elif "yolos_s" in yolos_name:
         config.hidden_size = 384
         config.intermediate_size = 1536
         config.num_hidden_layers = 12
         config.num_attention_heads = 6
     elif "yolos_b" in yolos_name:
-        config.image_size = [800, 1333]
+        config.image_size = [800, 1344]
+        config.mid_pe_size = [800, 1344]
 
     config.num_labels = 91
     repo_id = "datasets/huggingface/label-files"
@@ -159,7 +165,7 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     # load original state_dict
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
-    # load HuggingFace model
+    # load 🤗 model
     model = YolosForObjectDetection(config)
     model.eval()
     new_state_dict = convert_state_dict(state_dict, model)
@@ -171,6 +177,9 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
+
+    print("Actual logits:", logits[0, :3, :3])
+    print("Actual boxes:", pred_boxes[0, :3, :3])
 
     expected_slice_logits, expected_slice_boxes = None, None
     if yolos_name == "yolos_ti":
@@ -187,9 +196,26 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
         expected_slice_boxes = torch.tensor(
             [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]]
         )
+    elif yolos_name == "yolos_s_300_pre":
+        expected_slice_logits = torch.tensor()
+        expected_slice_boxes = torch.tensor()
+    elif yolos_name == "yolos_s_dWr":
+        expected_slice_logits = torch.tensor(
+            [[-42.8668, -24.1049, -41.1690], [-34.7456, -14.1274, -24.9194], [-33.7898, -12.1946, -25.6495]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.5587, 0.2773, 0.0605], [0.5004, 0.3014, 0.9994], [0.4999, 0.1548, 0.9994]]
+        )
+    elif yolos_name == "yolos_base":
+        expected_slice_logits = torch.tensor(
+            [[-40.6064, -24.3084, -32.6447], [-55.1990, -30.7719, -35.5877], [-51.4311, -33.3507, -35.6462]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.5555, 0.2794, 0.0655], [0.9049, 0.2664, 0.1894], [0.9183, 0.1984, 0.1635]]
+        )
     else:
         raise ValueError(f"Unknown yolos_name: {yolos_name}")
-    
+
     assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     assert torch.allclose(pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
@@ -212,14 +238,14 @@ if __name__ == "__main__":
         "--yolos_name",
         default="yolos_s_200_pre",
         type=str,
-        help="Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre'",
+        help="Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre', 'yolos_s_300_pre', 'yolos_s_dWr', 'yolos_base'.",
     )
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the original state dict.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the HuggingFace hub."
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
     args = parser.parse_args()
