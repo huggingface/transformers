@@ -517,7 +517,6 @@ def filter_framework_files(
         else:
             framework_to_file["pt"] = f
 
-    frameworks = ["pt", "flax"]
     return [framework_to_file[f] for f in frameworks] + others
 
 
