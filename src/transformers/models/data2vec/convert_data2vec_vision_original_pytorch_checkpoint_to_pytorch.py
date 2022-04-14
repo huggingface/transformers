@@ -14,7 +14,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 
-# Copied from transformers.models.beit.modeling_beit.create_rename_keys
+# Copied from transformers.models.beit.convert_beit_unilm_to_pytorch.py.create_rename_keys with beit.->data2vec_vision.
 def create_rename_keys(config, has_lm_head=False, is_semantic=False, hf_prefix="data2vec."):
     prefix = "backbone." if is_semantic else ""
 
@@ -94,6 +94,7 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False, hf_prefix="
     return rename_keys
 
 
+# Copied from transformers.models.beit.convert_beit_unilm_to_pytorch.py.rename_keys with beit.->data2vec_vision.
 def read_in_q_k_v(state_dict, config, has_lm_head=False, is_semantic=False, hf_prefix="data2vec_vision."):
     for i in range(config.num_hidden_layers):
         prefix = "backbone." if is_semantic else ""
