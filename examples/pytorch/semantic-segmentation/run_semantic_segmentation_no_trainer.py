@@ -270,7 +270,6 @@ def parse_args():
         default=500,
         help="Number of steps between each logging",
     )
-    parser.add_argument("--wandb", action="store_true", help="Whether or not to log to Weights and Biases.")
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
@@ -288,13 +287,18 @@ def parse_args():
         default=None,
         help="If the training should continue from a checkpoint folder.",
     )
+    parser.add_argument(
+        "--with_tracking",
+        required=False,
+        action="store_true",
+        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
-    if args.push_to_hub or args.wandb:
-        assert (
-            args.output_dir is not None
-        ), "Need an `output_dir` to create a repo when `--push_to_hub` or `--wandb` is passed."
+    if args.push_to_hub or args.with_tracking:
+        if args.output_dir is None:
+            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified.")
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -306,8 +310,8 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using wandb, we also need to initialize it here
-    accelerator = Accelerator(log_with="wandb") if args.wandb else Accelerator()
+    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
+    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     logger.info(accelerator.state)
 
     # Setup logging, we only want one process per machine to log things on the screen.
@@ -319,8 +323,6 @@ def main():
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
-    if args.wandb:
-        accelerator.init_trackers(args.output_dir.split("/")[-1])
 
     # If passed along, set the training seed now.
     # We set device_specific to True as we want different data augmentation per device.
@@ -389,7 +391,7 @@ def main():
     # Define torchvision transforms to be applied to each image + target.
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
-    _train_transforms = Compose(
+    train_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
             RandomCrop(size=feature_extractor.size),
@@ -401,7 +403,7 @@ def main():
     )
     # Define torchvision transform to be applied to each image.
     # jitter = ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1)
-    _val_transforms = Compose(
+    val_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
             Resize(size=(feature_extractor.size, feature_extractor.size)),
@@ -411,11 +413,11 @@ def main():
         ]
     )
 
-    def train_transforms(example_batch):
+    def preprocess_train(example_batch):
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = _train_transforms(image.convert("RGB"), target)
+            image, target = train_transforms(image.convert("RGB"), target)
             pixel_values.append(image)
             labels.append(target)
 
@@ -425,11 +427,11 @@ def main():
 
         return encoding
 
-    def val_transforms(example_batch):
+    def preprocess_val(example_batch):
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = _val_transforms(image.convert("RGB"), target)
+            image, target = val_transforms(image.convert("RGB"), target)
             pixel_values.append(image)
             labels.append(target)
 
@@ -440,8 +442,8 @@ def main():
         return encoding
 
     with accelerator.main_process_first():
-        train_dataset = dataset["train"].with_transform(train_transforms)
-        eval_dataset = dataset["validation"].with_transform(val_transforms)
+        train_dataset = dataset["train"].with_transform(preprocess_train)
+        eval_dataset = dataset["validation"].with_transform(preprocess_val)
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
@@ -487,6 +489,12 @@ def main():
 
     # Instantiate metric
     metric = load_metric("mean_iou")
+
+    if args.with_tracking:
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("semantic_segmentation_no_trainer", experiment_config)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -600,7 +608,8 @@ def main():
                         log_str += "| {}: {:.3e}".format(k, v)
 
                 progress_bar.write(log_str)
-                if args.wandb:
+                if args.with_tracking:
+                    train_logs["step"] = completed_steps
                     accelerator.log(train_logs)
 
         logger.info("***** Running evaluation *****")
