@@ -416,12 +416,12 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("microsoft/data2vec_vision-base-patch16-224") if is_vision_available() else None
+            BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = Data2VecVisionForImageClassification.from_pretrained("microsoft/data2vec_vision-base-patch16-224").to(torch_device)
+        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -436,9 +436,9 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
+        expected_slice = torch.tensor([0.3277, -0.1395, 0.0911]).to(torch_device)
 
         self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
 
-        expected_class_idx = 281
-        self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
+        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
+        self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
