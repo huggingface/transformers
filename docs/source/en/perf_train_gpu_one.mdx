@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -212,17 +212,17 @@ Let's look at the details.
 **Model Weights:**
 
 - 4 bytes * number of parameters for fp32 training
-- 6 bytes * number of parameters for mixed precision training
+- 6 bytes * number of parameters for mixed precision training (maintains a model in fp32 and one in fp16 in memory)
 
 **Optimizer States:**
 
 - 8 bytes * number of parameters for normal AdamW (maintains 2 states)
 - 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/facebookresearch/bitsandbytes)
-- 4 bytes * number of parameters for optimizers like SGD (maintains only 1 state)
+- 4 bytes * number of parameters for optimizers like SGD with momentum (maintains only 1 state)
 
 **Gradients**
 
-- 4 bytes * number of parameters for either fp32 or mixed precision training
+- 4 bytes * number of parameters for either fp32 or mixed precision training (gradients are always kept in fp32)
 
 **Forward Activations**
 
@@ -395,9 +395,8 @@ Like all cases with reduced precision this may or may not be satisfactory for yo
 If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
 
 You can enable this mode in the 🤗 Trainer with: 
-    ```python
-    TrainingArguments(tf32=True)
-    ```
+```python
+TrainingArguments(tf32=True)
 By default the PyTorch default is used.
 
 Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
