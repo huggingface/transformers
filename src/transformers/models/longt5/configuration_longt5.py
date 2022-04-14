@@ -119,8 +119,6 @@ class LongT5Config(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
-        if encoder_attention_type not in ["local", "transient-global"]:
-            raise
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
         super().__init__(
