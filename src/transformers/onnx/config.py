@@ -316,7 +316,9 @@ class OnnxConfig(ABC):
                     num_choices, fixed_dimension=OnnxConfig.default_fixed_num_choices, num_token_to_add=0
                 )
                 dummy_input = dummy_input * num_choices
+                # The shape of the tokenized inputs values is [batch_size * num_choices, seq_length]
                 tokenized_input = preprocessor(dummy_input, text_pair=dummy_input)
+                # Unflatten the tokenized inputs values expanding it to the shape [batch_size, num_choices, seq_length]
                 for k, v in tokenized_input.items():
                     tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
                 return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
