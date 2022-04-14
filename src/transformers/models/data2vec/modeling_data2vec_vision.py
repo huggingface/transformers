@@ -58,6 +58,9 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
+# Semantic segmantation docstring
+_IMAGE_SEGMENTATION_CHECKPOINT = "facebook/data2vec-vision-base"
+
 DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/data2vec-vision-base-ft1k",
     # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
@@ -300,8 +303,8 @@ class Data2VecVisionSelfAttention(nn.Module):
 # Copied from transformers.models.beit.modeling_beit.BeitSelfOutput with Beit->Data2VecVision
 class Data2VecVisionSelfOutput(nn.Module):
     """
-    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due
+    to the layernorm applied before each block.
     """
 
     def __init__(self, config: Data2VecVisionConfig) -> None:
@@ -392,7 +395,9 @@ class Data2VecVisionOutput(nn.Module):
 class Data2VecVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
+    def __init__(
+        self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
+    ) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -1016,7 +1021,11 @@ class Data2VecVisionFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config: Data2VecVisionConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self,
+        config: Data2VecVisionConfig,
+        in_index: int = 2,
+        kernel_size: int = 3,
+        dilation: Union[int, Tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
         self.in_channels = config.hidden_size
@@ -1121,12 +1130,30 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SemanticSegmenterOutput]:
-        r"""
+        f"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
 
         Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import Data2VecVisionFeatureExtractor, Data2VecVisionForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = Data2VecVisionFeatureExtractor.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
+        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained({_IMAGE_SEGMENTATION_CHECKPOINT})
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
