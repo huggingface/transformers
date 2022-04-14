@@ -51,15 +51,15 @@ _CONFIG_FOR_DOC = "Data2VecVisionConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base-ft"
+_CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/data2vec_vision-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft",
+    "facebook/data2vec-vision-base-ft1k",
     # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
 ]
 
@@ -1127,24 +1127,6 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
 
         Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, Data2VecVisionForSemanticSegmentation
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/data2vec_vision-base-finetuned-ade-640-640")
-        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("microsoft/data2vec_vision-base-finetuned-ade-640-640")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height, width)
-        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
