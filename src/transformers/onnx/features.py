@@ -10,6 +10,7 @@ from ..models.big_bird import BigBirdOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
+from ..models.data2vec import Data2VecTextOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.flaubert import FlaubertOnnxConfig
@@ -162,6 +163,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=BigBirdOnnxConfig,
@@ -199,6 +201,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=FlaubertOnnxConfig,
@@ -276,6 +279,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
@@ -299,6 +303,15 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
+        "data2vec-text": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=Data2VecTextOnnxConfig,
         ),
     }
 
