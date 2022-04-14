@@ -30,11 +30,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -149,7 +148,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
                 _padding_value = t_padding_value
             elif key in {"input_values", "pixel_values", "input_features"}:
                 _padding_value = f_padding_value
-            elif key in {"p_mask"}:
+            elif key in {"p_mask", "special_tokens_mask"}:
                 _padding_value = 1
             elif key in {"attention_mask", "token_type_ids"}:
                 _padding_value = 0

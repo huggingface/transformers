@@ -22,7 +22,7 @@ import unittest
 from typing import Tuple
 
 from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
-from transformers.file_utils import cached_property, is_tf_available, is_torch_available
+from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ..test_tokenization_common import TokenizerTesterMixin
 
@@ -286,3 +286,14 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # tests all ids in vocab => vocab doesn't exist so unnecessary to test
     def test_conversion_reversible(self):
         pass
+
+    def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests uses invalid tokens for Perceiver that can only accept one-character
+        # strings and special added tokens as tokens
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["[CLS]", "t", "h", "i", "s", " ", "i", "s", " ", "a", " ", "t", "e", "s", "t", "[SEP]"]
+                string = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(string, str)

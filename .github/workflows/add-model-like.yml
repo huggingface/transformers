@@ -3,7 +3,7 @@ name: Add model like runner
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     paths:
       - "src/**"
@@ -23,10 +23,7 @@ jobs:
         id: cache
         with:
           path: ~/.cache/pip
-          key: v1-tests_model_like
-          restore-keys: |
-            v1-tests_model_like-${{ hashFiles('setup.py') }}
-            v1-tests_model_like
+          key: v1-tests_model_like-${{ hashFiles('setup.py') }}
 
       - name: Install dependencies
         run: |

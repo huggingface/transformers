@@ -25,23 +25,21 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2Text2Config"
-_TOKENIZER_FOR_DOC = "Speech2Text2Tokenizer"
-_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
+_CHECKPOINT_FOR_DOC = "facebook/s2t-wav2vec2-large-en-de"
 
 
 SPEECH_TO_TEXT_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-small-librispeech-asr",
-    # See all Speech2Text2 models at https://huggingface.co/models?filter=speech_to_text
+    "facebook/s2t-wav2vec2-large-en-de",
+    # See all Speech2Text2 models at https://huggingface.co/models?filter=speech2text2
 ]
 
 
@@ -583,7 +581,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -852,7 +850,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 
@@ -865,13 +863,35 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         ...     Wav2Vec2Model,
         ...     Speech2Text2Config,
         ...     Wav2Vec2Config,
+        ...     Wav2Vec2FeatureExtractor,
+        ...     Speech2Text2Tokenizer,
         ... )
+        >>> from datasets import load_dataset
+
+        >>> feature_extractor = Wav2Vec2FeatureExtractor()
+        >>> tokenizer = Speech2Text2Tokenizer.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
         >>> encoder = Wav2Vec2Model(Wav2Vec2Config())
         >>> decoder = Speech2Text2ForCausalLM(Speech2Text2Config())
-        # init speech2text model
+        >>> # init random speech2text model
 
         >>> model = SpeechEncoderDecoderModel(encoder=encoder, decoder=decoder)
+        >>> model.config.pad_token_id = tokenizer.pad_token_id
+        >>> model.config.decoder_start_token_id = tokenizer.bos_token_id
+        >>> # pre-process inputs and labels
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = feature_extractor(
+        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+        ... )
+        >>> input_values = inputs.input_values
+        >>> decoder_input_ids = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
+        >>> # compute loss
+
+        >>> loss = model(inputs=input_values, labels=decoder_input_ids).loss
+        >>> # backprop loss
+
+        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

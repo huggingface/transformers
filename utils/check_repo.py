@@ -18,19 +18,20 @@ import inspect
 import os
 import re
 import warnings
+from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
-from transformers.file_utils import ENV_VARS_TRUE_VALUES
 from transformers.models.auto import get_values
+from transformers.utils import ENV_VARS_TRUE_VALUES
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source"
+PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
@@ -44,6 +45,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "PLBartEncoder",  # Building part of bigger (tested) model.
     "PLBartDecoder",  # Building part of bigger (tested) model.
@@ -88,11 +90,13 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
+    "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
+    "decision_transformer/test_modeling_decision_transformer.py",
     "camembert/test_modeling_camembert.py",
     "mt5/test_modeling_flax_mt5.py",
     "mbart/test_modeling_mbart.py",
@@ -101,16 +105,21 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "camembert/test_modeling_tf_camembert.py",
     "mt5/test_modeling_tf_mt5.py",
     "xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "xlm_roberta/test_modeling_flax_xlm_roberta.py",
     "xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "xlm_roberta/test_modeling_xlm_roberta.py",
     "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
+    "decision_transformer/test_modeling_decision_transformer.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "DPTForDepthEstimation",
+    "DecisionTransformerGPT2Model",
+    "GLPNForDepthEstimation",
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
@@ -168,7 +177,18 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
+    "MaskFormerForInstanceSegmentation",
 ]
+
+# Update this list for models that have multiple model types for the same
+# model doc
+MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
+    [
+        ("data2vec-text", "data2vec"),
+        ("data2vec-audio", "data2vec"),
+    ]
+)
+
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
@@ -215,6 +235,7 @@ def get_model_modules():
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_speech_encoder_decoder",
+        "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -290,6 +311,7 @@ def get_model_test_files():
         "test_modeling_common",
         "test_modeling_encoder_decoder",
         "test_modeling_flax_encoder_decoder",
+        "test_modeling_flax_speech_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
         "test_modeling_tf_encoder_decoder",
@@ -639,6 +661,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
 
     errors = []
     for m in model_docs:

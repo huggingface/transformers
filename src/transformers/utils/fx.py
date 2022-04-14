@@ -45,8 +45,9 @@ from .. import (
     XLNetForQuestionAnswering,
     logging,
 )
-from ..file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 from ..models.auto import get_values
+from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -115,7 +116,9 @@ _SPECIAL_SUPPORTED_MODELS = [
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
-_SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
+_SUPPORTED_MODELS = tuple(
+    sorted(list(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)), key=lambda c: c.__name__)
+)
 
 
 class HFProxy(Proxy):

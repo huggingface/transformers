@@ -12,8 +12,8 @@ from tensorflow.keras.callbacks import Callback
 from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
-from .file_utils import get_full_repo_name
 from .modelcard import TrainingSummary
+from .utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -264,7 +264,7 @@ class PushToHubCallback(Callback):
         save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
-                - `"no"`: No save is done during training.
+                - `"no"`: Save is done at the end of training.
                 - `"epoch"`: Save is done at the end of each epoch.
                 - `"steps"`: Save is done every `save_steps`
         save_steps (`int`, *optional*):
@@ -331,7 +331,7 @@ class PushToHubCallback(Callback):
         self.training_history = []
 
     def on_train_batch_end(self, batch, logs=None):
-        if self.save_strategy == IntervalStrategy.STEPS and batch + 1 % self.save_steps == 0:
+        if self.save_strategy == IntervalStrategy.STEPS and (batch + 1) % self.save_steps == 0:
             if self.last_job is not None and not self.last_job.is_done:
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
@@ -370,7 +370,7 @@ class PushToHubCallback(Callback):
 
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done:
-            logger.info("Waiting for existing upload to finish...")
+            self.last_job._process.terminate()  # Gotta go fast
             while not self.last_job.is_done:
                 sleep(1)
         self.model.save_pretrained(self.output_dir)

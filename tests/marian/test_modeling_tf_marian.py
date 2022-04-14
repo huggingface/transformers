@@ -19,8 +19,8 @@ import unittest
 import warnings
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -116,7 +116,6 @@ class TFMarianModelTester:
         outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
-        past_key_values = past_key_values[1]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)

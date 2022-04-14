@@ -1,5 +1,11 @@
 name: Self-hosted runner (scheduled)
 
+# Note that each job's dependencies go into a corresponding docker file.
+#
+# For example for `run_all_tests_torch_cuda_extensions_gpu` the docker image is
+# `huggingface/transformers-pytorch-deepspeed-latest-gpu`, which can be found at
+# `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
+
 on:
   repository_dispatch:
   schedule:
@@ -76,7 +82,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Run all non-slow tests on GPU
+      - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
@@ -130,7 +136,7 @@ jobs:
         machines: [multi-gpu-docker, single-gpu-docker]
     runs-on: ${{ matrix.machines }}
     container:
-      image: huggingface/transformers-pytorch-latest-gpu
+      image: huggingface/transformers-pytorch-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
@@ -165,7 +171,7 @@ jobs:
         machines: [multi-gpu-docker, single-gpu-docker]
     runs-on: ${{ matrix.machines }}
     container:
-      image: huggingface/transformers-tensorflow-latest-gpu
+      image: huggingface/transformers-tensorflow-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
@@ -208,6 +214,14 @@ jobs:
       - name: Update clone
         working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Re-compile DeepSpeed
+        working-directory: /workspace
+        run: |
+          pip install deepspeed # installs the deps correctly
+          rm -rf DeepSpeed
+          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers

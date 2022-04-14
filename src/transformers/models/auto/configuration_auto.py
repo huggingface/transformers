@@ -21,8 +21,7 @@ from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import CONFIG_NAME
-from ...utils import logging
+from ...utils import CONFIG_NAME, logging
 
 
 logger = logging.get_logger(__name__)
@@ -30,8 +29,17 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("tapex", "BartConfig"),
+        ("dpt", "DPTConfig"),
+        ("decision_transformer", "DecisionTransformerConfig"),
+        ("glpn", "GLPNConfig"),
+        ("maskformer", "MaskFormerConfig"),
+        ("decision_transformer", "DecisionTransformerConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("convnext", "ConvNextConfig"),
+        ("van", "VanConfig"),
+        ("resnet", "ResNetConfig"),
+        ("regnet", "RegNetConfig"),
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -121,14 +129,22 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("unispeech", "UniSpeechConfig"),
         ("wavlm", "WavLMConfig"),
+        ("data2vec-audio", "Data2VecAudioConfig"),
+        ("data2vec-text", "Data2VecTextConfig"),
     ]
 )
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
-        # Add archive maps here
+        # Add archive maps here)
+        ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -177,6 +193,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("data2vec-text", "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("data2vec-audio", "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -211,8 +229,16 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("tapex", "TAPEX"),
+        ("dpt", "DPT"),
+        ("decision_transformer", "Decision Transformer"),
+        ("glpn", "GLPN"),
+        ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
+        ("van", "VAN"),
+        ("resnet", "ResNet"),
+        ("regnet", "RegNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
@@ -321,10 +347,15 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
         ("mluke", "mLUKE"),
         ("layoutxlm", "LayoutXLM"),
+        ("data2vec-audio", "Data2VecAudio"),
+        ("data2vec-text", "Data2VecText"),
+        ("dit", "DiT"),
     ]
 )
 
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict([("openai-gpt", "openai")])
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
+    [("openai-gpt", "openai"), ("data2vec-audio", "data2vec"), ("data2vec-text", "data2vec")]
+)
 
 
 def model_type_to_module_name(key):
@@ -363,7 +394,13 @@ class _LazyConfigMapping(OrderedDict):
         module_name = model_type_to_module_name(key)
         if module_name not in self._modules:
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
-        return getattr(self._modules[module_name], value)
+        if hasattr(self._modules[module_name], value):
+            return getattr(self._modules[module_name], value)
+
+        # Some of the mappings have entries model_type -> config of another model type. In that case we try to grab the
+        # object at the top level.
+        transformers_module = importlib.import_module("transformers")
+        return getattr(transformers_module, value)
 
     def keys(self):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
@@ -570,7 +607,7 @@ class AutoConfig:
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.

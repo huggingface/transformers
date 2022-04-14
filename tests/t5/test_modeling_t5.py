@@ -19,8 +19,8 @@ import tempfile
 import unittest
 
 from transformers import T5Config, is_torch_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.utils import cached_property
 
 from ..generation.test_generation_utils import GenerationTesterMixin
 from ..test_configuration_common import ConfigTester
@@ -512,7 +512,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     fx_compatible = True
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = True
     test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
@@ -777,7 +776,6 @@ class T5EncoderOnlyModelTester:
 class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5EncoderModel,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = True
     test_resize_embeddings = False
     test_model_parallel = True
     all_parallelizable_model_classes = (T5EncoderModel,) if is_torch_available() else ()

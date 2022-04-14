@@ -540,6 +540,42 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # last E is at 6th position of first word, first L is at last (15th) position of second word
         self.assertListEqual(self.get_from_offsets(outputs["word_offsets"], "end_offset"), [6, 15])
 
+    def test_word_offsets_from_char_offsets(self):
+        tokenizer = self.get_tokenizer()
+
+        char_offsets = [
+            {"char": "H", "start_offset": 0, "end_offset": 1},
+            {"char": "I", "start_offset": 1, "end_offset": 2},
+            {"char": " ", "start_offset": 2, "end_offset": 3},
+            {"char": "L", "start_offset": 3, "end_offset": 4},
+            {"char": "I", "start_offset": 4, "end_offset": 5},
+        ]
+        word_offsets = tokenizer._get_word_offsets(char_offsets, tokenizer.replace_word_delimiter_char)
+
+        self.assertEqual(
+            word_offsets,
+            [{"word": "HI", "start_offset": 0, "end_offset": 2}, {"word": "LI", "start_offset": 3, "end_offset": 5}],
+        )
+
+        # Double spaces don't get counted
+        char_offsets = [
+            {"char": " ", "start_offset": 0, "end_offset": 1},
+            {"char": "H", "start_offset": 1, "end_offset": 2},
+            {"char": "I", "start_offset": 2, "end_offset": 3},
+            {"char": " ", "start_offset": 3, "end_offset": 4},
+            {"char": " ", "start_offset": 4, "end_offset": 5},
+            {"char": "L", "start_offset": 5, "end_offset": 6},
+            {"char": "I", "start_offset": 6, "end_offset": 7},
+            {"char": "I", "start_offset": 7, "end_offset": 8},
+            {"char": " ", "start_offset": 8, "end_offset": 9},
+            {"char": " ", "start_offset": 9, "end_offset": 10},
+        ]
+        word_offsets = tokenizer._get_word_offsets(char_offsets, tokenizer.replace_word_delimiter_char)
+        self.assertEqual(
+            word_offsets,
+            [{"word": "HI", "start_offset": 1, "end_offset": 3}, {"word": "LII", "start_offset": 5, "end_offset": 8}],
+        )
+
     def test_offsets_batch(self):
         tokenizer = self.get_tokenizer()
 
@@ -717,3 +753,14 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
+
+    def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests assumes that the output of `convert_tokens_to_string` is a string which
+        # is not the case for Wav2vec2.
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["T", "H", "I", "S", "|", "I", "S", "|", "A", "|", "T", "E", "X", "T"]
+                output = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(output["text"], str)

@@ -3,7 +3,7 @@ name: Model templates runner
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     paths:
       - "src/**"
@@ -29,10 +29,7 @@ jobs:
         id: cache
         with:
           path: ~/.cache/pip
-          key: v1.2-tests_templates
-          restore-keys: |
-            v1.2-tests_templates-${{ hashFiles('setup.py') }}
-            v1.2-tests_templates
+          key: v1.2-tests_templates-${{ hashFiles('setup.py') }}
 
       - name: Install dependencies
         run: |
@@ -60,7 +57,7 @@ jobs:
 
       - name: Run style changes
         run: |
-          git fetch origin master:master
+          git fetch origin main:main
           make style && make quality && make repo-consistency
 
       - name: Failure short reports

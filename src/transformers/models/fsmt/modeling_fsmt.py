@@ -29,7 +29,7 @@
 
 import math
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -37,13 +37,6 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -51,7 +44,14 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fsmt import FSMTConfig
 
 
@@ -207,7 +207,7 @@ FSMT_GENERATION_EXAMPLE = r"""
     >>> tokenizer = FSMTTokenizer.from_pretrained(mname)
 
     >>> src_text = "Машинное обучение - это здорово, не так ли?"
-    >>> input_ids = tokenizer(src_text, return_tensors="pt")
+    >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
     >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
     >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
     "Machine learning is great, isn't it?"
@@ -282,7 +282,7 @@ FSMT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1009,20 +1009,20 @@ class FSMTModel(PretrainedFSMTModel):
     )
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[Tuple] = None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         if decoder_input_ids is None:
             use_cache = False
 
@@ -1131,21 +1131,21 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

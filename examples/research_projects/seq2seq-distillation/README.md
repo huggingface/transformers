@@ -62,7 +62,7 @@ export DATA_DIR=${PWD}/wmt_en_de
 #### FSMT datasets (wmt)
 
 Refer to the scripts starting with `eval_` under:
-https://github.com/huggingface/transformers/tree/master/scripts/fsmt
+https://github.com/huggingface/transformers/tree/main/scripts/fsmt
 
 #### Pegasus (multiple datasets)
 

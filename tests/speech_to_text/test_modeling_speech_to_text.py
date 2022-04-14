@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 from transformers import Speech2TextConfig
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     is_torch_available,
     require_sentencepiece,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import cached_property
 
 from ..generation.test_generation_utils import GenerationTesterMixin
 from ..test_configuration_common import ConfigTester
@@ -185,6 +185,17 @@ class Speech2TextModelTester:
 
         return input_lengths
 
+    def create_and_check_model_forward(self, config, inputs_dict):
+        model = Speech2TextModel(config=config).to(torch_device).eval()
+
+        input_features = inputs_dict["input_features"]
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
+
+        # first forward pass
+        last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+
+        self.parent.assertTrue(last_hidden_state.shape, (13, 7, 16))
+
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = Speech2TextModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["decoder_input_ids"]
@@ -262,7 +273,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
-    test_torchscript = True
 
     input_name = "input_features"
 
@@ -283,6 +293,10 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+
+    def test_model_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

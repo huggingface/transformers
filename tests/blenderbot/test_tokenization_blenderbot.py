@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import BlenderbotTokenizer, BlenderbotTokenizerFast
-from transformers.file_utils import cached_property
+from transformers.utils import cached_property
 
 
 class Blenderbot3BTokenizerTests(unittest.TestCase):

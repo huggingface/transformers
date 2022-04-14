@@ -98,6 +98,7 @@ class RealmRetrieverTest(TestCase):
                 b"This is the third record",
                 b"This is the fourth record",
                 b"This is the fifth record",
+                b"This is a longer longer longer record",
             ],
             dtype=np.object,
         )
@@ -135,6 +136,7 @@ class RealmRetrieverTest(TestCase):
         self.assertEqual(concat_inputs.input_ids.shape, (2, 10))
         self.assertEqual(concat_inputs.attention_mask.shape, (2, 10))
         self.assertEqual(concat_inputs.token_type_ids.shape, (2, 10))
+        self.assertEqual(concat_inputs.special_tokens_mask.shape, (2, 10))
         self.assertEqual(
             tokenizer.convert_ids_to_tokens(concat_inputs.input_ids[0]),
             ["[CLS]", "test", "question", "[SEP]", "this", "is", "the", "first", "record", "[SEP]"],
@@ -149,10 +151,10 @@ class RealmRetrieverTest(TestCase):
         retriever = self.get_dummy_retriever()
         tokenizer = retriever.tokenizer
 
-        retrieved_block_ids = np.array([0, 3], dtype=np.long)
+        retrieved_block_ids = np.array([0, 3, 5], dtype=np.long)
         question_input_ids = tokenizer(["Test question"]).input_ids
         answer_ids = tokenizer(
-            ["the fourth"],
+            ["the fourth", "longer longer"],
             add_special_tokens=False,
             return_token_type_ids=False,
             return_attention_mask=False,
@@ -163,9 +165,9 @@ class RealmRetrieverTest(TestCase):
             retrieved_block_ids, question_input_ids, answer_ids=answer_ids, max_length=max_length, return_tensors="np"
         )
 
-        self.assertEqual([False, True], has_answers)
-        self.assertEqual([[-1], [6]], start_pos)
-        self.assertEqual([[-1], [7]], end_pos)
+        self.assertEqual([False, True, True], has_answers)
+        self.assertEqual([[-1, -1, -1], [6, -1, -1], [6, 7, 8]], start_pos)
+        self.assertEqual([[-1, -1, -1], [7, -1, -1], [7, 8, 9]], end_pos)
 
     def test_save_load_pretrained(self):
         retriever = self.get_dummy_retriever()

@@ -37,6 +37,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     import optax
+    from flax.traverse_util import flatten_dict
     from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
         FlaxWav2Vec2ForCTC,
@@ -229,6 +230,71 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    def test_freeze_feature_encoder(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        input_values = inputs_dict["input_values"]
+        attention_mask = inputs_dict["attention_mask"]
+
+        model = FlaxWav2Vec2ForPreTraining(config)
+        params = model.params
+
+        # dummy loss function
+        def compute_loss(
+            params, input_values, attention_mask, freeze_feature_encoder: bool = False, epsilon: float = 1e-8
+        ):
+            outputs = model(
+                input_values,
+                attention_mask=attention_mask,
+                freeze_feature_encoder=freeze_feature_encoder,
+                params=params,
+            )
+            # compute cosine similarity of projected and projected_quantized states
+            cosine_sim = optax.cosine_similarity(
+                outputs.projected_states, outputs.projected_quantized_states, epsilon=epsilon
+            )
+            loss = cosine_sim.sum()
+            return loss, outputs.to_tuple()
+
+        # transform the loss function to get the gradients
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+
+        # compute loss, outputs and gradients for unfrozen model
+        (loss, outputs), grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
+
+        # compare to loss, outputs and gradients for frozen model
+        (loss_frozen, outputs_frozen), grads_frozen = grad_fn(
+            params, input_values, attention_mask, freeze_feature_encoder=True
+        )
+
+        # ensure that the outputs and losses remain precisely equal
+        for output, output_frozen in zip(outputs, outputs_frozen):
+            self.assertTrue((output == output_frozen).all())
+        self.assertEqual(loss, loss_frozen)
+
+        grads = flatten_dict(grads)
+        grads_frozen = flatten_dict(grads_frozen)
+
+        # ensure that the dicts of gradients contain the same keys
+        self.assertEqual(grads.keys(), grads_frozen.keys())
+
+        # ensure that the gradients of the feature extractor layers are precisely zero when frozen and contain non-zero entries when unfrozen
+        feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
+        feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
+
+        for feature_extractor_grad, feature_extractor_grad_frozen in zip(
+            feature_extractor_grads, feature_extractor_grads_frozen
+        ):
+            self.assertTrue((feature_extractor_grad_frozen == 0.0).all())
+            self.assertTrue((feature_extractor_grad > 0.0).any())
+
+        # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
+        grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
+        grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
+
+        for grad, grad_frozen in zip(grads, grads_frozen):
+            self.assertTrue((grad == grad_frozen).all())
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
@@ -384,7 +450,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="np", padding=True)
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask

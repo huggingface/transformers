@@ -25,7 +25,6 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPooling,
@@ -41,7 +40,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -182,7 +181,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
 """
 
@@ -390,9 +389,10 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
     def create_masks_for_block_sparse_attn(attention_mask, block_size: int):
 
         batch_size, seq_length = attention_mask.shape
-        assert (
-            seq_length % block_size == 0
-        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+            )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -465,8 +465,12 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_seq_len = key_layer.shape[2]
         from_block_size = to_block_size = self.config.block_size
 
-        assert from_seq_len % from_block_size == 0, "Query sided sequence length must be multiple of block size"
-        assert to_seq_len % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
+        if from_seq_len % from_block_size != 0:
+            raise ValueError("Query sided sequence length must be multiple of block size")
+
+        if to_seq_len % to_block_size != 0:
+            raise ValueError("Key/Value sided sequence length must be multiple of block size")
+
         if from_seq_len // from_block_size != to_seq_len // to_block_size:
             raise ValueError("Error the number of blocks needs to be same!")
 
@@ -864,9 +868,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
@@ -940,11 +943,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length not in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
-        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
+        if from_seq_length not in plan_from_length:
+            raise ValueError("Error from sequence length not in plan!")
 
         # Total number of blocks in the mmask
         num_blocks = from_seq_length // from_block_size
@@ -2124,7 +2127,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).astype("i4")
             logits_mask = jnp.expand_dims(logits_mask, axis=2)
-            logits_mask = jax.ops.index_update(logits_mask, jax.ops.index[:, 0], False)
+            logits_mask = logits_mask.at[:, 0].set(False)
 
         # init input tensors if not passed
         if token_type_ids is None:

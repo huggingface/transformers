@@ -857,10 +857,10 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
 
         # fmt: off
         expected_hidden_states_slice = torch.tensor(
-            [[[-0.1192, -0.0825],
-              [-0.0012, 0.0235]],
-             [[-0.1240, -0.1332],
-              [-0.0658, -0.0565]]],
+            [[[-0.1172, -0.0797],
+              [-0.0012, 0.0213]],
+             [[-0.1225, -0.1277],
+              [-0.0668, -0.0585]]],
             device=torch_device,
         )
         # fmt: on

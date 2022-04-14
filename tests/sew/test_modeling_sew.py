@@ -303,7 +303,6 @@ class SEWModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SEWForCTC, SEWModel, SEWForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SEWModelTester(self)

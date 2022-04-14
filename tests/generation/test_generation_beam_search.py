@@ -25,7 +25,7 @@ from ..test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation_beam_constraints import PhrasalConstraint
+    from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
     from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
 
 
@@ -260,10 +260,10 @@ class ConstrainedBeamSearchTester:
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
 
         if constraints is None:
-            force_tokens = torch.randint(10, 50, (1, 2)).type(torch.LongTensor)[0]
-            constraints = [
-                PhrasalConstraint(force_tokens),
-            ]
+            force_tokens = torch.randint(10, 50, (1, 2))[0].tolist()
+            disjunctive_tokens = torch.randint(10, 50, (2, 2)).tolist()
+
+            constraints = [PhrasalConstraint(force_tokens), DisjunctiveConstraint(disjunctive_tokens)]
             self.constraints = constraints
         # cannot be randomely generated
         self.eos_token_id = vocab_size + 1
@@ -331,7 +331,13 @@ class ConstrainedBeamSearchTester:
     ):
         # check too many eos tokens
         constrained_beam_scorer = self.prepare_constrained_beam_scorer()
-        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
+        stacked_token_ids = []
+        for constraint in self.constraints:
+            token_ids = constraint.token_ids
+            token_ids = token_ids[0] if isinstance(token_ids[0], list) else token_ids
+            stacked_token_ids = stacked_token_ids + token_ids
+
+        fulfilling_sequence = torch.LongTensor(stacked_token_ids)
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -398,7 +404,14 @@ class ConstrainedBeamSearchTester:
         max_length = self.sequence_length + 1
 
         # for testing finalize, we do want to have fulfilled constraints
-        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
+        stacked_token_ids = []
+        for constraint in self.constraints:
+            token_ids = constraint.token_ids
+            token_ids = token_ids[0] if isinstance(token_ids[0], list) else token_ids
+            stacked_token_ids = stacked_token_ids + token_ids
+
+        fulfilling_sequence = torch.LongTensor(stacked_token_ids)
+
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -451,9 +464,17 @@ class ConstrainedBeamSearchTester:
         self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # test that the constraint is indeed fulfilled
-        for output in sequences:
-            for constraint in constraints:
-                forced_token_ids = constraint.token_ids
+        for (output, constraint) in [(s, c) for s in sequences for c in constraints]:
+            forced_token_ids = constraint.token_ids
+            if isinstance(forced_token_ids[0], list):
+                # disjunctive case
+                flag = False
+                for token_ids in forced_token_ids:
+                    if self._check_sequence_inside_sequence(output, token_ids):
+                        flag = True
+                        break
+                self.parent.assertEqual(flag, True)
+            else:
                 self.parent.assertEqual(self._check_sequence_inside_sequence(output, forced_token_ids), True)
 
         # now test that if `num_beam_hyps_to_keep` is 3 => all beams are returned
@@ -479,18 +500,23 @@ class ConstrainedBeamSearchTester:
         self.parent.assertListEqual(list(sequence_scores.shape), [self.num_beams * self.batch_size])
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
+        # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
         # set to same device. we don't care what device.
-        tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
-        in_order = tensor_1.size(0) <= tensor_2.size(0)
+        if not isinstance(tensor_1, list):
+            tensor_1 = tensor_1.cpu().tolist()
+        if not isinstance(tensor_2, list):
+            tensor_2 = tensor_2.cpu().tolist()
+
+        in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
         shorter = tensor_1 if in_order else tensor_2
 
         flag = False
-        chunk_size = shorter.size(0)
-        for chunk_idx in range(longer.size(0) - chunk_size + 1):
+        chunk_size = len(shorter)
+        for chunk_idx in range(len(longer) - chunk_size + 1):
             subseq = longer[chunk_idx : chunk_idx + chunk_size]
-            if torch.equal(subseq, shorter):
+            if subseq == shorter:
                 flag = True
                 break
 

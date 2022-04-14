@@ -16,9 +16,9 @@ import os
 import unittest
 
 from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding
-from transformers.file_utils import cached_property
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
+from transformers.utils import cached_property
 
 from ..test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors
 

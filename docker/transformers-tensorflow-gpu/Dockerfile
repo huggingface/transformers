@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -7,15 +7,16 @@ RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
-ARG REF=master
+ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-tensorflow,testing]
 
 # If set to nothing, will install the latest version
 ARG TENSORFLOW=''
 
 RUN [ ${#TENSORFLOW} -gt 0 ] && VERSION='tensorflow=='$TENSORFLOW'.*' ||  VERSION='tensorflow'; python3 -m pip install --no-cache-dir -U $VERSION
 RUN python3 -m pip uninstall -y torch flax
+RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
