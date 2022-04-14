@@ -1345,11 +1345,11 @@ class LongT5Stack(LongT5PreTrainedModel):
 
 LONGT5_START_DOCSTRING = r"""
 
-    The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long Sequences
-    ](https://arxiv.org/abs/2112.07916) by Mandy Guo,  Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo Ni,
-    Yun-Hsuan Sung and Yinfei Yang. It's an encoder decoder transformer pre-trained in a text-to-text denoising
-    generative setting. LongT5 model enables using one of the two different efficient attention mechanisms - (1) Local
-    attention, or (2) Transient-Global attention.
+    The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long
+    Sequences](https://arxiv.org/abs/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
+    Ni, Yun-Hsuan Sung and Yinfei Yang. It's an encoder-decoder transformer pre-trained in a text-to-text denoising
+    generative setting. LongT5 model is an extension of T5 model, and it enables using one of the two different
+    efficient attention mechanisms - (1) Local attention, or (2) Transient-Global attention.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1368,7 +1368,7 @@ LONGT5_START_DOCSTRING = r"""
 LONGT5_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so
+            Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -1463,7 +1463,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
 LONGT5_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. LONGT5 is a model with relative position embeddings so
+            Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and

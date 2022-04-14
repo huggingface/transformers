@@ -29,9 +29,9 @@ LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LongT5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`TFLongT5Model`]. It is used to
-    instantiate a LongT5 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LongT5
+    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`TFLongT5Model`]. It is used
+    to instantiate a LongT5 model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the LongT5
     [](https://huggingface.co/) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

@@ -27,7 +27,8 @@ _import_structure = {
 
 if is_torch_available():
     _import_structure["modeling_longt5"] = [
-        "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST" "LongT5EncoderModel",
+        "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "LongT5EncoderModel",
         "LongT5ForConditionalGeneration",
         "LongT5Model",
         "LongT5PreTrainedModel",
