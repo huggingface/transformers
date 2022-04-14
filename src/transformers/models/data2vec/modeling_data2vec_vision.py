@@ -714,7 +714,8 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return Data2VecVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1257,7 +1258,7 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[2]
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
@@ -1288,9 +1289,9 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (logits,) + outputs[1:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
