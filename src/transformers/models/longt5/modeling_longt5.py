@@ -121,6 +121,7 @@ DEPARALLELIZE_DOCSTRING = r"""
 
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:
+    """Pad a tensor so that a sequence length will be a multiple of ``block_len``"""
     pad_len = -x.shape[dim] % block_len
     pad = [(0, 0)] * x.ndim
     pad[dim] = (0, pad_len)
@@ -142,7 +143,7 @@ def _split_into_blocks(x: torch.Tensor, block_len: int, dim: int) -> torch.Tenso
 
 
 def _concatenate_3_blocks(x: torch.Tensor, block_dim: int, sequence_dim: int, pad_value: int = 0) -> torch.Tensor:
-    """Concatenate three consecutive block for each input block for local attentiont.
+    """Concatenate three consecutive blocks for each input block for local attentiont.
 
     For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
     """
@@ -692,7 +693,7 @@ class LongT5LocalAttention(nn.Module):
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
         )
 
-        # Split unto blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
+        # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
         query_states = _split_into_blocks(query_states, self.block_len, dim=1)
         key_states = _split_into_blocks(key_states, self.block_len, dim=1)
         value_states = _split_into_blocks(value_states, self.block_len, dim=1)
@@ -703,7 +704,7 @@ class LongT5LocalAttention(nn.Module):
 
         # Compute scores
         scores = torch.einsum(
-            "bnqhd,bnkhd->bnhqk", query_states, key_states
+            "...qhd,...khd->...hqk", query_states, key_states
         )  # (batch_size, num_block, n_heads, block_len, 3 * block_len)
 
         if position_bias is None:
@@ -736,7 +737,7 @@ class LongT5LocalAttention(nn.Module):
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.einsum("bnhqk,bnkhd->bnqhd", attn_weights, value_states))
+        attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
         attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
 
