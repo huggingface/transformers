@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -32,23 +32,6 @@ if is_torch_available():
         "LongT5ForConditionalGeneration",
         "LongT5Model",
         "LongT5PreTrainedModel",
-        "load_tf_weights_in_longt5",
-    ]
-
-if is_tf_available():
-    _import_structure["modeling_tf_longt5"] = [
-        "TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFLongT5EncoderModel",
-        "TFLongT5ForConditionalGeneration",
-        "TFLongT5Model",
-        "TFLongT5PreTrainedModel",
-    ]
-
-if is_flax_available():
-    _import_structure["modeling_flax_longt5"] = [
-        "FlaxLongT5ForConditionalGeneration",
-        "FlaxLongT5Model",
-        "FlaxLongT5PreTrainedModel",
     ]
 
 
@@ -64,23 +47,6 @@ if TYPE_CHECKING:
             LongT5PreTrainedModel,
             load_tf_weights_in_longt5,
         )
-
-    if is_tf_available():
-        from .modeling_tf_longt5 import (
-            TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFLongT5EncoderModel,
-            TFLongT5ForConditionalGeneration,
-            TFLongT5Model,
-            TFLongT5PreTrainedModel,
-        )
-
-    if is_flax_available():
-        from .modeling_flax_longt5 import (
-            FlaxLongT5ForConditionalGeneration,
-            FlaxLongT5Model,
-            FlaxLongT5PreTrainedModel,
-        )
-
 
 else:
     import sys

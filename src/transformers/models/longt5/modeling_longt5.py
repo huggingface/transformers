@@ -784,8 +784,6 @@ class LongT5LayerLocalSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->LongT5
 class LongT5LayerSelfAttention(nn.Module):
-    """Self attention used in decoder"""
-
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.SelfAttention = LongT5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
@@ -969,7 +967,6 @@ class LongT5Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->LongT5,t5->longt5
 class LongT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -992,6 +989,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._init_weights with T5->LongT5,t5->longt5
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -1034,10 +1032,12 @@ class LongT5PreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (LongT5Attention, LongT5Stack)):
             module.gradient_checkpointing = value
 
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
