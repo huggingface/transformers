@@ -704,14 +704,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
 
-    # a list of re pattern of tensor names to ignore from the model when loading the model weights
-    # (and avoid unnecessary warnings).
+    # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
+    # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
     _keys_to_ignore_on_load_missing = None
-    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
-    # (and avoid unnecessary warnings).
+    # a list of `re` patterns of `state_dict` keys that should be removed from the list of
+    # unexpected keys we find (keys inside the checkpoint but not the model) and avoid unnecessary
+    # warnings.
     _keys_to_ignore_on_load_unexpected = None
-    # a list of of tensor names to ignore when saving the model (useful for keys that aren't
-    # trained, but which are deterministic, or tied variables)
+    # a list of `state_dict` keys to ignore when saving the model (useful for keys that aren't
+    # trained, but which are either deterministic or tied variables)
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False

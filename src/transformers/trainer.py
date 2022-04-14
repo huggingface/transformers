@@ -2411,7 +2411,7 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = self.args.per_device_eval_batch_size
+        batch_size = self.args.eval_batch_size
 
         logger.info(f"***** Running {description} *****")
         if has_length(dataloader):
@@ -2903,6 +2903,11 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero():
             return
+
+        # Cancel any async push in progress if blocking=True. The commits will all be pushed together.
+        if blocking and self.push_in_progress is not None and not self.push_in_progress.is_done:
+            self.push_in_progress._process.kill()
+            self.push_in_progress = None
 
         git_head_commit_url = self.repo.push_to_hub(
             commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
