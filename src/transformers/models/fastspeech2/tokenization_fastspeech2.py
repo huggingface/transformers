@@ -39,7 +39,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class FastSpeech2Tokenizer(PreTrainedTokenizer):
     """
-    Construct a FastSpeech2 tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a FastSpeech2 tokenizer.
 
     Args:
         vocab_file (`str`):
