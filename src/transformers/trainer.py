@@ -397,7 +397,9 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        if (self.sharded_ddp is not None or args.deepspeed) and (self.optimizer is not None or self.lr_scheduler is not None):
+        if (self.sharded_ddp is not None or args.deepspeed) and (
+            self.optimizer is not None or self.lr_scheduler is not None
+        ):
             raise RuntimeError(
                 "Passing `optimizers` is not allowed if Fairscale or Deepspeed is enabled."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
