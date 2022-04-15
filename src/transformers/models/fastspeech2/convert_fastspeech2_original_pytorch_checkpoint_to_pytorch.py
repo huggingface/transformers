@@ -67,6 +67,9 @@ def convert_fastspeech2_checkpoint(fairseq_model_id, pytorch_dump_folder_path):
         elif "_predictor.conv" in key:
             del hf_state_dict[key]
             hf_state_dict[key.replace(".0", "")] = value
+        elif "ln" in key:
+            del hf_state_dict[key]
+            hf_state_dict[key.replace("ln", "layernorm")] = value
         elif "postnet" in key:
             del hf_state_dict[key]
             key = key.replace("convolutions", "layers")
