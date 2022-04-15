@@ -91,15 +91,21 @@ class FastSpeech2Config(PretrainedConfig):
         speaker_embed_dim (`int`, *optional*, defaults to 64)
             Dimensionality of the speaker identity embedding.
         num_speakers (`int`, *optional*, defaults to 1)
-            Number of speakers. Set to 1 if the dataset is a single-speaker dataset. Otherwise, set to the number of speakers in the multi-speaker training dataset.
+            Number of speakers. Set to 1 if the dataset is a single-speaker dataset. Otherwise, set to the number of
+            speakers in the multi-speaker training dataset.
         max_source_positions (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.0625):
             The standard deviation of the truncated_normal_initializer for initializing all embedding weight matrices.
         use_mean (`bool`, *optional*, defaults to `True`)
-            Flag that specifies whether or not to denormalize predicted output using cepstral mean and variance normalization. For more information, please refer to [cepstral mean and variance normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
+            Flag that specifies whether or not to denormalize predicted output using cepstral mean and variance
+            normalization. For more information, please refer to [cepstral mean and variance
+            normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
         use_standard_deviation (`bool`, *optional*, defaults to `True`)
-            Flag that specifies whether or not to scale predicted output using cepstral mean and variance normalization. For more information, please refer to [cepstral mean and variance normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
+            Flag that specifies whether or not to scale predicted output using cepstral mean and variance
+            normalization. For more information, please refer to [cepstral mean and variance
+            normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
 
     Example:
 
@@ -184,11 +190,11 @@ class FastSpeech2Config(PretrainedConfig):
         self.energy_min = energy_min
         self.speaker_embed_dim = speaker_embed_dim
         self.num_speakers = num_speakers
-        self.max_source_positions = max_source_positions        
+        self.max_source_positions = max_source_positions
         self.initializer_range = initializer_range
         self.use_mean = use_mean
         self.use_standard_deviation = use_standard_deviation
-    
+
     @property
     def mel_dim(self):
         # Dimensionality of the prediced mel-spectrograms.
