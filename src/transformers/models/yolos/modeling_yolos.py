@@ -61,7 +61,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 
 YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/yolos-base-patch16-224",
+    # TODO update nielsr to organization
+    "nielsr/yolos-s",
     # See all YOLOS models at https://huggingface.co/models?filter=yolos
 ]
 
@@ -670,7 +671,8 @@ class YolosModel(YolosPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,

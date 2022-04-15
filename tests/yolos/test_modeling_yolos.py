@@ -186,6 +186,26 @@ class YolosModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
 
+    # special case for head model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "YolosForObjectDetection":
+                labels = []
+                for i in range(self.model_tester.batch_size):
+                    target = {}
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                    )
+                    target["boxes"] = torch.ones(
+                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                    )
+                    labels.append(target)
+                inputs_dict["labels"] = labels
+
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = YolosModelTester(self)
         self.config_tester = ConfigTester(self, config_class=YolosConfig, has_text_modality=False, hidden_size=37)
