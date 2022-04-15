@@ -122,8 +122,9 @@ class TFViTModelTester:
         image_size = self.image_size // 2
         pixel_values = pixel_values[:, :, :image_size, :image_size]
         result = model(pixel_values, interpolate_pos_encoding=True, training=False)
+        expected_seq_length = (image_size // self.patch_size) ** 2 + 1
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size)
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):

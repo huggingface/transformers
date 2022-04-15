@@ -98,7 +98,7 @@ class BeitModelTester:
 
         # in BeiT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.expected_seq_len = num_patches + 1
+        self.expected_seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -137,7 +137,7 @@ class BeitModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
         )
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
@@ -145,7 +145,7 @@ class BeitModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_len, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_length, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
@@ -311,7 +311,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         # BEiT has a different seq_length
-        seq_len = self.model_tester.expected_seq_len
+        seq_len = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -379,7 +379,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # BEiT has a different seq_length
-            seq_length = self.model_tester.expected_seq_len
+            seq_length = self.model_tester.expected_seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

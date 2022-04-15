@@ -128,7 +128,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        seq_length = self.model_tester.expected_seq_len
+        seq_length = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -209,7 +209,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
 
-            seq_length = self.model_tester.expected_seq_len
+            seq_length = self.model_tester.expected_seq_length
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states

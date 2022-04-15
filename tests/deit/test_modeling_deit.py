@@ -92,9 +92,9 @@ class DeiTModelTester:
         self.scope = scope
         self.encoder_stride = encoder_stride
 
-        # in DeiT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in DeiT, the expected seq_len equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
-        self.expected_seq_length = num_patches + 1
+        self.expected_seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -130,7 +130,7 @@ class DeiTModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -214,7 +214,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        seq_len = self.model_tester.expected_seq_len
+        seq_len = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -280,7 +280,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = self.model_tester.expected_seq_len
+            seq_length = self.model_tester.expected_seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
