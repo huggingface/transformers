@@ -283,6 +283,7 @@ class FeaturesManager:
         ),
         "luke": supported_features_mapping(
             "default",
+            "masked-lm",
             onnx_config_cls=LukeOnnxConfig,
         ),
         
