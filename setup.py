@@ -290,6 +290,8 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
+
 extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
