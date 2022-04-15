@@ -81,7 +81,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
             bin_data = file.read()
             self.assertTrue(bin_data)
     
-    # @unittest.skip("demonstrating skipping")
+    @unittest.skip("demonstrating skipping")
     @unittest.skipUnless(file_exists, "requires data stored in the local machine!")
     def test_encodings_from_bin_data(self):
         """
@@ -96,11 +96,30 @@ class BigScienceTokenizationTest(unittest.TestCase):
 
         computed_tokens = list(map(tokenizer.encode, input_text))
         self.assertListEqual([m.tolist() for m in  mmapdataset[:self.NB_SENTENCES]], computed_tokens)
-        #_ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens)) # if this passes then the tests pass
-        # self.assertListEqual(computed_tokens, mmapdataset[:self.NB_SENTENCES])
 
         decoded_tokens = list(map(tokenizer.decode, mmapdataset[:self.NB_SENTENCES]))
         self.assertListEqual(decoded_tokens, input_text)
+
+    def test_encodings_from_sample_data(self):
+        """
+            Assert that the created tokens are the same than the hard-coded ones
+        """
+        tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer)
+
+        INPUT_SENTENCES = [ 
+            'The quick brown fox</s>', 
+            'jumps over the lazy dog</s>'
+        ]
+        TARGET_TOKENS = [
+            [2175, 23714, 73173, 144252, 2], 
+            [77, 132619, 3478, 368, 109586, 35433, 2]
+        ]
+
+        computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)['input_ids']
+        self.assertListEqual(TARGET_TOKENS, computed_tokens)
+
+        decoded_tokens = tokenizer.batch_decode(computed_tokens)
+        self.assertListEqual(decoded_tokens, INPUT_SENTENCES)
 
         
     @unittest.skipUnless(file_exists and local_tokenizer_exists, "requires data stored in the local machine!")
@@ -119,7 +138,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         mmapdataset = MMapIndexedDataset(self.path_bin_data)
 
         computed_tokens_with_local_tokenizer = list(map(local_tokenizer.encode, input_text))
-        # _ = list(map(np.testing.assert_equal, mmapdataset[:self.NB_SENTENCES], computed_tokens_with_local_tokenizer))
+
         self.assertListEqual([m.tolist() for m in  mmapdataset[:self.NB_SENTENCES]], computed_tokens_with_local_tokenizer)
 
         decoded_tokens_with_local_tokenizer = list(map(local_tokenizer.decode, mmapdataset[:self.NB_SENTENCES]))
@@ -159,7 +178,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         predicted_text = list(map(lambda x : tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
         self.assertListEqual(predicted_text, input_text) 
     
-    @unittest.skip(reason="skipping this test bc of env issues (see slack) - You have to install tokenizers 0.12.0 before")
+    @unittest.skip(reason="skipping this test bc of env issues (see slack) - You have to install tokenizers 0.12.0 before - Needs to be tested after the release 0.12.1")
     def test_encodings_on_xlmi(self):
         tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer)
         local_tokenizer = AutoTokenizer.from_pretrained(self.path_local_tokenizer)
