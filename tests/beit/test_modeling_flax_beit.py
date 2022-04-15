@@ -115,7 +115,7 @@ class FlaxBeitModelTester(unittest.TestCase):
     def create_and_check_for_masked_lm(self, config, pixel_values, labels):
         model = FlaxBeitForMaskedImageModeling(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_length - 1, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
