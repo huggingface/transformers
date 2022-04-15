@@ -435,7 +435,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     ) -> Mapping[str, Any]:
 
         # TODO: should we set seq_length = 1 when self.use_past = True?
-        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        common_inputs = super().generate_dummy_inputs(
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+        )
 
         if self.use_past:
             if not is_torch_available():
@@ -554,13 +556,13 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
     ) -> Mapping[str, Any]:
 
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=decoder_seq_length, is_pair=is_pair, framework=framework
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
