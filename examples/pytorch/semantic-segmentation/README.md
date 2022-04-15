@@ -20,6 +20,59 @@ This directory contains a script, `run_semantic_segmentation_no_trainer.py`, tha
 
 The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
 
+## Note on custom data
+
+In case you'd like to use the script with custom data, there are 2 things required: 1) creating a DatasetDict 2) creating an id2label mapping. Below, these are explained in more detail.
+
+### Creating a `DatasetDict`
+
+The script assumes that you have a `DatasetDict` with 2 columns, "image" and "label", both of type [Image](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Image). This can be created as follows:
+
+```python
+from datasets import Dataset, DatasetDict, Image
+
+image_paths_train = ["path/to/image_1", "path/to/image_2", ..., "path/to/image_n"]
+label_paths_train = ["path/to/annotation_1", "path/to/annotation_2", ..., "path/to/annotation_n"]
+
+# same for validation
+# image_paths_validation = [...]
+# label_paths_validation = [...]
+
+def create_dataset(image_paths, label_paths):
+    dataset = Dataset.from_dict({"image": sorted(image_paths),
+                                "label": sorted(label_paths)})
+    dataset = dataset.cast_column("image", Image())
+    dataset = dataset.cast_column("label", Image())
+    
+    return dataset
+
+# step 1: create Dataset objects
+train_dataset = create_dataset(image_paths_train, label_paths_train)
+validation_dataset = create_dataset(image_paths_validation, label_paths_validation)
+
+# step 2: create DatasetDict
+dataset = DatasetDict({
+    "train": train_dataset,
+    "validation": val_dataset,
+  }
+)
+
+# step 3: push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+dataset.push_to_hub("name of repo on the hub")
+
+# optionally, you can push to a private repo on the hub
+# dataset.push_to_hub("name of repo on the hub")
+```
+
+An example of such a dataset can be seen at [nielsr/ade20k-demo](https://huggingface.co/datasets/nielsr/ade20k-demo).
+
+### Creating an id2label mapping
+
+Besides that, the script also assumes the existence of an `id2label.json` file in the repo, containing a mapping from integers to actual class names.
+An example of that can be seen [here](https://huggingface.co/datasets/segments/sidewalk-semantic/blob/main/id2label.json). You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
+
+## Running the script
+
 First, run:
 
 ```bash
@@ -35,10 +88,10 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch --output_dir segformer-finetuned-sidewalk --wandb --push_to_hub
+accelerate launch --output_dir segformer-finetuned-sidewalk --with_tracking --push_to_hub
 ```
 
-and boom, you're training, possibly on multiple GPUs, logging everything to Weights and Biases and regularly pushing your model to the hub :)
+and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username):)
 
 With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](segments/sidewalk-semantic) dataset.
 

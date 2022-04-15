@@ -298,7 +298,9 @@ def parse_args():
     # Sanity checks
     if args.push_to_hub or args.with_tracking:
         if args.output_dir is None:
-            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified.")
+            raise ValueError(
+                "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
+            )
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -371,19 +373,15 @@ def main():
     if args.dataset_name == "scene_parse_150":
         repo_id = "datasets/huggingface/label-files"
         filename = "ade20k-id2label.json"
-        num_labels = 150
     else:
         repo_id = f"datasets/{args.dataset_name}"
         filename = "id2label.json"
     id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
-    num_labels = len(id2label)
 
     # Load pretrained model and feature extractor
-    config = AutoConfig.from_pretrained(
-        args.model_name_or_path, num_labels=num_labels, id2label=id2label, label2id=label2id
-    )
+    config = AutoConfig.from_pretrained(args.model_name_or_path, id2label=id2label, label2id=label2id)
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
     model = AutoModelForSemanticSegmentation.from_pretrained(args.model_name_or_path, config=config)
 
