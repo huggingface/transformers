@@ -570,7 +570,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
 
         self.embed_dim = config.hidden_size
         dtype = getattr(torch, config.dtype)
-        assert dtype in ['torch.bfloat16', 'torch.float32', 'torch.float']
+        assert dtype in [torch.bfloat16, torch.float32, torch.float]
 
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=dtype)
         self.word_embeddings_layernorm = MixedFusedLayerNorm(self.embed_dim, dtype=dtype)
