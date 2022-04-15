@@ -30,8 +30,11 @@ from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_flax_utils import FlaxGenerationMixin
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
+from .utils import (
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     WEIGHTS_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -45,11 +48,9 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
     replace_return_docstrings,
 )
-from .generation_flax_utils import FlaxGenerationMixin
-from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -373,7 +374,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -492,23 +493,20 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     user_agent=user_agent,
                 )
 
-            except RepositoryNotFoundError as err:
-                logger.error(err)
+            except RepositoryNotFoundError:
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
                     "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
                     "login` and pass `use_auth_token=True`."
                 )
-            except RevisionNotFoundError as err:
-                logger.error(err)
+            except RevisionNotFoundError:
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
-            except EntryNotFoundError as err:
-                logger.error(err)
+            except EntryNotFoundError:
                 if filename == FLAX_WEIGHTS_NAME:
                     has_file_kwargs = {"revision": revision, "proxies": proxies, "use_auth_token": use_auth_token}
                     if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
@@ -518,7 +516,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                             "those weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {FLAX_WEIGHTS_NAME} "
                             f"or {WEIGHTS_NAME}."
@@ -528,16 +525,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
             except HTTPError as err:
-                logger.error(err)
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
-                    f"{FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
+                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
+                    f"{err}"
+                )
+            except ValueError:
+                raise EnvironmentError(
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
+                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
+                    f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
-            except EnvironmentError as err:
-                logger.error(err)
+            except EnvironmentError:
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -657,6 +657,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
+        # dictionary of key: dtypes for the model params
+        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
+        # extract keys of parameters not in jnp.float32
+        fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
+        bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]
+
+        # raise a warning if any of the parameters are not in jnp.float32
+        if len(fp16_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized in float16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{fp16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
+            )
+
+        if len(bf16_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized in bfloat16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{bf16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
+            )
+
         # set correct parameters
         model.params = unflatten_dict(state)
 
@@ -682,7 +705,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -724,6 +747,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):

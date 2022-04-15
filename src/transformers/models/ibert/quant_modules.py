@@ -327,16 +327,16 @@ class IntGELU(nn.Module):
 
     def int_erf(self, x_int, scaling_factor):
         b_int = torch.floor(self.coeff[1] / scaling_factor)
-        c_int = torch.floor(self.coeff[2] / scaling_factor ** 2)
+        c_int = torch.floor(self.coeff[2] / scaling_factor**2)
         sign = torch.sign(x_int)
 
         abs_int = torch.min(torch.abs(x_int), -b_int)
         y_int = sign * ((abs_int + b_int) ** 2 + c_int)
-        scaling_factor = scaling_factor ** 2 * self.coeff[0]
+        scaling_factor = scaling_factor**2 * self.coeff[0]
 
         # avoid overflow
-        y_int = floor_ste.apply(y_int / 2 ** self.const)
-        scaling_factor = scaling_factor * 2 ** self.const
+        y_int = floor_ste.apply(y_int / 2**self.const)
+        scaling_factor = scaling_factor * 2**self.const
 
         return y_int, scaling_factor
 
@@ -388,9 +388,9 @@ class IntSoftmax(nn.Module):
     def int_polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
             b_int = torch.floor(self.coef[1] / scaling_factor)
-            c_int = torch.floor(self.coef[2] / scaling_factor ** 2)
+            c_int = torch.floor(self.coef[2] / scaling_factor**2)
         z = (x_int + b_int) * x_int + c_int
-        scaling_factor = self.coef[0] * scaling_factor ** 2
+        scaling_factor = self.coef[0] * scaling_factor**2
         return z, scaling_factor
 
     def int_exp(self, x_int, scaling_factor):
@@ -402,7 +402,7 @@ class IntSoftmax(nn.Module):
         r = x_int - x0_int * q
         exp_int, exp_scaling_factor = self.int_polynomial(r, scaling_factor)
         exp_int = torch.clamp(floor_ste.apply(exp_int * 2 ** (self.const - q)), min=0)
-        scaling_factor = exp_scaling_factor / 2 ** self.const
+        scaling_factor = exp_scaling_factor / 2**self.const
         return exp_int, scaling_factor
 
     def forward(self, x, scaling_factor):
@@ -420,9 +420,9 @@ class IntSoftmax(nn.Module):
         exp_int = exp / exp_scaling_factor
 
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
-        factor = floor_ste.apply(2 ** self.max_bit / exp_int_sum)
+        factor = floor_ste.apply(2**self.max_bit / exp_int_sum)
         exp_int = floor_ste.apply(exp_int * factor / 2 ** (self.max_bit - self.output_bit))
-        scaling_factor = 1 / 2 ** self.output_bit
+        scaling_factor = 1 / 2**self.output_bit
         return exp_int * scaling_factor, scaling_factor
 
 
@@ -460,9 +460,9 @@ class IntLayerNorm(nn.Module):
 
     def set_shift(self, y_int):
         with torch.no_grad():
-            y_sq_int = y_int ** 2
+            y_sq_int = y_int**2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            shift = (torch.log2(torch.sqrt(var_int / 2 ** self.max_bit)).ceil()).max()
+            shift = (torch.log2(torch.sqrt(var_int / 2**self.max_bit)).ceil()).max()
             shift_old = self.shift
             self.shift = torch.max(self.shift, shift)
             logger.info(f"Dynamic shift adjustment: {int(shift_old)} -> {int(self.shift)}")
@@ -473,8 +473,8 @@ class IntLayerNorm(nn.Module):
         to avoid overflow in the subsequent runs.
         """
         self.set_shift(y_int)  # adjusts `self.shift`
-        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
-        y_sq_int = y_int_shifted ** 2
+        y_int_shifted = floor_ste.apply(y_int / 2**self.shift)
+        y_sq_int = y_int_shifted**2
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
         return var_int
 
@@ -482,7 +482,7 @@ class IntLayerNorm(nn.Module):
         if not self.quant_mode:
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
-            var = torch.mean(y ** 2, axis=2, keepdim=True)
+            var = torch.mean(y**2, axis=2, keepdim=True)
             x = y / torch.sqrt(self.eps + var)
             x = x * self.weight + self.bias
             return x, None
@@ -496,25 +496,25 @@ class IntLayerNorm(nn.Module):
         x_int = x / scaling_factor
         mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
         y_int = x_int - mean_int
-        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
-        y_sq_int = y_int_shifted ** 2
+        y_int_shifted = floor_ste.apply(y_int / 2**self.shift)
+        y_sq_int = y_int_shifted**2
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
 
         # overflow handling in training time
         if self.training:
             # if overflow is detected
-            if var_int.max() >= 2 ** self.max_bit:
+            if var_int.max() >= 2**self.max_bit:
                 var_int = self.overflow_fallback(y_int)
-                assert var_int.max() < 2 ** self.max_bit + 0.1, (
+                assert var_int.max() < 2**self.max_bit + 0.1, (
                     "Error detected in overflow handling: "
                     "`var_int` exceeds `self.max_bit` (the maximum possible bit width)"
                 )
 
         # To be replaced with integer-sqrt kernel that produces the same output
-        std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift
-        factor = floor_ste.apply(2 ** 31 / std_int)
+        std_int = floor_ste.apply(torch.sqrt(var_int)) * 2**self.shift
+        factor = floor_ste.apply(2**31 / std_int)
         y_int = floor_ste.apply(y_int * factor / 2)
-        scaling_factor = self.dim_sqrt / 2 ** 30
+        scaling_factor = self.dim_sqrt / 2**30
 
         # scaling and shifting
         bias = self.bias.data.detach() / (self.weight.data.detach())
@@ -725,7 +725,7 @@ def batch_frexp(inputs, max_bit=31):
     tmp_m = []
     for m in output_m:
         int_m_shifted = int(
-            decimal.Decimal(m * (2 ** max_bit)).quantize(decimal.Decimal("1"), rounding=decimal.ROUND_HALF_UP)
+            decimal.Decimal(m * (2**max_bit)).quantize(decimal.Decimal("1"), rounding=decimal.ROUND_HALF_UP)
         )
         tmp_m.append(int_m_shifted)
     output_m = np.array(tmp_m)
@@ -796,7 +796,7 @@ class FixedPointMul(Function):
             m, e = batch_frexp(new_scale)
 
             output = z_int.type(torch.double) * m.type(torch.double)
-            output = torch.round(output / (2.0 ** e))
+            output = torch.round(output / (2.0**e))
 
             if identity is not None:
                 # needs addition of identity activation
@@ -809,7 +809,7 @@ class FixedPointMul(Function):
 
                 m1, e1 = batch_frexp(new_scale)
                 output1 = wx_int.type(torch.double) * m1.type(torch.double)
-                output1 = torch.round(output1 / (2.0 ** e1))
+                output1 = torch.round(output1 / (2.0**e1))
 
                 output = output1 + output
 

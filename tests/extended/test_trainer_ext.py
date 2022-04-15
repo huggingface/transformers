@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
+from transformers.utils import is_apex_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))

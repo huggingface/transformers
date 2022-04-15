@@ -20,7 +20,6 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_torch_available
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -28,7 +27,7 @@ from ...image_utils import (
     ImageInput,
     is_torch_tensor,
 )
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 if is_torch_available():
@@ -146,7 +145,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
 
@@ -209,7 +208,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

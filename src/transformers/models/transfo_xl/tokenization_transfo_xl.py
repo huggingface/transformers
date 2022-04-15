@@ -29,9 +29,8 @@ import numpy as np
 
 import sacremoses as sm
 
-from ...file_utils import cached_path, is_torch_available, torch_only_method
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import cached_path, is_torch_available, logging, torch_only_method
 
 
 if is_torch_available():

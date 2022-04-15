@@ -18,9 +18,8 @@
 import collections
 from typing import List, Optional, Union
 
-from ...file_utils import TensorType, add_end_docstrings, add_start_docstrings
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
 from ..bert.tokenization_bert import BertTokenizer
 
 
@@ -145,7 +144,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (`str` or `List[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
@@ -175,7 +174,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
                 If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
                 is required by one of the truncation/padding parameters. If the model has no specific maximum input
                 length (like XLNet) truncation/padding to a maximum length will be deactivated.
-        return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -235,9 +234,10 @@ class CustomDPRReaderTokenizerMixin:
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
         questions = questions if not isinstance(questions, str) else [questions] * n_passages
-        assert len(titles) == len(
-            texts
-        ), f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+        if len(titles) != len(texts):
+            raise ValueError(
+                f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+            )
         encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {
@@ -348,9 +348,11 @@ class CustomDPRReaderTokenizerMixin:
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []
         for (start_index, end_index), score in scores:
-            assert start_index <= end_index, f"Wrong span indices: [{start_index}:{end_index}]"
+            if start_index > end_index:
+                raise ValueError(f"Wrong span indices: [{start_index}:{end_index}]")
             length = end_index - start_index + 1
-            assert length <= max_answer_length, f"Span is too long: {length} > {max_answer_length}"
+            if length > max_answer_length:
+                raise ValueError(f"Span is too long: {length} > {max_answer_length}")
             if any(
                 [
                     start_index <= prev_start_index <= prev_end_index <= end_index

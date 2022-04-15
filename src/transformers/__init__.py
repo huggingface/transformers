@@ -22,17 +22,15 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.17.0.dev0"
+__version__ = "4.19.0.dev0"
 
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
-from .file_utils import (
+from .utils import (
     _LazyModule,
     is_flax_available,
-    is_pyctcdecode_available,
-    is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -41,8 +39,8 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -95,40 +93,8 @@ _import_structure = {
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
-    "file_utils": [
-        "CONFIG_NAME",
-        "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
-        "SPIECE_UNDERLINE",
-        "TF2_WEIGHTS_NAME",
-        "TF_WEIGHTS_NAME",
-        "TRANSFORMERS_CACHE",
-        "WEIGHTS_NAME",
-        "TensorType",
-        "add_end_docstrings",
-        "add_start_docstrings",
-        "cached_path",
-        "is_apex_available",
-        "is_datasets_available",
-        "is_faiss_available",
-        "is_flax_available",
-        "is_phonemizer_available",
-        "is_psutil_available",
-        "is_py3nvml_available",
-        "is_pyctcdecode_available",
-        "is_scipy_available",
-        "is_sentencepiece_available",
-        "is_sklearn_available",
-        "is_speech_available",
-        "is_tf_available",
-        "is_timm_available",
-        "is_tokenizers_available",
-        "is_torch_available",
-        "is_torch_tpu_available",
-        "is_vision_available",
-    ],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
+    "file_utils": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_comet_available",
@@ -149,8 +115,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    # Models
     "models": [],
+    # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -201,14 +167,18 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
+    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
+    "models.dit": [],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DPRConfig",
@@ -217,12 +187,14 @@ _import_structure = {
         "DPRReaderOutput",
         "DPRReaderTokenizer",
     ],
+    "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -245,6 +217,7 @@ _import_structure = {
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
+    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
@@ -262,12 +235,16 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
+    "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
+    "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
+    "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
+    "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -290,6 +267,7 @@ _import_structure = {
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
+    "models.tapex": ["TapexTokenizer"],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -309,6 +287,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -362,8 +341,10 @@ _import_structure = {
         "TokenClassificationPipeline",
         "TranslationPipeline",
         "ZeroShotClassificationPipeline",
+        "ZeroShotImageClassificationPipeline",
         "pipeline",
     ],
+    "processing_utils": ["ProcessorMixin"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -387,7 +368,40 @@ _import_structure = {
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
-    "utils": ["logging"],
+    "utils": [
+        "CONFIG_NAME",
+        "MODEL_CARD_NAME",
+        "PYTORCH_PRETRAINED_BERT_CACHE",
+        "PYTORCH_TRANSFORMERS_CACHE",
+        "SPIECE_UNDERLINE",
+        "TF2_WEIGHTS_NAME",
+        "TF_WEIGHTS_NAME",
+        "TRANSFORMERS_CACHE",
+        "WEIGHTS_NAME",
+        "TensorType",
+        "add_end_docstrings",
+        "add_start_docstrings",
+        "cached_path",
+        "is_apex_available",
+        "is_datasets_available",
+        "is_faiss_available",
+        "is_flax_available",
+        "is_phonemizer_available",
+        "is_psutil_available",
+        "is_py3nvml_available",
+        "is_pyctcdecode_available",
+        "is_scipy_available",
+        "is_sentencepiece_available",
+        "is_sklearn_available",
+        "is_speech_available",
+        "is_tf_available",
+        "is_timm_available",
+        "is_tokenizers_available",
+        "is_torch_available",
+        "is_torch_tpu_available",
+        "is_vision_available",
+        "logging",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -407,6 +421,7 @@ if is_sentencepiece_available():
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
+    _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
@@ -513,13 +528,18 @@ if is_vision_available():
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
+    _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
+    _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
@@ -568,29 +588,6 @@ else:
         name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
 
-if is_torch_available() and is_pytorch_quantization_available():
-    _import_structure["models.qdqbert"].extend(
-        [
-            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "QDQBertForMaskedLM",
-            "QDQBertForMultipleChoice",
-            "QDQBertForNextSentencePrediction",
-            "QDQBertForQuestionAnswering",
-            "QDQBertForSequenceClassification",
-            "QDQBertForTokenClassification",
-            "QDQBertLayer",
-            "QDQBertLMHeadModel",
-            "QDQBertModel",
-            "QDQBertPreTrainedModel",
-            "load_tf_weights_in_qdqbert",
-        ]
-    )
-else:
-    from .utils import dummy_pytorch_quantization_and_torch_objects
-
-    _import_structure["utils.dummy_pytorch_quantization_and_torch_objects"] = [
-        name for name in dir(dummy_pytorch_quantization_and_torch_objects) if not name.startswith("_")
-    ]
 
 # PyTorch-backed objects
 if is_torch_available():
@@ -609,7 +606,13 @@ if is_torch_available():
         "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["deepspeed"] = []
-    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
+    _import_structure["generation_beam_constraints"] = [
+        "Constraint",
+        "ConstraintListState",
+        "DisjunctiveConstraint",
+        "PhrasalConstraint",
+    ]
+    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -635,7 +638,7 @@ if is_torch_available():
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
     _import_structure["models.albert"].extend(
@@ -655,17 +658,21 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
             "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
             "MODEL_FOR_OBJECT_DETECTION_MAPPING",
             "MODEL_FOR_PRETRAINING_MAPPING",
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
@@ -682,12 +689,15 @@ if is_torch_available():
             "AutoModelForCTC",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForInstanceSegmentation",
+            "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
             "AutoModelForObjectDetection",
             "AutoModelForPreTraining",
             "AutoModelForQuestionAnswering",
+            "AutoModelForSemanticSegmentation",
             "AutoModelForSeq2SeqLM",
             "AutoModelForSequenceClassification",
             "AutoModelForSpeechSeq2Seq",
@@ -837,6 +847,14 @@ if is_torch_available():
             "load_tf_weights_in_convbert",
         ]
     )
+    _import_structure["models.convnext"].extend(
+        [
+            "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextForImageClassification",
+            "ConvNextModel",
+            "ConvNextPreTrainedModel",
+        ]
+    )
     _import_structure["models.ctrl"].extend(
         [
             "CTRL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -844,6 +862,26 @@ if is_torch_available():
             "CTRLLMHeadModel",
             "CTRLModel",
             "CTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec"].extend(
+        [
+            "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Data2VecAudioForAudioFrameClassification",
+            "Data2VecAudioForCTC",
+            "Data2VecAudioForSequenceClassification",
+            "Data2VecAudioForXVector",
+            "Data2VecAudioModel",
+            "Data2VecAudioPreTrainedModel",
+            "Data2VecTextForCausalLM",
+            "Data2VecTextForMaskedLM",
+            "Data2VecTextForMultipleChoice",
+            "Data2VecTextForQuestionAnswering",
+            "Data2VecTextForSequenceClassification",
+            "Data2VecTextForTokenClassification",
+            "Data2VecTextModel",
+            "Data2VecTextPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -868,11 +906,21 @@ if is_torch_available():
             "DebertaV2PreTrainedModel",
         ]
     )
+    _import_structure["models.decision_transformer"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerGPT2Model",
+            "DecisionTransformerGPT2PreTrainedModel",
+            "DecisionTransformerModel",
+            "DecisionTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.deit"].extend(
         [
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeiTForImageClassification",
             "DeiTForImageClassificationWithTeacher",
+            "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
         ]
@@ -901,6 +949,15 @@ if is_torch_available():
             "DPRPretrainedReader",
             "DPRQuestionEncoder",
             "DPRReader",
+        ]
+    )
+    _import_structure["models.dpt"].extend(
+        [
+            "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DPTForDepthEstimation",
+            "DPTForSemanticSegmentation",
+            "DPTModel",
+            "DPTPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -960,6 +1017,14 @@ if is_torch_available():
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.glpn"].extend(
+        [
+            "GLPN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GLPNForDepthEstimation",
+            "GLPNModel",
+            "GLPNPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -1099,6 +1164,14 @@ if is_torch_available():
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
+    _import_structure["models.maskformer"].extend(
+        [
+            "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MaskFormerForInstanceSegmentation",
+            "MaskFormerModel",
+            "MaskFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.mbart"].extend(
         [
             "MBartForCausalLM",
@@ -1197,6 +1270,24 @@ if is_torch_available():
             "PerceiverPreTrainedModel",
         ]
     )
+    _import_structure["models.plbart"].extend(
+        [
+            "PLBART_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PLBartForCausalLM",
+            "PLBartForConditionalGeneration",
+            "PLBartForSequenceClassification",
+            "PLBartModel",
+            "PLBartPreTrainedModel",
+        ]
+    )
+    _import_structure["models.poolformer"].extend(
+        [
+            "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PoolFormerForImageClassification",
+            "PoolFormerModel",
+            "PoolFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1206,6 +1297,22 @@ if is_torch_available():
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.qdqbert"].extend(
+        [
+            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "QDQBertForMaskedLM",
+            "QDQBertForMultipleChoice",
+            "QDQBertForNextSentencePrediction",
+            "QDQBertForQuestionAnswering",
+            "QDQBertForSequenceClassification",
+            "QDQBertForTokenClassification",
+            "QDQBertLayer",
+            "QDQBertLMHeadModel",
+            "QDQBertModel",
+            "QDQBertPreTrainedModel",
+            "load_tf_weights_in_qdqbert",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -1237,6 +1344,14 @@ if is_torch_available():
             "ReformerPreTrainedModel",
         ]
     )
+    _import_structure["models.regnet"].extend(
+        [
+            "REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RegNetForImageClassification",
+            "RegNetModel",
+            "RegNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.rembert"].extend(
         [
             "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1250,6 +1365,14 @@ if is_torch_available():
             "RemBertModel",
             "RemBertPreTrainedModel",
             "load_tf_weights_in_rembert",
+        ]
+    )
+    _import_structure["models.resnet"].extend(
+        [
+            "RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ResNetForImageClassification",
+            "ResNetModel",
+            "ResNetPreTrainedModel",
         ]
     )
     _import_structure["models.retribert"].extend(
@@ -1348,6 +1471,7 @@ if is_torch_available():
         [
             "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SwinForImageClassification",
+            "SwinForMaskedImageModeling",
             "SwinModel",
             "SwinPreTrainedModel",
         ]
@@ -1398,6 +1522,14 @@ if is_torch_available():
             "UniSpeechSatPreTrainedModel",
         ]
     )
+    _import_structure["models.van"].extend(
+        [
+            "VAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VanForImageClassification",
+            "VanModel",
+            "VanPreTrainedModel",
+        ]
+    )
     _import_structure["models.vilt"].extend(
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1429,6 +1561,7 @@ if is_torch_available():
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTForImageClassification",
+            "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
         ]
@@ -1560,6 +1693,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
     _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -1574,6 +1708,20 @@ if is_tf_available():
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
+    _import_structure["generation_tf_logits_process"] = [
+        "TFForcedBOSTokenLogitsProcessor",
+        "TFForcedEOSTokenLogitsProcessor",
+        "TFLogitsProcessor",
+        "TFLogitsProcessorList",
+        "TFLogitsWarper",
+        "TFMinLengthLogitsProcessor",
+        "TFNoBadWordsLogitsProcessor",
+        "TFNoRepeatNGramLogitsProcessor",
+        "TFRepetitionPenaltyLogitsProcessor",
+        "TFTemperatureLogitsWarper",
+        "TFTopKLogitsWarper",
+        "TFTopPLogitsWarper",
+    ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
@@ -1609,6 +1757,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
@@ -1623,6 +1772,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForSpeechSeq2Seq",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelForVision2Seq",
@@ -1656,6 +1806,7 @@ if is_tf_available():
     _import_structure["models.camembert"].extend(
         [
             "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCamembertForCausalLM",
             "TFCamembertForMaskedLM",
             "TFCamembertForMultipleChoice",
             "TFCamembertForQuestionAnswering",
@@ -1684,6 +1835,13 @@ if is_tf_available():
             "TFConvBertLayer",
             "TFConvBertModel",
             "TFConvBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "TFConvNextForImageClassification",
+            "TFConvNextModel",
+            "TFConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -1792,6 +1950,15 @@ if is_tf_available():
             "TFGPT2MainLayer",
             "TFGPT2Model",
             "TFGPT2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.gptj"].extend(
+        [
+            "TFGPTJForCausalLM",
+            "TFGPTJForQuestionAnswering",
+            "TFGPTJForSequenceClassification",
+            "TFGPTJModel",
+            "TFGPTJPreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -1934,6 +2101,14 @@ if is_tf_available():
             "TFRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSpeech2TextForConditionalGeneration",
+            "TFSpeech2TextModel",
+            "TFSpeech2TextPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1970,6 +2145,13 @@ if is_tf_available():
             "TFViTForImageClassification",
             "TFViTModel",
             "TFViTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vit_mae"].extend(
+        [
+            "TFViTMAEForPreTraining",
+            "TFViTMAEModel",
+            "TFViTMAEPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -2018,6 +2200,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -2086,6 +2269,8 @@ if is_flax_available():
 
     _import_structure["models.bart"].extend(
         [
+            "FlaxBartDecoderPreTrainedModel",
+            "FlaxBartForCausalLM",
             "FlaxBartForConditionalGeneration",
             "FlaxBartForQuestionAnswering",
             "FlaxBartForSequenceClassification",
@@ -2222,6 +2407,7 @@ if is_flax_available():
             "FlaxRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
@@ -2234,6 +2420,16 @@ if is_flax_available():
             "FlaxXGLMForCausalLM",
             "FlaxXGLMModel",
             "FlaxXGLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.xlm_roberta"].extend(
+        [
+            "FlaxXLMRobertaForMaskedLM",
+            "FlaxXLMRobertaForMultipleChoice",
+            "FlaxXLMRobertaForQuestionAnswering",
+            "FlaxXLMRobertaForSequenceClassification",
+            "FlaxXLMRobertaForTokenClassification",
+            "FlaxXLMRobertaModel",
         ]
     )
 else:
@@ -2285,42 +2481,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
-
-    # Files and general utilities
-    from .file_utils import (
-        CONFIG_NAME,
-        MODEL_CARD_NAME,
-        PYTORCH_PRETRAINED_BERT_CACHE,
-        PYTORCH_TRANSFORMERS_CACHE,
-        SPIECE_UNDERLINE,
-        TF2_WEIGHTS_NAME,
-        TF_WEIGHTS_NAME,
-        TRANSFORMERS_CACHE,
-        WEIGHTS_NAME,
-        TensorType,
-        add_end_docstrings,
-        add_start_docstrings,
-        cached_path,
-        is_apex_available,
-        is_datasets_available,
-        is_faiss_available,
-        is_flax_available,
-        is_phonemizer_available,
-        is_psutil_available,
-        is_py3nvml_available,
-        is_pyctcdecode_available,
-        is_scipy_available,
-        is_sentencepiece_available,
-        is_sklearn_available,
-        is_speech_available,
-        is_tf_available,
-        is_timm_available,
-        is_tokenizers_available,
-        is_torch_available,
-        is_torch_tpu_available,
-        is_vision_available,
-    )
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -2391,10 +2552,16 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DecisionTransformerConfig,
+    )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -2406,12 +2573,14 @@ if TYPE_CHECKING:
         DPRReaderOutput,
         DPRReaderTokenizer,
     )
+    from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
@@ -2434,6 +2603,7 @@ if TYPE_CHECKING:
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
@@ -2445,12 +2615,16 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
+    from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
+    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
+    from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
@@ -2470,6 +2644,7 @@ if TYPE_CHECKING:
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
+    from .models.tapex import TapexTokenizer
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -2479,6 +2654,7 @@ if TYPE_CHECKING:
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -2530,8 +2706,10 @@ if TYPE_CHECKING:
         TokenClassificationPipeline,
         TranslationPipeline,
         ZeroShotClassificationPipeline,
+        ZeroShotImageClassificationPipeline,
         pipeline,
     )
+    from .processing_utils import ProcessorMixin
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -2558,7 +2736,42 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
-    from .utils import logging
+
+    # Files and general utilities
+    from .utils import (
+        CONFIG_NAME,
+        MODEL_CARD_NAME,
+        PYTORCH_PRETRAINED_BERT_CACHE,
+        PYTORCH_TRANSFORMERS_CACHE,
+        SPIECE_UNDERLINE,
+        TF2_WEIGHTS_NAME,
+        TF_WEIGHTS_NAME,
+        TRANSFORMERS_CACHE,
+        WEIGHTS_NAME,
+        TensorType,
+        add_end_docstrings,
+        add_start_docstrings,
+        cached_path,
+        is_apex_available,
+        is_datasets_available,
+        is_faiss_available,
+        is_flax_available,
+        is_phonemizer_available,
+        is_psutil_available,
+        is_py3nvml_available,
+        is_pyctcdecode_available,
+        is_scipy_available,
+        is_sentencepiece_available,
+        is_sklearn_available,
+        is_speech_available,
+        is_tf_available,
+        is_timm_available,
+        is_tokenizers_available,
+        is_torch_available,
+        is_torch_tpu_available,
+        is_vision_available,
+        logging,
+    )
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -2575,6 +2788,7 @@ if TYPE_CHECKING:
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
+        from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
@@ -2654,12 +2868,17 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.dpt import DPTFeatureExtractor
+        from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
+        from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
@@ -2691,24 +2910,6 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_scatter_objects import *
 
-    if is_torch_available() and is_pytorch_quantization_available():
-        from .models.qdqbert import (
-            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            QDQBertForMaskedLM,
-            QDQBertForMultipleChoice,
-            QDQBertForNextSentencePrediction,
-            QDQBertForQuestionAnswering,
-            QDQBertForSequenceClassification,
-            QDQBertForTokenClassification,
-            QDQBertLayer,
-            QDQBertLMHeadModel,
-            QDQBertModel,
-            QDQBertPreTrainedModel,
-            load_tf_weights_in_qdqbert,
-        )
-    else:
-        from .utils.dummy_pytorch_quantization_and_torch_objects import *
-
     if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -2724,7 +2925,13 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_search import BeamScorer, BeamSearchScorer
+        from .generation_beam_constraints import (
+            Constraint,
+            ConstraintListState,
+            DisjunctiveConstraint,
+            PhrasalConstraint,
+        )
+        from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
@@ -2749,7 +2956,7 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
         )
         from .generation_utils import top_k_top_p_filtering
-        from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
+        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -2764,17 +2971,21 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_AUDIO_XVECTOR_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -2791,12 +3002,15 @@ if TYPE_CHECKING:
             AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForInstanceSegmentation,
+            AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
             AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
             AutoModelForSpeechSeq2Seq,
@@ -2921,12 +3135,36 @@ if TYPE_CHECKING:
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
         )
+        from .models.convnext import (
+            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextForImageClassification,
+            ConvNextModel,
+            ConvNextPreTrainedModel,
+        )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             CTRLForSequenceClassification,
             CTRLLMHeadModel,
             CTRLModel,
             CTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecAudioForAudioFrameClassification,
+            Data2VecAudioForCTC,
+            Data2VecAudioForSequenceClassification,
+            Data2VecAudioForXVector,
+            Data2VecAudioModel,
+            Data2VecAudioPreTrainedModel,
+            Data2VecTextForCausalLM,
+            Data2VecTextForMaskedLM,
+            Data2VecTextForMultipleChoice,
+            Data2VecTextForQuestionAnswering,
+            Data2VecTextForSequenceClassification,
+            Data2VecTextForTokenClassification,
+            Data2VecTextModel,
+            Data2VecTextPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2946,10 +3184,18 @@ if TYPE_CHECKING:
             DebertaV2Model,
             DebertaV2PreTrainedModel,
         )
+        from .models.decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
+            DecisionTransformerModel,
+            DecisionTransformerPreTrainedModel,
+        )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
             DeiTForImageClassificationWithTeacher,
+            DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
         )
@@ -2974,6 +3220,13 @@ if TYPE_CHECKING:
             DPRPretrainedReader,
             DPRQuestionEncoder,
             DPRReader,
+        )
+        from .models.dpt import (
+            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DPTForDepthEstimation,
+            DPTForSemanticSegmentation,
+            DPTModel,
+            DPTPreTrainedModel,
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3025,6 +3278,12 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.glpn import (
+            GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GLPNForDepthEstimation,
+            GLPNModel,
+            GLPNPreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3137,6 +3396,12 @@ if TYPE_CHECKING:
             M2M100PreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
+        from .models.maskformer import (
+            MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskFormerForInstanceSegmentation,
+            MaskFormerModel,
+            MaskFormerPreTrainedModel,
+        )
         from .models.mbart import (
             MBartForCausalLM,
             MBartForConditionalGeneration,
@@ -3224,6 +3489,20 @@ if TYPE_CHECKING:
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
+        from .models.plbart import (
+            PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PLBartForCausalLM,
+            PLBartForConditionalGeneration,
+            PLBartForSequenceClassification,
+            PLBartModel,
+            PLBartPreTrainedModel,
+        )
+        from .models.poolformer import (
+            POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PoolFormerForImageClassification,
+            PoolFormerModel,
+            PoolFormerPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
@@ -3232,6 +3511,20 @@ if TYPE_CHECKING:
             ProphetNetForConditionalGeneration,
             ProphetNetModel,
             ProphetNetPreTrainedModel,
+        )
+        from .models.qdqbert import (
+            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            QDQBertForMaskedLM,
+            QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
+            QDQBertForQuestionAnswering,
+            QDQBertForSequenceClassification,
+            QDQBertForTokenClassification,
+            QDQBertLayer,
+            QDQBertLMHeadModel,
+            QDQBertModel,
+            QDQBertPreTrainedModel,
+            load_tf_weights_in_qdqbert,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
         from .models.realm import (
@@ -3256,6 +3549,12 @@ if TYPE_CHECKING:
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
         )
+        from .models.regnet import (
+            REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RegNetForImageClassification,
+            RegNetModel,
+            RegNetPreTrainedModel,
+        )
         from .models.rembert import (
             REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RemBertForCausalLM,
@@ -3268,6 +3567,12 @@ if TYPE_CHECKING:
             RemBertModel,
             RemBertPreTrainedModel,
             load_tf_weights_in_rembert,
+        )
+        from .models.resnet import (
+            RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ResNetForImageClassification,
+            ResNetModel,
+            ResNetPreTrainedModel,
         )
         from .models.retribert import RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST, RetriBertModel, RetriBertPreTrainedModel
         from .models.roberta import (
@@ -3346,6 +3651,7 @@ if TYPE_CHECKING:
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwinForImageClassification,
+            SwinForMaskedImageModeling,
             SwinModel,
             SwinPreTrainedModel,
         )
@@ -3385,6 +3691,12 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.van import (
+            VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VanForImageClassification,
+            VanModel,
+            VanPreTrainedModel,
+        )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViltForImageAndTextRetrieval,
@@ -3411,6 +3723,7 @@ if TYPE_CHECKING:
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
         )
@@ -3518,6 +3831,7 @@ if TYPE_CHECKING:
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
         )
+        from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
         # Trainer
         from .trainer import Trainer
@@ -3533,6 +3847,20 @@ if TYPE_CHECKING:
 
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
+        from .generation_tf_logits_process import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFLogitsWarper,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+            TFTemperatureLogitsWarper,
+            TFTopKLogitsWarper,
+            TFTopPLogitsWarper,
+        )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
@@ -3567,6 +3895,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
@@ -3581,6 +3910,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
@@ -3614,6 +3944,7 @@ if TYPE_CHECKING:
         )
         from .models.camembert import (
             TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCamembertForCausalLM,
             TFCamembertForMaskedLM,
             TFCamembertForMultipleChoice,
             TFCamembertForQuestionAnswering,
@@ -3639,6 +3970,7 @@ if TYPE_CHECKING:
             TFConvBertModel,
             TFConvBertPreTrainedModel,
         )
+        from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,
@@ -3728,6 +4060,13 @@ if TYPE_CHECKING:
             TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
+        )
+        from .models.gptj import (
+            TFGPTJForCausalLM,
+            TFGPTJForQuestionAnswering,
+            TFGPTJForSequenceClassification,
+            TFGPTJModel,
+            TFGPTJPreTrainedModel,
         )
         from .models.hubert import (
             TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3829,6 +4168,12 @@ if TYPE_CHECKING:
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
         )
+        from .models.speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeech2TextForConditionalGeneration,
+            TFSpeech2TextModel,
+            TFSpeech2TextPreTrainedModel,
+        )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
@@ -3855,6 +4200,7 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
+        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
@@ -3955,6 +4301,8 @@ if TYPE_CHECKING:
             FlaxAutoModelForVision2Seq,
         )
         from .models.bart import (
+            FlaxBartDecoderPreTrainedModel,
+            FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
@@ -4057,6 +4405,7 @@ if TYPE_CHECKING:
             FlaxRoFormerModel,
             FlaxRoFormerPreTrainedModel,
         )
+        from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
@@ -4068,6 +4417,14 @@ if TYPE_CHECKING:
             FlaxWav2Vec2PreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .models.xlm_roberta import (
+            FlaxXLMRobertaForMaskedLM,
+            FlaxXLMRobertaForMultipleChoice,
+            FlaxXLMRobertaForQuestionAnswering,
+            FlaxXLMRobertaForSequenceClassification,
+            FlaxXLMRobertaForTokenClassification,
+            FlaxXLMRobertaModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

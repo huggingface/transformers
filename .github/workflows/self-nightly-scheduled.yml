@@ -157,7 +157,7 @@ jobs:
                   apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
-                  pip install .[testing,deepspeed]
+                  pip install .[deepspeed-testing]
                   pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install git+https://github.com/microsoft/DeepSpeed
 

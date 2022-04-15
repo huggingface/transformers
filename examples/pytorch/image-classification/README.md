@@ -14,13 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Image classification examples
+# Image classification example
 
-The following examples showcase how to fine-tune a `ViT` for image-classification using PyTorch.
+This directory contains a script, `run_image_classification.py`, that showcases how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT]((https://huggingface.co/docs/transformers/main/en/model_doc/convnext)), [ResNet]((https://huggingface.co/docs/transformers/main/en/model_doc/resnet)), [Swin Transformer]((https://huggingface.co/docs/transformers/main/en/model_doc/swin))...) using PyTorch. It can be used to fine-tune models on both well-known datasets (like [CIFAR-10](https://huggingface.co/datasets/cifar10), [Fashion MNIST](https://huggingface.co/datasets/fashion_mnist), ...) as well as on your own custom data.
 
-## Using datasets from 🤗 `datasets`
+This page includes 2 sections:
+- [Using datasets from the hub](#using-datasets-from-🤗-hub)
+- [Using your own data](#using-your-own-data).
 
-Here we show how to fine-tune a `ViT` on the [beans](https://huggingface.co/datasets/beans) dataset.
+
+## Using datasets from 🤗 `Hub`
+
+Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
 
 👀 See the results here: [nateraw/vit-base-beans](https://huggingface.co/nateraw/vit-base-beans).
 
@@ -46,36 +51,21 @@ python run_image_classification.py \
     --seed 1337
 ```
 
-Here we show how to fine-tune a `ViT` on the [cats_vs_dogs](https://huggingface.co/datasets/cats_vs_dogs) dataset.
+To fine-tune another model, simply provide the `--model_name_or_path` argument. To train on another dataset, simply set the `--dataset_name` argument. 
 
 👀 See the results here: [nateraw/vit-base-cats-vs-dogs](https://huggingface.co/nateraw/vit-base-cats-vs-dogs).
 
-```bash
-python run_image_classification.py \
-    --dataset_name cats_vs_dogs \
-    --output_dir ./cats_vs_dogs_outputs/ \
-    --remove_unused_columns False \
-    --do_train \
-    --do_eval \
-    --push_to_hub \
-    --push_to_hub_model_id vit-base-cats-vs-dogs \
-    --fp16 True \
-    --learning_rate 2e-4 \
-    --num_train_epochs 5 \
-    --per_device_train_batch_size 32 \
-    --per_device_eval_batch_size 32 \
-    --logging_strategy steps \
-    --logging_steps 10 \
-    --evaluation_strategy epoch \
-    --save_strategy epoch \
-    --load_best_model_at_end True \
-    --save_total_limit 3 \
-    --seed 1337
-```
-
 ## Using your own data
 
-To use your own dataset, the training script expects the following directory structure:
+To use your own dataset, there are 2 ways: 
+- you can either provide your own folders as `--train_dir` and/or `--validation_dir` arguments
+- you can upload your dataset to the hub (possibly as a private repo, if you prefer so), and simply pass the `--dataset_name` argument.
+
+Below, we explain both in more detail.
+
+### Provide them as folders
+
+If you provide your own folders with images, the script expects the following directory structure:
 
 ```bash
 root/dog/xxx.png
@@ -87,11 +77,10 @@ root/cat/nsdf3.png
 root/cat/[...]/asd932_.png
 ```
 
-Once you've prepared your dataset, you can can run the script like this:
+In other words, you need to organize your images in subfolders, based on their class. You can then run the script like this:
 
 ```bash
 python run_image_classification.py \
-    --dataset_name nateraw/image-folder \
     --train_dir <path-to-train-root> \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
@@ -99,12 +88,48 @@ python run_image_classification.py \
     --do_eval
 ```
 
-### 💡 The above will split the train dir into training and evaluation sets
+Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature which will automatically turn the folders into 🤗 Dataset objects.
+
+#### 💡 The above will split the train dir into training and evaluation sets
   - To control the split amount, use the `--train_val_split` flag.
   - To provide your own validation split in its own directory, you can pass the `--validation_dir <path-to-val-root>` flag.
 
+### Upload your data to the hub, as a (possibly private) repo
 
-## Sharing your model on 🤗 Hub
+It's very easy (and convenient) to upload your image dataset to the hub using the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
+
+```python
+from datasets import load_dataset
+
+# example 1: local folder
+dataset = load_dataset("imagefolder", data_dir="path_to_your_folder")
+
+# example 2: local files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+dataset = load_dataset("imagefolder", data_files="path_to_zip_file")
+
+# example 3: remote files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+dataset = load_dataset("imagefolder", data_files="https://download.microsoft.com/download/3/E/1/3E1C3F21-ECDB-4869-8368-6DEBA77B919F/kagglecatsanddogs_3367a.zip")
+
+# example 4: providing several splits
+dataset = load_dataset("imagefolder", data_files={"train": ["path/to/file1", "path/to/file2"], "test": ["path/to/file3", "path/to/file4"]})
+```
+
+`ImageFolder` will create a `label` column, and the label name is based on the directory name.
+
+Next, push it to the hub!
+
+```python
+dataset.push_to_hub("name_of_your_dataset")
+
+# if you want to push to a private repo, simply pass private=True:
+dataset.push_to_hub("name_of_your_dataset", private=True)
+```
+
+and that's it! You can now simply train your model simply by setting the `--dataset_name` argument to the name of your dataset on the hub (as explained in [Using datasets from the hub](#using-datasets-from-🤗-hub)).
+
+More on this can also be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
+
+# Sharing your model on 🤗 Hub
 
 0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
 
@@ -116,11 +141,19 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `huggingface-cli`:
 
 ```bash
 $ huggingface-cli login
 # ...follow the prompts
+```
+
+or, in case you're running in a notebook:
+
+```python
+from huggingface_hub import notebook_login
+
+notebook_login()
 ```
 
 3. When running the script, pass the following arguments:

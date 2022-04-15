@@ -24,19 +24,20 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
     is_vision_available,
+    logging,
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import logging
 from .configuration_detr import DetrConfig
 
 
@@ -411,7 +412,8 @@ class DetrSinePositionEmbedding(nn.Module):
         self.scale = scale
 
     def forward(self, pixel_values, pixel_mask):
-        assert pixel_mask is not None, "No pixel mask provided"
+        if pixel_mask is None:
+            raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
@@ -419,7 +421,7 @@ class DetrSinePositionEmbedding(nn.Module):
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.embedding_dim)
+        dim_t = self.temperature ** (2 * torch_int_div(dim_t, 2) / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -485,10 +487,11 @@ class DetrAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
-        self.scaling = self.head_dim ** -0.5
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -867,7 +870,7 @@ DETR_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -931,7 +934,7 @@ class DetrEncoder(DetrPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1053,7 +1056,7 @@ class DetrDecoder(DetrPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1253,7 +1256,8 @@ class DetrModel(DetrPreTrainedModel):
         # get final feature map and downsampled mask
         feature_map, mask = features[-1]
 
-        assert mask is not None, "Backbone does not return downsampled pixel mask"
+        if mask is None:
+            raise ValueError("Backbone does not return downsampled pixel mask")
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         projected_feature_map = self.input_projection(feature_map)
@@ -1708,9 +1712,10 @@ class DetrMaskHeadSmallConv(nn.Module):
     def __init__(self, dim, fpn_dims, context_dim):
         super().__init__()
 
-        assert (
-            dim % 8 == 0
-        ), "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+        if dim % 8 != 0:
+            raise ValueError(
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+            )
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
 
@@ -1896,7 +1901,8 @@ class DetrLoss(nn.Module):
         Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
         [nb_target_boxes]
         """
-        assert "logits" in outputs, "No logits were found in the outputs"
+        if "logits" not in outputs:
+            raise KeyError("No logits were found in the outputs")
         src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
@@ -1934,7 +1940,8 @@ class DetrLoss(nn.Module):
         Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
         are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
-        assert "pred_boxes" in outputs, "No predicted boxes found in outputs"
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
@@ -1956,7 +1963,8 @@ class DetrLoss(nn.Module):
 
         Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
         """
-        assert "pred_masks" in outputs, "No predicted masks found in outputs"
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
 
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
@@ -2001,7 +2009,8 @@ class DetrLoss(nn.Module):
             "boxes": self.loss_boxes,
             "masks": self.loss_masks,
         }
-        assert loss in loss_map, f"Loss {loss} not supported"
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
@@ -2096,7 +2105,8 @@ class DetrHungarianMatcher(nn.Module):
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        assert class_cost != 0 or bbox_cost != 0 or giou_cost != 0, "All costs of the Matcher can't be 0"
+        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
     def forward(self, outputs, targets):

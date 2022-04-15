@@ -22,8 +22,7 @@ import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...file_utils import PaddingStrategy, TensorType
-from ...utils import logging
+from ...utils import PaddingStrategy, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +42,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
-        do_normalize (`bool`, *optional*, defaults to `False`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
             improve the performance for some models, *e.g.*,
             [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
@@ -119,7 +118,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -157,7 +156,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
                 </Tip>
 
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
