@@ -67,7 +67,7 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
 
 
 def _pad_to_multiple(x: np.ndarray, block_len: int, dim: int, pad_value: int = 0) -> np.ndarray:
-    """Pad an array so that a sequence length will be a multiple of ``block_len``"""
+    """Pad an array so that a sequence length will be a multiple of `block_len`"""
     pad_len = -x.shape[dim] % block_len
     pad = [(0, 0)] * x.ndim
     pad[dim] = (0, pad_len)
@@ -76,8 +76,8 @@ def _pad_to_multiple(x: np.ndarray, block_len: int, dim: int, pad_value: int = 0
 
 
 def _split_into_blocks(x: np.ndarray, block_len: int, dim: int) -> np.ndarray:
-    """Split an input array into blocks of a given ``block_len`` along the given ``dim``. If the dimension length
-    is not a multiple of ``block_len``, it will be padded first with selected ``pad_value``.
+    """Split an input array into blocks of a given `block_len` along the given `dim`. If the dimension length
+    is not a multiple of `block_len`, it will be padded first with selected `pad_value`.
     """
     # pad tensor to multiple of block_len
     if x.shape[dim] % block_len != 0:
