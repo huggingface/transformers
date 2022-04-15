@@ -52,6 +52,7 @@ from transformers.testing_utils import (
     is_staging_test,
     require_torch,
     require_torch_multi_gpu,
+    require_usr_bin_time,
     slow,
     torch_device,
 )
@@ -2488,6 +2489,56 @@ class ModelUtilsTest(TestCasePlus):
         ref_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
+
+    def test_from_pretrained_low_cpu_mem_usage_functional(self):
+        # test that we can use `from_pretrained(..., low_cpu_mem_usage=True)` with normal and
+        # sharded models
+
+        mnames = [
+            "hf-internal-testing/tiny-random-bert-sharded",
+            "hf-internal-testing/tiny-random-bert",
+        ]
+        for mname in mnames:
+            _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
+
+    @require_usr_bin_time
+    def test_from_pretrained_low_cpu_mem_usage_measured(self):
+        # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+
+        mname = "bert-base-cased"
+
+        preamble = "from transformers import AutoModel"
+        one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
+        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
+        # print(f"{max_rss_normal=}")
+
+        one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
+        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
+        # print(f"{max_rss_low_mem=}")
+
+        diff_bytes = max_rss_normal - max_rss_low_mem
+        diff_percent = diff_bytes / max_rss_low_mem
+        # print(f"{diff_bytes=}, {diff_percent=}")
+        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
+        # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
+        # it's at least 15% less cpu memory consumed
+
+        self.assertGreater(
+            diff_percent,
+            0.15,
+            "should use less CPU memory for low_cpu_mem_usage=True, "
+            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
+        )
+
+        # if you want to compare things manually, let's first look at the size of the model in bytes
+        # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
+        # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        # total_bytes = total_numel * 4  # 420MB
+        # Now the diff_bytes should be very close to total_bytes, but the reports are inconsistent.
+        # The easiest way to test this is to switch the model and torch.load to do all the work on
+        # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
+        # functionality to load models directly on gpu, this test can be rewritten to use torch's
+        # cuda memory tracking and then we should be able to do a much more precise test.
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
