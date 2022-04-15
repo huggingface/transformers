@@ -43,7 +43,8 @@ _CONFIG_FOR_DOC = "FastSpeech2Config"
 _TOKENIZER_FOR_DOC = "FastSpeech2Tokenizer"
 
 FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "fastspeech2",
+    "jaketae/fastspeech2-ljspeech",
+    "jaketae/fastspeech2-commonvoice",
     # See all FastSpeech2 models at https://huggingface.co/models?filter=fastspeech2
 ]
 
@@ -369,7 +370,7 @@ class FastSpeech2VariancePredictor(nn.Module):
             kernel_size=config.var_pred_kernel_size,
             padding=(config.var_pred_kernel_size - 1) // 2,
         )
-        self.ln1 = nn.LayerNorm(config.var_pred_hidden_dim)
+        self.layernorm1 = nn.LayerNorm(config.var_pred_hidden_dim)
         self.dropout_module = nn.Dropout(config.var_pred_dropout)
         self.conv2 = nn.Conv1d(
             config.var_pred_hidden_dim,
@@ -377,15 +378,15 @@ class FastSpeech2VariancePredictor(nn.Module):
             kernel_size=config.var_pred_kernel_size,
             padding=(config.var_pred_kernel_size - 1) // 2,
         )
-        self.ln2 = nn.LayerNorm(config.var_pred_hidden_dim)
+        self.layernorm2 = nn.LayerNorm(config.var_pred_hidden_dim)
         self.proj = nn.Linear(config.var_pred_hidden_dim, 1)
 
     def forward(self, hidden):
         # hidden.shape == (batch_size, sequence_length, hidden_size)
         hidden = F.relu(self.conv1(hidden.transpose(1, 2)).transpose(1, 2))
-        hidden = self.dropout_module(self.ln1(hidden))
+        hidden = self.dropout_module(self.layernorm1(hidden))
         hidden = F.relu(self.conv2(hidden.transpose(1, 2)).transpose(1, 2))
-        hidden = self.dropout_module(self.ln2(hidden))
+        hidden = self.dropout_module(self.layernorm2(hidden))
         out = self.proj(hidden).squeeze(dim=2)
         # out.shape == (batch_size, sequence_length)
         return out
@@ -436,15 +437,15 @@ class FastSpeech2VarianceAdaptor(nn.Module):
         e_factor=1.0,
     ):
         # hidden.shape == (batch_size, sequence_length, hidden_size)
-        log_dur_out = self.duration_predictor(hidden)
-        dur_out = torch.clamp(torch.round((torch.exp(log_dur_out) - 1) * d_factor).long(), min=0)
+        log_duration_out = self.duration_predictor(hidden)
+        dur_out = torch.clamp(torch.round((torch.exp(log_duration_out) - 1) * d_factor).long(), min=0)
         dur_out.masked_fill_(padding_mask, 0)
         pitch_out, pitch_embedding = self.get_pitch_embedding(hidden, pitches, p_factor)
         hidden = hidden + pitch_embedding
         energy_out, energy_embedding = self.get_energy_embedding(hidden, energies, e_factor)
         hidden = hidden + energy_embedding
         hidden, out_lens = self.length_regulator(hidden, dur_out if durations is None else durations)
-        return hidden, out_lens, log_dur_out, pitch_out, energy_out
+        return hidden, out_lens, log_duration_out, pitch_out, energy_out
 
 
 class FastSpeech2Postnet(nn.Module):
