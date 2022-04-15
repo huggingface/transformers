@@ -182,6 +182,7 @@ PYTORCH_EXPORT_MODELS = {
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
+    ("data2vec-text", "facebook/data2vec-text-base"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
