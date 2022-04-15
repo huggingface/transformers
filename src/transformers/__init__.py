@@ -2921,6 +2921,7 @@ if TYPE_CHECKING:
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments

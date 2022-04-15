@@ -41,8 +41,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .tokenization_gpt_neox import GPTNeoXTokenizer
@@ -58,7 +56,6 @@ if TYPE_CHECKING:
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
-
 
 
 else:

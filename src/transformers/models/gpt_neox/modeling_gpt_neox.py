@@ -59,7 +59,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        """ Initialize the weights"""
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -96,9 +96,7 @@ class GPTNeoXAttention(nn.Module):
             self.rotary_ndims,
             base=config.rotary_emb_base,
         )
-        self.norm_factor = torch.sqrt(
-            torch.tensor(self.head_size, dtype=torch.float32)
-        ).to(torch.get_default_dtype())
+        self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
         self.query_key_value = nn.Linear(
             config.hidden_size,
             3 * config.hidden_size,
@@ -125,15 +123,15 @@ class GPTNeoXAttention(nn.Module):
         qkv = qkv.view(*new_qkv_shape)
 
         # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., :self.head_size].permute(0, 2, 1, 3)
-        key = qkv[..., self.head_size: 2 * self.head_size].permute(0, 2, 1, 3)
-        value = qkv[..., 2 * self.head_size:].permute(0, 2, 1, 3)
+        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
+        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
+        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
 
         # Compute rotary embeddings on rotary_ndims
-        query_rot = query[..., :self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims:]
-        key_rot = key[..., :self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims:]
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
 
         # Compute token offset for rotary embeddings (when decoding)
         seq_len = key.shape[-2]
@@ -201,7 +199,7 @@ class GPTNeoXAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
@@ -244,11 +242,10 @@ def attention_mask_func(attention_scores, ltor_mask):
 
 
 class RotaryEmbedding(torch.nn.Module):
-
     def __init__(self, dim, base=10000, device=None):
         super().__init__()
-        inv_freq = 1. / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-        self.register_buffer('inv_freq', inv_freq)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+        self.register_buffer("inv_freq", inv_freq)
         self.max_seq_len_cached = None
         self.cos_cached = None
         self.sin_cached = None
@@ -258,7 +255,7 @@ class RotaryEmbedding(torch.nn.Module):
         if self.max_seq_len_cached is None or (seq_len > self.max_seq_len_cached):
             self.max_seq_len_cached = seq_len
             t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
             self.cos_cached = emb.cos()[None, None, :, :]
@@ -268,15 +265,15 @@ class RotaryEmbedding(torch.nn.Module):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., :x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
 # @torch.jit.script
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos = cos[..., offset:q.shape[-2] + offset, :]
-    sin = sin[..., offset:q.shape[-2] + offset, :]
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -572,17 +569,17 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            inputs_embeds=None,
-            head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -622,8 +619,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.gpt_neox(
@@ -677,5 +673,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past

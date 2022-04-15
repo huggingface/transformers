@@ -40,29 +40,29 @@ if is_torch_available():
 
 class GPTNeoXModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -138,10 +138,10 @@ class GPTNeoXModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            input_mask,
+        self,
+        config,
+        input_ids,
+        input_mask,
     ):
         config.add_cross_attention = True
         model = GPTNeoXModel(config)
@@ -151,11 +151,11 @@ class GPTNeoXModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_labels,
     ):
         model = GPTNeoXForCausalLM(config=config)
         model.to(torch_device)
@@ -190,11 +190,9 @@ class GPTNeoXModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True,)[
+            "hidden_states"
+        ][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
@@ -296,9 +294,7 @@ class GPTNeoXModelIntegrationTest(unittest.TestCase):
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[33.8045,  2.3958, 34.2816],
-              [63.7805,  4.8332, 63.5882],
-              [66.9116,  5.2198, 63.1185]]]
+            [[[33.8045, 2.3958, 34.2816], [63.7805, 4.8332, 63.5882], [66.9116, 5.2198, 63.1185]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

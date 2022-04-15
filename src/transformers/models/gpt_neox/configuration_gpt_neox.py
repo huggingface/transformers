@@ -83,8 +83,7 @@ class GPTNeoXConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "gpt_neox"
 
     def __init__(
@@ -108,11 +107,7 @@ class GPTNeoXConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs
     ):
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -128,5 +123,3 @@ class GPTNeoXConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
-
-    
