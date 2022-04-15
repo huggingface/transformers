@@ -26,7 +26,6 @@ class BigScienceTokenizationTest(unittest.TestCase):
         Tokenizer that has been pushed to the hub:
             - https://huggingface.co/bigscience/tokenizer/ -> We do not use it
         
-        # TODO design a test that loads both tokenizers and gets a dataset from datasets to compare the tokenizations
         
         This code is not device agnostic --> figure out what to do? / for now I am adding some decorators to check whether the data/tokenizers exists
     
