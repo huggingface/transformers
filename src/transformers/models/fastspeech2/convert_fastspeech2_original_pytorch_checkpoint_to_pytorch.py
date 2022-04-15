@@ -16,6 +16,7 @@
 
 
 import argparse
+import copy
 
 import torch
 from fairseq.checkpoint_utils import load_model_ensemble_and_task_from_hf_hub
@@ -28,14 +29,15 @@ from transformers import FastSpeech2Config, FastSpeech2Model
 def convert_fastspeech2_checkpoint(fairseq_model_id, pytorch_dump_folder_path):
     if "fastspeech2" not in fairseq_model_id:
         raise ValueError("`fairseq_model_id` must be a FastSpeech2 checkpoint")
-    models, cfg, task = load_model_ensemble_and_task_from_hf_hub(fairseq_model_id)
+    models, cfg, task = load_model_ensemble_and_task_from_hf_hub(args.fairseq_model_id)
     fairseq_model = models[0]
     TTSHubInterface.update_cfg_with_data_cfg(cfg, task.data_cfg)
     generator = task.build_generator(models, cfg)
+
     model_cfg = cfg["model"]
     config = FastSpeech2Config(
         pitch_min=model_cfg.pitch_min,
-        pitch_max=model_cfg.pitch_min,
+        pitch_max=model_cfg.pitch_max,
         energy_min=model_cfg.energy_min,
         energy_max=model_cfg.energy_max,
         add_postnet=model_cfg.add_postnet,
@@ -43,12 +45,36 @@ def convert_fastspeech2_checkpoint(fairseq_model_id, pytorch_dump_folder_path):
         num_speakers=1 if model_cfg.speaker_to_id is None else len(model_cfg.speaker_to_id),
     )
     hf_model = FastSpeech2Model(config)
-    state_dict = fairseq_model.state_dict()
-    _ = state_dict.pop("encoder.embed_positions._float_tensor", None)
-    state_dict["encoder.embed_positions.weights"] = fairseq_model.encoder.embed_positions.weights
-    state_dict["encoder.mean"] = torch.from_numpy(generator.gcmvn_stats["mean"])
-    state_dict["encoder.std"] = torch.from_numpy(generator.gcmvn_stats["std"])
-    hf_model.load_state_dict(state_dict)
+    fairseq_state_dict = fairseq_model.state_dict()
+    _ = fairseq_state_dict.pop("encoder.embed_positions._float_tensor", None)
+    fairseq_state_dict["encoder.embed_positions.weights"] = fairseq_model.encoder.embed_positions.weights
+    fairseq_state_dict["encoder.mean"] = torch.from_numpy(generator.gcmvn_stats["mean"])
+    fairseq_state_dict["encoder.std"] = torch.from_numpy(generator.gcmvn_stats["std"])
+    fairseq_state_dict["encoder.var_adaptor.pitch_bins"] = torch.linspace(
+        config.pitch_min, config.pitch_max, config.var_pred_n_bins - 1
+    )
+    fairseq_state_dict["encoder.var_adaptor.energy_bins"] = torch.linspace(
+        config.energy_min, config.energy_max, config.var_pred_n_bins - 1
+    )
+
+    hf_state_dict = copy.deepcopy(fairseq_state_dict)
+    for key, value in fairseq_state_dict.items():
+        if "ffn.ffn" in key:
+            del hf_state_dict[key]
+            key = key.replace("ffn.ffn.", "ffn.conv")
+            idx = max(1, int(key[37]))
+            hf_state_dict[f"{key[:37]}{idx}{key[38:]}"] = value
+        elif "_predictor.conv" in key:
+            del hf_state_dict[key]
+            hf_state_dict[key.replace(".0", "")] = value
+        elif "postnet" in key:
+            del hf_state_dict[key]
+            key = key.replace("convolutions", "layers")
+            names = key.split(".")
+            idx = 4 * int(names[-3]) + int(names[-2])
+            new_key = ".".join(names[:-3]) + f".{idx}." + names[-1]
+            hf_state_dict[new_key] = value
+    hf_model.load_state_dict(hf_state_dict)
     hf_model.save_pretrained(pytorch_dump_folder_path)
 
 
