@@ -97,7 +97,7 @@ class YolosConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "vit"
+    model_type = "yolos"
 
     def __init__(
         self,
