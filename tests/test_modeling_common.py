@@ -2501,13 +2501,11 @@ class ModelUtilsTest(TestCasePlus):
         for mname in mnames:
             _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
 
-    # @slow
-    # XXX: when switching back to slow, move `apt install time` to the github action running this test
     @require_usr_bin_time
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
-        mname = "bert-base-uncased"
+        mname = "bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'

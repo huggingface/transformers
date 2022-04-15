@@ -402,7 +402,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
 def find_submodule_and_param_name(model, long_key, start_prefix):
     """
-    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll removed
+    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
     from the start of the key
     """
 
@@ -1621,9 +1621,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         * `low_cpu_mem_usage` algorithm:
 
-        This is an experimental function that loads the model using ~1.x model size CPU memory
+        This is an experimental function that loads the model using ~1x model size CPU memory
 
-        Before it gets called we do:
+        Here is how it works:
 
         1. save which state_dict keys we have
         2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
@@ -1632,7 +1632,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         4. load state_dict 2nd time
         5. replace the params/buffers from the state_dict
 
-        Currently, it can't handle deepspeed ZeRO stage 3 and loading errors
+        Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
 
         """
         config = kwargs.pop("config", None)
