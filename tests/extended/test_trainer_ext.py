@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
-from transformers.utils import is_apex_available, is_bnb_available
+from transformers.utils import is_apex_available, is_bitsandbytes_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -74,11 +74,11 @@ def require_apex(test_case):
 
 
 # a candidate for testing_utils
-def require_bnb(test_case):
+def require_bitsandbytes(test_case):
     """
     Decorator for bits and bytes (bnb) dependency
     """
-    if not is_bnb_available():
+    if not is_bitsandbytes_available():
         return unittest.skip("test requires bnb")(test_case)
     else:
         return test_case
@@ -232,7 +232,7 @@ class TestTrainerExt(TestCasePlus):
         assert "predict_results.json" in contents
 
     @slow
-    @require_bnb
+    @require_bitsandbytes
     def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
 
