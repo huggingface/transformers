@@ -736,7 +736,7 @@ class FlaxLongT5LocalAttention(nn.Module):
         query_states *= jnp.sqrt(query_states.shape[-1])
 
         if attention_mask is not None:
-            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_mask = _get_local_attention_mask(attention_mask, self.block_len)
 
         # replace masked positions with -10_000
         if attention_mask is not None:
@@ -751,7 +751,9 @@ class FlaxLongT5LocalAttention(nn.Module):
             position_bias = self._create_position_bias(self.block_len, attention_mask)
 
             if attention_mask is not None:
+                position_bias = position_bias.swapaxes(1, 2)
                 position_bias = position_bias + attention_mask
+                position_bias = position_bias.swapaxes(1, 2)
 
         # create dropout rng
         dropout_rng = None
@@ -775,6 +777,7 @@ class FlaxLongT5LocalAttention(nn.Module):
 
         # bring back to (batch_size, seq_length, d_model)
         attn_output = self._merge_heads(attn_output)
+        attn_output = attn_output[:, :seq_length, :]
 
         # apply output matrix
         attn_output = self.o(attn_output)

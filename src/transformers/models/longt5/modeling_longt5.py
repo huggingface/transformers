@@ -721,15 +721,18 @@ class LongT5LocalAttention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
+                # We need to adjust position bias shape to be sum with mask
+                position_bias = position_bias.transpose(1, 2)
                 position_bias = position_bias + mask
+                position_bias = position_bias.transpose(1, 2)
 
         scores += position_bias
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
-        )  # (batch_size, n_heads, seq_length, key_length)
+        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
         attn_weights = nn.functional.dropout(
             attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
 
         # Mask heads if we want to
         if layer_head_mask is not None:

@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 from transformers import LongT5Config, is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -31,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ByT5Tokenizer,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         LongT5EncoderModel,
         LongT5ForConditionalGeneration,
         LongT5Model,
@@ -48,6 +49,7 @@ class LongT5ModelTester:
         batch_size=13,
         encoder_seq_length=7,
         decoder_seq_length=9,
+        local_radius=5,
         # For common tests
         is_training=True,
         use_attention_mask=True,
@@ -70,6 +72,8 @@ class LongT5ModelTester:
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
         self.decoder_seq_length = decoder_seq_length
+        self.local_radius = local_radius
+        self.block_len = local_radius + 1
         # For common tests
         self.seq_length = self.decoder_seq_length
         self.is_training = is_training
@@ -90,7 +94,7 @@ class LongT5ModelTester:
         self.decoder_layers = decoder_layers
 
     def get_large_model_config(self):
-        return LongT5Config.from_pretrained("longt5-base")
+        return LongT5Config.from_pretrained("Stancld/LongT5-Local-Large")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -133,6 +137,7 @@ class LongT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            local_radius=self.local_radius,
         )
 
     def get_config(self):
@@ -151,6 +156,7 @@ class LongT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            local_radius=self.local_radius,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -538,14 +544,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
-
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
@@ -661,6 +659,124 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            pass
+
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            seq_len = getattr(self.model_tester, "seq_length", None)
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+            encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+            decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+            encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+            chunk_length = getattr(self.model_tester, "chunk_length", None)
+            block_len = getattr(self.model_tester, "block_len", None)
+
+            if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+                encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+
+            for model_class in self.all_model_classes:
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = False
+                config.return_dict = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                # check that output_attentions also work using config
+                del inputs_dict["output_attentions"]
+                config.output_attentions = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                )
+                out_len = len(outputs)
+
+                if self.is_encoder_decoder:
+                    correct_outlen = 5
+
+                    # loss is at first position
+                    if "labels" in inputs_dict:
+                        correct_outlen += 1  # loss is added to beginning
+                    # Question Answering model returns start_logits and end_logits
+                    if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                        correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                    if "past_key_values" in outputs:
+                        correct_outlen += 1  # past_key_values have been returned
+
+                    self.assertEqual(out_len, correct_outlen)
+
+                    # decoder attentions
+                    decoder_attentions = outputs.decoder_attentions
+                    self.assertIsInstance(decoder_attentions, (list, tuple))
+                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(decoder_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    )
+
+                    # cross attentions
+                    cross_attentions = outputs.cross_attentions
+                    self.assertIsInstance(cross_attentions, (list, tuple))
+                    self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(cross_attentions[0].shape[-3:]),
+                        [
+                            self.model_tester.num_attention_heads,
+                            decoder_seq_length,
+                            encoder_key_length,
+                        ],
+                    )
+
+                # Check attention is always last and order is fine
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                if hasattr(self.model_tester, "num_hidden_states_types"):
+                    added_hidden_states = self.model_tester.num_hidden_states_types
+                elif self.is_encoder_decoder:
+                    added_hidden_states = 2
+                else:
+                    added_hidden_states = 1
+                self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+                self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                )
+
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+        block_len = getattr(self.model_tester, "block_len", None)
+        encoder_expected_shape = (batch_size, 1, config.num_attention_heads, block_len, 3 * block_len)
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
 
 class LongT5EncoderOnlyModelTester:
     def __init__(
@@ -669,6 +785,7 @@ class LongT5EncoderOnlyModelTester:
         vocab_size=99,
         batch_size=13,
         encoder_seq_length=7,
+        local_radius=5,
         # For common tests
         use_attention_mask=True,
         hidden_size=32,
@@ -688,6 +805,8 @@ class LongT5EncoderOnlyModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
+        self.local_radius = local_radius
+        self.block_len = local_radius + 1
         # For common tests
         self.seq_length = self.encoder_seq_length
         self.use_attention_mask = use_attention_mask
@@ -706,7 +825,7 @@ class LongT5EncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return LongT5Config.from_pretrained("longt5-base")
+        return LongT5Config.from_pretrained("Stancld/LongT5-Local-Large")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -729,6 +848,7 @@ class LongT5EncoderOnlyModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             is_encoder_decoder=self.is_encoder_decoder,
+            local_radius=self.local_radius,
         )
 
         return (
@@ -804,6 +924,70 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            pass
+
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            block_len = getattr(self.model_tester, "block_len", 4)
+
+            for model_class in self.all_model_classes:
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = False
+                config.return_dict = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                # check that output_attentions also work using config
+                del inputs_dict["output_attentions"]
+                config.output_attentions = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                )
+                out_len = len(outputs)
+
+                # Check attention is always last and order is fine
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                if hasattr(self.model_tester, "num_hidden_states_types"):
+                    added_hidden_states = self.model_tester.num_hidden_states_types
+                elif self.is_encoder_decoder:
+                    added_hidden_states = 2
+                else:
+                    added_hidden_states = 1
+                self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+                self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                )
+
 
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
@@ -815,102 +999,11 @@ def use_task_specific_params(model, task):
 class LongT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return LongT5ForConditionalGeneration.from_pretrained("longt5-base").to(torch_device)
+        return LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base").to(torch_device)
 
     @cached_property
     def tokenizer(self):
         return T5Tokenizer.from_pretrained("longt5-base")
-
-    @slow
-    def test_small_generation(self):
-        model = LongT5ForConditionalGeneration.from_pretrained("").to(torch_device)
-        model.config.max_length = 8
-        model.config.num_beams = 1
-        model.config.do_sample = False
-        tokenizer = T5Tokenizer.from_pretrained("")
-
-        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
-
-        sequences = model.generate(input_ids)
-
-        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
-        self.assertTrue(output_str == "Hello there!")
-
-    @slow
-    def test_small_integration_test(self):
-        """
-        For comparision run:
-        >>> import longt5  # pip install longt5==0.7.1
-        >>> from longt5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_longt5_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> longt5_model = longt5.models.MtfModel(model_dir=path_to_mtf_small_longt5_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = longt5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = LongT5ForConditionalGeneration.from_pretrained("").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("")
-
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
-        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -19.0845
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-    @slow
-    def test_small_v1_1_integration_test(self):
-        """
-        For comparision run:
-        >>> import longt5  # pip install longt5==0.7.1
-        >>> from longt5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_longt5_v1_1_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> longt5_model = longt5.models.MtfModel(model_dir=path_to_mtf_small_longt5_v1_1_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = longt5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = LongT5ForConditionalGeneration.from_pretrained("google/longt5-v1_1-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("google/longt5-v1_1-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
-        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -59.0293
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-    @slow
-    def test_small_bylongt5_integration_test(self):
-        """
-        For comparision run:
-        >>> import longt5  # pip install longt5==0.9.1
-
-        >>> path_to_bylongt5_small_checkpoint = '<fill_in>'
-        >>> longt5_model = longt5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = longt5.data.ByteVocabulary()
-        >>> score = longt5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = LongT5ForConditionalGeneration.from_pretrained("google/by").to(torch_device)
-        tokenizer = ByT5Tokenizer.from_pretrained("google/by")
-
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
-        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -60.7397
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_summarization(self):
@@ -975,7 +1068,7 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_fr(self):
-        model = self.model  # longt5-base
+        model = self.model  # LongT5-Local-Base
         tok = self.tokenizer
         use_task_specific_params(model, "translation_en_to_fr")
 
@@ -1016,40 +1109,3 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
         output = model.generate(**inputs)
         translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertEqual(translation, expected_translation)
-
-
-@require_torch
-class TestAsymmetricLongT5(unittest.TestCase):
-    def build_model_and_check_forward_pass(self, **kwargs):
-        tester = LongT5ModelTester(self, **kwargs)
-        config, *inputs = tester.prepare_config_and_inputs()
-        (
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = inputs
-        model = LongT5ForConditionalGeneration(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-        )
-        # outputs = model(*inputs)
-        assert len(outputs) == 4
-        assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
-        assert outputs["loss"].size() == ()
-        return model
-
-    def test_small_decoder(self):
-        # num_hidden_layers is passed to LongT5Config as num_layers
-        model = self.build_model_and_check_forward_pass(decoder_layers=1, num_hidden_layers=2)
-        assert len(model.encoder.block) == 2
-        assert len(model.decoder.block) == 1
-
-    def test_defaulting_to_symmetry(self):
-        # num_hidden_layers is passed to LongT5Config as num_layers
-        model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
-        assert len(model.decoder.block) == len(model.encoder.block) == 2
