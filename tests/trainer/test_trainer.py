@@ -39,7 +39,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_NAME, is_apex_available, is_bnb_available
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -66,7 +65,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
-from transformers.utils import WEIGHTS_NAME, is_apex_available
+from transformers.utils import WEIGHTS_NAME, is_apex_available, is_bnb_available
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -1871,6 +1870,7 @@ if is_torch_available():
             },
         ),
     ]
+
     if is_apex_available():
         import apex
 
@@ -1881,6 +1881,7 @@ if is_torch_available():
                 default_adam_kwargs,
             )
         )
+
     if is_bnb_available():
         import bitsandbytes as bnb
 

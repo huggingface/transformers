@@ -21,7 +21,7 @@ from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers.file_utils import is_apex_available, is_bnb_available
+from transformers import AutoModel
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     CaptureStderr,
@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
-from transformers.utils import is_apex_available
+from transformers.utils import is_apex_available, is_bnb_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -206,7 +206,7 @@ class TestTrainerExt(TestCasePlus):
         self.assertEqual(n_matches, data["n_matches"])
 
     @slow
-    def test_run_seq2seq_slow(self):
+    def test_run_seq2seq(self):
         output_dir = self.run_trainer(
             eval_steps=2,
             max_len=128,
@@ -233,14 +233,14 @@ class TestTrainerExt(TestCasePlus):
 
     @slow
     @require_bnb
-    def test_run_seq2seq_bnb_slow(self):
+    def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
 
         def train_and_return_metrics(optim: str) -> Tuple[int, float]:
             from pathlib import Path
 
             extra_args = (
-                "--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
+                f"--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
                 "False --adafactor False --log_level debug"
             )
 
@@ -250,23 +250,69 @@ class TestTrainerExt(TestCasePlus):
                 model_name=MARIAN_MODEL,
                 learning_rate=3e-4,
                 num_train_epochs=1,
-                distributed=False,
-                extra_args_str=extra_args.format(optim=optim),
+                distributed=True,  # force run in a new process
+                extra_args_str=extra_args,
                 do_eval=False,
                 do_predict=False,
             )
 
             # Check metrics
             logs = TrainerState.load_from_json(Path(output_dir, "trainer_state.json")).log_history
-            gpu_peak_memory = logs[0]["train_mem_gpu_peaked_delta"]
+            gpu_peak_mem = logs[0]["train_mem_gpu_peaked_delta"]
+            gpu_alloc_mem = logs[0]["train_mem_gpu_alloc_delta"]
+
             loss = logs[0]["train_loss"]
-            return gpu_peak_memory, loss
+            return gpu_peak_mem, gpu_alloc_mem, loss
 
-        original_gpu_peak_memory, original_loss = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
-        bnb_gpu_peak_memory, bnb_loss = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
+        gpu_peak_mem_orig, gpu_alloc_mem_orig, loss_orig = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
+        gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
 
-        assert original_gpu_peak_memory < bnb_gpu_peak_memory
-        assert original_loss == bnb_loss
+        gpu_peak_mem_diff_bytes = gpu_peak_mem_orig - gpu_peak_mem_bnb
+        gpu_peak_mem_diff_percent = gpu_peak_mem_diff_bytes / gpu_peak_mem_bnb
+
+        gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
+        gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
+
+        gpu_total_mem_diff_bytes = gpu_total_mem_orig - gpu_total_mem_bnb
+        gpu_total_mem_diff_percent = gpu_total_mem_diff_bytes / gpu_total_mem_bnb
+
+        # leave this for now if CI gets very different results
+        # print(f"{gpu_alloc_mem_orig=:010d} {gpu_peak_mem_orig=:010d} {gpu_alloc_mem_orig+gpu_peak_mem_orig=:010d}" )
+        # print(f" {gpu_alloc_mem_bnb=:010d}  {gpu_peak_mem_bnb=:010d}   {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=:010d}")
+        # print(f"{gpu_peak_mem_diff_bytes=}, {gpu_peak_mem_diff_percent=}")
+        # print(f"{gpu_total_mem_orig=}, {gpu_total_mem_bnb=}")
+        # print(f"{gpu_total_mem_diff_bytes=}, {gpu_total_mem_diff_percent=}")
+
+        self.assertGreater(
+            gpu_peak_mem_diff_percent,
+            10,  # basically a huge difference - got ~30x on my desktop
+            "should use very little peak gpu memory with BNB, compared to without it"
+            f"but got gpu_peak_mem_orig={gpu_peak_mem_orig} and gpu_peak_mem_bnb={gpu_peak_mem_bnb}",
+        )
+
+        self.assertGreater(
+            gpu_total_mem_diff_percent,
+            0.20,  # could easily be 0.50, but let's stay on the safe side
+            "Using BNB should use less total GPU memory than without it"
+            f"but got gpu_total_mem_orig={gpu_total_mem_orig} and gpu_total_mem_bnb={gpu_total_mem_bnb}",
+        )
+
+        self.assertEqual(
+            loss_orig, loss_bnb, "loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
+        )
+
+        # Additionally let's test that the absolute gpu memory difference is larger or about the
+        # same as the expected saving coming from BNB (6 bytes per param)
+        model = AutoModel.from_pretrained(MARIAN_MODEL)
+        total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        bnb_saved_bytes = total_numel * 6  # 324MB
+        print(f"{bnb_saved_bytes=}")
+
+        self.assertGreater(
+            gpu_total_mem_diff_bytes,
+            bnb_saved_bytes * 0.8,  # add a safety margin, if it saved slightly less
+            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were {gpu_total_mem_diff_bytes}",
+        )
 
     def run_trainer(
         self,
@@ -350,6 +396,8 @@ class TestTrainerExt(TestCasePlus):
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
+            # keep for quick debug
+            # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
             execute_subprocess_async(cmd, env=self.get_env())
         else:
             testargs = ["run_translation.py"] + args
