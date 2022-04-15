@@ -306,7 +306,6 @@ class TestTrainerExt(TestCasePlus):
         model = AutoModel.from_pretrained(MARIAN_MODEL)
         total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
         bnb_saved_bytes = total_numel * 6  # 324MB
-        print(f"{bnb_saved_bytes=}")
 
         self.assertGreater(
             gpu_total_mem_diff_bytes,
