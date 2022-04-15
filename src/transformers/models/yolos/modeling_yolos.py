@@ -256,6 +256,7 @@ class PatchEmbeddings(nn.Module):
         return embeddings
 
 
+# copied from transformers.models.vit.modeling_vit.ViTSelfAttention
 class YolosSelfAttention(nn.Module):
     def __init__(self, config: YolosConfig) -> None:
         super().__init__()
@@ -316,6 +317,7 @@ class YolosSelfAttention(nn.Module):
         return outputs
 
 
+# copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Yolos
 class YolosSelfOutput(nn.Module):
     """
     The residual connection is defined in YolosLayer instead of here (as is the case with other models), due to the
@@ -335,6 +337,7 @@ class YolosSelfOutput(nn.Module):
         return hidden_states
 
 
+# copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Yolos
 class YolosAttention(nn.Module):
     def __init__(self, config: YolosConfig) -> None:
         super().__init__()
@@ -374,6 +377,7 @@ class YolosAttention(nn.Module):
         return outputs
 
 
+# copied from transformers.models.vit.modeling_vit.ViTIntermediate
 class YolosIntermediate(nn.Module):
     def __init__(self, config: YolosConfig) -> None:
         super().__init__()
@@ -391,6 +395,7 @@ class YolosIntermediate(nn.Module):
         return hidden_states
 
 
+# copied from transformers.models.vit.modeling_vit.ViTOutput
 class YolosOutput(nn.Module):
     def __init__(self, config: YolosConfig) -> None:
         super().__init__()
@@ -406,6 +411,7 @@ class YolosOutput(nn.Module):
         return hidden_states
 
 
+# copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Yolos
 class YolosLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
