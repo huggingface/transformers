@@ -1709,36 +1709,35 @@ class Trainer:
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
-        if self.args.save_optimizer_state:
-            if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-                self.optimizer.consolidate_state_dict()
+        if self.sharded_ddp == ShardedDDPOption.SIMPLE:
+            self.optimizer.consolidate_state_dict()
 
-            if is_torch_tpu_available():
-                xm.rendezvous("saving_optimizer_states")
-                xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-                with warnings.catch_warnings(record=True) as caught_warnings:
-                    xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                    reissue_pt_warnings(caught_warnings)
-            elif is_sagemaker_mp_enabled():
-                if smp.rdp_rank() == 0:
-                    # Consolidate the state dict on all processed of rdp_rank 0
-                    opt_state_dict = self.optimizer.state_dict()
-                    # Save it and the scheduler on the main process
-                    if self.args.should_save:
-                        torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
-                        with warnings.catch_warnings(record=True) as caught_warnings:
-                            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                        reissue_pt_warnings(caught_warnings)
-                        if self.do_grad_scaling:
-                            torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
-            elif self.args.should_save and not self.deepspeed:
-                # deepspeed.save_checkpoint above saves model/optim/sched
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-                with warnings.catch_warnings(record=True) as caught_warnings:
-                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+        if is_torch_tpu_available():
+            xm.rendezvous("saving_optimizer_states")
+            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
-                if self.do_grad_scaling:
-                    torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+        elif is_sagemaker_mp_enabled():
+            if smp.rdp_rank() == 0:
+                # Consolidate the state dict on all processed of rdp_rank 0
+                opt_state_dict = self.optimizer.state_dict()
+                # Save it and the scheduler on the main process
+                if self.args.should_save:
+                    torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
+                    with warnings.catch_warnings(record=True) as caught_warnings:
+                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                    reissue_pt_warnings(caught_warnings)
+                    if self.do_grad_scaling:
+                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+        elif self.args.should_save and not self.deepspeed:
+            # deepspeed.save_checkpoint above saves model/optim/sched
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            reissue_pt_warnings(caught_warnings)
+            if self.do_grad_scaling:
+                torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
