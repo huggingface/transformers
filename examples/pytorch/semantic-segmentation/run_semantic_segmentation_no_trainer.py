@@ -255,7 +255,7 @@ def parse_args():
     parser.add_argument(
         "--lr_scheduler_type",
         type=SchedulerType,
-        default="linear",
+        default="polynomial",
         help="The scheduler type to use.",
         choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
     )
@@ -264,12 +264,6 @@ def parse_args():
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
-    parser.add_argument(
-        "--logging_steps",
-        type=int,
-        default=500,
-        help="Number of steps between each logging",
-    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
@@ -528,6 +522,8 @@ def main():
             resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
 
     for epoch in range(args.num_train_epochs):
+        if args.with_tracking:
+            total_loss = 0
         model.train()
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
@@ -535,6 +531,9 @@ def main():
                 continue
             outputs = model(**batch)
             loss = outputs.loss
+            # We keep track of the loss at each epoch
+            if args.with_tracking:
+                total_loss += loss.detach().float()
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
@@ -566,50 +565,6 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-            # Log all results
-            if (step + 1) % (args.gradient_accumulation_steps * args.logging_steps) == 0:
-                loss.detach()
-
-                if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum() / accelerator.num_processes
-
-                train_logs = {
-                    "loss": loss,
-                    "lr": torch.tensor(optimizer.param_groups[0]["lr"]),
-                }
-
-                # Evaluate (gather required)
-                with torch.no_grad():
-                    upsampled_logits = torch.nn.functional.interpolate(
-                        outputs.logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
-                    )
-                    predictions = upsampled_logits.argmax(dim=1)
-
-                    metric.add_batch(
-                        predictions=accelerator.gather(predictions),
-                        references=accelerator.gather(batch["labels"]),
-                    )
-                train_metrics = metric.compute(
-                    num_labels=len(id2label),
-                    ignore_index=255,
-                    reduce_labels=False,  # we've already reduced the labels before
-                )
-                train_logs["mean_iou"] = train_metrics["mean_iou"]
-                train_logs["mean_accuracy"] = train_metrics["mean_accuracy"]
-                train_logs["overall_accuracy"] = train_metrics["overall_accuracy"]
-
-                log_str = ""
-                for k, v in train_logs.items():
-                    if isinstance(v, torch.Tensor):
-                        log_str += "| {}: {:.3e}".format(k, v.item())
-                    else:
-                        log_str += "| {}: {:.3e}".format(k, v)
-
-                progress_bar.write(log_str)
-                if args.with_tracking:
-                    train_logs["step"] = completed_steps
-                    accelerator.log(train_logs)
-
         logger.info("***** Running evaluation *****")
         model.eval()
         for step, batch in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)):
@@ -631,6 +586,18 @@ def main():
             reduce_labels=False,  # we've already reduced the labels before
         )
         logger.info(f"epoch {epoch}: {eval_metrics}")
+
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "mean_iou": eval_metrics["mean_iou"],
+                    "mean_accuracy": eval_metrics["mean_accuracy"],
+                    "overall_accuracy": eval_metrics["overall_accuracy"],
+                    "train_loss": total_loss,
+                    "epoch": epoch,
+                    "step": completed_steps,
+                },
+            )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
