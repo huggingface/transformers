@@ -119,6 +119,7 @@ class BigScience176BConfig(PretrainedConfig):
         eos_token_id=0, # =50256,  # TODO
         pretraining_tp=2,  # TODO
         pretraining_pp=2,  # TODO
+        dtype="bfloat16",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -136,6 +137,7 @@ class BigScience176BConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.dtype = dtype
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
