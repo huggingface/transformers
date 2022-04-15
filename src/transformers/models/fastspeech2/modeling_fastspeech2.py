@@ -71,16 +71,17 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_length: Optional
 @dataclass
 class FastSpeech2ModelOutput(ModelOutput):
     """
-    Output type of [`FastSpeech2Model`].
     Args:
+    Output type of [`FastSpeech2Model`].
         mel_spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, mel_s)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
 
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
     """
 
     mel_spectrogram: torch.FloatTensor = None
@@ -374,7 +375,7 @@ class FastSpeech2VariancePredictor(nn.Module):
             config.var_pred_hidden_dim,
             config.var_pred_hidden_dim,
             kernel_size=config.var_pred_kernel_size,
-            padding=1,
+            padding=(config.var_pred_kernel_size - 1) // 2,
         )
         self.ln2 = nn.LayerNorm(config.var_pred_hidden_dim)
         self.proj = nn.Linear(config.var_pred_hidden_dim, 1)
@@ -399,30 +400,28 @@ class FastSpeech2VarianceAdaptor(nn.Module):
         self.pitch_predictor = FastSpeech2VariancePredictor(config)
         self.energy_predictor = FastSpeech2VariancePredictor(config)
 
-        n_bins, steps = self.config.var_pred_n_bins, self.config.var_pred_n_bins - 1
-        self.pitch_bins = torch.linspace(config.pitch_min, config.pitch_max, steps)
-        self.embed_pitch = nn.Embedding(n_bins, config.encoder_embed_dim)
-        self.energy_bins = torch.linspace(config.energy_min, config.energy_max, steps)
-        self.embed_energy = nn.Embedding(n_bins, config.encoder_embed_dim)
+        num_bins, steps = self.config.var_pred_n_bins, self.config.var_pred_n_bins - 1
+        self.embed_pitch = nn.Embedding(num_bins, config.encoder_embed_dim)
+        self.embed_energy = nn.Embedding(num_bins, config.encoder_embed_dim)
+        self.register_buffer("pitch_bins", torch.linspace(config.pitch_min, config.pitch_max, steps))
+        self.register_buffer("energy_bins", torch.linspace(config.energy_min, config.energy_max, steps))
 
     def get_pitch_embedding(self, hidden, target=None, factor=1.0):
         out = self.pitch_predictor(hidden)
-        bins = self.pitch_bins.to(hidden.device)
         if target is None:
             out = out * factor
-            pitch_embedding = self.embed_pitch(torch.bucketize(out, bins))
+            pitch_embedding = self.embed_pitch(torch.bucketize(out, self.pitch_bins))
         else:
-            pitch_embedding = self.embed_pitch(torch.bucketize(target, bins))
+            pitch_embedding = self.embed_pitch(torch.bucketize(target, self.pitch_bins))
         return out, pitch_embedding
 
     def get_energy_embedding(self, hidden, target=None, factor=1.0):
         out = self.energy_predictor(hidden)
-        bins = self.energy_bins.to(hidden.device)
         if target is None:
             out = out * factor
-            energy_embedding = self.embed_energy(torch.bucketize(out, bins))
+            energy_embedding = self.embed_energy(torch.bucketize(out, self.energy_bins))
         else:
-            energy_embedding = self.embed_energy(torch.bucketize(target, bins))
+            energy_embedding = self.embed_energy(torch.bucketize(target, self.energy_bins))
         return out, energy_embedding
 
     def forward(
@@ -440,35 +439,32 @@ class FastSpeech2VarianceAdaptor(nn.Module):
         log_dur_out = self.duration_predictor(hidden)
         dur_out = torch.clamp(torch.round((torch.exp(log_dur_out) - 1) * d_factor).long(), min=0)
         dur_out.masked_fill_(padding_mask, 0)
-
         pitch_out, pitch_embedding = self.get_pitch_embedding(hidden, pitches, p_factor)
         hidden = hidden + pitch_embedding
         energy_out, energy_embedding = self.get_energy_embedding(hidden, energies, e_factor)
         hidden = hidden + energy_embedding
-
         hidden, out_lens = self.length_regulator(hidden, dur_out if durations is None else durations)
-
         return hidden, out_lens, log_dur_out, pitch_out, energy_out
 
 
 class FastSpeech2Postnet(nn.Module):
-    def __init__(self, in_dim, n_channels, kernel_size, n_layers, dropout):
+    def __init__(self, in_dim, num_channels, kernel_size, num_layers, dropout):
         super().__init__()
         self.layers = nn.ModuleList()
-        for i in range(n_layers):
-            cur_layers = [
+        for i in range(num_layers):
+            layers = [
                 nn.Conv1d(
-                    in_dim if i == 0 else n_channels,
-                    n_channels if i < n_layers - 1 else in_dim,
+                    in_dim if i == 0 else num_channels,
+                    num_channels if i < num_layers - 1 else in_dim,
                     kernel_size=kernel_size,
                     padding=((kernel_size - 1) // 2),
                 ),
-                nn.BatchNorm1d(n_channels if i < n_layers - 1 else in_dim),
+                nn.BatchNorm1d(num_channels if i < num_layers - 1 else in_dim),
             ]
-            if i < n_layers - 1:
-                cur_layers.append(nn.Tanh())
-            cur_layers.append(nn.Dropout(dropout))
-            self.layers.extend(cur_layers)
+            if i < num_layers - 1:
+                layers.append(nn.Tanh())
+            layers.append(nn.Dropout(dropout))
+            self.layers.extend(layers)
 
     def forward(self, hidden):
         # hidden.shape == (batch_size, sequence_length, hidden_size)
@@ -493,7 +489,7 @@ class FastSpeech2Encoder(nn.Module):
                 config.encoder_embed_dim + config.speaker_embed_dim, config.encoder_embed_dim
             )
 
-        self.dropout_module = nn.Dropout(config.dropout)
+        self.dropout_module = nn.Dropout(config.fft_dropout)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.encoder_embed_dim, padding_idx=self.padding_idx)
 
         self.embed_positions = FastSpeech2PositionalEmbedding(
@@ -508,7 +504,7 @@ class FastSpeech2Encoder(nn.Module):
                 config.encoder_attention_heads,
                 config.fft_hidden_dim,
                 config.fft_kernel_size,
-                dropout=config.dropout,
+                dropout=config.fft_dropout,
                 attention_dropout=config.attention_dropout,
             )
             for _ in range(config.encoder_layers)
@@ -522,7 +518,7 @@ class FastSpeech2Encoder(nn.Module):
                 config.decoder_attention_heads,
                 config.fft_hidden_dim,
                 config.fft_kernel_size,
-                dropout=config.dropout,
+                dropout=config.fft_dropout,
                 attention_dropout=config.attention_dropout,
             )
             for _ in range(config.decoder_layers)
@@ -587,7 +583,7 @@ class FastSpeech2Encoder(nn.Module):
             speaker_embedding = self.embed_speaker(speaker_ids).expand(batch_size, sequence_length, -1)
             hidden = self.spk_emb_proj(torch.cat([hidden, speaker_embedding], dim=2))
 
-        hidden, out_lengths, log_dur_out, pitch_out, energy_out = self.var_adaptor(
+        hidden, out_lengths, log_duration_out, pitch_out, energy_out = self.var_adaptor(
             hidden, enc_padding_mask, durations, pitches, energies
         )
 
@@ -608,8 +604,8 @@ class FastSpeech2Encoder(nn.Module):
             hidden = hidden + self.mean.view(1, 1, -1).expand_as(hidden)
 
         if not return_dict:
-            return tuple([hidden, out_lengths, log_dur_out, pitch_out, energy_out])
-        return FastSpeech2ModelOutput(hidden, out_lengths, log_dur_out, pitch_out, energy_out)
+            return tuple([hidden, out_lengths, log_duration_out, pitch_out, energy_out])
+        return FastSpeech2ModelOutput(hidden, out_lengths, log_duration_out, pitch_out, energy_out)
 
 
 class FastSpeech2PreTrainedModel(PreTrainedModel):
@@ -645,14 +641,15 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
 
 
 FASTSPEECH2_START_DOCSTRING = r"""
-    FastSpeech2 was proposed in [FastSpeech 2: Fast and High-Quality End-to-End Text to Speech](https://arxiv.org/abs/2006.04558) by Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan Liu.
+    FastSpeech2 was proposed in [FastSpeech 2: Fast and High-Quality End-to-End Text to
+    Speech](https://arxiv.org/abs/2006.04558) by Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan
+    Liu.
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
     Parameters:
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, etc.) This model is also a PyTorch
+    [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a regular PyTorch
+    Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
         config ([`FastSpeech2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -661,12 +658,11 @@ FASTSPEECH2_START_DOCSTRING = r"""
 FASTSPEECH2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using [`FastSpeech2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`FastSpeech2Tokenizer`].
+            See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         speaker_ids (`torch.LongTensor`, *optional*):
-            Indices of speaker ids. 
+            Indices of speaker ids.
         durations (`torch.LongTensor`, *optional*):
             pass
         pitches (`torch.FloatTensor` of shape `()`, *optional*):
