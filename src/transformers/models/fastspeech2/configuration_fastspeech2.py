@@ -62,8 +62,6 @@ class FastSpeech2Config(PretrainedConfig):
             Kernel size of the feed forward layers.
         fft_dropout (`float`, *optional*, defaults to 0.5)
             The dropout ratio for the feedforward layers.
-        var_pred_n_bins (`int`, *optional*, defaults to 256)
-            Number of bins in the variance predictors.
         var_pred_hidden_dim (`int`, *optional*, defaults to 256)
             Dimensionality of the hidden size of the variance predictor.
         var_pred_kernel_size (`int`, *optional*, defaults to 3)
@@ -136,7 +134,6 @@ class FastSpeech2Config(PretrainedConfig):
         fft_hidden_dim=1024,
         fft_kernel_size=9,
         fft_dropout=0.2,
-        var_pred_n_bins=256,
         var_pred_hidden_dim=256,
         var_pred_kernel_size=3,
         var_pred_dropout=0.5,
@@ -175,7 +172,6 @@ class FastSpeech2Config(PretrainedConfig):
         self.fft_hidden_dim = fft_hidden_dim
         self.fft_kernel_size = fft_kernel_size
         self.fft_dropout = fft_dropout
-        self.var_pred_n_bins = var_pred_n_bins
         self.var_pred_hidden_dim = var_pred_hidden_dim
         self.var_pred_kernel_size = var_pred_kernel_size
         self.var_pred_dropout = var_pred_dropout
@@ -199,3 +195,8 @@ class FastSpeech2Config(PretrainedConfig):
     def mel_dim(self):
         # Dimensionality of the prediced mel-spectrograms.
         return 80
+
+    @property
+    def var_pred_num_bins(self):
+        # Number of bins in the variance predictors.
+        return 256
