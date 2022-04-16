@@ -973,7 +973,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
             max_distance=self.relative_attention_max_distance,
         )
         # (batch_size, seq_len, global_seq_len, num_heads)
-        side_bias = self.relative_attention_bias(side_relative_position_bucket)
+        side_bias = self.global_relative_attention_bias(side_relative_position_bucket)
 
         # (batch_size, 1, num_heads, seq_len, global_seq_len)
         side_bias = jnp.transpose(side_bias, (0, 3, 1, 2))[:, None, ...]
