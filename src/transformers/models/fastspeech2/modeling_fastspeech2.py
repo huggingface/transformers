@@ -395,13 +395,13 @@ class FastSpeech2VariancePredictor(nn.Module):
 class FastSpeech2VarianceAdaptor(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.length_regulator = FastSpeech2LengthRegulator()
         self.duration_predictor = FastSpeech2VariancePredictor(config)
         self.pitch_predictor = FastSpeech2VariancePredictor(config)
         self.energy_predictor = FastSpeech2VariancePredictor(config)
 
-        num_bins, steps = self.config.var_pred_n_bins, self.config.var_pred_n_bins - 1
+        num_bins = config.var_pred_num_bins
+        steps = config.var_pred_num_bins - 1
         self.embed_pitch = nn.Embedding(num_bins, config.encoder_embed_dim)
         self.embed_energy = nn.Embedding(num_bins, config.encoder_embed_dim)
         self.register_buffer("pitch_bins", torch.linspace(config.pitch_min, config.pitch_max, steps))
@@ -438,14 +438,14 @@ class FastSpeech2VarianceAdaptor(nn.Module):
     ):
         # hidden.shape == (batch_size, sequence_length, hidden_size)
         log_duration_out = self.duration_predictor(hidden)
-        dur_out = torch.clamp(torch.round((torch.exp(log_duration_out) - 1) * d_factor).long(), min=0)
-        dur_out.masked_fill_(padding_mask, 0)
+        duration_out = torch.clamp(torch.round((torch.exp(log_duration_out) - 1) * d_factor).long(), min=0)
+        duration_out.masked_fill_(padding_mask, 0)
         pitch_out, pitch_embedding = self.get_pitch_embedding(hidden, pitches, p_factor)
         hidden = hidden + pitch_embedding
         energy_out, energy_embedding = self.get_energy_embedding(hidden, energies, e_factor)
         hidden = hidden + energy_embedding
-        hidden, out_lens = self.length_regulator(hidden, dur_out if durations is None else durations)
-        return hidden, out_lens, log_duration_out, pitch_out, energy_out
+        hidden, out_lengths = self.length_regulator(hidden, duration_out if durations is None else durations)
+        return hidden, out_lengths, log_duration_out, pitch_out, energy_out
 
 
 class FastSpeech2Postnet(nn.Module):
@@ -559,7 +559,7 @@ class FastSpeech2Encoder(nn.Module):
     def forward(
         self,
         input_ids,
-        speaker_ids=None,
+        speaker_id=None,
         durations=None,
         pitches=None,
         energies=None,
@@ -578,10 +578,10 @@ class FastSpeech2Encoder(nn.Module):
             hidden = layer(hidden, attention_mask)
 
         if self.embed_speaker is not None:
-            if speaker_ids is None:
+            if speaker_id is None:
                 raise ValueError("`speaker` cannot be `None` for multi-speaker FastSpeech2.")
             batch_size, sequence_length, _ = hidden.size()
-            speaker_embedding = self.embed_speaker(speaker_ids).expand(batch_size, sequence_length, -1)
+            speaker_embedding = self.embed_speaker(speaker_id).expand(batch_size, sequence_length, -1)
             hidden = self.spk_emb_proj(torch.cat([hidden, speaker_embedding], dim=2))
 
         hidden, out_lengths, log_duration_out, pitch_out, energy_out = self.var_adaptor(
@@ -662,14 +662,15 @@ FASTSPEECH2_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`FastSpeech2Tokenizer`].
             See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
-        speaker_ids (`torch.LongTensor`, *optional*):
-            Indices of speaker ids.
-        durations (`torch.LongTensor`, *optional*):
-            pass
-        pitches (`torch.FloatTensor` of shape `()`, *optional*):
-            pass
-        energies (`torch.FloatTensor` of shape `()`, *optional*):
-            pass
+        speaker_id (`torch.LongTensor` of shape `(1)`, *optional*):
+            Index of a single speaker id. The index must be between 0 and `FastSpeech2Config.num_speakers - 1`.
+        durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Duration information for each token. The value of `durations[batch_idx][i]` represents the number of
+            mel-spectrogram frames attributed to the `i`-th token in the `batch_idx` batch.
+        pitches (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Pitch level information for each token.
+        energies (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Amount of energy attributed to each token.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -738,7 +739,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        speaker_ids: Optional[torch.Tensor] = None,
+        speaker_id: Optional[torch.Tensor] = None,
         durations: Optional[torch.Tensor] = None,
         pitches: Optional[torch.Tensor] = None,
         energies: Optional[torch.Tensor] = None,
@@ -747,7 +748,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     ):
         return self.encoder(
             input_ids=input_ids,
-            speaker_ids=speaker_ids,
+            speaker_id=speaker_id,
             durations=durations,
             pitches=pitches,
             energies=energies,
