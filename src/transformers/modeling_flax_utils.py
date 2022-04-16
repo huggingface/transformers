@@ -34,6 +34,7 @@ from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import (
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     WEIGHTS_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -530,7 +531,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
                     "Checkout your internet connection or see how to run the library in offline mode at "
@@ -654,6 +655,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
                 f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+
+        # dictionary of key: dtypes for the model params
+        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
+        # extract keys of parameters not in jnp.float32
+        fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
+        bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]
+
+        # raise a warning if any of the parameters are not in jnp.float32
+        if len(fp16_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized in float16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{fp16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
+            )
+
+        if len(bf16_params) > 0:
+            logger.warning(
+                f"Some of the weights of {model.__class__.__name__} were initialized in bfloat16 precision from "
+                f"the model checkpoint at {pretrained_model_name_or_path}:\n{bf16_params}\n"
+                "You should probably UPCAST the model weights to float32 if this was not intended. "
+                "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
 
         # set correct parameters

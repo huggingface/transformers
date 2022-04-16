@@ -647,7 +647,6 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
         embedding_output, mask, ids_restore = self.embeddings(
             pixel_values=pixel_values, training=training, noise=noise
@@ -811,7 +810,6 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -862,7 +860,9 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
         self.decoder_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
         self.decoder_pred = tf.keras.layers.Dense(
-            config.patch_size**2 * config.num_channels, name="decoder_pred"
+            config.patch_size**2 * config.num_channels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="decoder_pred",
         )  # encoder to decoder
         self.config = config
         self.num_patches = num_patches
@@ -1028,7 +1028,6 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFViTMAEForPreTrainingOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:

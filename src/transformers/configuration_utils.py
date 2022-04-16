@@ -31,6 +31,7 @@ from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     CONFIG_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
@@ -303,7 +304,12 @@ class PretrainedConfig(PushToHubMixin):
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
         if self.id2label is not None:
-            kwargs.pop("num_labels", None)
+            num_labels = kwargs.pop("num_labels", None)
+            if num_labels is not None and len(self.id2label) != num_labels:
+                logger.warn(
+                    f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
+                    f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
+                )
             self.id2label = dict((int(key), value) for key, value in self.id2label.items())
             # Keys are always strings in JSON so convert ids to int here.
         else:
@@ -626,7 +632,7 @@ class PretrainedConfig(PushToHubMixin):
             )
         except ValueError:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                 f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
                 "{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
@@ -677,6 +683,15 @@ class PretrainedConfig(PushToHubMixin):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
 
         # Update config with kwargs if needed
+        if "num_labels" in kwargs and "id2label" in kwargs:
+            num_labels = kwargs["num_labels"]
+            id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
+            if len(id2label) != num_labels:
+                raise ValueError(
+                    f"You passed along `num_labels={num_labels }` with an incompatible id to label map: "
+                    f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
+                    "one of them."
+                )
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):

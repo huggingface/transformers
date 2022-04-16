@@ -271,6 +271,43 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
                 self.assertIn(decoded, [output, output.lower()])
 
+    # cannot use default `test_tokenizers_common_ids_setters` method because tokenizer has no vocab
+    def test_tokenizers_common_ids_setters(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                ]
+
+        token_to_test_setters = "a"
+        token_id_to_test_setters = ord(token_to_test_setters)
+
+        for attr in attributes_list:
+            setattr(tokenizer, attr + "_id", None)
+            self.assertEqual(getattr(tokenizer, attr), None)
+            self.assertEqual(getattr(tokenizer, attr + "_id"), None)
+
+            setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+            self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+            self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
+
+        setattr(tokenizer, "additional_special_tokens_ids", [])
+        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
+        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+
+        additional_special_token_id = 0xE006
+        additional_special_token = chr(additional_special_token_id)
+        setattr(tokenizer, "additional_special_tokens_ids", [additional_special_token_id])
+        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [additional_special_token])
+        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [additional_special_token_id])
+
     # tokenizer has a fixed vocab_size (namely all possible unicode code points)
     def test_add_tokens_tokenizer(self):
         pass

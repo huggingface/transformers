@@ -15,13 +15,12 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
+from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
+from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
-
-from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
 
 
 @require_onnx
@@ -173,6 +172,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 PYTORCH_EXPORT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
+    ("bigbird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
@@ -181,6 +181,7 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
+    ("beit", "microsoft/beit-base-patch16-224"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
