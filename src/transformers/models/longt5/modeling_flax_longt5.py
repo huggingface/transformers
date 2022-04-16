@@ -1152,6 +1152,8 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
 
 class FlaxLongT5LayerLocalSelfAttention(nn.Module):
+    """Local self attention used in encoder"""
+
     config: LongT5Config
     has_relative_attention_bias: bool = False
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1176,6 +1178,45 @@ class FlaxLongT5LayerLocalSelfAttention(nn.Module):
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.LocalSelfAttention(
+            normed_hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
+            deterministic=deterministic,
+            init_cache=init_cache,
+        )
+        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
+
+
+class FlaxLongT5LayerTransientGlobalSelfAttention(nn.Module):
+    """Transient-Global self attention used in encoder"""
+
+    config: LongT5Config
+    has_relative_attention_bias: bool = False
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.TransientGlobalSelfAttention = FlaxLongT5TransientGlobalAttention(
+            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+        )
+        self.layer_norm = FlaxLongT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
+        self.dropout = nn.Dropout(self.config.dropout_rate)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        output_attentions=False,
+        deterministic=True,
+        init_cache=False,
+    ):
+        normed_hidden_states = self.layer_norm(hidden_states)
+        attention_output = self.TransientGlobalSelfAttention(
             normed_hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
@@ -1272,6 +1313,17 @@ class FlaxLongT5Block(nn.Module):
 
     def setup(self):
         self.causal = self.config.causal
+        if self.causal:
+            attention_layer = FlaxLongT5LayerSelfAttention
+        elif self.config.encoder_attention_type == "local":
+            attention_layer = FlaxLongT5LayerLocalSelfAttention
+        elif self.config.encoder_attention_type == "transient-global":
+            attention_layer = FlaxLongT5LayerTransientGlobalSelfAttention
+        else:
+            raise ValueError(
+                "For encoder attention mechanism, either `local` or `transient-global` attention type is expected, "
+                f"but got {self.config.encoder_attention_type}."
+            )
         attention_layer = FlaxLongT5LayerSelfAttention if self.causal else FlaxLongT5LayerLocalSelfAttention
         self.layer = (
             attention_layer(
