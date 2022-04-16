@@ -837,7 +837,9 @@ class LongT5TransientGlobalAttention(nn.Module):
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
-        # Components for global attention
+        # Relativen attention bias & Layer norm for global attention
+        if self.has_relative_attention_bias:
+            self.global_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.global_input_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     # Copied from transformers.models.t5.modeling_t5.T5Attention.prune_heads

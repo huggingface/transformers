@@ -141,6 +141,59 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> np.
     return local_attention_mask[:, None, ...]  # [batch_size, 1, num_block, block_len, 3 * block_len]
 
 
+def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Obtain the "fixed block" global id corresponding to each input token.
+
+    This implementation is a simlified version of the original Flaxformr implementation adopted from:
+    https://github.com/google/flaxformer/blob/main/flaxformer/architectures/longt5/long_attention.py.
+
+    In our scenario, as we use this strategy only for a decoder, orphan tokens, i.e. those tokens which do not make for
+    the whole fixed block, are assigned to the preceding block.
+
+    Padding tokens from the original sequence are represented by -1.
+    """
+    batch_size, seq_len = attention_mask.shape[:2]
+
+    def handle_orphan_tokens(block_ids: np.ndarray) -> np.ndarray:
+        block_ends = (jnp.arange(seq_len) % global_block_size) == global_block_size - 1
+        true_block_ends = jnp.logical_and(block_ends, block_ids >= 0)
+        full_blocks = true_block_ends.sum(-1).unsqueeze(-1)
+        block_ids = jnp.minimum(block_ids, full_blocks - 1)
+        return block_ids
+
+    attention_mask = jnp.where(attention_mask != 0.0, 1.0, -1000.0)
+    fixed_block_mask = jnp.ones_like(attention_mask) / global_block_size
+    fixed_block_mask = jnp.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
+    global_block_ids = jnp.maximum(
+        jnp.floor(attention_mask + fixed_block_mask - 1.0), jnp.array(-1.0, dtype=attention_mask.dtype)
+    )
+    # [batch_size, seq_len]
+    global_block_ids = handle_orphan_tokens(global_block_ids)
+    # [batch_size, seq_len // global_block_size]
+    _sequence_block_ids_max = jnp.max(global_block_ids, dim=-1).values.repeat(seq_len // global_block_size, 1).T
+    global_segment_ids = jnp.cumsum(jnp.ones((batch_size, seq_len // global_block_size)), axis=-1) - 1
+    global_segment_ids = global_segment_ids.where(
+        global_segment_ids <= _sequence_block_ids_max, -1 * jnp.ones_like(global_segment_ids)
+    )
+    return global_block_ids.astype(jnp.int32), global_segment_ids.astype(jnp.int32)
+
+
+def _make_side_relative_position_ids(attention_mask: np.ndarray, global_block_size: int) -> np.ndarray:
+    """Create the relative position tensor for local -> global attention."""
+    block_ids, global_segment_ids = _make_global_fixed_block_ids(attention_mask, global_block_size)
+    global_seq_len = global_segment_ids.shape[-1]
+    global_positions = jnp.arange(global_seq_len)
+    side_relative_position = global_positions - block_ids[..., None]
+    return side_relative_position.type(jnp.int64)
+
+
+def _create_global_aggregates(hidden_states: np.ndarray, block_ids: np.ndarray, global_seq_len: int) -> np.ndarray:
+    """Compute individual block aggregates by summing over individual blocks."""
+    # (batch..., seq_len, global_seq_len))
+    one_hot_block_ids = jax.nn.one_hot(block_ids, global_seq_len)
+    return jnp.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids.type(hidden_states.dtype))
+
+
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5LayerNorm with T5->LongT5
 class FlaxLongT5LayerNorm(nn.Module):
     hidden_size: int
@@ -595,6 +648,7 @@ class FlaxLongT5LocalAttention(nn.Module):
             )
 
     @staticmethod
+    # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Attention._relative_position_bucket
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
         Adapted from Mesh Tensorflow:
@@ -746,6 +800,321 @@ class FlaxLongT5LocalAttention(nn.Module):
                 position_bias = position_bias.swapaxes(1, 2)
                 position_bias = position_bias + attention_mask
                 position_bias = position_bias.swapaxes(1, 2)
+
+        # create dropout rng
+        dropout_rng = None
+        if not deterministic and self.dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
+        # Softmax(QK^T)
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=position_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+        )
+
+        # multiply with value states
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+
+        # bring back to (batch_size, seq_length, d_model)
+        attn_output = self._merge_heads(attn_output)
+        attn_output = attn_output[:, :seq_length, :]
+
+        # apply output matrix
+        attn_output = self.o(attn_output)
+
+        outputs = (attn_output, position_bias)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+
+        return outputs
+
+
+class FlaxLongT5TransientGlobalAttention(nn.Module):
+    config: LongT5Config
+    has_relative_attention_bias: bool = False
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
+        self.d_model = self.config.d_model
+        self.key_value_proj_dim = self.config.d_kv
+        self.n_heads = self.config.num_heads
+        self.local_radius = self.config.local_radius
+        self.block_len = self.local_radius + 1
+        self.global_block_size = self.config.global_block_size
+        self.dropout = self.config.dropout_rate
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
+
+        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
+        o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
+
+        self.q = nn.Dense(
+            self.inner_dim,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(q_init_std),
+            dtype=self.dtype,
+        )
+        self.k = nn.Dense(
+            self.inner_dim,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
+            dtype=self.dtype,
+        )
+        self.v = nn.Dense(
+            self.inner_dim,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
+            dtype=self.dtype,
+        )
+        self.o = nn.Dense(
+            self.d_model,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(o_init_std),
+            dtype=self.dtype,
+        )
+
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = nn.Embed(
+                self.relative_attention_num_buckets,
+                self.n_heads,
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
+            )
+
+        # Relativen attention bias & Layer norm for global attention
+        if self.has_relative_attention_bias:
+            self.global_relative_attention_bias = nn.Embed(
+                self.relative_attention_num_buckets,
+                self.n_heads,
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
+            )
+        self.global_input_layer_norm = FlaxLongT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
+
+    @staticmethod
+    # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Attention._relative_position_bucket
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+        """
+        relative_buckets = 0
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (relative_position > 0) * num_buckets
+            relative_position = jnp.abs(relative_position)
+        else:
+            relative_position = -jnp.clip(relative_position, a_max=0)
+        # now relative_position is in the range [0, inf)
+
+        # half of the buckets are for exact increments in positions
+        max_exact = num_buckets // 2
+        is_small = relative_position < max_exact
+
+        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        relative_position_if_large = max_exact + (
+            jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
+        )
+        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+
+        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+
+        return relative_buckets.astype("i4")
+
+    def compute_bias(self, block_length: int):
+        """Compute binned relative position bias"""
+        context_position = jnp.arange(block_length, dtype="i4")[:, None]
+        memory_position = jnp.arange(3 * block_length, dtype="i4")[None, :]
+
+        relative_position = memory_position - context_position
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,
+            bidirectional=(not self.causal),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+
+        values = self.relative_attention_bias(relative_position_bucket)
+        values = values.transpose((2, 0, 1))[None, None, :, :, :]
+        return values
+
+    def compute_side_bias(self, attention_mask: np.ndarray, global_segment_ids: np.ndarray) -> np.ndarray:
+        # (batch_size, 1, 1, seq_len, global_seq_len)
+        side_attention_mask = jnp.equal.eq(attention_mask[..., None], global_segment_ids[:, None, :])[
+            :, None, None, ...
+        ]
+        # (batch_size, seq_len, global_seq_len)
+        side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
+        side_relative_position_bucket = self._relative_position_bucket(
+            side_relative_position,
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        # (batch_size, seq_len, global_seq_len, num_heads)
+        side_bias = self.relative_attention_bias(side_relative_position_bucket)
+
+        # (batch_size, 1, num_heads, seq_len, global_seq_len)
+        side_bias = jnp.transpose(side_bias, (0, 3, 1, 2))[:, None, ...]
+        side_attention_mask = side_attention_mask + side_bias
+
+        # (batch_size, num_heads, seq_len, global_seq_len)
+        return side_attention_mask.squeeze(1)
+
+    def _split_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+
+    def _merge_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[0], -1, self.inner_dim)
+
+    @nn.compact
+    def _concatenate_to_cache(self, key, value, query, attention_mask):
+        """
+        This function takes projected key, value states from a single input token and concatenates the states to cached
+        states from previous steps. This function is slighly adapted from the official Flax repository:
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        """
+        # detect if we're initializing by absence of existing cache data.
+        is_initialized = self.has_variable("cache", "cached_key")
+        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+
+        if is_initialized:
+            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+            # update key, value caches with our new 1d spatial slices
+            cur_index = cache_index.value
+            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+            key = jax.lax.dynamic_update_slice(cached_key.value, key, indices)
+            value = jax.lax.dynamic_update_slice(cached_value.value, value, indices)
+            cached_key.value = key
+            cached_value.value = value
+            num_updated_cache_vectors = query.shape[1]
+            cache_index.value = cache_index.value + num_updated_cache_vectors
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions
+            # that have already been generated and cached, not the remaining zero elements.
+            pad_mask = jnp.broadcast_to(
+                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
+                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
+            )
+            attention_mask = combine_masks(pad_mask, attention_mask)
+        return key, value, attention_mask
+
+    def _create_position_bias(self, block_len: int, attention_mask: Optional[np.ndarray]) -> np.ndarray:
+        # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
+        if self.has_relative_attention_bias:
+            position_bias = self.compute_bias(block_len)
+        elif attention_mask is not None:
+            position_bias = jnp.zeros_like(attention_mask)
+        else:
+            position_bias = jnp.zeros((1, 1, self.n_heads, block_len, 3 * block_len), dtype=self.dtype)
+
+        return position_bias
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask=None,
+        key_value_states=None,
+        position_bias=None,
+        use_cache=False,
+        output_attentions=False,
+        deterministic=True,
+        init_cache=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        # Prepare components for transient-global attention
+        # Obtain block_ids and global_segment_ids
+        # global_seq_len := seq_len // self.global_block_size
+        # shapes: (batch_size, seq_len) & (batch_size, global_seq_len)
+        block_ids, global_segment_ids = _make_global_fixed_block_ids(
+            attention_mask if attention_mask is not None else jnp.ones((batch_size, seq_length)),
+            self.global_block_size,
+        )
+        # Create global inputs
+        _global_seq_len = global_segment_ids.shape[-1]
+        global_inputs = _create_global_aggregates(hidden_states, block_ids, _global_seq_len)
+        global_inputs = self.global_input_layer_norm(global_inputs)
+
+        # q, k, v projections
+        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = self.k(hidden_states) if key_value_states is None else self.k(key_value_states)
+        value_states = self.v(hidden_states) if key_value_states is None else self.v(key_value_states)
+
+        # reshape to (batch_size, seq_length, n_heads, head_dim)
+        query_states = self._split_heads(query_states)
+        key_states = self._split_heads(key_states)
+        value_states = self._split_heads(value_states)
+
+        # Get global/side key/value_states
+        side_key_states = self.k(global_inputs)
+        side_value_states = self.v(value_states)
+
+        # reshape to (batch_size, global_seq_len, n_heads, head_dim)
+        side_key_states = self._split_heads(side_key_states)
+        side_value_states = self._split_heads(side_value_states)
+
+        # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, head_dim)
+        query_states = _split_into_blocks(query_states, self.block_len, dim=1)
+        key_states = _split_into_blocks(key_states, self.block_len, dim=1)
+        value_states = _split_into_blocks(value_states, self.block_len, dim=1)
+
+        # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
+        key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
+        value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
+
+        # Tile side inputs across local key/value blocks
+        # New shape: (batch_size, num_blocks, global_seq_len, n_heads, dim_per_head)
+        reps = [1] * (side_key_states.ndim + 1)
+        reps[1] = key_states.shape[1]
+        side_key_states = jnp.tile(side_key_states[:, None, ...], reps)
+        side_value_states = jnp.tile(side_value_states[:, None, ...], reps)
+
+        # Concatenate "local" and "side"/"global" key/value states to allow each token to attend global aggregated ones
+        # New shape: (batch_size, num_blocks, 3 * block_len + global_seq_len, n_heads, dim_per_head)
+        key_states = jnp.concatenate((key_states, side_key_states), axis=2)
+        value_states = jnp.concatenate((value_states, side_value_states), axis=2)
+
+        # counter-act scaling in dot_product_attention_weights function
+        query_states *= jnp.sqrt(query_states.shape[-1])
+
+        if position_bias is None:
+            # compute position bias (only for first layer)
+            position_bias = self._create_position_bias(self.block_len, attention_mask)
+
+            if attention_mask is not None:
+                position_bias = position_bias.swapaxes(1, 2)
+                position_bias = position_bias + _get_local_attention_mask(attention_mask, self.block_len)
+                position_bias = position_bias.swapaxes(1, 2)
+
+            # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
+            global_position_bias = self.compute_side_bias(
+                attention_mask if attention_mask is not None else jnp.ones((batch_size, seq_length)),
+                global_segment_ids,
+            )
+            global_position_bias = _split_into_blocks(global_position_bias, self.block_len, axis=-2)
+            global_position_bias = jnp.swapaxes(global_position_bias, 1, 2)
+            position_bias = jnp.concatenate((position_bias, global_position_bias), axis=-1)
 
         # create dropout rng
         dropout_rng = None
