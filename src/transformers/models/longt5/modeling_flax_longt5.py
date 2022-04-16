@@ -959,11 +959,6 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
     def compute_side_bias(self, attention_mask: np.ndarray, global_segment_ids: np.ndarray) -> np.ndarray:
         # (batch_size, 1, 1, seq_len, global_seq_len)
         side_attention_mask = jnp.equal(attention_mask[..., None], global_segment_ids[:, None, :])[:, None, None, ...]
-        side_attention_mask = jax.lax.select(
-            side_attention_mask,
-            jnp.full(side_attention_mask.shape, 0).astype(side_attention_mask.dtype),
-            jnp.full(side_attention_mask.shape, -1e10).astype(side_attention_mask.dtype),
-        )
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
         side_relative_position_bucket = self._relative_position_bucket(
