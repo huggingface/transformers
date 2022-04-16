@@ -18,6 +18,8 @@ limitations under the License.
 
 This directory contains a script, `run_semantic_segmentation_no_trainer.py`, that showcases how to fine-tune any model supported by the [`AutoModelForSemanticSegmentation` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSemanticSegmentation) (such as [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer), [BEiT](https://huggingface.co/docs/transformers/main/en/model_doc/beit), [DPT]((https://huggingface.co/docs/transformers/main/en/model_doc/dpt))) for semantic segmentation using PyTorch.
 
+![segformer_inference_widget](https://user-images.githubusercontent.com/48327001/163667406-01f323a6-72ec-4e7e-bdeb-7d9da71b0697.gif)
+
 The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
 
 ## Note on custom data
@@ -31,8 +33,8 @@ The script assumes that you have a `DatasetDict` with 2 columns, "image" and "la
 ```python
 from datasets import Dataset, DatasetDict, Image
 
-image_paths_train = ["path/to/image_1", "path/to/image_2", ..., "path/to/image_n"]
-label_paths_train = ["path/to/annotation_1", "path/to/annotation_2", ..., "path/to/annotation_n"]
+image_paths_train = ["path/to/image_1.jpg/png", "path/to/image_2.jpg/png", ..., "path/to/image_n.jpg/png"]
+label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
 
 # same for validation
 # image_paths_validation = [...]
@@ -69,7 +71,7 @@ An example of such a dataset can be seen at [nielsr/ade20k-demo](https://hugging
 ### Creating an id2label mapping
 
 Besides that, the script also assumes the existence of an `id2label.json` file in the repo, containing a mapping from integers to actual class names.
-An example of that can be seen [here](https://huggingface.co/datasets/segments/sidewalk-semantic/blob/main/id2label.json). You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
+An example of that can be seen [here](https://huggingface.co/datasets/nielsr/ade20k-demo/blob/main/id2label.json). You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
 
 ## Running the script
 
@@ -91,7 +93,7 @@ that will check everything is ready for training. Finally, you can launch traini
 accelerate launch --output_dir segformer-finetuned-sidewalk --with_tracking --push_to_hub
 ```
 
-and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username):)
+and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
 With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](segments/sidewalk-semantic) dataset.
 
