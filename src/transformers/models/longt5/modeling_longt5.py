@@ -57,7 +57,12 @@ _CHECKPOINT_FOR_DOC = "Stancld/LongT5-Local-Base"
 # for the pretrained weights provided with the models
 ####################################################
 # TODO: Update before the merge
-LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = ["Stancld/LongT5-Local-Base", "Stancld/LongT5-Local-Large"]
+LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Stancld/LongT5-Local-Base",
+    "Stancld/LongT5-Local-Large",
+    "Stancld/LongT5-TGlobal-Base",
+    "Stancld/LongT5-TGlobal-Large",
+]
 
 
 ####################################################
@@ -78,17 +83,17 @@ PARALLELIZE_DOCSTRING = r"""
             have fewer attention modules mapped to it than other devices. For reference, the longt5 models have the
             following number of attention modules:
 
-                - : 6
-                - longt5-base: 12
-                - longt5-large: 24
-                - longt5-3b: 24
-                - longt5-11b: 24
+                - LongT5-Local-Base: 12
+                - LongT5-TGlobal-Base: 12
+                - LongT5-Local-Large: 24
+                - LongT5-TGlobal-Large: 24
+
 
     Example:
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using longt5-3b, which has a total of 24 attention modules:
-    model = LongT5ForConditionalGeneration.from_pretrained("longt5-3b")
+    model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-TGlobal-Large")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
