@@ -1400,6 +1400,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs: Optional[int] = None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
@@ -1624,6 +1625,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             remove_invalid_values=remove_invalid_values,
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
+            renormalize_logits=renormalize_logits,
         )
 
         if num_beams == 1:
