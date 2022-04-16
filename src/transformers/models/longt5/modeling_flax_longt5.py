@@ -66,35 +66,35 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
-def _pad_to_multiple(x: np.ndarray, block_len: int, dim: int, pad_value: int = 0) -> np.ndarray:
+def _pad_to_multiple(x: np.ndarray, block_len: int, axis: int, pad_value: int = 0) -> np.ndarray:
     """Pad an array so that a sequence length will be a multiple of `block_len`"""
-    pad_len = -x.shape[dim] % block_len
+    pad_len = -x.shape[axis] % block_len
     pad = [(0, 0)] * x.ndim
-    pad[dim] = (0, pad_len)
+    pad[axis] = (0, pad_len)
     x = jnp.pad(x, pad_width=pad, mode="constant", constant_values=pad_value)
     return x
 
 
-def _split_into_blocks(x: np.ndarray, block_len: int, dim: int) -> np.ndarray:
-    """Split an input array into blocks of a given `block_len` along the given `dim`. If the dimension length
+def _split_into_blocks(x: np.ndarray, block_len: int, axis: int) -> np.ndarray:
+    """Split an input array into blocks of a given `block_len` along the given `axis`. If the dimension length
     is not a multiple of `block_len`, it will be padded first with selected `pad_value`.
     """
     # pad tensor to multiple of block_len
-    if x.shape[dim] % block_len != 0:
-        x = _pad_to_multiple(x, block_len, dim, pad_value=0)
-    num_blocks = x.shape[dim] // block_len
-    output_shape = x.shape[:dim] + (num_blocks, block_len) + x.shape[(dim + 1) :]
+    if x.shape[axis] % block_len != 0:
+        x = _pad_to_multiple(x, block_len, axis, pad_value=0)
+    num_blocks = x.shape[axis] // block_len
+    output_shape = x.shape[:axis] + (num_blocks, block_len) + x.shape[(axis + 1) :]
     return x.reshape(output_shape)
 
 
-def _concatenate_3_blocks(x: np.ndarray, block_dim: int, sequence_dim: int, pad_value: int = 0) -> np.ndarray:
+def _concatenate_3_blocks(x: np.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> np.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
     For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
     """
-    num_blocks = x.shape[block_dim]
+    num_blocks = x.shape[block_axis]
 
     pad = [(0, 0)] * x.ndim
-    pad[block_dim] = (1, 1)
+    pad[block_axis] = (1, 1)
     # [batch_size, num_blocks, block_len] -> [batch_size, num_blocks + 2, block_len]
     x = jnp.pad(x, pad_width=pad, mode="constant", constant_values=pad_value)
 
@@ -103,10 +103,10 @@ def _concatenate_3_blocks(x: np.ndarray, block_dim: int, sequence_dim: int, pad_
         # We use indexing approach here:
         # https://numpy.org/doc/stable/user/basics.indexing.html#dealing-with-variable-numbers-of-indices-within-programs
         indices = [slice(0, None)] * x.ndim
-        indices[block_dim] = slice(i, i + num_blocks)
+        indices[block_axis] = slice(i, i + num_blocks)
         indices = tuple(indices)
         blocks_list.append(x[indices])
-    return jnp.concatenate(blocks_list, axis=sequence_dim)  # [batch_size, num_blocks, 3 * block_len, ...]
+    return jnp.concatenate(blocks_list, axis=sequence_axis)  # [batch_size, num_blocks, 3 * block_len, ...]
 
 
 def _make_3block_relative_position_ids(block_len: int) -> np.ndarray:
@@ -128,10 +128,10 @@ def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int)
 def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> np.ndarray:
     """Prepare attention mask to be applied for a local attention."""
     _blocked_attention_mask = _split_into_blocks(
-        attention_mask, block_len, dim=1
+        attention_mask, block_len, axis=1
     )  # [batch_size, num_blocks, block_len]
     # [batch_size, num_block, 3 * block_len]
-    _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_dim=1, sequence_dim=2)
+    _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_axis=1, sequence_axis=2)
 
     _blocked_attention_mask = _blocked_attention_mask[..., None]
     _3blocked_attention_mask = _3blocked_attention_mask[..., None, :]
@@ -157,7 +157,7 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     def handle_orphan_tokens(block_ids: np.ndarray) -> np.ndarray:
         block_ends = (jnp.arange(seq_len) % global_block_size) == global_block_size - 1
         true_block_ends = jnp.logical_and(block_ends, block_ids >= 0)
-        full_blocks = true_block_ends.sum(-1).unsqueeze(-1)
+        full_blocks = true_block_ends.sum(-1)[..., None]
         block_ids = jnp.minimum(block_ids, full_blocks - 1)
         return block_ids
 
@@ -169,13 +169,15 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
+    # We assing num_globals >= 1 to handel the model initialization pass
+    num_globals = max(seq_len // global_block_size, 1)
     # [batch_size, seq_len // global_block_size]
-    _sequence_block_ids_max = jnp.max(global_block_ids, dim=-1).values.repeat(seq_len // global_block_size, 1).T
-    global_segment_ids = jnp.cumsum(jnp.ones((batch_size, seq_len // global_block_size)), axis=-1) - 1
-    global_segment_ids = global_segment_ids.where(
-        global_segment_ids <= _sequence_block_ids_max, -1 * jnp.ones_like(global_segment_ids)
+    _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1).T
+    global_segment_ids = jnp.cumsum(jnp.ones((batch_size, num_globals)), axis=-1) - 1
+    global_segment_ids = jnp.where(
+        global_segment_ids <= _sequence_block_ids_max, global_segment_ids, -1 * jnp.ones_like(global_segment_ids)
     )
-    return global_block_ids.astype(jnp.int32), global_segment_ids.astype(jnp.int32)
+    return global_block_ids, global_segment_ids
 
 
 def _make_side_relative_position_ids(attention_mask: np.ndarray, global_block_size: int) -> np.ndarray:
@@ -184,14 +186,14 @@ def _make_side_relative_position_ids(attention_mask: np.ndarray, global_block_si
     global_seq_len = global_segment_ids.shape[-1]
     global_positions = jnp.arange(global_seq_len)
     side_relative_position = global_positions - block_ids[..., None]
-    return side_relative_position.type(jnp.int64)
+    return side_relative_position
 
 
 def _create_global_aggregates(hidden_states: np.ndarray, block_ids: np.ndarray, global_seq_len: int) -> np.ndarray:
     """Compute individual block aggregates by summing over individual blocks."""
     # (batch..., seq_len, global_seq_len))
     one_hot_block_ids = jax.nn.one_hot(block_ids, global_seq_len)
-    return jnp.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids.type(hidden_states.dtype))
+    return jnp.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids)
 
 
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5LayerNorm with T5->LongT5
@@ -778,13 +780,13 @@ class FlaxLongT5LocalAttention(nn.Module):
         value_states = self._split_heads(value_states)
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, head_dim)
-        query_states = _split_into_blocks(query_states, self.block_len, dim=1)
-        key_states = _split_into_blocks(key_states, self.block_len, dim=1)
-        value_states = _split_into_blocks(value_states, self.block_len, dim=1)
+        query_states = _split_into_blocks(query_states, self.block_len, axis=1)
+        key_states = _split_into_blocks(key_states, self.block_len, axis=1)
+        value_states = _split_into_blocks(value_states, self.block_len, axis=1)
 
         # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
-        key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
-        value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
+        key_states = _concatenate_3_blocks(key_states, block_axis=1, sequence_axis=2)
+        value_states = _concatenate_3_blocks(value_states, block_axis=1, sequence_axis=2)
 
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
@@ -945,7 +947,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         relative_position = memory_position - context_position
         relative_position_bucket = self._relative_position_bucket(
             relative_position,
-            bidirectional=(not self.causal),
+            bidirectional=True,
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
@@ -956,14 +958,17 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
     def compute_side_bias(self, attention_mask: np.ndarray, global_segment_ids: np.ndarray) -> np.ndarray:
         # (batch_size, 1, 1, seq_len, global_seq_len)
-        side_attention_mask = jnp.equal.eq(attention_mask[..., None], global_segment_ids[:, None, :])[
-            :, None, None, ...
-        ]
+        side_attention_mask = jnp.equal(attention_mask[..., None], global_segment_ids[:, None, :])[:, None, None, ...]
+        side_attention_mask = jax.lax.select(
+            side_attention_mask,
+            jnp.full(side_attention_mask.shape, 0).astype(side_attention_mask.dtype),
+            jnp.full(side_attention_mask.shape, -1e10).astype(side_attention_mask.dtype),
+        )
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
         side_relative_position_bucket = self._relative_position_bucket(
             side_relative_position,
-            bidirectional=(not self.is_decoder),
+            bidirectional=True,
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
@@ -1068,20 +1073,20 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
         # Get global/side key/value_states
         side_key_states = self.k(global_inputs)
-        side_value_states = self.v(value_states)
+        side_value_states = self.v(global_inputs)
 
         # reshape to (batch_size, global_seq_len, n_heads, head_dim)
         side_key_states = self._split_heads(side_key_states)
         side_value_states = self._split_heads(side_value_states)
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, head_dim)
-        query_states = _split_into_blocks(query_states, self.block_len, dim=1)
-        key_states = _split_into_blocks(key_states, self.block_len, dim=1)
-        value_states = _split_into_blocks(value_states, self.block_len, dim=1)
+        query_states = _split_into_blocks(query_states, self.block_len, axis=1)
+        key_states = _split_into_blocks(key_states, self.block_len, axis=1)
+        value_states = _split_into_blocks(value_states, self.block_len, axis=1)
 
         # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
-        key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
-        value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
+        key_states = _concatenate_3_blocks(key_states, block_axis=1, sequence_axis=2)
+        value_states = _concatenate_3_blocks(value_states, block_axis=1, sequence_axis=2)
 
         # Tile side inputs across local key/value blocks
         # New shape: (batch_size, num_blocks, global_seq_len, n_heads, dim_per_head)
@@ -1324,7 +1329,6 @@ class FlaxLongT5Block(nn.Module):
                 "For encoder attention mechanism, either `local` or `transient-global` attention type is expected, "
                 f"but got {self.config.encoder_attention_type}."
             )
-        attention_layer = FlaxLongT5LayerSelfAttention if self.causal else FlaxLongT5LayerLocalSelfAttention
         self.layer = (
             attention_layer(
                 self.config,
