@@ -2511,7 +2511,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig, GPTNeoXTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2586,6 +2585,7 @@ if TYPE_CHECKING:
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig, GPTNeoXTokenizer
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
@@ -2802,7 +2802,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2820,6 +2819,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
@@ -2913,14 +2913,6 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
-
-        from .models.gpt_neox import (
-            GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoXForCausalLM,
-            GPTNeoXLayer,
-            GPTNeoXModel,
-            GPTNeoXPreTrainedModel,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -3313,6 +3305,13 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
+        )
+        from .models.gpt_neox import (
+            GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoXForCausalLM,
+            GPTNeoXLayer,
+            GPTNeoXModel,
+            GPTNeoXPreTrainedModel,
         )
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
