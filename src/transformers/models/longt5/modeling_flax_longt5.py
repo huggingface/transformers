@@ -172,7 +172,7 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     # We assing num_globals >= 1 to handel the model initialization pass
     num_globals = max(seq_len // global_block_size, 1)
     # [batch_size, seq_len // global_block_size]
-    _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1).T
+    _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1)
     global_segment_ids = jnp.cumsum(jnp.ones((batch_size, num_globals)), axis=-1) - 1
     global_segment_ids = jnp.where(
         global_segment_ids <= _sequence_block_ids_max, global_segment_ids, -1 * jnp.ones_like(global_segment_ids)

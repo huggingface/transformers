@@ -812,7 +812,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
             chunk_length = getattr(self.model_tester, "chunk_length", None)
             block_len = getattr(self.model_tester, "block_len", None)
             global_block_size = getattr(self.model_tester, "global_block_size", None)
-            global_seq_len = seq_len // global_block_size
+            global_seq_len = encoder_seq_length // global_block_size
 
             if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
                 encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes

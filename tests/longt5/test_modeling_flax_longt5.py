@@ -43,9 +43,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    import optax
     from flax.core.frozen_dict import unfreeze
-    from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
     from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, LongT5Config, T5Tokenizer
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
@@ -578,7 +576,7 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
-        global_seq_len = seq_length // global_block_size
+        global_seq_len = encoder_seq_length // global_block_size
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True

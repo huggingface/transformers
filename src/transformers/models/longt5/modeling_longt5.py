@@ -231,7 +231,7 @@ def _make_global_fixed_block_ids(
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
-    num_globals = seq_len // global_block_size
+    num_globals = max(seq_len // global_block_size, 1)  # handle cases with empty global sequences
     # [batch_size, seq_len // global_block_size]
     _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).T
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
@@ -1392,6 +1392,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     @property
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
     def dummy_inputs(self):
         input_ids = torch.tensor(DUMMY_INPUTS)
         input_mask = torch.tensor(DUMMY_MASK)
@@ -1402,7 +1403,6 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._init_weights with T5->LongT5,t5->longt5
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -1432,7 +1432,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, LongT5Attention):
+        elif isinstance(module, (LongT5Attention, LongT5LocalAttention, LongT5TransientGlobalAttention)):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -1444,6 +1444,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                if isinstance(module, LongT5TransientGlobalAttention):
+                    module.global_relative_attention_bias.weight.data.normal_(
+                        mean=0.0, std=factor * ((d_model) ** -0.5)
+                    )
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1502,6 +1506,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.gradient_checkpointing = False
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.parallelize
     def parallelize(self, device_map=None):
         # Check validity of device_map
         self.device_map = (
@@ -1523,6 +1528,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.deparallelize
     def deparallelize(self):
         self.model_parallel = False
         self.device_map = None
@@ -1534,9 +1540,11 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.final_layer_norm = self.final_layer_norm.to("cpu")
         torch.cuda.empty_cache()
 
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
     def get_input_embeddings(self):
         return self.embed_tokens
 
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
