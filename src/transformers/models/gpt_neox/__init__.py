@@ -36,7 +36,6 @@ if is_torch_available():
         "GPTNeoXLayer",
         "GPTNeoXModel",
         "GPTNeoXPreTrainedModel",
-        "load_tf_weights_in_gpt_neox",
     ]
 
 
