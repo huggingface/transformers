@@ -1615,7 +1615,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
             for col_index in range(num_columns):
                 for row_index in range(num_rows):
-                    numeric_value = table.loc[row_index, col_index].numeric_value
+                    numeric_value = table.iloc[row_index, col_index].numeric_value
                     if numeric_value is not None:
                         if numeric_value.float_value is None:
                             continue
@@ -2761,9 +2761,7 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
     filter_invalid_unicode_from_table(table)
 
     # Second, replace cell values by Cell objects
-    for row_index, row in table.iterrows():
-        for col_index, cell in enumerate(row):
-            table.loc[row_index, col_index] = Cell(text=cell)
+    table = table.applymap(lambda cell: Cell(text=cell))
 
     # Third, add numeric_value attributes to these Cell objects
     for col_index, column in enumerate(table.columns):
@@ -2773,7 +2771,6 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
             debug_info=(debug_info, column),
         )
 
-        for row_index, numeric_value in column_values.items():
-            table.loc[row_index, col_index].numeric_value = numeric_value
+        table[column] = table[column].apply(lambda cell: column_values[cell])
 
     return table
