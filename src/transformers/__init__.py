@@ -302,6 +302,14 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_conformer": [
+        "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2ConformerConfig",
+       
+       
+       
+        "Wav2Vec2ConformerTokenizer",
+    ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.wavlm": [
@@ -1588,6 +1596,19 @@ if is_torch_available():
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2_conformer"].extend(
+        [
+            "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ConformerForAudioFrameClassification",
+            "Wav2Vec2ConformerForCTC",
+            "Wav2Vec2ConformerForMaskedLM",
+            "Wav2Vec2ConformerForPreTraining",
+            "Wav2Vec2ConformerForSequenceClassification",
+            "Wav2Vec2ConformerForXVector",
+            "Wav2Vec2ConformerModel",
+            "Wav2Vec2ConformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2162,6 +2183,14 @@ if is_tf_available():
             "TFWav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2_conformer"].extend(
+        [
+            "TF_WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ConformerForCTC",
+            "TFWav2Vec2ConformerModel",
+            "TFWav2Vec2ConformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2414,6 +2443,9 @@ if is_flax_available():
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
+    )
+    _import_structure["models.wav2vec2_conformer"].extend(
+        ["FlaxWav2Vec2ConformerForCTC", "FlaxWav2Vec2ConformerForPreTraining", "FlaxWav2Vec2ConformerModel", "FlaxWav2Vec2ConformerPreTrainedModel"]
     )
     _import_structure["models.xglm"].extend(
         [
@@ -2668,6 +2700,14 @@ if TYPE_CHECKING:
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
+    )
+    from .models.wav2vec2_conformer import (
+        WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2ConformerConfig,
+       
+       
+       
+        Wav2Vec2ConformerTokenizer,
     )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
@@ -3744,6 +3784,17 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wav2vec2_conformer import (
+            WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ConformerForAudioFrameClassification,
+            Wav2Vec2ConformerForCTC,
+            Wav2Vec2ConformerForMaskedLM,
+            Wav2Vec2ConformerForPreTraining,
+            Wav2Vec2ConformerForSequenceClassification,
+            Wav2Vec2ConformerForXVector,
+            Wav2Vec2ConformerModel,
+            Wav2Vec2ConformerPreTrainedModel,
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
