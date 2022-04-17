@@ -40,13 +40,25 @@ logger = logging.get_logger(__name__)
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
     "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
-    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
-    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
-    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
-    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
-    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
-    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
-    "fc2": "encoder.layers.*.feed_forward.output_dense",
+    "self_attn.linear_k": "encoder.layers.*.self_attn.linear_k",
+    "self_attn.linear_v": "encoder.layers.*.self_attn.linear_v",
+    "self_attn.linear_q": "encoder.layers.*.self_attn.linear_q",
+    "self_attn.pos_bias_u": "encoder.layers.*.self_attn.pos_bias_u",
+    "self_attn.pos_bias_v": "encoder.layers.*.self_attn.pos_bias_v",
+    "self_attn.linear_out": "encoder.layers.*.self_attn.linear_out",
+    "self_attn.linear_pos": "encoder.layers.*.self_attn.linear_pos",
+    "self_attn_layer_norm": "encoder.layers.*.self_attn_layer_norm",
+    "conv_module.pointwise_conv1": "encoder.layers.*.conv_module.pointwise_conv1",
+    "conv_module.pointwise_conv2": "encoder.layers.*.conv_module.pointwise_conv2",
+    "conv_module.depthwise_conv": "encoder.layers.*.conv_module.depthwise_conv",
+    "conv_module.batch_norm": "encoder.layers.*.conv_module.batch_norm",
+    "conv_module.layer_norm": "encoder.layers.*.conv_module.layer_norm",
+    "ffn1.w_1": "encoder.layers.*.ffn1.w_1",
+    "ffn1.w_2": "encoder.layers.*.ffn1.w_2",
+    "ffn1.layer_norm": "encoder.layers.*.ffn1.layer_norm",
+    "ffn2.w_1": "encoder.layers.*.ffn2.w_1",
+    "ffn2.w_2": "encoder.layers.*.ffn2.w_2",
+    "ffn2.layer_norm": "encoder.layers.*.ffn2.layer_norm",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
@@ -88,6 +100,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
     else:
         hf_pointer.data = value
 
@@ -97,6 +115,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
+
+    if len(hf_model.state_dict()) != len(fairseq_dict):
+        raise ValueError(f"Fsq dict has {len(fairseq_dict)} weights, but hf dict has {len(hf_model.state_dict())} weights.")
 
     feature_extractor = hf_model.wav2vec2_conformer.feature_extractor
 
@@ -119,7 +140,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
                         mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
+                    if "pos_bias_u" in name:
+                        weight_type = None
+                    elif "pos_bias_v" in name:
+                        weight_type = None
+                    elif "weight_g" in name:
                         weight_type = "weight_g"
                     elif "weight_v" in name:
                         weight_type = "weight_v"
@@ -128,6 +153,12 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
                     elif "weight" in name:
                         # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
+                    elif "running_mean" in name:
+                        weight_type = "running_mean"
+                    elif "running_var" in name:
+                        weight_type = "running_var"
+                    elif "num_batches_tracked" in name:
+                        weight_type = "num_batches_tracked"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
