@@ -865,10 +865,13 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
 
     def forward(
         self,
-        x,
-        encoder_padding_mask: Optional[torch.Tensor],
+        hidden_states,
+        attention_mask: Optional[torch.Tensor] = None,
         position_emb: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ):
+        x = hidden_states
+        encoder_padding_mask = 1 - attention_mask
         """
         Args:
             x: Tensor of shape T X B X C
@@ -976,7 +979,8 @@ class ESPNETMultiHeadedAttention(nn.Module):
         n_batch = value.size(0)
         if mask is not None:
             scores = scores.masked_fill(
-                mask.unsqueeze(1).unsqueeze(2).to(bool),
+#                mask.unsqueeze(1).unsqueeze(2).to(bool),
+                mask,
                 float("-inf"),  # (batch, head, time1, time2)
             )
             self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
