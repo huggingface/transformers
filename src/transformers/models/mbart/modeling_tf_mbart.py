@@ -66,7 +66,8 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     input_ids = tf.where(input_ids == -100, tf.fill(shape_list(input_ids), pad_token_id), input_ids)
     language_id_index = (
@@ -684,7 +685,6 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
         Args:
@@ -848,7 +848,6 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[
         TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
     ]:
@@ -1278,7 +1277,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: [Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1287,7 +1286,6 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         return_dict: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         """
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

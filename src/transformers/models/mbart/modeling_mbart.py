@@ -55,11 +55,14 @@ _TOKENIZER_FOR_DOC = "MBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-mbart"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 
 # QuestionAsnwering docstring
-_QA_EXPECTED_LOSS = 3.04
-_QA_EXPECTED_OUTPUT_SHAPE = [1, 16]
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-mbart"
+_QA_EXPECTED_LOSS = 3.55
+_QA_EXPECTED_OUTPUT = "'? Jim Henson was a'"
 
 
 MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -75,7 +78,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
     prev_output_tokens = input_ids.clone()
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
 
@@ -802,9 +806,10 @@ class MBartEncoder(MBartPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -1041,9 +1046,10 @@ class MBartDecoder(MBartPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1437,10 +1443,11 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
@@ -1563,11 +1570,11 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_QA_EXPECTED_OUTPUT,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(

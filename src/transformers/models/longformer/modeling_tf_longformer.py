@@ -1676,7 +1676,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -2023,7 +2022,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         outputs = self.longformer(
@@ -2100,7 +2098,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2194,7 +2191,6 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -2340,7 +2336,6 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
 
         if global_attention_mask is None and input_ids is not None:
@@ -2450,7 +2445,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -2580,7 +2574,6 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.array, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

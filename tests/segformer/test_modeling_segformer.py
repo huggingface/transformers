@@ -165,7 +165,6 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SegformerModelTester(self)

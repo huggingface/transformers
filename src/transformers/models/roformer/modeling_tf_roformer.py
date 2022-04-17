@@ -614,7 +614,6 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
 
         if input_ids is not None and inputs_embeds is not None:
@@ -817,7 +816,6 @@ class TFRoFormerModel(TFRoFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         outputs = self.roformer(
             input_ids=input_ids,
@@ -877,7 +875,6 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -953,7 +950,6 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1064,7 +1060,6 @@ class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceC
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1155,7 +1150,6 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1269,7 +1263,6 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1348,7 +1341,6 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):

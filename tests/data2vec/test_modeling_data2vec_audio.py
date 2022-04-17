@@ -372,7 +372,6 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)

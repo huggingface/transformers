@@ -17,13 +17,14 @@
 
 import math
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -790,19 +791,25 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
+
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                if self.gradient_checkpointing and self.training:
 
+            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+
+                if self.gradient_checkpointing and self.training:
+                    # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
                             return module(*inputs, output_attentions)
@@ -824,6 +831,9 @@ class M2M100Encoder(M2M100PreTrainedModel):
                     )
 
                 hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -1013,60 +1023,70 @@ class M2M100Decoder(M2M100PreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
+
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
 
-            if self.gradient_checkpointing and self.training:
+                past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                if self.gradient_checkpointing and self.training:
+
+                    if use_cache:
+                        logger.warning(
+                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                        )
+                        use_cache = False
+
+                    def create_custom_forward(module):
+                        def custom_forward(*inputs):
+                            # None for past_key_value
+                            return module(*inputs, output_attentions, use_cache)
+
+                        return custom_forward
+
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        combined_attention_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                        None,
                     )
-                    use_cache = False
+                else:
 
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
+                    layer_outputs = decoder_layer(
+                        hidden_states,
+                        attention_mask=combined_attention_mask,
+                        encoder_hidden_states=encoder_hidden_states,
+                        encoder_attention_mask=encoder_attention_mask,
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        cross_attn_layer_head_mask=(
+                            cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
+                        ),
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                    )
 
-                    return custom_forward
+                hidden_states = layer_outputs[0]
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    combined_attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                )
-            else:
-
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=combined_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
-            hidden_states = layer_outputs[0]
+            if skip_the_layer:
+                continue
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -1137,22 +1157,22 @@ class M2M100Model(M2M100PreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1255,23 +1275,23 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
     @add_end_docstrings(M2M_100_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

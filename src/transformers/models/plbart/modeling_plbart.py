@@ -54,7 +54,9 @@ _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-plbart"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
 
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -73,7 +75,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
     prev_output_tokens = input_ids.clone()
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
 
@@ -1408,10 +1411,11 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(

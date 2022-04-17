@@ -258,7 +258,6 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFBaseModelOutput]:
         outputs = self.transformer(
             input_ids=input_ids,
@@ -490,7 +489,6 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFBaseModelOutput]:
         # removed: src_enc=None, src_len=None
 
@@ -808,7 +806,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFFlaubertWithLMHeadModelOutput]:
 
         transformer_outputs = self.transformer(

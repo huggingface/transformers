@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import json
 import os
 import re
@@ -24,7 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, device, nn
@@ -37,9 +36,18 @@ from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation_utils import GenerationMixin
+from .pytorch_utils import (  # noqa: F401
+    Conv1D,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+    prune_layer,
+    prune_linear_layer,
+)
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -94,32 +102,6 @@ except ImportError:
 
         def forward(self, input):
             return input
-
-
-def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
-    """
-    Finds the heads and their indices taking `already_pruned_heads` into account.
-
-    Args:
-        heads (`List[int]`): List of the indices of heads to prune.
-        n_heads (`int`): The number of heads in the model.
-        head_size (`int`): The size of each head.
-        already_pruned_heads (`Set[int]`): A set of already pruned heads.
-
-    Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
-    """
-    mask = torch.ones(n_heads, head_size)
-    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
-    for head in heads:
-        # Compute how many pruned heads are before the head and move the index accordingly
-        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
-        mask[head] = 0
-    mask = mask.view(-1).contiguous().eq(1)
-    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
-    return heads, index
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -331,7 +313,7 @@ def get_checkpoint_shard_files(
             )
         except HTTPError:
             raise EnvironmentError(
-                f"We couldn't connect to 'https://huggingface.co/' to load {shard_filename}. You should try again "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try again "
                 "after checking your internet connection."
             )
 
@@ -414,6 +396,95 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                 load(child, prefix + name + ".")
 
     load(model_to_load, prefix=start_prefix)
+
+    return error_msgs
+
+
+def find_submodule_and_param_name(model, long_key, start_prefix):
+    """
+    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
+    from the start of the key
+    """
+
+    if len(start_prefix) > 0 and long_key.startswith(start_prefix):
+        long_key = ".".join(long_key.split(".")[1:])
+
+    split_key = long_key.split(".")
+    submodule = model
+    while len(split_key) > 1:
+        if hasattr(submodule, split_key[0]):
+            submodule = getattr(submodule, split_key[0])
+            del split_key[0]
+        else:
+            submodule = None
+            break
+    if submodule == model:
+        submodule = None
+    return submodule, split_key[0]
+
+
+def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+    """
+    Moves `loaded_state_dict_keys` in model to meta device which frees up the memory taken by those params.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
+
+    # meta device was added in pt=1.9
+    require_version_core("torch>=1.9")
+
+    # dematerialize param storage for keys that are going to be replaced by state_dict, by
+    # putting those on the meta device
+    for k in loaded_state_dict_keys:
+        submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+        if submodule is not None:
+            # selectively switch to the meta device only those params/buffers that will
+            # be next replaced from state_dict. This a complex way to do p.to_("meta")
+            # since we have no in-place to_ for tensors.
+            new_val = getattr(submodule, param_name)
+            if isinstance(new_val, torch.nn.Parameter):
+                # isinstance returns False for Params on meta device, so switch after the check
+                new_val = torch.nn.Parameter(new_val.to("meta"))
+            else:
+                new_val = new_val.to("meta")
+            setattr(submodule, param_name, new_val)
+
+
+def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix):
+    """
+    This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
+    params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
+    params back to the normal device, but only for `loaded_state_dict_keys`.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
+
+    # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
+    # - deepspeed zero 3 support
+    # - need to copy metadata if any - see _load_state_dict_into_model
+    # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
+    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
+    #   they won't get loaded.
+
+    if is_deepspeed_zero3_enabled():
+        raise ValueError("low_cpu_mem_usage arg cannot currently be used with DeepSpeed ZeRO-3")
+
+    error_msgs = []
+
+    # materialize state_dict entries one by one on CPU
+    for k in loaded_state_dict_keys:
+        if k in state_dict:
+            submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+            if submodule is not None:
+                param_dtype = getattr(submodule, param_name).dtype
+                new_val = state_dict[k].to(param_dtype)
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
 
     return error_msgs
 
@@ -722,14 +793,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
 
-    # a list of re pattern of tensor names to ignore from the model when loading the model weights
-    # (and avoid unnecessary warnings).
+    # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
+    # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
     _keys_to_ignore_on_load_missing = None
-    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
-    # (and avoid unnecessary warnings).
+    # a list of `re` patterns of `state_dict` keys that should be removed from the list of
+    # unexpected keys we find (keys inside the checkpoint but not the model) and avoid unnecessary
+    # warnings.
     _keys_to_ignore_on_load_unexpected = None
-    # a list of of tensor names to ignore when saving the model (useful for keys that aren't
-    # trained, but which are deterministic, or tied variables)
+    # a list of `state_dict` keys to ignore when saving the model (useful for keys that aren't
+    # trained, but which are either deterministic or tied variables)
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
@@ -890,9 +962,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        if getattr(self.config, "tie_word_embeddings", True):
+            output_embeddings = self.get_output_embeddings()
+            if output_embeddings is not None:
+                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
@@ -1486,12 +1559,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Please refer to the mirror site for more information.
             _fast_init(`bool`, *optional*, defaults to `True`):
                 Whether or not to disable fast initialization.
-            low_cpu_mem_usage(`bool``, *optional*, defaults to `False`):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
-                This is an experimental feature and a subject to change at any moment.
-            torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
-                will be automatically derived from the model's weights.
 
                 <Tip warning={true}>
 
@@ -1501,6 +1568,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
+            low_cpu_mem_usage(`bool`, *optional*, defaults to `False`):
+                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                This is an experimental feature and a subject to change at any moment.
+            torch_dtype (`str` or `torch.dtype`, *optional*):
+                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
+                will be automatically derived from the model's weights.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -1545,7 +1618,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
         >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
-        ```"""
+        ```
+
+        * `low_cpu_mem_usage` algorithm:
+
+        This is an experimental function that loads the model using ~1x model size CPU memory
+
+        Here is how it works:
+
+        1. save which state_dict keys we have
+        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
+        3. after the model has been instantiated switch to the meta device all params/buffers that
+        are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
+
+        """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1749,7 +1839,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             except ValueError:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                     f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
                     f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
                     f"{FLAX_WEIGHTS_NAME}.\n"
@@ -1791,9 +1881,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
-            if not is_sharded:
+            if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
+
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -1817,14 +1908,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+            if is_sharded:
+                loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
+            else:
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
             if low_cpu_mem_usage:
-                # save the keys
-                if is_sharded:
-                    loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
-                else:
-                    state_dict = load_state_dict(resolved_archive_file)
-                    loaded_state_dict_keys = [k for k in state_dict.keys()]
-                    del state_dict  # free CPU memory - will reload again later
+                state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1841,11 +1930,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
-
-        if from_pt:
-            # restore default dtype
-            if dtype_orig is not None:
-                torch.set_default_dtype(dtype_orig)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1876,18 +1960,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
 
-            if low_cpu_mem_usage:
-                cls._load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
-            else:
-                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
-                    model,
-                    state_dict,
-                    resolved_archive_file,
-                    pretrained_model_name_or_path,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    sharded_metadata=sharded_metadata,
-                    _fast_init=_fast_init,
-                )
+            # restore default dtype
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
+
+            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
+                model,
+                state_dict,
+                loaded_state_dict_keys,  # XXX: rename?
+                resolved_archive_file,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                _fast_init=_fast_init,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1911,16 +1998,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cls,
         model,
         state_dict,
+        loaded_keys,
         resolved_archive_file,
         pretrained_model_name_or_path,
         ignore_mismatched_sizes=False,
         sharded_metadata=None,
         _fast_init=True,
+        low_cpu_mem_usage=False,
     ):
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-        loaded_keys = list(state_dict.keys()) if state_dict is not None else sharded_metadata["all_checkpoint_keys"]
         prefix = model.base_model_prefix
 
         def _fix_key(key):
@@ -1984,8 +2072,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "properly saved?"
                 )
 
-        if state_dict is not None:
-            # Whole checkpoint
+        def _find_mismatched_keys(
+            state_dict,
+            model_state_dict,
+            loaded_keys,
+            add_prefix_to_model,
+            remove_prefix_from_model,
+            ignore_mismatched_sizes,
+        ):
             mismatched_keys = []
             if ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
@@ -2005,40 +2099,55 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                         )
                         del state_dict[checkpoint_key]
+            return mismatched_keys
 
+        if low_cpu_mem_usage:
+            model_state_dict = None  # free references to model's params to allow memory freeing
+            _move_model_to_meta(model, loaded_keys, start_prefix)
+
+        if state_dict is not None:
+            # Whole checkpoint
+            mismatched_keys = _find_mismatched_keys(
+                state_dict,
+                model_state_dict,
+                loaded_keys,
+                add_prefix_to_model,
+                remove_prefix_from_model,
+                ignore_mismatched_sizes,
+            )
             error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
         else:
-            # Sharded checkpoint
+            # Sharded checkpoint or whole but low_cpu_mem_usage==True
+
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
             error_msgs = []
+            mismatched_keys = []
             for shard_file in resolved_archive_file:
                 state_dict = load_state_dict(shard_file)
+
+                if low_cpu_mem_usage:
+                    model_state_dict = model.state_dict()
+
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
-                mismatched_keys = []
-                if ignore_mismatched_sizes:
-                    for checkpoint_key in loaded_keys:
-                        model_key = checkpoint_key
-                        if remove_prefix_from_model:
-                            # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                            model_key = f"{prefix}.{checkpoint_key}"
-                        elif add_prefix_to_model:
-                            # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                            model_key = ".".join(checkpoint_key.split(".")[1:])
+                mismatched_keys += _find_mismatched_keys(
+                    state_dict,
+                    model_state_dict,
+                    loaded_keys,
+                    add_prefix_to_model,
+                    remove_prefix_from_model,
+                    ignore_mismatched_sizes,
+                )
 
-                        if (
-                            model_key in model_state_dict
-                            and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-                        ):
-                            mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                            )
-                            del state_dict[checkpoint_key]
-
-                error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                if low_cpu_mem_usage:
+                    error_msgs += _load_state_dict_into_meta_model(
+                        model_to_load, state_dict, loaded_keys, start_prefix
+                    )
+                else:
+                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -2102,14 +2211,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return retrieved_modules
 
-    @classmethod
-    def _load_pretrained_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
+    @staticmethod
+    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file, start_prefix=""):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
-        Before it gets called we do:
+        Before you call it do:
 
-        1. save which state_dict keys we have
+        1. save which state_dict keys are available
         2. drop state_dict before model is created, since the latter takes 1x model size memory
 
         Here then we continue:
@@ -2120,56 +2229,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
         """
-        require_version_core("torch>=1.9")
-        if is_deepspeed_zero3_enabled():
-            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
 
-        # a helper util to find the last sub-module and the param/buffer name
-        def find_submodule_and_param_name(model, long_key):
-            split_key = long_key.split(".")
-            submodule = model
-            while len(split_key) > 1:
-                if hasattr(submodule, split_key[0]):
-                    submodule = getattr(submodule, split_key[0])
-                    del split_key[0]
-                else:
-                    submodule = None
-                    break
-            return submodule, split_key[0]
-
-        # dematerialize param storage for keys that are going to be replaced by state_dict, by
-        # putting those on the meta device
-        for k in loaded_state_dict_keys:
-            submodule, param_name = find_submodule_and_param_name(model, k)
-            if submodule is not None:
-                # selectively switch to the meta device only those params/buffers that will
-                # be next replaced from state_dict. This a complex way to do p.to_("meta")
-                # since we have no in-place to_ for tensors.
-                new_val = getattr(submodule, param_name)
-                if isinstance(new_val, torch.nn.Parameter):
-                    # isinstance returns False for Params on meta device, so switch after the check
-                    new_val = torch.nn.Parameter(new_val.to("meta"))
-                else:
-                    new_val = new_val.to("meta")
-                setattr(submodule, param_name, new_val)
-
-        # only now can load state_dict(s)
-        if not isinstance(resolved_archive_file, list):
-            resolved_archive_file = [resolved_archive_file]
-
-        for archive_file in resolved_archive_file:
-            state_dict = torch.load(resolved_archive_file, map_location="cpu")
-
-            # materialize state_dict entries one by one on CPU
-            for k in loaded_state_dict_keys:
-                submodule, param_name = find_submodule_and_param_name(model, k)
-                if submodule is not None:
-                    new_val = state_dict[k]
-                    if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                        new_val = torch.nn.Parameter(new_val)
-                    setattr(submodule, param_name, new_val)
-
-            del state_dict
+        _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
+        state_dict = load_state_dict(resolved_archive_file)
+        error_msgs = _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix)
+        return error_msgs
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):
@@ -2300,32 +2364,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             shutil.rmtree(repo_path_or_name)
 
         return url
-
-
-class Conv1D(nn.Module):
-    """
-    1D-convolutional layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2).
-
-    Basically works like a linear layer but the weights are transposed.
-
-    Args:
-        nf (`int`): The number of output features.
-        nx (`int`): The number of input features.
-    """
-
-    def __init__(self, nf, nx):
-        super().__init__()
-        self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
-        self.bias = nn.Parameter(torch.zeros(nf))
-
-    def forward(self, x):
-        size_out = x.size()[:-1] + (self.nf,)
-        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-        x = x.view(size_out)
-        return x
 
 
 class PoolerStartLogits(nn.Module):
@@ -2759,169 +2797,3 @@ def unwrap_model(model: nn.Module) -> nn.Module:
         return unwrap_model(model.module)
     else:
         return model
-
-
-def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
-    """
-    Prune a linear layer to keep only entries in index.
-
-    Used to remove heads.
-
-    Args:
-        layer (`torch.nn.Linear`): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*, defaults to 0): The dimension on which to keep the indices.
-
-    Returns:
-        `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
-    if layer.bias is not None:
-        if dim == 1:
-            b = layer.bias.clone().detach()
-        else:
-            b = layer.bias[index].clone().detach()
-    new_size = list(layer.weight.size())
-    new_size[dim] = len(index)
-    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
-    new_layer.weight.requires_grad = False
-    new_layer.weight.copy_(W.contiguous())
-    new_layer.weight.requires_grad = True
-    if layer.bias is not None:
-        new_layer.bias.requires_grad = False
-        new_layer.bias.copy_(b.contiguous())
-        new_layer.bias.requires_grad = True
-    return new_layer
-
-
-def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
-    """
-    Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
-    are transposed.
-
-    Used to remove heads.
-
-    Args:
-        layer ([`~modeling_utils.Conv1D`]): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*, defaults to 1): The dimension on which to keep the indices.
-
-    Returns:
-        [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
-    if dim == 0:
-        b = layer.bias.clone().detach()
-    else:
-        b = layer.bias[index].clone().detach()
-    new_size = list(layer.weight.size())
-    new_size[dim] = len(index)
-    new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
-    new_layer.weight.requires_grad = False
-    new_layer.weight.copy_(W.contiguous())
-    new_layer.weight.requires_grad = True
-    new_layer.bias.requires_grad = False
-    new_layer.bias.copy_(b.contiguous())
-    new_layer.bias.requires_grad = True
-    return new_layer
-
-
-def prune_layer(
-    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[nn.Linear, Conv1D]:
-    """
-    Prune a Conv1D or linear layer to keep only entries in index.
-
-    Used to remove heads.
-
-    Args:
-        layer (`Union[torch.nn.Linear, Conv1D]`): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*): The dimension on which to keep the indices.
-
-    Returns:
-        `torch.nn.Linear` or [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    if isinstance(layer, nn.Linear):
-        return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
-    elif isinstance(layer, Conv1D):
-        return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
-    else:
-        raise ValueError(f"Can't prune layer of class {layer.__class__}")
-
-
-def apply_chunking_to_forward(
-    forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
-) -> torch.Tensor:
-    """
-    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension
-    `chunk_dim`. It then applies a layer `forward_fn` to each chunk independently to save memory.
-
-    If the `forward_fn` is independent across the `chunk_dim` this function will yield the same result as directly
-    applying `forward_fn` to `input_tensors`.
-
-    Args:
-        forward_fn (`Callable[..., torch.Tensor]`):
-            The forward function of the model.
-        chunk_size (`int`):
-            The chunk size of a chunked tensor: `num_chunks = len(input_tensors[0]) / chunk_size`.
-        chunk_dim (`int`):
-            The dimension over which the `input_tensors` should be chunked.
-        input_tensors (`Tuple[torch.Tensor]`):
-            The input tensors of `forward_fn` which will be chunked
-
-    Returns:
-        `torch.Tensor`: A tensor with the same shape as the `forward_fn` would have given if applied`.
-
-
-    Examples:
-
-    ```python
-    # rename the usual forward() fn to forward_chunk()
-    def forward_chunk(self, hidden_states):
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-    # implement a chunked forward function
-    def forward(self, hidden_states):
-        return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
-    ```"""
-
-    assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
-
-    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
-    num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
-    if num_args_in_forward_chunk_fn != len(input_tensors):
-        raise ValueError(
-            f"forward_chunk_fn expects {num_args_in_forward_chunk_fn} arguments, but only {len(input_tensors)} input "
-            "tensors are given"
-        )
-
-    if chunk_size > 0:
-        tensor_shape = input_tensors[0].shape[chunk_dim]
-        for input_tensor in input_tensors:
-            if input_tensor.shape[chunk_dim] != tensor_shape:
-                raise ValueError(
-                    f"All input tenors have to be of the same shape: {tensor_shape}, "
-                    f"found shape {input_tensor.shape[chunk_dim]}"
-                )
-
-        if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
-            raise ValueError(
-                f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "
-                f"size {chunk_size}"
-            )
-
-        num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
-
-        # chunk input tensor into tuples
-        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
-        # apply forward fn to every tuple
-        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
-        # concatenate output at same dimension
-        return torch.cat(output_chunks, dim=chunk_dim)
-
-    return forward_fn(*input_tensors)

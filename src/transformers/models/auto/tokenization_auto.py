@@ -105,6 +105,7 @@ else:
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
+            ("tapex", ("TapexTokenizer", None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),

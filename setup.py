@@ -113,8 +113,8 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8,!=0.3.2",
-    "jaxlib>=0.1.65",
+    "jax>=0.2.8,!=0.3.2,<=0.3.6",
+    "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "nltk",
     "numpy>=1.17",
@@ -290,6 +290,8 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
+
 extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
@@ -385,7 +387,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
