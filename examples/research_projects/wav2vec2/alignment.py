@@ -12,7 +12,6 @@ from tqdm import tqdm
 class Wav2Vec2_Aligner():
     def __init__(self, model_name, input_wavs_sr, cuda):
         self.cuda = cuda
-        self.feature_extractor = transformers.AutoFeatureExtractor.from_pretrained(model_name)
         self.config = AutoConfig.from_pretrained(model_name)
         self.model = AutoModelForCTC.from_pretrained(model_name)
         self.model.eval()
