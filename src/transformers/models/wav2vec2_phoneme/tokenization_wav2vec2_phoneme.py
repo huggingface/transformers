@@ -177,7 +177,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         Initializes the backend.
 
         Args:
-            phonemizer_lang (str): language to be used
+            phonemizer_lang (`str`): The language to be used.
         """
         requires_backends(self, "phonemizer")
         from phonemizer.backend import BACKENDS
