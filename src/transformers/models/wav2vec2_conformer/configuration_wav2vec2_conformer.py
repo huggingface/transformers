@@ -28,7 +28,6 @@ WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Wav2Vec2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to instantiate an
@@ -253,6 +252,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
+        max_source_positions=5000,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -281,6 +281,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
+        self.max_source_positions = max_source_positions
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)

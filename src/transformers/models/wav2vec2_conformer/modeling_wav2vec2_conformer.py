@@ -867,7 +867,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         self,
         hidden_states,
         attention_mask: Optional[torch.Tensor] = None,
-        position_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         x = hidden_states
@@ -885,23 +885,23 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         x = x * 0.5 + residual
         residual = x
         x = self.self_attn_layer_norm(x)
-        if self.pos_enc_type == "rel_pos":
-            x, attn = self.self_attn(
-                query=x,
-                key=x,
-                value=x,
-                key_padding_mask=encoder_padding_mask,
-                pos_emb=position_emb,
-                need_weights=False,
-            )
-        else:
-            x, attn = self.self_attn(
-                query=x,
-                key=x,
-                value=x,
-                key_padding_mask=encoder_padding_mask,
-                need_weights=False,
-            )
+#        if self.pos_enc_type == "rel_pos":
+        x, attn = self.self_attn(
+            query=x,
+            key=x,
+            value=x,
+            key_padding_mask=encoder_padding_mask,
+            pos_emb=position_embeddings,
+            need_weights=False,
+        )
+#        else:
+#            x, attn = self.self_attn(
+#                query=x,
+#                key=x,
+#                value=x,
+#                key_padding_mask=encoder_padding_mask,
+#                need_weights=False,
+#            )
         x = self.self_attn_dropout(x)
         x = x + residual
 
@@ -976,10 +976,12 @@ class ESPNETMultiHeadedAttention(nn.Module):
             torch.Tensor: Transformed value  B X T1 X d_model
                 weighted by the attention score  B X T1 X T2
         """
+        # TODO(PVP) - remove after
+        mask = mask > 1.0
+
         n_batch = value.size(0)
         if mask is not None:
             scores = scores.masked_fill(
-#                mask.unsqueeze(1).unsqueeze(2).to(bool),
                 mask,
                 float("-inf"),  # (batch, head, time1, time2)
             )
@@ -1222,11 +1224,80 @@ class Wav2Vec2ConformerEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
+class RelPositionalEncoding(nn.Module):
+    """Relative positional encoding module (new implementation).
+
+    Args:
+        d_model: Embedding dimension.
+        dropout_rate: Dropout rate.
+        max_len: Maximum input length.
+    """
+
+    def __init__(self, max_len, d_model):
+        """Construct an PositionalEncoding object."""
+        super().__init__()
+        self.d_model = d_model
+        self.pe = None
+        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+
+    def extend_pe(self, x):
+        """Reset the positional encodings."""
+        if self.pe is not None:
+            # self.pe contains both positive and negative parts
+            # the length of self.pe is 2 * input_len - 1
+            if self.pe.size(1) >= x.size(1) * 2 - 1:
+                if self.pe.dtype != x.dtype or self.pe.device != x.device:
+                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
+                return
+        # Suppose `i` means to the position of query vecotr and `j` means the
+        # position of key vector. We use position relative positions when keys
+        # are to the left (i>j) and negative relative positions otherwise (i<j).
+        pe_positive = torch.zeros(x.size(1), self.d_model)
+        pe_negative = torch.zeros(x.size(1), self.d_model)
+        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, self.d_model, 2, dtype=torch.float32)
+            * -(math.log(10000.0) / self.d_model)
+        )
+        pe_positive[:, 0::2] = torch.sin(position * div_term)
+        pe_positive[:, 1::2] = torch.cos(position * div_term)
+        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
+        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
+
+        # Reserve the order of positive indices and concat both positive and
+        # negative indices. This is used to support the shifting trick
+        # as in https://arxiv.org/abs/1901.02860
+        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
+        pe_negative = pe_negative[1:].unsqueeze(0)
+        pe = torch.cat([pe_positive, pe_negative], dim=1)
+        self.pe = pe.to(device=x.device, dtype=x.dtype)
+
+    def forward(self, x: torch.Tensor):
+        """Add positional encoding.
+        Args:
+            x : Input tensor T X B X C.
+        Returns:
+            torch.Tensor: Encoded tensor T X B X C.
+
+        """
+        x = x.transpose(0, 1)  # Change TBC to BTC
+        self.extend_pe(x)
+        pos_emb = self.pe[
+            :,
+            self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
+        ]
+        pos_emb = pos_emb.transpose(0, 1)  # change to TBC
+        return pos_emb
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+
+        self.rel_embed_positions = RelPositionalEncoding(config.max_source_positions, config.hidden_size)
+
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
@@ -1254,14 +1325,14 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
+
+        hidden_states = hidden_states.transpose(0, 1)
+        relative_position_embeddings = self.rel_embed_positions(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1283,10 +1354,11 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
+                        relative_position_embeddings,
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states, attention_mask=attention_mask, position_embeddings=relative_position_embeddings, output_attentions=output_attentions
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1296,6 +1368,13 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
+            if i == 1:
+                break
+
+        # TODO(PVP) - remove after
+        hidden_states = hidden_states.transpose(0, 1)
+
+        hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
