@@ -35,8 +35,7 @@ class Data2VecVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
     an Data2VecVision model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Data2VecVision
-    [facebook/data2vec-vision-base](https://huggingface.co/facebook/data2vec-vision-base)
-    architecture.
+    [facebook/data2vec-vision-base](https://huggingface.co/facebook/data2vec-vision-base) architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):

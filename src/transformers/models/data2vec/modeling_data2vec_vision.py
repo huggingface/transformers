@@ -101,6 +101,7 @@ def to_2tuple(x):
 
 
 # Based on https://github.com/rwightman/pytorch-image-models/blob/a2727c1bf78ba0d7b5727f5f95e37fb7f8866b1f/timm/models/layers/drop.py
+# Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -121,6 +122,7 @@ def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -
     return output
 
 
+# Copied from transformers.models.beit.modeling_beit.DropPath
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -187,6 +189,7 @@ class Data2VecVisionEmbeddings(nn.Module):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+# Copied from transformers.models.beit.modeling_beit.PatchEmbeddings
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
