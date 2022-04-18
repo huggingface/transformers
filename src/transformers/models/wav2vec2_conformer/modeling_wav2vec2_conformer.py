@@ -877,7 +877,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         output_attentions: bool = False,
     ):
         x = hidden_states
-        encoder_padding_mask = 1 - attention_mask
+        encoder_padding_mask = 1 - attention_mask if attention_mask is not None else None
         """
         Args:
             x: Tensor of shape T X B X C
@@ -983,7 +983,10 @@ class ESPNETMultiHeadedAttention(nn.Module):
                 weighted by the attention score  B X T1 X T2
         """
         # TODO(PVP) - remove after
-        mask = mask > 1.0
+        if mask is not None:
+            mask = mask > 1.0
+        else:
+            mask = torch.zeros_like(scores, dtype=torch.long).bool()
 
         n_batch = value.size(0)
         if mask is not None:
