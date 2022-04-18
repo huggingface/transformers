@@ -794,6 +794,13 @@ class FlaxLongT5LocalAttention(nn.Module):
         if attention_mask is not None:
             attention_mask = _get_local_attention_mask(attention_mask, self.block_len)
 
+            # replace masked positions with -10_000
+            attention_mask = jax.lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+            )
+
         if position_bias is None:
             # compute position bias (only for first layer)
             position_bias = self._create_position_bias(self.block_len, attention_mask)

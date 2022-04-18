@@ -787,6 +787,8 @@ class LongT5LocalAttention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
+                # Replace masked positions with -10_000 (according to the original implementation)
+                mask = torch.where(mask > 0, 1.0, -1e4)
                 # We need to adjust position bias shape to be sum with mask
                 position_bias = position_bias.transpose(1, 2)
                 position_bias = position_bias + mask
