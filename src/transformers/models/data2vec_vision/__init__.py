@@ -22,7 +22,11 @@ from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_data2vec_vision": ["DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecVisionConfig", "Data2VecVisionOnnxConfig"],
+    "configuration_data2vec_vision": [
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecVisionConfig",
+        "Data2VecVisionOnnxConfig",
+    ],
 }
 
 if is_torch_available():
@@ -37,7 +41,11 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_data2vec_vision import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecVisionConfig, Data2VecVisionOnnxConfig
+    from .configuration_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecVisionConfig,
+        Data2VecVisionOnnxConfig,
+    )
 
     if is_torch_available():
         from .modeling_data2vec_vision import (

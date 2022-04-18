@@ -65,7 +65,6 @@ DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.beit.modeling_beit.BeitModelOutputWithPooling with Beit->Data2VecVision
 class Data2VecVisionModelOutputWithPooling(BaseModelOutputWithPooling):
@@ -302,8 +301,8 @@ class Data2VecVisionSelfAttention(nn.Module):
 # Copied from transformers.models.beit.modeling_beit.BeitSelfOutput with Beit->Data2VecVision
 class Data2VecVisionSelfOutput(nn.Module):
     """
-    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due
+    to the layernorm applied before each block.
     """
 
     def __init__(self, config: Data2VecVisionConfig) -> None:
@@ -394,7 +393,9 @@ class Data2VecVisionOutput(nn.Module):
 class Data2VecVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
+    def __init__(
+        self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
+    ) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -845,8 +846,8 @@ class Data2VecVisionForMaskedImageModeling(Data2VecVisionPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of the final
-    hidden states of the patch tokens) e.g. for ImageNet.
+    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of
+    the final hidden states of the patch tokens) e.g. for ImageNet.
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
@@ -1115,7 +1116,11 @@ class Data2VecVisionFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config: Data2VecVisionConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self,
+        config: Data2VecVisionConfig,
+        in_index: int = 2,
+        kernel_size: int = 3,
+        dilation: Union[int, Tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
         self.in_channels = config.hidden_size
@@ -1237,8 +1242,12 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/data2vec_vision-base-finetuned-ade-640-640")
-        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("microsoft/data2vec_vision-base-finetuned-ade-640-640")
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained(
+        ...     "microsoft/data2vec_vision-base-finetuned-ade-640-640"
+        ... )
+        >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained(
+        ...     "microsoft/data2vec_vision-base-finetuned-ade-640-640"
+        ... )
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

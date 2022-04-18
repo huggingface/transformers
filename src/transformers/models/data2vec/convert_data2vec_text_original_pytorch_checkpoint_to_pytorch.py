@@ -24,7 +24,7 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
+from transformers import Data2VecTextConfig, Data2VecTextForSequenceClassification, Data2VecTextModel
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -35,7 +35,7 @@ from transformers.models.bert.modeling_bert import (
 
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-from transformers.models.data2vec.data2vec_text import Data2VecTextModel
+from transformers.models.data2vec.data2vec_text import Data2VecTextModel as FsqData2VecTextModel
 from transformers.utils import logging
 
 
@@ -56,7 +56,7 @@ def convert_data2vec_checkpoint_to_pytorch(
     Copy/paste/tweak data2vec's weights to our BERT structure.
     """
     data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(data2vec_checkpoint_path)
-    data2vec = Data2VecTextModel.from_pretrained(
+    data2vec = FsqData2VecTextModel.from_pretrained(
         data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name
     )
     data2vec.eval()  # disable dropout
@@ -76,7 +76,7 @@ def convert_data2vec_checkpoint_to_pytorch(
         config.num_labels = data2vec.model.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = Data2VecTextForSequenceClassification(config) if classification_head else Data2VecTextForMaskedLM(config)
+    model = Data2VecTextForSequenceClassification(config) if classification_head else Data2VecTextModel(config)
     model.eval()
 
     # Now let's copy all the weights.

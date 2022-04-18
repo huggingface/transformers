@@ -30,7 +30,6 @@ if is_torch_available():
 
     from transformers import (
         Data2VecTextForCausalLM,
-        Data2VecTextForMaskedLM,
         Data2VecTextForMultipleChoice,
         Data2VecTextForQuestionAnswering,
         Data2VecTextForSequenceClassification,
@@ -269,15 +268,6 @@ class Data2VecTextModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Data2VecTextForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -342,7 +332,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     all_model_classes = (
         (
             Data2VecTextForCausalLM,
-            Data2VecTextForMaskedLM,
             Data2VecTextModel,
             Data2VecTextForSequenceClassification,
             Data2VecTextForTokenClassification,
@@ -477,20 +466,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
 @require_torch
 class Data2VecTextModelIntegrationTest(TestCasePlus):
-    @slow
-    def test_inference_masked_lm(self):
-        model = Data2VecTextForMaskedLM.from_pretrained("facebook/data2vec-text-base")
-
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        with torch.no_grad():
-            output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
-        self.assertEqual(output.shape, expected_shape)
-        # compare the actual values for a slice.
-        expected_slice = torch.tensor([[[0.2328, 0.0000, 1.1710], [2.2525, 0.0000, 1.9937], [2.1280, 0.0000, 1.8691]]])
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
     @slow
     def test_inference_no_head(self):
         model = Data2VecTextModel.from_pretrained("facebook/data2vec-text-base")

@@ -46,7 +46,6 @@ if is_torch_available():
     _import_structure["modeling_data2vec_text"] = [
         "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Data2VecTextForCausalLM",
-        "Data2VecTextForMaskedLM",
         "Data2VecTextForMultipleChoice",
         "Data2VecTextForQuestionAnswering",
         "Data2VecTextForSequenceClassification",
@@ -76,7 +75,6 @@ if TYPE_CHECKING:
         from .modeling_data2vec_text import (
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecTextForCausalLM,
-            Data2VecTextForMaskedLM,
             Data2VecTextForMultipleChoice,
             Data2VecTextForQuestionAnswering,
             Data2VecTextForSequenceClassification,
