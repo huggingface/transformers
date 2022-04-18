@@ -44,7 +44,7 @@ body:
           - Benchmarks: `@patrickvonplaten`
           - Deepspeed: `@stas00`
           - Ray/raytune: `@richardliaw`, `@amogkam`
-          - Text generation: `@patrickvonplaten, `@narsil`
+          - Text generation: `@patrickvonplaten`, `@Narsil`
           - Tokenizers: `@SaulLu`
           - Trainer: `@sgugger`
           - Pipelines: `@Narsil`
