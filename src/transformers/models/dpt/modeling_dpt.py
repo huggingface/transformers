@@ -750,7 +750,8 @@ class DPTModel(DPTPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -938,7 +939,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[2]
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
@@ -956,9 +957,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (predicted_depth,) + outputs[2:]
+                output = (predicted_depth,) + outputs[1:]
             else:
-                output = (predicted_depth,) + outputs[3:]
+                output = (predicted_depth,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return DepthEstimatorOutput(
@@ -1083,7 +1084,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[2]
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
@@ -1120,9 +1121,9 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (logits,) + outputs[1:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
