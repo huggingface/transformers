@@ -18,7 +18,7 @@ class Wav2Vec2_Aligner():
         self.model.eval()
         if self.cuda:
             self.model.to(device='cuda')
-        self.processor = transformers.AutoProcessor.from_pretrained(model_name)
+        self.processor = AutoProcessor.from_pretrained(model_name)
         self.resampler = torchaudio.transforms.Resample(input_wavs_sr, 16_000)
         blank_id = 0
         vocab = list(self.processor.tokenizer.get_vocab().keys())
