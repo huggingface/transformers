@@ -840,17 +840,11 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         )
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
         self.self_attn_dropout = torch.nn.Dropout(dropout)
-
-        if config.position_embeddings_type == "relative":
-            self.self_attn = RelPositionMultiHeadedAttention(
-                embed_dim,
-                attention_heads,
-                dropout=dropout,
-            )
-        elif config.position_embeddings_type == "rotary":
-            self.self_attn = RotaryPositionMultiHeadedAttention(embed_dim, attention_heads, dropout=dropout)
-        else:
-            raise ValueError(f"`config.position_embeddings_type` should be one of ['relative', 'rotary'], but is {config.position_embeddings_type}")
+        self.self_attn = RelPositionMultiHeadedAttention(
+            embed_dim,
+            attention_heads,
+            dropout=dropout,
+        )
 
         self.conv_module = ConvolutionModule(
             embed_dim=embed_dim,
@@ -876,6 +870,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
+        print("hf x", hidden_states.abs().sum())
         x = hidden_states
         encoder_padding_mask = 1 - attention_mask
         """
@@ -888,6 +883,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         """
         residual = x
         x = self.ffn1(x)
+        print("hf after ffn1", x.abs().sum())
         x = x * 0.5 + residual
         residual = x
         x = self.self_attn_layer_norm(x)
@@ -900,6 +896,8 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
             pos_emb=position_embeddings,
             need_weights=False,
         )
+#        print("hf after attn", attn.abs().sum())
+        print("hf after attn x", x.abs().sum())
 #        else:
 #            x, attn = self.self_attn(
 #                query=x,
@@ -982,9 +980,6 @@ class ESPNETMultiHeadedAttention(nn.Module):
             torch.Tensor: Transformed value  B X T1 X d_model
                 weighted by the attention score  B X T1 X T2
         """
-        # TODO(PVP) - remove after
-        mask = mask > 1.0
-
         n_batch = value.size(0)
         if mask is not None:
             scores = scores.masked_fill(
@@ -1109,7 +1104,11 @@ class RelPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
             self.d_k
         )  # (batch, head, time1, time2)
 
+        print("v", v.abs().sum())
+        print("scores", scores.abs().sum())
+
         scores = self.forward_attention(v, scores, key_padding_mask)
+        print("scores 2", scores.abs().sum())
         scores = scores.transpose(0, 1)
         return scores, None
 
@@ -1230,114 +1229,6 @@ class Wav2Vec2ConformerEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
-class RotaryPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
-    def __init__(
-        self,
-        n_feat,
-        n_head,
-        dropout,
-#        precision,
-        rotary_emd_base=10000,
-    ):
-        """Construct an RotaryPositionMultiHeadedAttention object."""
-        super().__init__(n_feat, n_head, dropout)
-        precision = torch.float
-        self.rotary_ndims = self.d_k  # also try self.d_k//2
-#        if precision == "fp16":
-#            precision = torch.half
-
-        self.rotary_emb = RotaryPositionalEmbedding(
-            self.rotary_ndims, base=rotary_emd_base, precision=precision
-        )
-
-    def forward(self, query, key, value, key_padding_mask=None, **kwargs):
-        """Compute rotary position attention.
-        Args:
-            query: Query tensor T X B X C
-            key: Key tensor T X B X C
-            value: Value tensor T X B X C
-            key_padding_mask: Mask tensor T X B
-        Returns:
-            torch.Tensor: Output tensor T X B X D.
-        Notes:
-            Assumes self attn
-        """
-
-        T, B, C = value.size()
-        query = query.view(T, B, self.h, self.d_k)
-        key = key.view(T, B, self.h, self.d_k)
-        value = value.view(T, B, self.h, self.d_k)
-        cos, sin = self.rotary_emb(value, seq_len=T)
-        query, key = apply_rotary_pos_emb(
-            query, key, cos, sin, offset=0
-        )  # offset is based on layer_past
-
-        query = query.view(T, B, self.h * self.d_k)
-        key = key.view(T, B, self.h * self.d_k)
-        value = value.view(T, B, self.h * self.d_k)
-
-        # TBD to BTD
-        query = query.transpose(0, 1)
-        key = key.transpose(0, 1)
-        value = value.transpose(0, 1)
-
-        q, k, v = self.forward_qkv(query, key, value)
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        scores = self.forward_attention(v, scores, key_padding_mask)
-        scores = scores.transpose(0, 1)
-        return scores, None
-
-
-class RotaryPositionalEmbedding(torch.nn.Module):
-    def __init__(self, dim, base=10000, precision=torch.half):
-        """Rotary positional embedding
-        Reference : https://blog.eleuther.ai/rotary-embeddings/
-        Paper: https://arxiv.org/pdf/2104.09864.pdf
-        Args:
-            dim: Dimension of embedding
-            base: Base value for exponential
-            precision: precision to use for numerical values
-        """
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        self.seq_len_cached = None
-        self.cos_cached = None
-        self.sin_cached = None
-        self.precision = precision
-
-    def forward(self, x, seq_len=None):
-        """
-        Args:
-            x: Input x with T X B X C
-            seq_len: Sequence length of input x
-        """
-        if seq_len != self.seq_len_cached:
-            self.seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[:, None, None, :]
-            self.sin_cached = emb.sin()[:, None, None, :]
-        return self.cos_cached, self.sin_cached
-
-
-# rotary pos emb helpers:
-def rotate_half(x):
-    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
-    return torch.cat(
-        (-x2, x1), dim=x1.ndim - 1
-    )  # dim=-1 triggers a bug in earlier torch versions
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos, sin = (
-        cos[offset : q.shape[0] + offset, ...],
-        sin[offset : q.shape[0] + offset, ...],
-    )
-    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
-
-
 class RelPositionalEncoding(nn.Module):
     """Relative positional encoding module (new implementation).
 
@@ -1410,12 +1301,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        if config.position_embeddings_type == "relative":
-            self.embed_positions = RelPositionalEncoding(config.max_source_positions, config.hidden_size)
-        elif config.position_embeddings_type == "rotary":
-            self.embed_positions = None
-        else:
-            raise ValueError(f"`config.position_embeddings_type` should be one of ['relative', 'rotary'], but is {config.position_embeddings_type}")
+        self.rel_embed_positions = RelPositionalEncoding(config.max_source_positions, config.hidden_size)
 
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1447,10 +1333,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         hidden_states = hidden_states.transpose(0, 1)
-        relative_position_embeddings = self.embed_positions(hidden_states) if self.embed_positions is not None else hidden_states
+        relative_position_embeddings = self.rel_embed_positions(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
+        print("hf hid 0", hidden_states.abs().sum())
+        print("hf pos", relative_position_embeddings.abs().sum())
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1480,6 +1368,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                         hidden_states, attention_mask=attention_mask, position_embeddings=relative_position_embeddings, output_attentions=output_attentions
                     )
                 hidden_states = layer_outputs[0]
+                print("hf hid l", hidden_states.abs().sum())
 
             if skip_the_layer:
                 layer_outputs = (None, None)
@@ -1490,10 +1379,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if i == 1:
                 break
 
-        # TODO(PVP) - remove after
         hidden_states = hidden_states.transpose(0, 1)
-
-        hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 

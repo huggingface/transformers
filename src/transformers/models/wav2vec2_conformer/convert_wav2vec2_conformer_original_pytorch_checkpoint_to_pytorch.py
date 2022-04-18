@@ -47,6 +47,7 @@ MAPPING = {
     "self_attn.pos_bias_v": "encoder.layers.*.self_attn.pos_bias_v",
     "self_attn.linear_out": "encoder.layers.*.self_attn.linear_out",
     "self_attn.linear_pos": "encoder.layers.*.self_attn.linear_pos",
+    "self_attn.rotary_emb": "encoder.layers.*.self_attn.rotary_emb",
     "self_attn_layer_norm": "encoder.layers.*.self_attn_layer_norm",
     "conv_module.pointwise_conv1": "encoder.layers.*.conv_module.pointwise_conv1",
     "conv_module.pointwise_conv2": "encoder.layers.*.conv_module.pointwise_conv2",
@@ -106,6 +107,8 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.running_var.data = value
     elif weight_type == "num_batches_tracked":
         hf_pointer.num_batches_tracked.data = value
+    elif weight_type == "inv_freq":
+        hf_pointer.inv_freq.data = value
     else:
         hf_pointer.data = value
 
@@ -116,8 +119,8 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    if len(hf_model.state_dict()) != len(fairseq_dict):
-        raise ValueError(f"Fsq dict has {len(fairseq_dict)} weights, but hf dict has {len(hf_model.state_dict())} weights.")
+#    if len(hf_model.state_dict()) != len(fairseq_dict):
+#        raise ValueError(f"Fsq dict has {len(fairseq_dict)} weights, but hf dict has {len(hf_model.state_dict())} weights.")
 
     feature_extractor = hf_model.wav2vec2_conformer.feature_extractor
 
@@ -155,6 +158,8 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
                         weight_type = "weight"
                     elif "running_mean" in name:
                         weight_type = "running_mean"
+                    elif "inv_freq" in name:
+                        weight_type = "inv_freq"
                     elif "running_var" in name:
                         weight_type = "running_var"
                     elif "num_batches_tracked" in name:
@@ -220,6 +225,8 @@ def convert_wav2vec2_conformer_checkpoint(
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path)
     else:
         config = Wav2Vec2ConformerConfig()
+
+    config.position_embeddings_type = "rotary"
 
     if is_finetuned:
         if dict_path:
