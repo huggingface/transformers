@@ -67,6 +67,10 @@ class FlaxViTModelTester(unittest.TestCase):
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
 
+        # in ViT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.expected_seq_length = num_patches + 1
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -120,13 +124,11 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     # We need to override this test because in ViT, the seq_len equals the number of patches + 1
-    # we compute that here
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        num_patches = (config.image_size // config.patch_size) ** 2
-        seq_length = num_patches + 1
+        seq_length = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -203,12 +205,11 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # We need to override this test because in ViT, the seq_len equals the number of patches + 1
-    # we compute that here
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            num_patches = (config.image_size // config.patch_size) ** 2
-            seq_length = num_patches + 1  # we add 1 for the [CLS] token
+
+            seq_length = self.model_tester.expected_seq_length
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states

@@ -75,6 +75,10 @@ class FlaxBeitModelTester(unittest.TestCase):
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
 
+        # in BeiT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.expected_seq_length = num_patches + 1
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -104,20 +108,14 @@ class FlaxBeitModelTester(unittest.TestCase):
 
         model = FlaxBeitModel(config=config)
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
+        )
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels):
         model = FlaxBeitForMaskedImageModeling(config=config)
         result = model(pixel_values)
-        # expected sequence length = num_patches
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_length - 1, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -151,13 +149,11 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     # We need to override this test because in Beit, the seq_len equals the number of patches + 1
-    # we compute that here
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        num_patches = (config.image_size // config.patch_size) ** 2
-        seq_length = num_patches + 1
+        seq_length = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -209,7 +205,7 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    # We neeed to override this test because Beit expects pixel_values instead of input_ids
+    # We need to override this test because Beit expects pixel_values instead of input_ids
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -234,12 +230,10 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # We need to override this test because in Beit, the seq_len equals the number of patches + 1
-    # we compute that here
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            num_patches = (config.image_size // config.patch_size) ** 2
-            seq_length = num_patches + 1  # we add 1 for the [CLS] token
+            seq_length = self.model_tester.expected_seq_length
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states
