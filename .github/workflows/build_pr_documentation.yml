@@ -7,7 +7,6 @@ jobs:
   test:
     runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v1
     - name: ps
       run: ps aeuxwww
     - name: env
