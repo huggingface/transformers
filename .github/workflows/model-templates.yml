@@ -24,20 +24,27 @@ jobs:
         with:
           python-version: 3.6
 
-      - name: Loading cache.
+      - name: Install dependencies
+        run: |
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
+
+      - name: Load cached virtual environment
         uses: actions/cache@v2
         id: cache
         with:
-          path: ~/.cache/pip
-          key: v1.2-tests_templates-${{ hashFiles('setup.py') }}
+          path: ~/venv/
+          key: v2-tests_templates-${{ hashFiles('setup.py') }}
 
-      - name: Install dependencies
+      - name: Create virtual environment on cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
+          python -m venv ~/venv && . ~/venv/bin/activate
           pip install --upgrade pip!=21.3
-          sudo apt -y update && sudo apt install -y libsndfile1-dev
           pip install .[dev]
+
       - name: Create model files
         run: |
+          . ~/venv/bin/activate
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
@@ -53,11 +60,13 @@ jobs:
 
       - name: Run all non-slow tests
         run: |
+          . ~/venv/bin/activate
           python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_templates tests/*template*
 
       - name: Run style changes
         run: |
           git fetch origin main:main
+          . ~/venv/bin/activate
           make style && make quality && make repo-consistency
 
       - name: Failure short reports
