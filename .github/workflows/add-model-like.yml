@@ -32,7 +32,10 @@ jobs:
       - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
+<<<<<<< HEAD
           python -m venv ~/venv && . ~/venv/bin/activate
+=======
+>>>>>>> revert dbg commit
           pip install --upgrade pip!=21.3
           pip install .[dev]
 
