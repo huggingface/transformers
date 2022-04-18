@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright Meta Platforms and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ class Data2VecVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
     an Data2VecVision model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Data2VecVision
-    [microsoft/data2vec_vision-base-patch16-224-in22k](https://huggingface.co/microsoft/data2vec_vision-base-patch16-224-in22k)
+    [facebook/data2vec-vision-base](https://huggingface.co/facebook/data2vec-vision-base)
     architecture.
 
     Args:
