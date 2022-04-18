@@ -14,7 +14,7 @@ class Wav2Vec2_Aligner():
         self.cuda = cuda
         self.feature_extractor = transformers.AutoFeatureExtractor.from_pretrained(model_name)
         self.config = AutoConfig.from_pretrained(model_name)
-        self.model = transformers.Wav2Vec2ForCTC.from_pretrained(model_name)
+        self.model = AutoModelForCTC.from_pretrained(model_name)
         self.model.eval()
         if self.cuda:
             self.model.to(device='cuda')
