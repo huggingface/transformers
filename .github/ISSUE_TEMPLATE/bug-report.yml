@@ -26,11 +26,11 @@ body:
           - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: `@LysandreJik`
           - T5, Pegasus, EncoderDecoder: `@patrickvonplaten`
           - Blenderbot, MBART, BART, Marian, Pegasus: `@patil-suraj`
-          - Reformer, TransfoXL, XLNet, FNet: `@patrickvonplaten
-          - Longformer, BigBird: `@ydshieh
+          - Reformer, TransfoXL, XLNet, FNet: `@patrickvonplaten`
+          - Longformer, BigBird: `@ydshieh`
           - FSMT: `@stas00`
           - Funnel: `@sgugger`
-          - GPT-2, GPT: `@patil-suraj`, `@patrickvonplaten`, `@LysandreJik
+          - GPT-2, GPT: `@patil-suraj`, `@patrickvonplaten`, `@LysandreJik`
           - RAG, DPR: `@patrickvonplaten`, `@lhoestq`
           - TensorFlow: `@Rocketknight1`
           - JAX/Flax: `@patil-suraj`
