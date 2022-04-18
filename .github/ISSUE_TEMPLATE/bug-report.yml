@@ -36,7 +36,8 @@ body:
           - JAX/Flax: `@patil-suraj`
           - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: `@NielsRogge`
           - GPT-Neo, GPT-J, CLIP: `@patil-suraj`
-          - Wav2Vec2, HuBERT, SpeechEncoderDecoder, UniSpeech, UniSpeechSAT, SEW, SEW-D, Speech2Text: `@patrickvonplaten`, `@anton-l`
+          - Wav2Vec2, HuBERT, UniSpeech, UniSpeechSAT, SEW, SEW-D: `@patrickvonplaten`, `@anton-l`
+          - SpeechEncoderDecoder, Speech2Text, Speech2Text2: `@sanchit-gandhi`, `@patrickvonplaten`, `@anton-l`
           
           If the model isn't in the list, ping `@LysandreJik` who will redirect you to the correct contributor.
 
