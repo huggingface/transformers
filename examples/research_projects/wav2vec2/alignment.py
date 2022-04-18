@@ -13,7 +13,7 @@ class Wav2Vec2_Aligner():
     def __init__(self, model_name, input_wavs_sr, cuda):
         self.cuda = cuda
         self.feature_extractor = transformers.AutoFeatureExtractor.from_pretrained(model_name)
-        self.config = transformers.PretrainedConfig.from_pretrained(model_name)
+        self.config = AutoConfig.from_pretrained(model_name)
         self.model = transformers.Wav2Vec2ForCTC.from_pretrained(model_name)
         self.model.eval()
         if self.cuda:
