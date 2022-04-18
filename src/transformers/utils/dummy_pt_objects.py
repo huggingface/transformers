@@ -1274,13 +1274,6 @@ class Data2VecTextForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Data2VecTextForMaskedLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Data2VecTextForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
