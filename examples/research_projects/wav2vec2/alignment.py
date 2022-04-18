@@ -1,3 +1,6 @@
+# The code is inspired from the pytorch tutorial on doing force alignment with wav2vec models
+# The Full tutorial can be found here: https://pytorch.org/audio/stable/tutorials/forced_alignment_tutorial.html
+
 import argparse
 import torchaudio
 import transformers
