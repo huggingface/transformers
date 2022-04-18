@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import Seq2SeqLMOutput
+from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
@@ -514,6 +514,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
+        elif isinstance(encoder_outputs, tuple):
+            encoder_outputs = BaseModelOutput(*encoder_outputs)
 
         encoder_hidden_states = encoder_outputs[0]
 
