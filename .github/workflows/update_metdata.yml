@@ -23,6 +23,12 @@ jobs:
           path: ~/venv/
           key: v2-metadata-${{ hashFiles('setup.py') }}
 
+      - name: Create virtual environment on cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv ~/venv && . ~/venv/bin/activate
+          pip install --upgrade pip
+
       - name: Setup environment
         run: |
           . ~/venv/bin/activate
