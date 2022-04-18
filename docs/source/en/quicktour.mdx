@@ -130,7 +130,8 @@ rate `facebook/wav2vec2-base-960h` was trained on.
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
 ```
 
-You can pass a whole dataset pipeline:
+Audio files are automatically loaded and resampled when calling the `"audio"` column.
+Let's extract the raw waveform arrays of the first 4 samples and pass it as a list to the pipeline:
 
 ```py
 >>> raw_audio_waveforms = [d["array"] for d in dataset[:4]["audio"]]

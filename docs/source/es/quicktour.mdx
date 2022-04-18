@@ -129,7 +129,8 @@ Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coinc
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
 ```
 
-Puedes pasar un pipeline para un dataset:
+Los archivos de audio se cargan y remuestrean automáticamente cuando se llama a la columna `"audio"`.
+Extraigamos las matrices de forma de onda cruda de las primeras 4 muestras y pasémosla como una lista al pipeline:
 
 ```py
 >>> raw_audio_waveforms = [d["array"] for d in dataset[:4]["audio"]]
