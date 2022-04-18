@@ -34,7 +34,7 @@ jobs:
         . ~/venv/bin/activate
         pip install --upgrade pip
         # install torch-hub specific dependencies
-        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub] -U
+        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub]
         # no longer needed
         pip uninstall -y transformers
 
