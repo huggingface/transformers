@@ -23,8 +23,8 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-is_torch_less_than_1_8 = version.parse(torch.__version__) < version.parse("1.8.0")
-is_torch_less_than_1_11 = version.parse(torch.__version__) < version.parse("1.11")
+is_torch_less_than_1_8 = version.parse(version.parse(torch.__version__).base_version) < version.parse("1.8.0")
+is_torch_less_than_1_11 = version.parse(version.parse(torch.__version__).base_version) < version.parse("1.11")
 
 
 def torch_int_div(tensor1, tensor2):

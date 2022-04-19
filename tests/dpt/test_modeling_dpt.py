@@ -81,6 +81,9 @@ class DPTModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
+        # expected sequence length of DPT = num_patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.expected_seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -115,9 +118,9 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (config.image_size // config.patch_size) ** 2
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
+        )
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -206,8 +209,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         # in DPT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (config.image_size // config.patch_size) ** 2
-        seq_len = num_patches + 1
+        seq_len = self.model_tester.expected_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -274,8 +276,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # DPT has a different seq_length
-            num_patches = (config.image_size // config.patch_size) ** 2
-            seq_len = num_patches + 1
+            seq_len = self.model_tester.expected_seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

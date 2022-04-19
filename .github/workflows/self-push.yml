@@ -384,7 +384,7 @@ jobs:
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
-          pip install .[testing,deepspeed]
+          pip install .[deepspeed-testing]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
