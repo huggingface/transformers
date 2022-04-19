@@ -118,19 +118,27 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
 
 ```py
->>> import datasets
+>>> from datasets import load_dataset, Audio
 
->>> dataset = datasets.load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-Puedes pasar un pipeline para un dataset:
+Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coincide con la frecuencia de muestreo con la que se entrenó `facebook/wav2vec2-base-960h`.
 
 ```py
->>> files = dataset["path"]
->>> speech_recognizer(files[:4])
-[{'text': 'I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT'}, 
- {'text': "FONDERING HOW I'D SET UP A JOIN TO HELL T WITH MY WIFE AND WHERE THE AP MIGHT BE"}, 
- {'text': "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AN I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS"},
+>>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
+```
+
+Los archivos de audio se cargan y remuestrean automáticamente cuando se llama a la columna `"audio"`.
+Extraigamos las matrices de forma de onda cruda de las primeras 4 muestras y pasémosla como una lista al pipeline:
+
+```py
+>>> raw_audio_waveforms = [d["array"] for d in dataset[:4]["audio"]]
+>>> speech_recognizer(raw_audio_waveforms)
+[{'text': 'I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT'},
+ {'text': "FONDERING HOW I'D SET UP A JOIN TO HET WITH MY WIFE AND WHERE THE AP MIGHT BE"}, 
+ {'text': "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AND I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS"},
+ {'text': 'HOW DO I TURN A JOIN A COUNT'}]
 ```
 
 Para un dataset más grande, donde los inputs son de mayor tamaño (como en habla/audio o visión), querrás pasar un generador en lugar de una lista que carga todos los inputs en memoria. Ve la [documentación del pipeline](./main_classes/pipelines) para más información.

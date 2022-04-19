@@ -22,16 +22,22 @@ jobs:
       with:
         python-version: 3.7
 
-    - name: Loading cache
+    - name: Load cached virtual environment
       uses: actions/cache@v2
       id: cache
       with:
-        path: ~/.cache/pip
-        key: v0-torch_hub-${{ hashFiles('setup.py') }}
+        path: ~/venv/
+        key: v1-torch_hub-${{ hashFiles('setup.py') }}
+
+    - name: Create virtual environment on cache miss
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        python -m venv ~/venv && . ~/venv/bin/activate
+        pip install --upgrade pip
 
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
+        . ~/venv/bin/activate
         # install torch-hub specific dependencies
         pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub]
         # no longer needed

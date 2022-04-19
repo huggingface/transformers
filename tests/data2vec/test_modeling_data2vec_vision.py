@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,38 +12,48 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViT model. """
+""" Testing suite for the PyTorch Data2VecVision model. """
 
 
 import inspect
 import unittest
 
-from transformers import ViTConfig
+from transformers import Data2VecVisionConfig
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ..test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import (
+        MODEL_MAPPING,
+        Data2VecVisionForImageClassification,
+        Data2VecVisionForSemanticSegmentation,
+        Data2VecVisionModel,
+    )
+    from transformers.models.data2vec.modeling_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+        to_2tuple,
+    )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import BeitFeatureExtractor
 
 
-class ViTModelTester:
+class Data2VecVisionModelTester:
     def __init__(
         self,
         parent,
+        vocab_size=100,
         batch_size=13,
         image_size=30,
         patch_size=2,
@@ -51,7 +61,7 @@ class ViTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=4,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -59,10 +69,12 @@ class ViTModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
+        num_labels=3,
         scope=None,
-        encoder_stride=2,
+        out_indices=[0, 1, 2, 3],
     ):
         self.parent = parent
+        self.vocab_size = 100
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
@@ -79,25 +91,25 @@ class ViTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
-
-        # in ViT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.expected_seq_length = num_patches + 1
+        self.out_indices = out_indices
+        self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
+        pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
-        return ViTConfig(
+        return Data2VecVisionConfig(
+            vocab_size=self.vocab_size,
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -110,50 +122,58 @@ class ViTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            out_indices=self.out_indices,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = ViTModel(config=config)
+    def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
+        model = Data2VecVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
-        )
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(self.image_size)
+        patch_size = to_2tuple(self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
-        model = ViTForImageClassification(config)
+        model = Data2VecVisionForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+        config.num_labels = self.num_labels
+        model = Data2VecVisionForSemanticSegmentation(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+        result = model(pixel_values, labels=pixel_labels)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels, pixel_labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
 @require_torch
-class ViTModelTest(ModelTesterMixin, unittest.TestCase):
+class Data2VecVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Data2VecVision does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (
-            ViTModel,
-            ViTForImageClassification,
-            ViTForMaskedImageModeling,
-        )
+        (Data2VecVisionModel, Data2VecVisionForImageClassification, Data2VecVisionForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
@@ -163,14 +183,16 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = Data2VecVisionModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_inputs_embeds(self):
-        # ViT does not use inputs_embeds
+        # Data2VecVision does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -198,11 +220,86 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in [*get_values(MODEL_MAPPING)]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.model_tester.is_training:
+            return
+
+        config.use_cache = False
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in [*get_values(MODEL_MAPPING)] or not model_class.supports_gradient_checkpointing:
+                continue
+            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+            # this can then be incorporated into _prepare_for_class in test_modeling_common.py
+            elif model_class.__name__ == "Data2VecVisionForSemanticSegmentation":
+                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros(
+                    [self.model_tester.batch_size, height, width], device=torch_device
+                ).long()
+            model = model_class(config)
+            model.gradient_checkpointing_enable()
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                # we skip lambda parameters as these require special initial values
+                # determined by config.layer_scale_init_value
+                if "lambda" in name:
+                    continue
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        seq_len = self.model_tester.expected_seq_length
+        # in Data2VecVision, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(self.model_tester.image_size)
+        patch_size = to_2tuple(self.model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -213,7 +310,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -224,12 +321,13 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
             attentions = outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
 
@@ -249,7 +347,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
     def test_hidden_states_output(self):
@@ -261,16 +359,22 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.hidden_states
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
+            # Data2VecVision has a different seq_length
+            image_size = to_2tuple(self.model_tester.image_size)
+            patch_size = to_2tuple(self.model_tester.patch_size)
+            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            seq_length = num_patches + 1
+
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.expected_seq_length, self.model_tester.hidden_size],
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -291,8 +395,8 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTModel.from_pretrained(model_name)
+        for model_name in DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = Data2VecVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -304,14 +408,20 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ViTModelIntegrationTest(unittest.TestCase):
+class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return (
+            BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
+        )
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+    def test_inference_image_classification_head_imagenet_1k(self):
+        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -320,11 +430,15 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
+        logits = outputs.logits
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([0.3277, -0.1395, 0.0911]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
+        self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
