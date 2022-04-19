@@ -83,24 +83,31 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         chunk_length_s (`float`, *optional*, defaults to 0):
             The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default). Only
             available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+
             <Tip>
+
             For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR chunking
             blog post](https://huggingface.co/blog/asr-chunking).
+
             </Tip>
+
         stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
             The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This enables
             the model to *see* more context and infer letters better than without this context but the pipeline
             discards the stride bits at the end to make the final reconstitution as perfect as possible.
+
             <Tip>
+
             For more information on how to effectively use `stride_length_s`, please have a look at the [ASR chunking
             blog post](https://huggingface.co/blog/asr-chunking).
+
             </Tip>
+
         framework (`str`, *optional*):
             The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed.
-            If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
-            provided.
+            installed. If no framework is specified, will default to the one currently installed. If no framework is
+            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
+            no model is provided.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
