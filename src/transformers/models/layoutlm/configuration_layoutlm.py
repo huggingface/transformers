@@ -171,7 +171,9 @@ class LayoutLMOnnxConfig(OnnxConfig):
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
 
-        input_dict = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        input_dict = super().generate_dummy_inputs(
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+        )
 
         # Generate a dummy bbox
         box = [48, 84, 73, 128]
