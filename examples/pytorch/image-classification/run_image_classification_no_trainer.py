@@ -162,18 +162,15 @@ def parse_args():
     # Sanity checks
     if args.dataset_name is None and args.train_dir is None and args.validation_dir is None:
         raise ValueError("Need either a dataset name or a training/validation folder.")
-    else:
-        # TODO
-        pass
-        # if args.train_file is not None:
-        #     extension = args.train_file.split(".")[-1]
-        #     assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-        # if args.validation_file is not None:
-        #     extension = args.validation_file.split(".")[-1]
-        #     assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
-    if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+    if args.push_to_hub or args.with_tracking:
+        if args.output_dir is None:
+            raise ValueError(
+                "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
+            )
+
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
 
     return args
 
@@ -183,7 +180,8 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="wandb") if args.with_tracking else Accelerator()
+    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -238,15 +236,19 @@ def main():
         if "img" in dataset["train"].column_names:
             dataset = dataset.rename_columns({"img": "image"})
     else:
-        # Loading the dataset from local folders.
-        data_dirs = {}
+        data_files = {}
         if args.train_dir is not None:
-            data_dirs["train"] = args.train_dir
+            data_files["train"] = os.path.join(args.train_dir, "**")
         if args.validation_dir is not None:
-            data_dirs["validation"] = args.validation_dir
-        dataset = load_dataset("imagefolder", data_dir=data_dirs)
-    # See more about loading custom images at
-    # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
+            data_files["validation"] = os.path.join(args.validation_dir, "**")
+        dataset = load_dataset(
+            "imagefolder",
+            data_files=data_files,
+            cache_dir=args.cache_dir,
+            task="image-classification",
+        )
+        # See more about loading custom images at
+        # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
@@ -269,7 +271,6 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
-        num_labels=len(labels),
         i2label=id2label,
         label2id=label2id,
         finetuning_task="image-classification",
@@ -378,7 +379,10 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("image_classification_no_trainer", args)
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("image_classification_no_trainer", experiment_config)
 
     # Get the metric function
     metric = load_metric("accuracy")
@@ -444,6 +448,18 @@ def main():
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
 
+                    if args.push_to_hub and epoch < args.num_train_epochs - 1:
+                        accelerator.wait_for_everyone()
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                        if accelerator.is_main_process:
+                            feature_extractor.save_pretrained(args.output_dir)
+                            repo.push_to_hub(
+                                commit_message=f"Training in progress {completed_steps} steps",
+                                blocking=False,
+                                auto_lfs_prune=True,
+                            )
+
             if completed_steps >= args.max_train_steps:
                 break
 
@@ -465,8 +481,8 @@ def main():
                     "accuracy": eval_metric,
                     "train_loss": total_loss,
                     "epoch": epoch,
+                    "step": completed_steps,
                 },
-                step=completed_steps,
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
