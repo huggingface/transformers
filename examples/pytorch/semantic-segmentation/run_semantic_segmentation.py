@@ -59,10 +59,10 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 def pad_if_smaller(img, size, fill=0):
     min_size = min(img.size)
     if min_size < size:
-        ow, oh = img.size
-        padh = size - oh if oh < size else 0
-        padw = size - ow if ow < size else 0
-        img = functional.pad(img, (0, 0, padw, padh), fill=fill)
+        original_width, original_height = img.size
+        pad_height = size - original_height if original_height < size else 0
+        pad_width = size - original_width if original_width < size else 0
+        img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
     return img
 
 
@@ -324,7 +324,7 @@ def main():
         filename = "id2label.json"
     id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    label2id = {v: k for k, v in id2label.items()}
+    label2id = {v: str(k) for k, v in id2label.items()}
 
     # Load the mean IoU metric from the datasets package
     metric = datasets.load_metric("mean_iou")
@@ -351,9 +351,10 @@ def main():
             ignore_index=0,
             reduce_labels=feature_extractor.reduce_labels,
         )
-        for key, value in metrics.items():
-            if type(value) is np.ndarray:
-                metrics[key] = value.tolist()
+        # don't log per category metrics
+        del metrics["per_category_accuracy"]
+        del metrics["per_category_iou"]
+
         return metrics
 
     config = AutoConfig.from_pretrained(
