@@ -31,8 +31,16 @@ from unittest import mock
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
+from .integrations import (
+    is_fairscale_available,
+    is_optuna_available,
+    is_ray_available,
+    is_sigopt_available,
+    is_wandb_available,
+)
 from .utils import (
+    is_apex_available,
+    is_bitsandbytes_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -634,6 +642,36 @@ def require_deepspeed(test_case):
     """
     if not is_deepspeed_available():
         return unittest.skip("test requires deepspeed")(test_case)
+    else:
+        return test_case
+
+
+def require_fairscale(test_case):
+    """
+    Decorator marking a test that requires fairscale
+    """
+    if not is_fairscale_available():
+        return unittest.skip("test requires fairscale")(test_case)
+    else:
+        return test_case
+
+
+def require_apex(test_case):
+    """
+    Decorator marking a test that requires apex
+    """
+    if not is_apex_available():
+        return unittest.skip("test requires apex")(test_case)
+    else:
+        return test_case
+
+
+def require_bitsandbytes(test_case):
+    """
+    Decorator for bits and bytes (bnb) dependency
+    """
+    if not is_bitsandbytes_available():
+        return unittest.skip("test requires bnb")(test_case)
     else:
         return test_case
 
