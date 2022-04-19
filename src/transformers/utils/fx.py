@@ -17,6 +17,7 @@ import functools
 import inspect
 import math
 import random
+import warnings
 from types import ModuleType
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
@@ -121,55 +122,75 @@ _SUPPORTED_MODELS = tuple(
 )
 
 
-class HFProxy(Proxy):
-    """
-    Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing
-    the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the
-    existing ones.
-    """
+# class HFProxy(Proxy):
+#     """
+#     Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing
+#     the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the
+#     existing ones.
+#     """
+#
+#     def __init__(self, node: Node, tracer: Optional[Tracer] = None):
+#         super().__init__(node, tracer=tracer)
+#         if hasattr(self, "tracer") and self.tracer is not None:
+#             self.device = self.tracer.root.device
+#             self.dtype = next(self.tracer.root.parameters()).dtype
+#             self.cache = None
+#
+#     @property
+#     def shape(self):
+#         return self.size()
+#
+#     def __setitem__(self, key, value):
+#         pass
+#
+#     def __contains__(self, key):
+#         return False
+#
+#     def __eq__(self, other):
+#         if self.cache is not None:
+#             return self.cache == other
+#         elif isinstance(other, HFProxy):
+#             return True
+#         else:
+#             return super().__eq__(other)
+#
+#     def __ne__(self, other):
+#         return not self == other
+#
+#     def __len__(self):
+#         if self.cache is not None:
+#             if isinstance(self.cache, int):
+#                 return self.cache
+#             elif isinstance(self.cache, (torch.Size, list, tuple)):
+#                 return len(self.cache)
+#             else:
+#                 return super().__len__(self)
+#         return super().__len__(self)
+#
+#     def __torch_function__(self, orig_method, types, args=None, kwargs=None):
+#         proxy = super().__torch_function__(orig_method, types, args=args, kwargs=kwargs)
+#         proxy.cache = self.cache
+#         return proxy
 
-    def __init__(self, node: Node, tracer: Optional[Tracer] = None):
-        super().__init__(node, tracer=tracer)
-        if hasattr(self, "tracer") and self.tracer is not None:
-            self.device = self.tracer.root.device
-            self.dtype = next(self.tracer.root.parameters()).dtype
-            self.cache = None
+class HFProxy(Proxy):
+    def __init__(self, node, tracer):
+        self._meta_tensor = None
+        super().__init__(node, tracer)
+
+    def install_meta_tensor(self, meta_tensor):
+        assert isinstance(meta_tensor, torch.Tensor) and meta_tensor.device == torch.device('meta')
+        self._meta_tensor = meta_tensor
+
+    def dim(self):
+        if self._meta_tensor is None:
+            return super().__getattr__('dim')
+        return self._meta_tensor.dim()
 
     @property
     def shape(self):
-        return self.size()
-
-    def __setitem__(self, key, value):
-        pass
-
-    def __contains__(self, key):
-        return False
-
-    def __eq__(self, other):
-        if self.cache is not None:
-            return self.cache == other
-        elif isinstance(other, HFProxy):
-            return True
-        else:
-            return super().__eq__(other)
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __len__(self):
-        if self.cache is not None:
-            if isinstance(self.cache, int):
-                return self.cache
-            elif isinstance(self.cache, (torch.Size, list, tuple)):
-                return len(self.cache)
-            else:
-                return super().__len__(self)
-        return super().__len__(self)
-
-    def __torch_function__(self, orig_method, types, args=None, kwargs=None):
-        proxy = super().__torch_function__(orig_method, types, args=args, kwargs=kwargs)
-        proxy.cache = self.cache
-        return proxy
+        if self._meta_tensor is None:
+            return super().__getattr__('shape')
+        return self._meta_tensor.shape
 
 
 def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -431,29 +452,62 @@ class HFTracer(Tracer):
             method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
         }
 
-    def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
-        if isinstance(attr_val, torch.nn.Parameter):
-            for n, p in self.root.named_parameters():
-                if attr_val is p:
-                    if n not in parameter_proxy_cache:
-                        parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
-                    return parameter_proxy_cache[n]
-        # TODO: condition this on wether dynamic axes were requested.
-        if isinstance(attr_val, torch.Tensor):
-            for n, p in self.root.named_buffers():
-                if attr_val is p:
-                    if n not in parameter_proxy_cache:
-                        parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
-                    return parameter_proxy_cache[n]
-        return attr_val
+    # def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
+    #     if isinstance(attr_val, torch.nn.Parameter):
+    #         for n, p in self.root.named_parameters():
+    #             if attr_val is p:
+    #                 if n not in parameter_proxy_cache:
+    #                     parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
+    #                 return parameter_proxy_cache[n]
+    #     # TODO: condition this on wether dynamic axes were requested.
+    #     if isinstance(attr_val, torch.Tensor):
+    #         for n, p in self.root.named_buffers():
+    #             if attr_val is p:
+    #                 if n not in parameter_proxy_cache:
+    #                     parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
+    #                 return parameter_proxy_cache[n]
+    #     return attr_val
 
-    def proxy(self, node: Node):
-        p = HFProxy(node, self)
-        if self.recorded_methods:
-            for method_name, cache_name in self.recorded_methods.items():
-                return_proxy = self._DEFAULT_METHODS_TO_RECORD[method_name]
-                _create_recorded_proxy_method(p, method_name, cache_name, return_proxy)
-        return p
+    def create_proxy(self, kind, target, args, kwargs, name=None, type_expr=None, proxy_factory_fn=None):
+        if proxy_factory_fn is not None:
+            raise RuntimeError("Don't support custom proxy factory function for MetaTensorTracer")
+
+        proxy = super().create_proxy(kind, target, args, kwargs, name, type_expr, lambda n: HFProxy(n, self))
+
+        def extract_meta(a):
+            if isinstance(a, HFProxy):
+                if getattr(a, '_meta', None) is not None:
+                    return a._meta_tensor
+                else:
+                    return None
+            return a
+
+        try:
+            meta_args = torch.fx.node.map_aggregate(args if args else (), extract_meta)
+            meta_kwargs = torch.fx.node.map_aggregate(kwargs if kwargs else {}, extract_meta)
+
+            if kind == 'call_function':
+                meta_target = target
+            elif kind == 'call_method':
+                assert isinstance(args[0], torch.fx.Proxy)
+                meta_target = getattr(torch.Tensor, target)
+            elif kind == 'call_module':
+                raise RuntimeError('Not yet implemented')
+            elif kind == 'placeholder':
+                proxy.install_meta_tensor(next(self.concrete_meta_iter))
+                return proxy
+            else:
+                assert False, f'Unknown target {kind}'
+
+            meta_out = meta_target(*meta_args, **meta_kwargs)
+
+            if isinstance(meta_out, torch.Tensor):
+                proxy.install_meta_tensor(meta_out)
+
+        except Exception as e:
+            warnings.warn(f"Could not compute shape for value {proxy}: {e}")
+
+        return proxy
 
     def trace(
         self,
@@ -467,19 +521,37 @@ class HFTracer(Tracer):
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 
-        self.record(root, input_names, method_names=method_names)
+        # self.record(root, input_names, method_names=method_names)
 
         # TODO: adapt the way leaf function are wrapped with the "autowrap function" feature from Tracer.
-        autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
-        self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
+        # autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
+        # self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
 
-        self._patch_leaf_functions_for_root(root)
+        # self._patch_leaf_functions_for_root(root)
+
+        # Creating a random input shape to generate dummy inputs.
+        batch_size = _generate_random_int()
+        sequence_length = _generate_random_int()
+        shape = [batch_size, sequence_length]
+
+        if root.__class__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            num_choices = _generate_random_int(low=2, high=5)
+            shape.insert(1, num_choices)
+
+        inputs = {}
+        for input_name in input_names:
+            inputs.update(self._generate_dummy_input(root, input_name, shape))
+
+        concrete_metas = [input_.to("meta") for input_ in inputs.values()]
+
+        self.concrete_metas = concrete_metas
+        self.concrete_meta_iter = iter(self.concrete_metas)
 
         self.graph = super().trace(root, concrete_args=concrete_args)
 
-        self._patch_leaf_functions_for_root(root, restore=True)
+        # self._patch_leaf_functions_for_root(root, restore=True)
 
-        _reset_tensor_methods(self.original_methods)
+        # _reset_tensor_methods(self.original_methods)
 
         # TODO: keep this until necessary.
         # This is necessary because concrete args are added as input to the traced module since
