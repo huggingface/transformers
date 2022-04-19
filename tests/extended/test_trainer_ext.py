@@ -22,7 +22,6 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 from transformers import AutoModel
-from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     CaptureStderr,
     ExtendSysPath,
@@ -30,6 +29,9 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_gpu_count,
     get_torch_dist_unique_port,
+    require_apex,
+    require_bitsandbytes,
+    require_fairscale,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -38,7 +40,6 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
-from transformers.utils import is_apex_available, is_bitsandbytes_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -49,39 +50,6 @@ with ExtendSysPath(f"{bindir}/../../examples/pytorch/translation"):
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
-
-
-# a candidate for testing_utils
-def require_fairscale(test_case):
-    """
-    Decorator marking a test that requires fairscale
-    """
-    if not is_fairscale_available():
-        return unittest.skip("test requires fairscale")(test_case)
-    else:
-        return test_case
-
-
-# a candidate for testing_utils
-def require_apex(test_case):
-    """
-    Decorator marking a test that requires apex
-    """
-    if not is_apex_available():
-        return unittest.skip("test requires apex")(test_case)
-    else:
-        return test_case
-
-
-# a candidate for testing_utils
-def require_bitsandbytes(test_case):
-    """
-    Decorator for bits and bytes (bnb) dependency
-    """
-    if not is_bitsandbytes_available():
-        return unittest.skip("test requires bnb")(test_case)
-    else:
-        return test_case
 
 
 @require_torch
