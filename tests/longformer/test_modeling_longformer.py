@@ -416,7 +416,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertEqual(hidden_states.shape, (1, 8, 4))
+        self.assertEqual(hidden_states.shape, (1, 4, 8))
         padding = (0, 0, 0, 1)
 
         padded_hidden_states = LongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, padding)
