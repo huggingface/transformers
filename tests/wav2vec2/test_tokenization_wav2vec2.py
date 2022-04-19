@@ -202,7 +202,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         input_values_5 = tokenizer(speech_inputs, padding="max_length", max_length=1600).input_values
 
         self.assertTrue(_input_values_are_equal(input_values_1, input_values_4))
-        self.assertTrue(input_values_5.shape, (3, 1600))
+        self.assertEqual(input_values_5.shape, (3, 1600))
         # padding should be 0.0
         self.assertTrue(abs(sum(np.asarray(input_values_5[0])[800:1200])) < 1e-3)
 
@@ -213,8 +213,8 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         ).input_values
 
         self.assertTrue(_input_values_are_equal(input_values_1, input_values_6))
-        self.assertTrue(input_values_7.shape, (3, 1500))
-        self.assertTrue(input_values_8.shape, (3, 2500))
+        self.assertEqual(input_values_7.shape, (3, 1500))
+        self.assertEqual(input_values_8.shape, (3, 2500))
         # padding should be 0.0
         self.assertTrue(abs(sum(np.asarray(input_values_7[0])[800:])) < 1e-3)
         self.assertTrue(abs(sum(np.asarray(input_values_7[1])[1000:])) < 1e-3)
@@ -489,21 +489,21 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         outputs_char = tokenizer.decode(sample_ids, output_char_offsets=True)
         # check Wav2Vec2CTCTokenizerOutput keys for char
-        self.assertTrue(len(outputs_char.keys()), 2)
+        self.assertEqual(len(outputs_char.keys()), 2)
         self.assertTrue("text" in outputs_char)
         self.assertTrue("char_offsets" in outputs_char)
         self.assertTrue(isinstance(outputs_char, Wav2Vec2CTCTokenizerOutput))
 
         outputs_word = tokenizer.decode(sample_ids, output_word_offsets=True)
         # check Wav2Vec2CTCTokenizerOutput keys for word
-        self.assertTrue(len(outputs_word.keys()), 2)
+        self.assertEqual(len(outputs_word.keys()), 2)
         self.assertTrue("text" in outputs_word)
         self.assertTrue("word_offsets" in outputs_word)
         self.assertTrue(isinstance(outputs_word, Wav2Vec2CTCTokenizerOutput))
 
         outputs = tokenizer.decode(sample_ids, output_char_offsets=True, output_word_offsets=True)
         # check Wav2Vec2CTCTokenizerOutput keys for both
-        self.assertTrue(len(outputs.keys()), 3)
+        self.assertEqual(len(outputs.keys()), 3)
         self.assertTrue("text" in outputs)
         self.assertTrue("char_offsets" in outputs)
         self.assertTrue("word_offsets" in outputs)

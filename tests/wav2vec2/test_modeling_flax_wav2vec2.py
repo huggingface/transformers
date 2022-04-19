@@ -386,7 +386,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         # make sure that full vectors are sampled and not values of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
     def test_sample_negatives_with_attn_mask(self):
         batch_size = 2
@@ -428,7 +428,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         # make sure that full vectors are sampled and not just slices of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 
 @require_flax

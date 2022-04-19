@@ -265,7 +265,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         outputs = tokenizer.decode(sample_ids, output_char_offsets=True, filter_word_delimiter_token=False)
         # check Wav2Vec2CTCTokenizerOutput keys for char
-        self.assertTrue(len(outputs.keys()), 2)
+        self.assertEqual(len(outputs.keys()), 2)
         self.assertTrue("text" in outputs)
         self.assertTrue("char_offsets" in outputs)
         self.assertTrue(isinstance(outputs, Wav2Vec2PhonemeCTCTokenizerOutput))
