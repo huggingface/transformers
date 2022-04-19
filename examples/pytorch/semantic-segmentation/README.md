@@ -101,7 +101,7 @@ Here we show how to fine-tune a [SegFormer](https://huggingface.co/nvidia/mit-b0
 python run_semantic_segmentation.py \
     --model_name_or_path nvidia/mit-b0 \
     --dataset_name segments/sidewalk-semantic \
-    --output_dir ./beans_outputs/ \
+    --output_dir ./segformer_outputs/ \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
