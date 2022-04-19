@@ -255,10 +255,8 @@ def main():
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
     labels = dataset["train"].features["labels"].names
-    label2id, id2label = dict(), dict()
-    for i, label in enumerate(labels):
-        label2id[label] = str(i)
-        id2label[str(i)] = label
+    label2id = {label: str(i) for i, label in enumerate(labels)}
+    id2label = {str(i): label for i, label in enumerate(labels)}
 
     # Load pretrained model and feature extractor
     #
@@ -266,7 +264,6 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
-        num_labels=len(id2label),
         i2label=id2label,
         label2id=label2id,
         finetuning_task="image-classification",

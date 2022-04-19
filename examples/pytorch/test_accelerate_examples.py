@@ -323,7 +323,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_overall_accuracy"], 0.10)
 
-    def test_image_classification_no_trainer(self):
+    def test_run_image_classification_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_image_classification_no_trainer.py
@@ -335,6 +335,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size=1
             --checkpointing_steps epoch
             --with_tracking
+            --seed 42
         """.split()
 
         with patch.object(sys, "argv", testargs):
