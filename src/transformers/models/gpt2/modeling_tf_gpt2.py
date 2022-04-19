@@ -655,8 +655,8 @@ GPT2_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             
-            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for 
-            `past_key_values`. In other words, the attention_mask always has to have the length: 
+            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for
+            `past_key_values`. In other words, the `attention_mask` always has to have the length:
             `len(past_key_values) + len(input_ids)`
 
             [What are attention masks?](../glossary#attention-mask)
