@@ -2426,7 +2426,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
 
         >>> # add mask_token
-        >>> ARTICLE_TO_MASK = (
+        >>> LONG_ARTICLE_TO_MASK = (
         ...     "BIGBIRD is a sparse attention mechanism that is linear in the number of tokens. "
         ...     "BIGBIRD satisfies a number of theoretical results: it is a universal approximator of sequence to "
         ...     "sequence functions and is also Turing complete. Theoretically, authors use the power of extra "
@@ -2437,7 +2437,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         ...     "fine-tune it for down stream tasks such as promoter region prediction and predicting effects of "
         ...     "non-coding variants."
         ... )
-        >>> inputs = tokenizer(ARTICLE_TO_MASK, return_tensors="pt")
+        >>> inputs = tokenizer(LONG_ARTICLE_TO_MASK, return_tensors="pt")
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
 
@@ -2728,7 +2728,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         >>> tokenizer = BigBirdTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
 
-        >>> text = (
+        >>> text = 50 * (
         ...     "I had a great time eating delicious food at your restaurant. The waiters and waitresses were "
         ...     "committed to great service and were very friendly. The atmosphere was awesome and I definitely liked "
         ...     "that you have a very modern style. Most importantly, every food and drink on your menu tasted great!"
@@ -3061,7 +3061,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> tokenizer = BigBirdTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
         >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
 
-        >>> text = (
+        >>> text = 50 * (
         ...     "The university is the major seat of the Congregation of Holy Cross (albeit not its official "
         ...     "headquarters, which are in Rome). Its main seminary, Moreau Seminary, is located on the campus across "
         ...     "St. Joseph lake from the Main Building. Old College, the oldest building on campus and located near "
