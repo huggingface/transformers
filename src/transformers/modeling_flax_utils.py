@@ -709,7 +709,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
-        
         # dictionary of key: dtypes for the model params
         param_dtypes = jax.tree_map(lambda x: x.dtype, state)
         # extract keys of parameters not in jnp.float32
@@ -732,14 +731,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 "You should probably UPCAST the model weights to float32 if this was not intended. "
                 "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
-         
+
         if _do_init:
             # set correct parameters
             model.params = unflatten_dict(state)
             return model
         else:
             return model, unflatten_dict(state)
-
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, **kwargs):
         """
