@@ -158,6 +158,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
 
+        if do_phonemize:
+            self.init_backend(self.phonemizer_lang)
+
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -168,6 +171,18 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self) -> Dict:
         return dict(self.encoder, **self.added_tokens_encoder)
+
+    def init_backend(self, phonemizer_lang: str):
+        """
+        Initializes the backend.
+
+        Args:
+            phonemizer_lang (`str`): The language to be used.
+        """
+        requires_backends(self, "phonemizer")
+        from phonemizer.backend import BACKENDS
+
+        self.backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
 
     def prepare_for_tokenization(
         self,
@@ -209,6 +224,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # set the correct phonemizer language
         if phonemizer_lang is not None:
             self.phonemizer_lang = phonemizer_lang
+            self.init_backend(phonemizer_lang)
 
         return (text, {})
 
@@ -234,23 +250,20 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return tokens
 
     def phonemize(self, text: str, phonemizer_lang: Optional[str] = None) -> str:
-        requires_backends(self, "phonemizer")
-
-        from phonemizer import phonemize
         from phonemizer.separator import Separator
 
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
-        phonemizer_lang = phonemizer_lang if phonemizer_lang is not None else self.phonemizer_lang
+        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
+            self.init_backend(phonemizer_lang)
+        else:
+            phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
-        phonemes = phonemize(
-            text,
-            language=phonemizer_lang,
-            backend=self.phonemizer_backend,
+        phonemes = self.backend.phonemize(
+            [text],
             separator=separator,
-            language_switch="remove-flags",
         )
-        phonemes = phonemes.strip()
+        phonemes = phonemes[0].strip()
 
         return phonemes
 
