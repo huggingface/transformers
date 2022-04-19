@@ -368,7 +368,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         outputs = processor.decode(logits, output_word_offsets=True)
         # check Wav2Vec2CTCTokenizerOutput keys for word
-        self.assertTrue(len(outputs.keys()), 2)
+        self.assertEqual(len(outputs.keys()), 4)
         self.assertTrue("text" in outputs)
         self.assertTrue("word_offsets" in outputs)
         self.assertTrue(isinstance(outputs, Wav2Vec2DecoderWithLMOutput))
@@ -385,7 +385,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         outputs = processor.batch_decode(logits, output_word_offsets=True)
 
         # check Wav2Vec2CTCTokenizerOutput keys for word
-        self.assertTrue(len(outputs.keys()), 2)
+        self.assertEqual(len(outputs.keys()), 4)
         self.assertTrue("text" in outputs)
         self.assertTrue("word_offsets" in outputs)
         self.assertTrue(isinstance(outputs, Wav2Vec2DecoderWithLMOutput))
