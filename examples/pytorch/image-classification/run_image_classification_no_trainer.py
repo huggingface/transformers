@@ -264,6 +264,7 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
+        num_labels=len(labels),
         i2label=id2label,
         label2id=label2id,
         finetuning_task="image-classification",
