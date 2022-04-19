@@ -413,7 +413,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertEqual(shape_list(hidden_states), [1, 8, 4])
+        self.assertEqual(shape_list(hidden_states), [1, 4, 8])
 
         # pad along seq length dim
         paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
