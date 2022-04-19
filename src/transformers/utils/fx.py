@@ -122,56 +122,6 @@ _SUPPORTED_MODELS = tuple(
 )
 
 
-# class HFProxy(Proxy):
-#     """
-# Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing #
-the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the # existing
-ones. #"""
-#
-#     def __init__(self, node: Node, tracer: Optional[Tracer] = None):
-#         super().__init__(node, tracer=tracer)
-#         if hasattr(self, "tracer") and self.tracer is not None:
-#             self.device = self.tracer.root.device
-#             self.dtype = next(self.tracer.root.parameters()).dtype
-#             self.cache = None
-#
-#     @property
-#     def shape(self):
-#         return self.size()
-#
-#     def __setitem__(self, key, value):
-#         pass
-#
-#     def __contains__(self, key):
-#         return False
-#
-#     def __eq__(self, other):
-#         if self.cache is not None:
-#             return self.cache == other
-#         elif isinstance(other, HFProxy):
-#             return True
-#         else:
-#             return super().__eq__(other)
-#
-#     def __ne__(self, other):
-#         return not self == other
-#
-#     def __len__(self):
-#         if self.cache is not None:
-#             if isinstance(self.cache, int):
-#                 return self.cache
-#             elif isinstance(self.cache, (torch.Size, list, tuple)):
-#                 return len(self.cache)
-#             else:
-#                 return super().__len__(self)
-#         return super().__len__(self)
-#
-#     def __torch_function__(self, orig_method, types, args=None, kwargs=None):
-#         proxy = super().__torch_function__(orig_method, types, args=args, kwargs=kwargs)
-#         proxy.cache = self.cache
-#         return proxy
-
-
 class HFProxy(Proxy):
     """
     Proxy that uses meta data to handle data-dependent control-flow.
