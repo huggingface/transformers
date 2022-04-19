@@ -25,13 +25,15 @@ from tokenizers import normalizers
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
+    PaddingStrategy,
     PreTokenizedInput,
+    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import add_end_docstrings, logging
 from .tokenization_layoutlmv2 import (
     LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING,
     LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
