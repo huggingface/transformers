@@ -13,28 +13,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+import json
 import logging
 import os
-import json
-import sys
 import random
+import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
 import numpy as np
 import torch
+from datasets import load_dataset
+from PIL import Image
 from torch import nn
 from torchvision import transforms
 from torchvision.transforms import functional
-from datasets import load_dataset
-from PIL import Image
-
-from huggingface_hub import hf_hub_download
 
 import transformers
+from huggingface_hub import hf_hub_download
 from transformers import (
-    MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForSemanticSegmentation,
@@ -209,9 +207,7 @@ class DataTrainingArguments:
     )
     reduce_labels: Optional[bool] = field(
         default=False,
-        metadata={
-            "help": "Whether or not to reduce all labels by 1 and replace background by 255."
-        },
+        metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
     )
 
     def __post_init__(self):
@@ -310,7 +306,7 @@ def main():
         dataset = dataset.rename_columns({"pixel_values": "image"})
     if "annotation" in dataset["train"].column_names:
         dataset = dataset.rename_columns({"annotation": "label"})
-    
+
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
@@ -348,10 +344,13 @@ def main():
         ).argmax(dim=1)
 
         pred_labels = logits_tensor.detach().cpu().numpy()
-        metrics = metric.compute(predictions=pred_labels, references=labels, 
-                                    num_labels=len(id2label), 
-                                    ignore_index=0,
-                                    reduce_labels=feature_extractor.reduce_labels)
+        metrics = metric.compute(
+            predictions=pred_labels,
+            references=labels,
+            num_labels=len(id2label),
+            ignore_index=0,
+            reduce_labels=feature_extractor.reduce_labels,
+        )
         for key, value in metrics.items():
             if type(value) is np.ndarray:
                 metrics[key] = value.tolist()
