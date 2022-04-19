@@ -1259,11 +1259,11 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        return_dict: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[Union[np.ndarray, tf.Tensor]] = False,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs
     ) -> Union[Tuple, TFSeq2SeqModelOutput]:
         outputs = self.model(
