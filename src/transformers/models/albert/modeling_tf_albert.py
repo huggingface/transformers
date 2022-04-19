@@ -953,14 +953,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'reims'",
-        expected_loss=0,
-    )
+    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -980,6 +973,36 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import AlbertTokenizer, TFAlbertForMaskedLM
+
+        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> model = TFAlbertForMaskedLM.from_pretrained("albert-base-v2")
+
+        >>> # add mask_token
+        >>> inputs = tokenizer(f"The capital of [MASK] is Paris.", return_tensors="tf")
+        >>> logits = model(**inputs).logits
+
+        >>> # retrieve index of [MASK]
+        >>> mask_token_index = tf.where(inputs.input_ids == tokenizer.mask_token_id)[0][1]
+        >>> predicted_token_id = tf.math.argmax(logits[0, mask_token_index], axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        'france'
+        ```
+
+        ```python
+        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+        >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
+        >>> outputs = model(**inputs, labels=labels)
+        >>> round(float(outputs.loss), 2)
+        0.81
+        ```
         """
         outputs = self.albert(
             input_ids=input_ids,

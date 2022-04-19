@@ -2392,14 +2392,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'here'",
-        expected_loss=19.02,
-    )
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2420,6 +2413,59 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BigBirdTokenizer, BigBirdForMaskedLM
+
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
+
+        >>> # add mask_token
+        >>> ARTICLE_TO_MASK = (
+        ...     "BIGBIRD is a sparse attention mechanism that is linear in the number of tokens. "
+        ...     "BIGBIRD satisfies a number of theoretical results: it is a universal approximator of sequence to "
+        ...     "sequence functions and is also Turing complete. Theoretically, authors use the power of extra "
+        ...     "global tokens preserve the expressive powers of the model. Authors complement these results by "
+        ...     "showing that moving to sparse attention mechanism do incur a cost. Empirically, BIGBIRD gives "
+        ...     "state-of-the-art performance on a number of NLP tasks such as question [MASK] and long document "
+        ...     "classification. Authors further introduce attention based contextual language model for DNA and "
+        ...     "fine-tune it for down stream tasks such as promoter region prediction and predicting effects of "
+        ...     "non-coding variants."
+        ... )
+        >>> inputs = tokenizer(ARTICLE_TO_MASK, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # retrieve index of [MASK]
+        >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        'answering'
+        ```
+
+        ```python
+        >>> ARTICLE_TO_TARGET = (
+        ...     "BIGBIRD is a sparse attention mechanism that is linear in the number of tokens. "
+        ...     "BIGBIRD satisfies a number of theoretical results: it is a universal approximator of sequence to "
+        ...     "sequence functions and is also Turing complete. Theoretically, authors use the power of extra "
+        ...     "global tokens preserve the expressive powers of the model. Authors complement these results by "
+        ...     "showing that moving to sparse attention mechanism do incur a cost. Empirically, BIGBIRD gives "
+        ...     "state-of-the-art performance on a number of NLP tasks such as question answering and long document"
+        ...     " classification. Authors further introduce attention based contextual language model for DNA and "
+        ...     "fine-tune it for down stream tasks such as promoter region prediction and predicting effects of "
+        ...     "non-coding variants."
+        ... )
+        >>> labels = tokenizer(ARTICLE_TO_TARGET, return_tensors="pt")["input_ids"]
+        >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
+        >>> outputs = model(**inputs, labels=labels)
+        >>> round(outputs.loss.item(), 2)
+        1.19
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2651,14 +2697,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="l-yohai/bigbird-roberta-base-mnli",
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_0'",
-        expected_loss=1.16,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2677,6 +2716,42 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BigBirdTokenizer, BigBirdForSequenceClassification
+
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
+        >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
+
+        >>> text = (
+        ...     "I had a great time eating delicious food at your restaurant. The waiters and waitresses were "
+        ...     "committed to great service and were very friendly. The atmosphere was awesome and I definitely liked "
+        ...     "that you have a very modern style. Most importantly, every food and drink on your menu tasted great!"
+        ... )
+        >>> inputs = tokenizer(text, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> num_labels = len(model.config.id2label)
+        >>> model = BigBirdForSequenceClassification.from_pretrained(
+        ...     "l-yohai/bigbird-roberta-base-mnli", num_labels=num_labels
+        ... )
+        >>> labels = torch.tensor(1)
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        1.18
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2949,16 +3024,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="abhinavkulkarni/bigbird-roberta-base-finetuned-squad",
-        output_type=BigBirdForQuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        qa_target_start_index=13,
-        qa_target_end_index=14,
-        expected_output="'nice puppet'",
-        expected_loss=0.65,
-    )
+    @replace_return_docstrings(output_type=BigBirdForQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2983,6 +3049,47 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BigBirdTokenizer, BigBirdForQuestionAnswering
+
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
+        >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
+
+        >>> text = (
+        ...     "The university is the major seat of the Congregation of Holy Cross (albeit not its official "
+        ...     "headquarters, which are in Rome). Its main seminary, Moreau Seminary, is located on the campus across "
+        ...     "St. Joseph lake from the Main Building. Old College, the oldest building on campus and located near "
+        ...     "the shore of St. Mary lake, houses undergraduate seminarians. Retired priests and brothers reside "
+        ...     "in Fatima House (a former retreat center), Holy Cross House, as well as Columba Hall near the "
+        ...     "Grotto. The university through the Moreau Seminary has ties to theologian Frederick Buechner. "
+        ...     "While not Catholic, Buechner has praised writers from Notre Dame and Moreau Seminary created a "
+        ...     "Buechner Prize for Preaching."
+        ... )
+        >>> question = "What is the oldest structure at Notre Dame?"
+        >>> inputs = tokenizer(question, text, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> answer_start_index = outputs.start_logits.argmax()
+        >>> answer_end_index = outputs.end_logits.argmax()
+        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> tokenizer.decode(predict_answer_tokens)
+        'Old College'
+        ```
+
+        ```python
+        >>> target_start_index, target_end_index = torch.tensor([130]), torch.tensor([132])
+        >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
+        >>> loss = outputs.loss
+        >>> round(outputs.loss.item(), 2)
+        9.48
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
