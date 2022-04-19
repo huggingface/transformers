@@ -52,10 +52,6 @@ _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "Stancld/LongT5-Local-Base"
 
-####################################################
-# This dict contains ids and associated url
-# for the pretrained weights provided with the models
-####################################################
 # TODO: Update before the merge
 LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Stancld/LongT5-Local-Base",
@@ -87,12 +83,14 @@ PARALLELIZE_DOCSTRING = r"""
                 - LongT5-TGlobal-Base: 12
                 - LongT5-Local-Large: 24
                 - LongT5-TGlobal-Large: 24
+                - LongT5-TGlobal-XL: 24
 
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using longt5-3b, which has a total of 24 attention modules:
+    # Here is an example of a device map on a machine with 4 GPUs using /LongT5-TGlobal-Large, which has a total of 24
+    # attention modules:
     model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-TGlobal-Large")
     device_map = {
         0: [0, 1, 2],
@@ -126,6 +124,12 @@ DEPARALLELIZE_DOCSTRING = r"""
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:
     """Pad a tensor so that a sequence length will be a multiple of `block_len`"""
     pad_len = -x.shape[dim] % block_len
+    # Handle cases when an empty input sequence is given
+    if not all(x.shape):
+        new_shape = list(x.shape)
+        new_shape[dim] += pad_len
+        return torch.zeros(new_shape, dtype=x.dtype)
+
     pad = [(0, 0)] * x.ndim
     pad[dim] = (0, pad_len)
     pad = sum(pad[::-1], ())
@@ -231,9 +235,12 @@ def _make_global_fixed_block_ids(
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
-    num_globals = max(seq_len // global_block_size, 1)  # handle cases with empty global sequences
+    num_globals = seq_len // global_block_size
     # [batch_size, seq_len // global_block_size]
-    _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).T
+    if num_globals > 0:
+        _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).T
+    else:
+        _sequence_block_ids_max = torch.zeros(batch_size, 0, dtype=global_block_ids.dtype)
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
     global_segment_ids = global_segment_ids.where(
         global_segment_ids <= _sequence_block_ids_max, -1 * torch.ones_like(global_segment_ids)
@@ -707,7 +714,6 @@ class LongT5LocalAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        """TODO"""
         batch_size, seq_length = hidden_states.shape[:2]
         real_seq_length = seq_length
 
@@ -788,11 +794,9 @@ class LongT5LocalAttention(nn.Module):
 
             if mask is not None:
                 # Replace masked positions with -10_000 (according to the original implementation)
-                mask = torch.where(mask > 0, 1.0, -1e4)
+                mask = torch.where(mask > 0, 0.0, -1e4)
                 # We need to adjust position bias shape to be sum with mask
-                position_bias = position_bias.transpose(1, 2)
-                position_bias = position_bias + mask
-                position_bias = position_bias.transpose(1, 2)
+                position_bias = position_bias + mask.transpose(1, 2)
 
         scores += position_bias
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
@@ -937,8 +941,9 @@ class LongT5TransientGlobalAttention(nn.Module):
         return values
 
     def compute_side_bias(self, mask: torch.Tensor, global_segment_ids: torch.Tensor) -> torch.Tensor:
-        # (batch_size, 1, 1, seq_len, global_seq_len)
-        side_attention_mask = torch.eq(mask[..., None], global_segment_ids[:, None, :]).unsqueeze(1).unsqueeze(1)
+        # (batch_size, 1, seq_len, global_seq_len)
+        side_attention_mask = torch.eq(mask[..., None], global_segment_ids[:, None, :])[:, None, ...]
+        attention_side_bias = torch.where(side_attention_mask > 0, 0.0, -1e4)
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(mask, self.global_block_size)
         side_relative_position_bucket = self._relative_position_bucket(
@@ -950,12 +955,11 @@ class LongT5TransientGlobalAttention(nn.Module):
         # (batch_size, seq_len, global_seq_len, num_heads)
         side_bias = self.global_relative_attention_bias(side_relative_position_bucket)
 
-        # (batch_size, 1, num_heads, seq_len, global_seq_len)
-        side_bias = side_bias.permute([0, 3, 1, 2]).unsqueeze(1)
-        side_attention_mask = side_attention_mask + side_bias
-
         # (batch_size, num_heads, seq_len, global_seq_len)
-        return side_attention_mask.squeeze(1)
+        side_bias = side_bias.permute([0, 3, 1, 2])
+        # (batch_size, num_heads, seq_len, global_seq_len)
+        attention_side_bias = attention_side_bias + side_bias
+        return attention_side_bias
 
     def forward(
         self,
@@ -969,7 +973,6 @@ class LongT5TransientGlobalAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        """TODO"""
         batch_size, seq_length = hidden_states.shape[:2]
         real_seq_length = seq_length
 
@@ -1062,6 +1065,14 @@ class LongT5TransientGlobalAttention(nn.Module):
             "...qhd,...khd->...hqk", query_states, key_states
         )  # (batch_size, num_block, n_heads, block_len, 3 * block_len + global_seq_len)
 
+        if mask is not None:
+            # We need to adjust position bias shape to be sum with mask
+            local_attention_mask = _get_local_attention_mask(mask, self.block_len, hidden_states.device)
+            # Replace masked positions with -10_000 (according to the original implementation)
+            local_attention_mask = torch.where(local_attention_mask > 0, 0.0, -1e4)
+        else:
+            local_attention_mask = None
+
         if position_bias is None:
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
             if not self.has_relative_attention_bias:
@@ -1079,19 +1090,19 @@ class LongT5TransientGlobalAttention(nn.Module):
             if past_key_value is not None:
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
-            if mask is not None:
-                # We need to adjust position bias shape to be sum with mask
-                position_bias = position_bias.transpose(1, 2)
-                position_bias = position_bias + _get_local_attention_mask(mask, self.block_len, hidden_states.device)
+            if local_attention_mask is not None:
+                position_bias = position_bias + local_attention_mask.transpose(1, 2)
                 # (batch_size, 1, n_heads, block_len, 3 * block_len)
-                position_bias = position_bias.transpose(1, 2)
 
             # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
-            global_position_bias = self.compute_side_bias(
-                mask if mask is not None else torch.ones(batch_size, seq_length), global_segment_ids
-            )
-            global_position_bias = _split_into_blocks(global_position_bias, self.block_len, dim=-2).transpose(1, 2)
-            position_bias = torch.cat([position_bias, global_position_bias], dim=-1)
+            if mask is None:
+                mask = torch.ones(batch_size, seq_length)
+            # (batch_size, num_heads, num_blocks, block_len, global_seq_len)
+            side_position_bias = self.compute_side_bias(mask, global_segment_ids)
+            # (batch_size, num_blocks, num_heads, block_len, global_seq_len)
+            side_position_bias = _split_into_blocks(side_position_bias, self.block_len, dim=-2).transpose(1, 2)
+            # (batch_size, num_blocks, num_heads, block_len, 3 * blocK_len + global_seq_len)
+            position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
         scores += position_bias
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(

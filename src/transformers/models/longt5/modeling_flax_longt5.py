@@ -48,7 +48,7 @@ from .configuration_longt5 import LongT5Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "Stancld/LongT5-Local-Base"
 _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
@@ -169,10 +169,13 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
-    # We assing num_globals >= 1 to handel the model initialization pass
-    num_globals = max(seq_len // global_block_size, 1)
+    num_globals = seq_len // global_block_size
+
     # [batch_size, seq_len // global_block_size]
-    _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1)
+    if num_globals > 0:
+        _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1)
+    else:
+        _sequence_block_ids_max = jnp.zeros((batch_size, 0), dtype=global_block_ids.dtype)
     global_segment_ids = jnp.cumsum(jnp.ones((batch_size, num_globals)), axis=-1) - 1
     global_segment_ids = jnp.where(
         global_segment_ids <= _sequence_block_ids_max, global_segment_ids, -1 * jnp.ones_like(global_segment_ids)
@@ -806,9 +809,7 @@ class FlaxLongT5LocalAttention(nn.Module):
             position_bias = self._create_position_bias(self.block_len, attention_mask)
 
             if attention_mask is not None:
-                position_bias = position_bias.swapaxes(1, 2)
-                position_bias = position_bias + attention_mask
-                position_bias = position_bias.swapaxes(1, 2)
+                position_bias = position_bias + attention_mask.swapaxes(1, 2)
 
         # create dropout rng
         dropout_rng = None
@@ -965,7 +966,12 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
     def compute_side_bias(self, attention_mask: np.ndarray, global_segment_ids: np.ndarray) -> np.ndarray:
         # (batch_size, 1, 1, seq_len, global_seq_len)
-        side_attention_mask = jnp.equal(attention_mask[..., None], global_segment_ids[:, None, :])[:, None, None, ...]
+        side_attention_mask = jnp.equal(attention_mask[..., None], global_segment_ids[:, None, :])[:, None, ...]
+        attention_side_bias = jax.lax.select(
+            side_attention_mask > 0,
+            jnp.full(side_attention_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(side_attention_mask.shape, -1e4).astype(self.dtype),
+        )
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
         side_relative_position_bucket = self._relative_position_bucket(
@@ -978,11 +984,10 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         side_bias = self.global_relative_attention_bias(side_relative_position_bucket)
 
         # (batch_size, 1, num_heads, seq_len, global_seq_len)
-        side_bias = jnp.transpose(side_bias, (0, 3, 1, 2))[:, None, ...]
-        side_attention_mask = side_attention_mask + side_bias
-
+        side_bias = jnp.transpose(side_bias, (0, 3, 1, 2))
         # (batch_size, num_heads, seq_len, global_seq_len)
-        return side_attention_mask.squeeze(1)
+        attention_side_bias = attention_side_bias + side_bias
+        return attention_side_bias
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
@@ -1105,23 +1110,29 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
 
+        if attention_mask is not None:
+            local_attention_mask = _get_local_attention_mask(attention_mask, self.block_len)
+            local_attention_mask = jax.lax.select(
+                local_attention_mask > 0,
+                jnp.full(local_attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(local_attention_mask.shape, -1e4).astype(self.dtype),
+            )
+        else:
+            local_attention_mask = None
+
         if position_bias is None:
             # compute position bias (only for first layer)
             position_bias = self._create_position_bias(self.block_len, attention_mask)
-
-            if attention_mask is not None:
-                position_bias = position_bias.swapaxes(1, 2)
-                position_bias = position_bias + _get_local_attention_mask(attention_mask, self.block_len)
-                position_bias = position_bias.swapaxes(1, 2)
+            if local_attention_mask is not None:
+                position_bias = position_bias + local_attention_mask.swapaxes(1, 2)
 
             # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
-            global_position_bias = self.compute_side_bias(
-                attention_mask if attention_mask is not None else jnp.ones((batch_size, seq_length)),
-                global_segment_ids,
-            )
-            global_position_bias = _split_into_blocks(global_position_bias, self.block_len, axis=-2)
-            global_position_bias = jnp.swapaxes(global_position_bias, 1, 2)
-            position_bias = jnp.concatenate((position_bias, global_position_bias), axis=-1)
+            if attention_mask is None:
+                attention_mask = jnp.ones((batch_size, seq_length))
+            side_position_bias = self.compute_side_bias(attention_mask, global_segment_ids)
+            side_position_bias = _split_into_blocks(side_position_bias, self.block_len, axis=-2)
+            side_position_bias = jnp.swapaxes(side_position_bias, 1, 2)
+            position_bias = jnp.concatenate((position_bias, side_position_bias), axis=-1)
 
         # create dropout rng
         dropout_rng = None
