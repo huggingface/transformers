@@ -2427,44 +2427,99 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         >>> # add mask_token
         >>> LONG_ARTICLE_TO_MASK = (
-        ...     "BIGBIRD is a sparse attention mechanism that is linear in the number of tokens. "
-        ...     "BIGBIRD satisfies a number of theoretical results: it is a universal approximator of sequence to "
-        ...     "sequence functions and is also Turing complete. Theoretically, authors use the power of extra "
-        ...     "global tokens preserve the expressive powers of the model. Authors complement these results by "
-        ...     "showing that moving to sparse attention mechanism do incur a cost. Empirically, BIGBIRD gives "
-        ...     "state-of-the-art performance on a number of NLP tasks such as question [MASK] and long document "
-        ...     "classification. Authors further introduce attention based contextual language model for DNA and "
-        ...     "fine-tune it for down stream tasks such as promoter region prediction and predicting effects of "
-        ...     "non-coding variants."
+        ...     "A transformer is a deep learning model that adopts the mechanism of self-attention, "
+        ...     "differentially weighting the significance of each part of the input data. It is used "
+        ...     "primarily in the fields of natural language processing (NLP) and computer vision (CV). "
+        ...     "Like recurrent neural networks (RNNs), transformers are designed to handle sequential input "
+        ...     "data, such as natural language, for tasks such as translation and text summarization. "
+        ...     "However, unlike RNNs, transformers do not necessarily process the data in order. Rather, the "
+        ...     "attention mechanism provides context for any position in the input sequence. For example, if "
+        ...     "the input data is a natural language sentence, the transformer does not need to process the "
+        ...     "beginning of the sentence before the end. Rather it identifies the context that confers "
+        ...     "meaning to each word in the sentence. This feature allows for more parallelization than RNNs "
+        ...     "and therefore reduces training times. Transformers were introduced in 2017 by a team at "
+        ...     "Google Brain and are increasingly the model of choice for NLP problems, replacing RNN models "
+        ...     "such as long short-term memory (LSTM). The additional training parallelization allows "
+        ...     "training on larger datasets than was once possible. This led to the development of pretrained "
+        ...     "systems such as BERT (Bidirectional Encoder Representations from Transformers) and GPT "
+        ...     "(Generative Pre-trained Transformer), which were trained with large language datasets, such "
+        ...     "as the Wikipedia Corpus and Common Crawl, and can be fine-tuned for specific tasks. Like "
+        ...     "earlier seq2seq models, the original Transformer model used an encoder-decoder architecture. "
+        ...     "The encoder consists of encoding layers that process the input iteratively one layer after "
+        ...     "another, while the decoder consists of decoding layers that do the same thing to the "
+        ...     "encoder's output. The function of each encoder layer is to generate encodings that contain "
+        ...     "information about which parts of the inputs are relevant to each other. It passes its "
+        ...     "encodings to the next encoder layer as inputs. Each decoder layer does the opposite, taking "
+        ...     "all the encodings and using their incorporated contextual information to generate an output "
+        ...     "sequence. To achieve this, each encoder and decoder layer makes use of an attention "
+        ...     "mechanism. For each input, attention weighs the relevance of every other input and draws "
+        ...     "from them to produce the output. Each decoder layer has an additional attention mechanism "
+        ...     "that draws information from the outputs of previous decoders, before the decoder layer draws "
+        ...     "information from the encodings. Both the encoder and decoder [MASK] have a feed-forward "
+        ...     "neural network for additional processing of the outputs and contain residual connections and "
+        ...     "layer normalization steps. Training transformer-based architectures can be expensive, "
+        ...     "especially for long inputs. Alternative architectures include the Reformer (which reduces the "
+        ...     "computational load from O(N^2) to O(NlnN), or models like ETC/BigBird (which can reduce it "
+        ...     "to O(N) where N is the length of the sequence. This is done using locality-sensitive hashing "
+        ...     "and reversible layers."
         ... )
         >>> inputs = tokenizer(LONG_ARTICLE_TO_MASK, return_tensors="pt")
+        >>> # long article input
+        >>> list(inputs["input_ids"].shape)
+        [1, 612]
+
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
         >>> # retrieve index of [MASK]
         >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
         >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
         >>> tokenizer.decode(predicted_token_id)
-        'answering'
+        'layers'
         ```
 
         ```python
-        >>> ARTICLE_TO_TARGET = (
-        ...     "BIGBIRD is a sparse attention mechanism that is linear in the number of tokens. "
-        ...     "BIGBIRD satisfies a number of theoretical results: it is a universal approximator of sequence to "
-        ...     "sequence functions and is also Turing complete. Theoretically, authors use the power of extra "
-        ...     "global tokens preserve the expressive powers of the model. Authors complement these results by "
-        ...     "showing that moving to sparse attention mechanism do incur a cost. Empirically, BIGBIRD gives "
-        ...     "state-of-the-art performance on a number of NLP tasks such as question answering and long document"
-        ...     " classification. Authors further introduce attention based contextual language model for DNA and "
-        ...     "fine-tune it for down stream tasks such as promoter region prediction and predicting effects of "
-        ...     "non-coding variants."
+        >>> LONG_ARTICLE_TO_TARGET = (
+        ...     "A transformer is a deep learning model that adopts the mechanism of self-attention, "
+        ...     "differentially weighting the significance of each part of the input data. It is used "
+        ...     "primarily in the fields of natural language processing (NLP) and computer vision (CV). "
+        ...     "Like recurrent neural networks (RNNs), transformers are designed to handle sequential input "
+        ...     "data, such as natural language, for tasks such as translation and text summarization. "
+        ...     "However, unlike RNNs, transformers do not necessarily process the data in order. Rather, the "
+        ...     "attention mechanism provides context for any position in the input sequence. For example, if "
+        ...     "the input data is a natural language sentence, the transformer does not need to process the "
+        ...     "beginning of the sentence before the end. Rather it identifies the context that confers "
+        ...     "meaning to each word in the sentence. This feature allows for more parallelization than RNNs "
+        ...     "and therefore reduces training times. Transformers were introduced in 2017 by a team at "
+        ...     "Google Brain and are increasingly the model of choice for NLP problems, replacing RNN models "
+        ...     "such as long short-term memory (LSTM). The additional training parallelization allows "
+        ...     "training on larger datasets than was once possible. This led to the development of pretrained "
+        ...     "systems such as BERT (Bidirectional Encoder Representations from Transformers) and GPT "
+        ...     "(Generative Pre-trained Transformer), which were trained with large language datasets, such "
+        ...     "as the Wikipedia Corpus and Common Crawl, and can be fine-tuned for specific tasks. Like "
+        ...     "earlier seq2seq models, the original Transformer model used an encoder-decoder architecture. "
+        ...     "The encoder consists of encoding layers that process the input iteratively one layer after "
+        ...     "another, while the decoder consists of decoding layers that do the same thing to the "
+        ...     "encoder's output. The function of each encoder layer is to generate encodings that contain "
+        ...     "information about which parts of the inputs are relevant to each other. It passes its "
+        ...     "encodings to the next encoder layer as inputs. Each decoder layer does the opposite, taking "
+        ...     "all the encodings and using their incorporated contextual information to generate an output "
+        ...     "sequence. To achieve this, each encoder and decoder layer makes use of an attention "
+        ...     "mechanism. For each input, attention weighs the relevance of every other input and draws "
+        ...     "from them to produce the output. Each decoder layer has an additional attention mechanism "
+        ...     "that draws information from the outputs of previous decoders, before the decoder layer draws "
+        ...     "information from the encodings. Both the encoder and decoder layers have a feed-forward "
+        ...     "neural network for additional processing of the outputs and contain residual connections and "
+        ...     "layer normalization steps. Training transformer-based architectures can be expensive, "
+        ...     "especially for long inputs. Alternative architectures include the Reformer (which reduces the "
+        ...     "computational load from O(N^2) to O(NlnN), or models like ETC/BigBird (which can reduce it "
+        ...     "to O(N) where N is the length of the sequence. This is done using locality-sensitive hashing "
+        ...     "and reversible layers."
         ... )
-        >>> labels = tokenizer(ARTICLE_TO_TARGET, return_tensors="pt")["input_ids"]
+        >>> labels = tokenizer(LONG_ARTICLE_TO_TARGET, return_tensors="pt")["input_ids"]
         >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
         >>> outputs = model(**inputs, labels=labels)
         >>> round(outputs.loss.item(), 2)
-        1.19
+        0.16
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2728,15 +2783,66 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         >>> tokenizer = BigBirdTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
 
-        >>> text = 50 * (
-        ...     "I had a great time eating delicious food at your restaurant. The waiters and waitresses were "
-        ...     "committed to great service and were very friendly. The atmosphere was awesome and I definitely liked "
-        ...     "that you have a very modern style. Most importantly, every food and drink on your menu tasted great!"
+        >>> LONG_ARTICLE = (
+        ...     "The shipping container is one of the mainstays of international trade. The globalised modern economy "
+        ...     "depends on the rapid and efficient movement of goods that containerisation allows. In many ways it "
+        ...     "was the advent of the container that allowed this globalised economy to develop. Invented during "
+        ...     "World War two as an efficient method of moving equipment to the front lines, there are now at any one "
+        ...     "time up to 15 million containers being used to transport goods on land and sea or waiting to be "
+        ...     "filled at factories and ports. They are vital in the supply chain and have allowed the added "
+        ...     "efficiency of 'just in time' inventory management, where companies no longer keep large warehouses of "
+        ...     "stock or parts, but rely on the ability to quickly order what they want from their suppliers. It is "
+        ...     "estimated that since the 1980s the ratio of inventory to GDP in American business' has fallen from "
+        ...     "25% to 15%. Altogether total business inventory in the US is estimated at $1.5 trillion, without "
+        ...     "'just in time' management methods this might be as much as $2.5 trillion. This means that companies "
+        ...     "rely more and more on the prompt delivery of parts from their suppliers to fulfill orders. This is "
+        ...     "particularly true of industries such as computer manufacture, which no longer make all the parts of "
+        ...     "the products that bear their names, but instead out source, often to suppliers half way around the "
+        ...     "world. American computer manufacturers are, for example, increasingly dependent on Asian microchip "
+        ...     "manufacturers in countries such as Taiwan and Thailand. An example of the kind of problems any "
+        ...     "disruption to the supply chain causes came after the September 11 attacks in the US when the "
+        ...     "Canadian border was shut for just two days causing chaos in the Detroit car industry, which relies "
+        ...     "on a regular flow of parts from Canada. There are three main flows of sea borne cargo: trans-Pacific, "
+        ...     "trans-Atlantic and Europe-Far East. The trans-Pacific route is by far the largest flow. At 11 "
+        ...     "million TEU ('twenty foot equivalent units') a year, it is almost twice the volume of Europe-Far East "
+        ...     "trade and three times the size of trans-Atlantic traffic. During the 1990s, during America's boom "
+        ...     "years, the trade of all the routes grew enormously and this led to more and larger ships being built. "
+        ...     "The container fleet grew by 12% in 2001. Until then, a container ship commonly carried 600 TEU, "
+        ...     "during the 1990s ships were being build that could carry up to 8000 TEU. However after the 1990s "
+        ...     "there was a dramatic fall off in trade. Trans-Pacific trade, for example, fell to 50% of its 1990s "
+        ...     "high. This down turn is being handled by the shipping alliances which manage the global trade. These "
+        ...     "large organizations are responsible for maintaining the fleets and seeing that the flow of goods is "
+        ...     "uninterrupted. This is a job that governments feel that the regular and reliable flow of trade is so "
+        ...     "important that in many cases the shipping alliances are exempt from anti-trust and monopoly laws. "
+        ...     "Their response has been to cut services, rest some of the older ships and share the burden amongst "
+        ...     "themselves. At first, containers reduced theft as it was more difficult for casual thieves to get "
+        ...     "into the containers. However, criminal gangs soon saw the potential for taking whole containers. "
+        ...     "This became a profitable crime as the average value of a container grew to $500,000 by the 1980s. "
+        ...     "Criminals also benefited from the convenience of containers when using them to transport drugs, "
+        ...     "illegal immigrants or other illegal goods. Measures to combat this, including stronger locks and "
+        ...     "preference schemes for shippers who have anti-theft programmes, have had some success, but crime is "
+        ...     "a constant menace to the container trade. Increasingly, the huge number of containers and their "
+        ...     "self-contained and enclosed nature has been raising worries about their possible use by terrorists. "
+        ...     "In fact, possible terrorists have already been found hiding in containers. This is particularly "
+        ...     "worrying considering that only 2% of containers are inspected. Containers are also extremely "
+        ...     "difficult to track and monitor. This is because they pass through so many countries and "
+        ...     "jurisdictions and because they can travel on both land and sea. Each transaction involving a "
+        ...     "container can involve as many as 25 different parties and generate between 30 and 40 documents. For "
+        ...     "a ship carrying 600 TEU this would result in approximately 4000 documents. The sheer scale of the "
+        ...     "information involved makes tracking containers a daunting task. Screening them to determine the "
+        ...     "contents is another solution that would take a great deal of effort because of the large numbers of "
+        ...     "containers. Additionally, it might cause delays in delivery that would disrupt international trade "
+        ...     "and industry out of proportion to the good the searches do. For the foreseeable future, there would "
+        ...     "seem to be no alternative to containers and their use is bound to grow. They are one of the "
+        ...     "cornerstones of global trade, but many yet cause problems their inventors never envisaged."
         ... )
-        >>> inputs = tokenizer(text, return_tensors="pt")
+        >>> inputs = tokenizer(LONG_ARTICLE, return_tensors="pt")
+        >>> # long input article
+        >>> list(inputs["input_ids"].shape)
+        [1, 969]
+
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
         >>> predicted_class_id = logits.argmax().item()
         >>> model.config.id2label[predicted_class_id]
         'LABEL_0'
@@ -2750,7 +2856,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        1.18
+        1.08
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -3061,18 +3167,56 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> tokenizer = BigBirdTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
         >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
 
-        >>> text = 50 * (
-        ...     "The university is the major seat of the Congregation of Holy Cross (albeit not its official "
-        ...     "headquarters, which are in Rome). Its main seminary, Moreau Seminary, is located on the campus across "
-        ...     "St. Joseph lake from the Main Building. Old College, the oldest building on campus and located near "
-        ...     "the shore of St. Mary lake, houses undergraduate seminarians. Retired priests and brothers reside "
-        ...     "in Fatima House (a former retreat center), Holy Cross House, as well as Columba Hall near the "
-        ...     "Grotto. The university through the Moreau Seminary has ties to theologian Frederick Buechner. "
-        ...     "While not Catholic, Buechner has praised writers from Notre Dame and Moreau Seminary created a "
-        ...     "Buechner Prize for Preaching."
+        >>> LONG_ARTICLE_TO_QUESTION_AND_ANSWERING = (
+        ...     "The weather phenomenon called El Nino was first recorded in the 1500s when fishermen in South America "
+        ...     "noticed that near Christmas some years the water was noticeably warmer than others. They named this "
+        ...     "El Nino, or the infant, as it happened near the celebration of the birth of Christ. Only in recent "
+        ...     "years has there been any serious investigations into the causes and results of El Nino. The 1997 – "
+        ...     "1998 El Nino was the first to be studied extensively. Scientists from France, Japan, Korea and "
+        ...     "Taiwan combined the various readings they had from satellite and surface measurements of wind "
+        ...     "speeds and water temperatures to make the Tropical Atmosphere Ocean Array. This combined information "
+        ...     "allowed them to see the overall patterns of an El Nino and helped them predict when one was starting. "
+        ...     "Weather pattern rely heavily on the operation of the “planetary heat engine”. Essentially, this means "
+        ...     "that because the sun is closest to the equator the seawater in that region is the warmest. The warm "
+        ...     "water evaporates and forms clouds, which move toward the poles powered by their heat. These "
+        ...     "atmospheric loops, which move heat from the tropics to the poles, are called “connective cells”. "
+        ...     "Without this process the equatorial regions would be hotter than they are and the north and south "
+        ...     "would be much colder. The wind in the central Pacific tends to blow from the east. This pushes water "
+        ...     "from South America towards Australia and Indonesia. As a result, sea levels have been found to be "
+        ...     "up to 60 centimetres higher in the west. The water that is pushed westward from the South American "
+        ...     "coast is replaced by colder water, which has a high nutrient level that consequently attracts fish. "
+        ...     "This makes the waters off Peru and Ecuador good fishing grounds. An El Nino happens when the winds "
+        ...     "weaken and sea levels drop. The warmer water moves east and less water evaporates to form clouds. "
+        ...     "The results of this are twofold. The warmer water in the east reduces the number of fish and the "
+        ...     "lack of rain causes droughts. This can cause problems such as the forest fires that have plagued "
+        ...     "Indonesia and Australia in recent years. Additionally, El Nino is thought to be one of the causes of "
+        ...     "hurricanes that have devastated Central and North West America. As the population has increased the "
+        ...     "effects of changing weather have had a greater impact. People are living in places, often in areas "
+        ...     "more likely to be affected by adverse weather, than they ever did before and in increased densities. "
+        ...     "This means that natural disasters affect more people. Natural resources are being used closer to "
+        ...     "their limits, so small changes in their availability can cause disruption. For example, in the past, "
+        ...     "South American fishermen could make a profit even during an EL Nino, but modern industrial fishing "
+        ...     "needs larger fish stocks to be profitable. Knowing when an El Nino is developing allows people to "
+        ...     "make plans to lessen its negative effects. The system of buoys and satellites monitoring the Pacific "
+        ...     "allows scientists to predict the start of the 12 to 18 month El Nino cycle. As a result people can "
+        ...     "prepare. For example, in North East Brazil during the 1987 El Nino, farmers only got 15% of their "
+        ...     "normal grain harvest, but in 1992, when the government advised them to plant fast maturing plants, "
+        ...     "they got 82%. The question of whether El Nino has been strengthened by global warming is unanswered. "
+        ...     "The National Centre for Atmospheric research believes that El Nino could be responsible for the "
+        ...     "increased temperatures in North America by changing the jet stream. Global warming may not be the "
+        ...     "direct cause. However, global warming may cause the local warming changes that cause El Nino and "
+        ...     "change atmospheric circulation. The National Oceanic and Atmospheric Administration suggests that "
+        ...     "global warming may increase El Nino effects by increasing temperatures and increasing water "
+        ...     "evaporation over land leading to floods. El Nino is only one factor in the complex inter-relations "
+        ...     "that cause weather patterns, but it appears to be a major factor. By monitoring the phenomenon, "
+        ...     "we can limit its effects and avoid disasters and droughts."
         ... )
-        >>> question = "What is the oldest structure at Notre Dame?"
-        >>> inputs = tokenizer(question, text, return_tensors="pt")
+        >>> QUESTION = "What is the effects of El Nino?"
+        >>> inputs = tokenizer(QUESTION, LONG_ARTICLE_TO_QUESTION_AND_ANSWERING, return_tensors="pt")
+        >>> # long article and question input
+        >>> list(inputs["input_ids"].shape)
+        [1, 816]
+
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
 
@@ -3080,7 +3224,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> answer_end_index = outputs.end_logits.argmax()
         >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
         >>> tokenizer.decode(predict_answer_tokens)
-        'Old College'
+        'increasing water evaporation over land leading to floods'
         ```
 
         ```python
@@ -3088,7 +3232,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
         >>> loss = outputs.loss
         >>> round(outputs.loss.item(), 2)
-        9.48
+        8.02
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
