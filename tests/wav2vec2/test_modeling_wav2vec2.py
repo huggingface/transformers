@@ -1061,7 +1061,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
     def test_sample_negatives_with_mask(self):
         batch_size = 2
@@ -1098,7 +1098,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 
 @require_torch
