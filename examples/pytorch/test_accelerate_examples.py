@@ -327,8 +327,8 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_image_classification_no_trainer.py
+            --dataset_name huggingface/image-classification-test-sample
             --output_dir {tmp_dir}
-            --max_train_steps=50
             --num_warmup_steps=8
             --learning_rate=3e-3
             --per_device_train_batch_size=2

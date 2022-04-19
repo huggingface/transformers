@@ -230,11 +230,6 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(args.dataset_name, task="image-classification")
-        # Rename column name of images to standardized name "image"
-        if "pixel_values" in dataset["train"].column_names:
-            dataset = dataset.rename_columns({"pixel_values": "image"})
-        if "img" in dataset["train"].column_names:
-            dataset = dataset.rename_columns({"img": "image"})
     else:
         data_files = {}
         if args.train_dir is not None:
@@ -271,6 +266,7 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
+        num_labels=len(id2label),
         i2label=id2label,
         label2id=label2id,
         finetuning_task="image-classification",
@@ -280,7 +276,6 @@ def main():
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
-        ignore_mismatched_sizes=True,
     )
 
     # Preprocessing the datasets
@@ -434,6 +429,7 @@ def main():
                 total_loss += loss.detach().float()
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
+            print("Loss:", loss.item())
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 optimizer.step()
                 lr_scheduler.step()
