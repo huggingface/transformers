@@ -29,6 +29,7 @@ from requests import HTTPError
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
@@ -117,9 +118,9 @@ class BatchFeature(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (`str` or [`~file_utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum
-                [`~file_utils.TensorType`]. If `None`, no modification is done.
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
         """
         if tensor_type is None:
             return self
@@ -328,7 +329,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -433,7 +434,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             )
         except ValueError:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                 f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
                 f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."

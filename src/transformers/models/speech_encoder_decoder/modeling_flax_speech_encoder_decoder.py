@@ -121,7 +121,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
@@ -146,7 +146,7 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxBaseModelOutput`] instead of a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxBaseModelOutput`] instead of a plain tuple.
 """
 
 SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
@@ -192,8 +192,8 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.FlaxCausalLMOutputWithCrossAttentions`] instead of
-            a plain tuple.
+            If set to `True`, the model will return a [`~utils.FlaxCausalLMOutputWithCrossAttentions`] instead of a
+            plain tuple.
 """
 
 
@@ -227,10 +227,14 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         else:
             self.enc_to_dec_proj = None
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
         """
         Computes the output length of the convolutional layers
         """
+
+        add_adapter = self.config.encoder.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
@@ -239,6 +243,10 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
 
         for kernel_size, stride in zip(self.config.encoder.conv_kernel, self.config.encoder.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.encoder.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.encoder.adapter_stride)
 
         return input_lengths
 
@@ -311,7 +319,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
@@ -355,6 +363,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                     f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
                 )
 
+        # make sure input & output embeddings are not tied
+        config.tie_word_embeddings = False
         module = self.module_class(config=config, dtype=dtype, **kwargs)
 
         if input_shape is None:
@@ -369,8 +379,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input DeviceArrays
-        inputs = jnp.zeros(encoder_input_shape, dtype="i4")
-        attention_mask = jnp.ones_like(inputs)
+        inputs = jnp.zeros(encoder_input_shape, dtype="f4")
+        attention_mask = jnp.ones_like(inputs, dtype="i4")
         decoder_input_ids = jnp.zeros(decoder_input_shape, dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
 
@@ -448,8 +458,10 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
-        return self.module._get_feat_extract_output_lengths(input_lengths)
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
+        return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
 
     @add_start_docstrings(SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -488,7 +500,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
-            attention_mask = jnp.ones_like(inputs)
+            attention_mask = jnp.ones_like(inputs, dtype="i4")
 
         # Handle any PRNG if needed
         rngs = {}
@@ -501,7 +513,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         outputs = self.module.apply(
             {"params": params or self.params},
-            inputs=jnp.array(inputs, dtype="i4"),
+            inputs=jnp.array(inputs, dtype="f4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -696,7 +708,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         # prepare encoder inputs
         if attention_mask is None:
-            attention_mask = jnp.ones_like(inputs)
+            attention_mask = jnp.ones_like(inputs, dtype="i4")
 
         # prepare decoder inputs
         if decoder_input_ids is None:
@@ -716,7 +728,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            inputs=jnp.array(inputs, dtype="i4"),
+            inputs=jnp.array(inputs, dtype="f4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
@@ -907,6 +919,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
         config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # make sure input & output word embeddings are not tied
+        config.tie_word_embeddings = False
 
         # init model
         model = cls(config, dtype=dtype)

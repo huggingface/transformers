@@ -156,7 +156,8 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
         self.bert_model = TFBertMainLayer(config, add_pooling_layer=False, name="bert_model")
         self.config = config
 
-        assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        if self.config.hidden_size <= 0:
+            raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
             self.encode_proj = tf.keras.layers.Dense(
@@ -174,7 +175,6 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         outputs = self.bert_model(
             input_ids=input_ids,
@@ -235,7 +235,6 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
@@ -294,7 +293,6 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         outputs = self.encoder(
             input_ids=input_ids,
@@ -328,7 +326,6 @@ class TFDPREncoder(TFPreTrainedModel):
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         outputs = self.encoder(
             input_ids=input_ids,
@@ -487,8 +484,8 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -523,8 +520,8 @@ TF_DPR_READER_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -560,7 +557,6 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
@@ -648,7 +644,6 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
@@ -734,7 +729,6 @@ class TFDPRReader(TFDPRPretrainedReader):
         output_hidden_states: bool = None,
         return_dict=None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:

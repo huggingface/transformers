@@ -634,7 +634,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -723,7 +723,7 @@ class MarianEncoder(MarianPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -942,7 +942,7 @@ class MarianDecoder(MarianPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1280,11 +1280,9 @@ class MarianMTModel(MarianPreTrainedModel):
         super().__init__(config)
         self.model = MarianModel(config)
 
-        self.target_vocab_size = (
-            config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
-        )
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.target_vocab_size)))
-        self.lm_head = nn.Linear(config.d_model, self.target_vocab_size, bias=False)
+        target_vocab_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
+        self.register_buffer("final_logits_bias", torch.zeros((1, target_vocab_size)))
+        self.lm_head = nn.Linear(config.d_model, target_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1305,6 +1303,10 @@ class MarianMTModel(MarianPreTrainedModel):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)
+
+        # update config.decoder_vocab_size if embeddings are tied
+        if self.config.share_encoder_decoder_embeddings:
+            self.config.decoder_vocab_size = new_num_tokens
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if (
@@ -1451,7 +1453,7 @@ class MarianMTModel(MarianPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.target_vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.decoder_vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1643,7 +1645,7 @@ class MarianForCausalLM(MarianPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 

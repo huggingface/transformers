@@ -31,7 +31,7 @@ from transformers.utils import ENV_VARS_TRUE_VALUES
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source"
+PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
@@ -117,6 +117,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
     "ViltForQuestionAnswering",
@@ -185,6 +186,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     [
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
+        ("data2vec-vision", "data2vec"),
     ]
 )
 
