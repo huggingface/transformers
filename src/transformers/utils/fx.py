@@ -124,10 +124,9 @@ _SUPPORTED_MODELS = tuple(
 
 # class HFProxy(Proxy):
 #     """
-#     Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing
-#     the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the
-#     existing ones.
-#     """
+# Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing #
+the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the # existing
+ones. #"""
 #
 #     def __init__(self, node: Node, tracer: Optional[Tracer] = None):
 #         super().__init__(node, tracer=tracer)
@@ -172,25 +171,28 @@ _SUPPORTED_MODELS = tuple(
 #         proxy.cache = self.cache
 #         return proxy
 
+
 class HFProxy(Proxy):
+    """
+    Proxy that uses meta data to handle data-dependent control-flow.
+    """
+
     def __init__(self, node, tracer):
         self._meta_tensor = None
         super().__init__(node, tracer)
 
     def install_meta_tensor(self, meta_tensor):
-        assert isinstance(meta_tensor, torch.Tensor) and meta_tensor.device == torch.device('meta')
+        assert (
+            isinstance(meta_tensor, torch.Tensor)
+            and meta_tensor.device == torch.device("meta")
+            or isinstance(meta_tensor, (int, torch.Size))
+        )
         self._meta_tensor = meta_tensor
 
     def dim(self):
         if self._meta_tensor is None:
-            return super().__getattr__('dim')
+            return super().__getattr__("dim")
         return self._meta_tensor.dim()
-
-    @property
-    def shape(self):
-        if self._meta_tensor is None:
-            return super().__getattr__('shape')
-        return self._meta_tensor.shape
 
 
 def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -331,52 +333,6 @@ class HFTracer(Tracer):
             currentframe = currentframe.f_back
         return False
 
-    def _wrap_method_for_model_recording(
-        self, model: PreTrainedModel, method_name: str, cache_name: str, module_ids: List[int]
-    ):
-        """Helper function that wraps a torch.Tensor method to record its outputs during forward pass."""
-        method = getattr(torch.Tensor, method_name)
-
-        @functools.wraps(method)
-        def wrapped(*args, **kwargs):
-            if self._method_is_called_in_leaf_module(module_ids):
-                return method(*args, **kwargs)
-            if not hasattr(model, cache_name):
-                setattr(model, cache_name, [])
-            cache = getattr(model, cache_name)
-            res = method(*args, **kwargs)
-            cache.append(res)
-            return res
-
-        return wrapped
-
-    def _monkey_patch_tensor_methods_for_model_recording(self, model: PreTrainedModel, method_names: Iterable[str]):
-        """
-        Helper function that patches torch.Tensor methods (specified by the method_names list) to record model
-        inference before symbolic tracing.
-        """
-        cache_names = {}
-        original_methods = {}
-        module_ids = set(id(mod) for mod in model.modules())
-        for method_name in method_names:
-            cache_name = f"cache_{method_name}"
-            cache_names[method_name] = cache_name
-            if not hasattr(torch.Tensor, method_name):
-                logger.info(f"torch.Tensor has no method called {method_name}, skipping patching.")
-                continue
-            original_methods[method_name] = getattr(torch.Tensor, method_name)
-            setattr(
-                torch.Tensor,
-                method_name,
-                self._wrap_method_for_model_recording(model, method_name, cache_name, module_ids),
-            )
-
-            if method_name == "size":
-                original_methods["shape"] = torch.Tensor.shape
-                setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
-
-        return cache_names, original_methods
-
     def _generate_dummy_input(
         self, model: PreTrainedModel, input_name: str, shape: List[int]
     ) -> Dict[str, torch.Tensor]:
@@ -421,53 +377,6 @@ class HFTracer(Tracer):
 
         return inputs_dict
 
-    def record(self, model: PreTrainedModel, input_names: List[str], method_names: Optional[Iterable[str]] = None):
-        """
-        Records torch.Tensor method outputs (specified by method_names) that will then be used during symbolic tracing.
-        """
-        if method_names is None:
-            method_names = self._DEFAULT_METHODS_TO_RECORD
-
-        # Creating a random input shape to generate dummy inputs.
-        batch_size = _generate_random_int()
-        sequence_length = _generate_random_int()
-        shape = [batch_size, sequence_length]
-
-        if model.__class__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-            num_choices = _generate_random_int(low=2, high=5)
-            shape.insert(1, num_choices)
-
-        inputs = {}
-        for input_name in input_names:
-            inputs.update(self._generate_dummy_input(model, input_name, shape))
-
-        cache_names, original_methods = self._monkey_patch_tensor_methods_for_model_recording(model, method_names)
-        self.original_methods = original_methods
-
-        model(**inputs)
-
-        _reset_tensor_methods(original_methods)
-
-        self.recorded_methods = {
-            method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
-        }
-
-    # def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
-    #     if isinstance(attr_val, torch.nn.Parameter):
-    #         for n, p in self.root.named_parameters():
-    #             if attr_val is p:
-    #                 if n not in parameter_proxy_cache:
-    #                     parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
-    #                 return parameter_proxy_cache[n]
-    #     # TODO: condition this on wether dynamic axes were requested.
-    #     if isinstance(attr_val, torch.Tensor):
-    #         for n, p in self.root.named_buffers():
-    #             if attr_val is p:
-    #                 if n not in parameter_proxy_cache:
-    #                     parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
-    #                 return parameter_proxy_cache[n]
-    #     return attr_val
-
     def create_proxy(self, kind, target, args, kwargs, name=None, type_expr=None, proxy_factory_fn=None):
         if proxy_factory_fn is not None:
             raise RuntimeError("Don't support custom proxy factory function for MetaTensorTracer")
@@ -476,7 +385,7 @@ class HFTracer(Tracer):
 
         def extract_meta(a):
             if isinstance(a, HFProxy):
-                if getattr(a, '_meta', None) is not None:
+                if getattr(a, "_meta_tensor", None) is not None:
                     return a._meta_tensor
                 else:
                     return None
@@ -486,22 +395,22 @@ class HFTracer(Tracer):
             meta_args = torch.fx.node.map_aggregate(args if args else (), extract_meta)
             meta_kwargs = torch.fx.node.map_aggregate(kwargs if kwargs else {}, extract_meta)
 
-            if kind == 'call_function':
+            if kind == "call_function":
                 meta_target = target
-            elif kind == 'call_method':
+            elif kind == "call_method":
                 assert isinstance(args[0], torch.fx.Proxy)
                 meta_target = getattr(torch.Tensor, target)
-            elif kind == 'call_module':
-                raise RuntimeError('Not yet implemented')
-            elif kind == 'placeholder':
+            elif kind == "call_module":
+                raise RuntimeError("Not yet implemented")
+            elif kind == "placeholder":
                 proxy.install_meta_tensor(next(self.concrete_meta_iter))
                 return proxy
             else:
-                assert False, f'Unknown target {kind}'
+                assert False, f"Unknown target {kind}"
 
             meta_out = meta_target(*meta_args, **meta_kwargs)
 
-            if isinstance(meta_out, torch.Tensor):
+            if isinstance(meta_out, (torch.Tensor, int, torch.Size)):
                 proxy.install_meta_tensor(meta_out)
 
         except Exception as e:
@@ -524,10 +433,10 @@ class HFTracer(Tracer):
         # self.record(root, input_names, method_names=method_names)
 
         # TODO: adapt the way leaf function are wrapped with the "autowrap function" feature from Tracer.
-        # autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
-        # self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
+        autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
+        self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
 
-        # self._patch_leaf_functions_for_root(root)
+        self._patch_leaf_functions_for_root(root)
 
         # Creating a random input shape to generate dummy inputs.
         batch_size = _generate_random_int()
@@ -549,7 +458,7 @@ class HFTracer(Tracer):
 
         self.graph = super().trace(root, concrete_args=concrete_args)
 
-        # self._patch_leaf_functions_for_root(root, restore=True)
+        self._patch_leaf_functions_for_root(root, restore=True)
 
         # _reset_tensor_methods(self.original_methods)
 

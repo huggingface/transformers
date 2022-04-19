@@ -697,9 +697,9 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict)
 
-    def test_torch_fx_output_loss(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
+    # def test_torch_fx_output_loss(self):
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
@@ -725,8 +725,13 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
+                    try:
+                        traced_model = symbolic_trace(model, input_names)
+                        traced_output = traced_model(**filtered_inputs)
+                    except:
+                        import pdb
+
+                        pdb.set_trace()
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
                     input_ids = inputs["input_ids"]
@@ -752,8 +757,13 @@ class ModelTesterMixin:
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
+                    try:
+                        traced_model = symbolic_trace(model, input_names)
+                        traced_output = traced_model(**filtered_inputs)
+                    except:
+                        import pdb
+
+                        pdb.set_trace()
 
             except RuntimeError:
                 self.fail("Couldn't trace module.")
