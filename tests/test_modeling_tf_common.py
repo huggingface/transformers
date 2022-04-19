@@ -565,8 +565,7 @@ class TFModelTesterMixin:
 
             # Output all for aggressive testing
             config.output_hidden_states = True
-            if self.has_attentions:
-                config.output_attentions = True
+            config.output_attentions = self.has_attentions
 
             # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
             # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
