@@ -83,6 +83,39 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         ]
         self.assertEqual(outputs, target_outputs)
 
+        import torch
+
+        outputs = generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_token_ids": ANY(torch.Tensor)},
+                {"generated_token_ids": ANY(torch.Tensor)},
+            ],
+        )
+        generator.tokenizer.pad_token_id = generator.model.config.eos_token_id
+        generator.tokenizer.pad_token = "<pad>"
+        outputs = generator(
+            ["This is a test", "This is a second test"],
+            do_sample=True,
+            num_return_sequences=2,
+            batch_size=2,
+            return_tensors=True,
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                ],
+                [
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                ],
+            ],
+        )
+
     @require_tf
     def test_small_model_tf(self):
         generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
