@@ -16,7 +16,7 @@ limitations under the License.
 
 # Semantic segmentation example
 
-This directory contains a script, `run_semantic_segmentation_no_trainer.py`, that showcases how to fine-tune any model supported by the [`AutoModelForSemanticSegmentation` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSemanticSegmentation) (such as [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer), [BEiT](https://huggingface.co/docs/transformers/main/en/model_doc/beit), [DPT]((https://huggingface.co/docs/transformers/main/en/model_doc/dpt))) for semantic segmentation using PyTorch.
+This directory contains a script, `run_semantic_segmentation_no_trainer.py`, that showcases how to fine-tune any model supported by the [`AutoModelForSemanticSegmentation` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSemanticSegmentation) (such as [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer), [BEiT](https://huggingface.co/docs/transformers/main/en/model_doc/beit), [DPT](https://huggingface.co/docs/transformers/main/en/model_doc/dpt)) for semantic segmentation using PyTorch.
 
 ![segformer_inference_widget](https://user-images.githubusercontent.com/48327001/163667406-01f323a6-72ec-4e7e-bdeb-7d9da71b0697.gif)
 
@@ -33,7 +33,9 @@ The script assumes that you have a `DatasetDict` with 2 columns, "image" and "la
 ```python
 from datasets import Dataset, DatasetDict, Image
 
-image_paths_train = ["path/to/image_1.jpg/png", "path/to/image_2.jpg/png", ..., "path/to/image_n.jpg/png"]
+# your images can of course have a different extension
+# semantic segmentation maps are typically stored in the png format
+image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"] 
 label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
 
 # same for validation
@@ -63,7 +65,7 @@ dataset = DatasetDict({
 dataset.push_to_hub("name of repo on the hub")
 
 # optionally, you can push to a private repo on the hub
-# dataset.push_to_hub("name of repo on the hub")
+# dataset.push_to_hub("name of repo on the hub", private=True)
 ```
 
 An example of such a dataset can be seen at [nielsr/ade20k-demo](https://huggingface.co/datasets/nielsr/ade20k-demo).
@@ -71,7 +73,19 @@ An example of such a dataset can be seen at [nielsr/ade20k-demo](https://hugging
 ### Creating an id2label mapping
 
 Besides that, the script also assumes the existence of an `id2label.json` file in the repo, containing a mapping from integers to actual class names.
-An example of that can be seen [here](https://huggingface.co/datasets/nielsr/ade20k-demo/blob/main/id2label.json). You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
+An example of that can be seen [here](https://huggingface.co/datasets/nielsr/ade20k-demo/blob/main/id2label.json). This can be created in Python as follows:
+
+```python
+import json
+
+# simple example
+id2label = {0: 'cat', 1: 'dog'}
+
+with open('id2label.json', 'w') as fp:
+    json.dump(id2label, fp)
+```
+
+You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
 
 ## Running the script
 
@@ -95,9 +109,9 @@ accelerate launch --output_dir segformer-finetuned-sidewalk --with_tracking --pu
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
-With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](segments/sidewalk-semantic) dataset.
+With the default settings, the script fine-tunes a [SegFormer]((https://huggingface.co/docs/transformers/main/en/model_doc/segformer)) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset.
 
-The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk.
+The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk. Note that the script usually requires quite a few epochs to achieve great results, e.g. the SegFormer authors fine-tuned their model for 160k steps (batches) on [`scene_parse_150`](https://huggingface.co/datasets/scene_parse_150).
 
 ## Reload and perform inference
 
@@ -142,6 +156,6 @@ For visualization of the segmentation maps, we refer to the [example notebook](h
 
 ## Important notes
 
-Some datasets, like [`scene_parse_150`](scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
+Some datasets, like [`scene_parse_150`](https://huggingface.co/datasets/scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
 
 In case you're training on such a dataset, make sure to set the ``reduce_labels`` flag, which will take care of this.
