@@ -14,7 +14,11 @@
 # limitations under the License.
 """ RoFormer model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -131,3 +135,16 @@ class RoFormerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.rotary_value = rotary_value
         self.use_cache = use_cache
+
+
+class RoFormerOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )
