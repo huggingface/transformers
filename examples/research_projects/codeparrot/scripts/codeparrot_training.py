@@ -1,4 +1,5 @@
 import logging
+import time
 from argparse import Namespace
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import transformers
 import wandb
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from arguments import TrainingArguments
 from huggingface_hub import Repository
 from transformers import AdamW, AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
@@ -203,19 +204,44 @@ model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
 # Train model
 model.train()
 completed_steps = 0
+config_model = accelerator.unwrap_model(model).config
+t_start = time.time()
 for step, batch in enumerate(train_dataloader, start=1):
     loss = model(batch, labels=batch, use_cache=False).loss
     log_metrics(
         step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
     )
     loss = loss / args.gradient_accumulation_steps
-    accelerator.backward(loss)
-    if step % args.gradient_accumulation_steps == 0:
+    if step % args.gradient_accumulation_steps != 0:
+        # Prevent backward from doing gradient all_reduce in every step
+        if accelerator.distributed_type == DistributedType.MULTI_GPU:
+            with model.no_sync():
+                accelerator.backward(loss)
+        else:
+            accelerator.backward(loss)
+    else:
+        accelerator.backward(loss)
         accelerator.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
         completed_steps += 1
+        elapsed_time_per_iteration = time.time() - t_start
+        checkpoint_factor = 4 if args.gradient_checkpointing else 3
+        batch_size = args.train_batch_size * accelerator.state.num_processes * args.gradient_accumulation_steps
+        factor = (
+            24 * checkpoint_factor * batch_size * args.seq_length * config_model.n_layer * (config_model.n_embd**2)
+        )
+        flops_per_iteration = factor * (
+            1.0
+            + (args.seq_length / (6.0 * config_model.n_embd))
+            + (tokenizer.vocab_size / (16.0 * config_model.n_layer * config_model.n_embd))
+        )
+        tflops = flops_per_iteration / (elapsed_time_per_iteration * accelerator.state.num_processes * (10**12))
+        log_metrics(
+            step, {"steps": completed_steps, "tflops": tflops, "time_per_iteration": elapsed_time_per_iteration}
+        )
+        t_start = time.time()
     if step % args.save_checkpoint_steps == 0:
         logger.info("Evaluating and saving model checkpoint")
         eval_loss, perplexity = evaluate(args)
