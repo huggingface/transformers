@@ -148,10 +148,13 @@ class FastSpeech2Config(PretrainedConfig):
         energy_max=3.2244551181793213,
         speaker_embed_dim=64,
         num_speakers=1,
-        max_source_positions=1024,
-        initializer_range=0.0625,
         use_mean=True,
         use_standard_deviation=True,
+        max_source_positions=1024,
+        initializer_range=0.0625,
+        bos_token_id=0,
+        pad_token_id=1,
+        eos_token_id=2,
         **kwargs
     ):
         if fft_kernel_size % 2 == 0:
@@ -160,7 +163,7 @@ class FastSpeech2Config(PretrainedConfig):
             raise ValueError(f"`postnet_conv_kernel_size` must be odd, but got {postnet_conv_kernel_size} instead.")
         if var_pred_kernel_size % 2 == 0:
             raise ValueError(f"`var_pred_kernel_size` must be odd, but got {var_pred_kernel_size} instead.")
-        super().__init__(pad_token_id=1, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.encoder_embed_dim = encoder_embed_dim
         self.encoder_attention_heads = encoder_attention_heads
@@ -200,3 +203,27 @@ class FastSpeech2Config(PretrainedConfig):
     def var_pred_num_bins(self):
         # Number of bins in the variance predictors.
         return 256
+
+
+class HiFiGANConfig(PretrainedConfig):
+    model_type = "hifigan"
+
+    def __init__(
+        self,
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        upsample_rates=[8, 8, 2, 2],
+        upsample_initial_channel=512,
+        upsample_kernel_sizes=[16, 16, 4, 4],
+        model_in_dim=80,
+        sampling_rate=22050,
+        **kwargs,
+    ):
+        self.resblock_kernel_sizes = resblock_kernel_sizes
+        self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.upsample_rates = upsample_rates
+        self.model_in_dim = model_in_dim
+        self.upsample_initial_channel = upsample_initial_channel
+        self.upsample_kernel_sizes = upsample_kernel_sizes
+        self.sampling_rate = sampling_rate
+        super().__init__(**kwargs)
