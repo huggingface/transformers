@@ -38,15 +38,13 @@ class FastSpeech2ModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
-        n_frames_per_step=1,
-        output_frame_dim=80,
         encoder_embed_dim=256,
         speaker_embed_dim=64,
-        dropout=0.2,
         max_source_positions=1024,
         encoder_attention_heads=2,
         fft_hidden_dim=1024,
         fft_kernel_size=9,
+        fft_dropout=0.2,
         attention_dropout=0,
         encoder_layers=4,
         decoder_embed_dim=256,
@@ -59,7 +57,6 @@ class FastSpeech2ModelTester:
         postnet_dropout=0.5,
         vocab_size=75,
         num_speakers=1,
-        var_pred_n_bins=256,
         var_pred_hidden_dim=256,
         var_pred_kernel_size=3,
         var_pred_dropout=0.5,
@@ -68,24 +65,21 @@ class FastSpeech2ModelTester:
         energy_max=3.2244551181793213,
         energy_min=-4.9544901847839355,
         initializer_range=0.0625,
-        mean=True,
-        std=True,
-        scope=None,
+        use_mean=True,
+        use_standard_deviation=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.n_frames_per_step = n_frames_per_step
-        self.output_frame_dim = output_frame_dim
         self.encoder_embed_dim = encoder_embed_dim
         self.speaker_embed_dim = speaker_embed_dim
         self.encoder_embed_dim = encoder_embed_dim
-        self.dropout = dropout
         self.max_source_positions = max_source_positions
         self.encoder_attention_heads = encoder_attention_heads
         self.fft_hidden_dim = fft_hidden_dim
         self.fft_kernel_size = fft_kernel_size
+        self.fft_dropout = fft_dropout
         self.attention_dropout = attention_dropout
         self.encoder_layers = encoder_layers
         self.decoder_embed_dim = decoder_embed_dim
@@ -98,7 +92,6 @@ class FastSpeech2ModelTester:
         self.postnet_dropout = postnet_dropout
         self.vocab_size = vocab_size
         self.num_speakers = num_speakers
-        self.var_pred_n_bins = var_pred_n_bins
         self.var_pred_hidden_dim = var_pred_hidden_dim
         self.var_pred_kernel_size = var_pred_kernel_size
         self.var_pred_dropout = var_pred_dropout
@@ -107,28 +100,22 @@ class FastSpeech2ModelTester:
         self.energy_min = energy_min
         self.energy_max = energy_max
         self.initializer_range = initializer_range
-        self.mean = mean
-        self.std = std
+        self.use_mean = use_mean
+        self.use_standard_deviation = use_standard_deviation
         self.initializer_range = initializer_range
-        self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        # attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-
         config = self.get_config()
-
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         return config, input_ids
 
     def get_config(self):
         return FastSpeech2Config(
-            n_frames_per_step=self.n_frames_per_step,
-            output_frame_dim=self.output_frame_dim,
             encoder_embed_dim=self.encoder_embed_dim,
             speaker_embed_dim=self.speaker_embed_dim,
-            dropout=self.dropout,
             max_source_positions=self.max_source_positions,
             encoder_attention_heads=self.encoder_attention_heads,
+            fft_dropout=self.fft_dropout,
             fft_hidden_dim=self.fft_hidden_dim,
             fft_kernel_size=self.fft_kernel_size,
             attention_dropout=self.attention_dropout,
@@ -143,7 +130,6 @@ class FastSpeech2ModelTester:
             postnet_dropout=self.postnet_dropout,
             vocab_size=self.vocab_size,
             num_speakers=self.num_speakers,
-            var_pred_n_bins=self.var_pred_n_bins,
             var_pred_hidden_dim=self.var_pred_hidden_dim,
             var_pred_kernel_size=self.var_pred_kernel_size,
             var_pred_dropout=self.var_pred_dropout,
@@ -152,8 +138,8 @@ class FastSpeech2ModelTester:
             energy_min=self.energy_min,
             energy_max=self.energy_max,
             initializer_range=self.initializer_range,
-            mean=self.mean,
-            std=self.std,
+            use_mean=self.use_mean,
+            use_standard_deviation=self.use_standard_deviation,
         )
 
     def create_and_check_model(self, config, input_values, *args):
@@ -171,7 +157,7 @@ class FastSpeech2ModelTester:
         for i in range(2, 4):
             self.parent.assertEqual(result[i].shape, result[i + 1].shape)
         # check predicted mel-spectrogram has correct dimension
-        self.parent.assertEqual(result.mel_spectrogram.size(2), self.output_frame_dim)
+        self.parent.assertEqual(result.mel_spectrogram.size(2), model.config.mel_dim)
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -189,7 +175,7 @@ class FastSpeech2ModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FastSpeech2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FastSpeech2Config)
-        # FastSpeech2Config does not have `hidden_size``
+        # FastSpeech2Config does not have `hidden_size`
         self.config_tester.create_and_test_config_common_properties = lambda: None
 
     def test_config(self):
