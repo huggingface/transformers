@@ -317,8 +317,11 @@ class FeaturesManager:
         "roformer": supported_features_mapping(
             "default",
             "masked-lm",
+            "causal-lm",
             "sequence-classification",
             "token-classification",
+            "multiple-choice",
+            "question-answering",
             onnx_config_cls=RoFormerOnnxConfig,
         ),
     }
