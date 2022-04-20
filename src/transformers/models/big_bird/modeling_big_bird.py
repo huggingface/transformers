@@ -2427,7 +2427,12 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
+        >>> # select random long article
         >>> LONG_ARTICLE_TARGET = squad_ds[81514]["context"]
+        >>> # select random sentence
+        >>> LONG_ARTICLE_TARGET[332:398]
+        'the highest values are very close to the theoretical maximum value'
+
         >>> # add mask_token
         >>> LONG_ARTICLE_TO_MASK = LONG_ARTICLE_TARGET.replace("maximum", "[MASK]")
         >>> inputs = tokenizer(LONG_ARTICLE_TO_MASK, return_tensors="pt")
@@ -3049,8 +3054,12 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
+        >>> # select random article and question
         >>> LONG_ARTICLE = squad_ds[81514]["context"]
         >>> QUESTION = squad_ds[81514]["question"]
+        >>> QUESTION
+        'During daytime how high can the temperatures reach?'
+
         >>> inputs = tokenizer(QUESTION, LONG_ARTICLE, return_tensors="pt")
         >>> # long article and question input
         >>> list(inputs["input_ids"].shape)
