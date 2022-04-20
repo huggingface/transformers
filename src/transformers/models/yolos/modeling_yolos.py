@@ -713,8 +713,8 @@ class YolosForObjectDetection(YolosPreTrainedModel):
     def __init__(self, config: YolosConfig):
         super().__init__(config)
 
-        # YOLOS encoder model
-        self.yolos = YolosModel(config, add_pooling_layer=False)
+        # YOLOS (ViT) encoder model
+        self.vit = YolosModel(config, add_pooling_layer=False)
 
         # Object detection heads
         # We add one for the "no object" class
@@ -778,7 +778,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through YOLOS base model to obtain hidden states
-        outputs = self.yolos(
+        outputs = self.vit(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

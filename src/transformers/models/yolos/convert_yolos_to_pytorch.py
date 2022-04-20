@@ -88,7 +88,7 @@ def read_in_q_k_v(state_dict, config, base_model=False):
 
 def rename_key(name):
     if "backbone" in name:
-        name = name.replace("backbone", "yolos")
+        name = name.replace("backbone", "vit")
     if "cls_token" in name:
         name = name.replace("cls_token", "embeddings.cls_token")
     if "det_token" in name:
@@ -117,8 +117,8 @@ def rename_key(name):
         name = name.replace("class_embed", "class_labels_classifier")
     if "bbox_embed" in name:
         name = name.replace("bbox_embed", "bbox_predictor")
-    if "yolos.norm" in name:
-        name = name.replace("yolos.norm", "yolos.layernorm")
+    if "vit.norm" in name:
+        name = name.replace("vit.norm", "vit.layernorm")
 
     return name
 
@@ -130,17 +130,17 @@ def convert_state_dict(orig_state_dict, model):
         if "qkv" in key:
             key_split = key.split(".")
             layer_num = int(key_split[2])
-            dim = model.yolos.encoder.layer[layer_num].attention.attention.all_head_size
+            dim = model.vit.encoder.layer[layer_num].attention.attention.all_head_size
             if "weight" in key:
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
             else:
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"yolos.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
