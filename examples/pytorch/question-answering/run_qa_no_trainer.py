@@ -908,7 +908,7 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_f1": eval_metric["f1"], "eval_exact": eval_metric["exact"]}, f)
+            json.dump({"eval_f1": eval_metric["f1"], "eval_exact": eval_metric["exact_match"]}, f)
 
 
 if __name__ == "__main__":
