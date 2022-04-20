@@ -20,9 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-base-patch16-224": "https://huggingface.co/vit-base-patch16-224/resolve/main/config.json",
-    # See all YOLOS models at https://huggingface.co/models?filter=vit
+YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/yolos-s": "https://huggingface.co/yolos-s/resolve/main/config.json",
+    # See all YOLOS models at https://huggingface.co/models?filter=yolos
 }
 
 
