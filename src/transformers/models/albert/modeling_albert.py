@@ -470,13 +470,7 @@ class AlbertTransformer(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[
-        BaseModelOutput,
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[BaseModelOutput, Tuple]:
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
@@ -707,13 +701,7 @@ class AlbertModel(AlbertPreTrainedModel):
         output_attentions: Optional[None] = None,
         output_hidden_states: Optional[None] = None,
         return_dict: Optional[None] = None,
-    ) -> Union[
-        BaseModelOutputWithPooling,
-        Tuple[torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[BaseModelOutputWithPooling, Tuple]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -816,24 +804,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        AlbertForPreTrainingOutput,
-        Tuple[torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[
-            torch.Tensor,
-            torch.Tensor,
-            Optional[torch.Tensor],
-            Tuple[torch.Tensor, ...],
-            Tuple[Tuple[torch.Tensor, ...], ...],
-        ],
-    ]:
+    ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -986,18 +957,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        MaskedLMOutput,
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[MaskedLMOutput, Tuple]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1077,18 +1037,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        SequenceClassifierOutput,
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[SequenceClassifierOutput, Tuple]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1195,18 +1144,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        TokenClassifierOutput,
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[TokenClassifierOutput, Tuple]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1288,20 +1226,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        AlbertForPreTrainingOutput,
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[
-            torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]
-        ],
-    ]:
+    ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1400,18 +1325,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[
-        AlbertForPreTrainingOutput,
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-        # if total_loss is not None
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[Tuple[torch.Tensor, ...], ...]],
-        Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, ...], Tuple[Tuple[torch.Tensor, ...], ...]],
-    ]:
+    ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
