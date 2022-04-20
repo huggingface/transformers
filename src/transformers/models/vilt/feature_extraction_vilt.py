@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for ViLT."""
 
-import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -35,7 +34,7 @@ if is_torch_available():
     import torch
 
     if torch.__version__ < (1, 10, 0):
-        warnings.warn(
+        logging.logging.warning(
             f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
             "ViltFeatureExtractor. Please upgrade torch."
         )
