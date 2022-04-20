@@ -142,6 +142,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
         self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
 
     @property
@@ -325,16 +326,7 @@ class SPMTokenizer:
         self.spm.Load(self.vocab_file)
 
     def tokenize(self, text):
-        pieces = self._encode_as_pieces(text)
-
-        def _norm(x):
-            if x not in self.vocab or x == "<unk>":
-                return "[UNK]"
-            else:
-                return x
-
-        pieces = [_norm(p) for p in pieces]
-        return pieces
+        return self._encode_as_pieces(text)
 
     def convert_ids_to_tokens(self, ids):
         tokens = []
