@@ -138,9 +138,7 @@ def evaluate(args):
         if args.max_eval_steps > 0 and step >= args.max_eval_steps:
             break
     losses = torch.cat(losses)
-    eval_size = eval_dataloader.dataset.current_size
-    losses = losses[:eval_size]
-    loss = torch.mean(losses)
+    loss = losses[:eval_dataloader.dataset.current_size].mean()
     try:
         perplexity = torch.exp(loss)
     except OverflowError:
