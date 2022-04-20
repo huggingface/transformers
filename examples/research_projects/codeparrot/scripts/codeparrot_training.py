@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -127,6 +128,20 @@ def log_metrics(step, metrics):
         accelerator.log(metrics, step)
 
 
+def compute_tflops(elapsed_time, accelerator, args):
+    config_model = accelerator.unwrap_model(model).config
+    checkpoint_factor = 4 if args.gradient_checkpointing else 3
+    batch_size = args.train_batch_size * accelerator.state.num_processes * args.gradient_accumulation_steps
+    factor = 24 * checkpoint_factor * batch_size * args.seq_length * config_model.n_layer * (config_model.n_embd**2)
+    flops_per_iteration = factor * (
+        1.0
+        + (args.seq_length / (6.0 * config_model.n_embd))
+        + (tokenizer.vocab_size / (16.0 * config_model.n_layer * config_model.n_embd))
+    )
+    tflops = flops_per_iteration / (elapsed_time * accelerator.state.num_processes * (10**12))
+    return tflops
+
+
 def evaluate(args):
     model.eval()
     losses = []
@@ -138,7 +153,7 @@ def evaluate(args):
         if args.max_eval_steps > 0 and step >= args.max_eval_steps:
             break
     losses = torch.cat(losses)
-    loss = losses[:eval_dataloader.dataset.current_size].mean()
+    loss = losses[: eval_dataloader.dataset.current_size].mean()
     try:
         perplexity = torch.exp(loss)
     except OverflowError:
@@ -187,6 +202,7 @@ lr_scheduler = get_scheduler(
     num_warmup_steps=args.num_warmup_steps,
     num_training_steps=args.max_train_steps,
 )
+accelerator.register_for_checkpointing(lr_scheduler)
 
 
 def get_lr():
@@ -198,12 +214,31 @@ model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
     model, optimizer, train_dataloader, eval_dataloader
 )
 
+# load in the weights and states from a previous save
+if args.resume_from_checkpoint:
+    if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
+        accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+        accelerator.load_state(args.resume_from_checkpoint)
+        path = os.path.basename(args.resume_from_checkpoint)
+    else:
+        # Get the most recent checkpoint
+        dirs = [f.name for f in os.scandir(args.save_dir) if f.is_dir()]
+        dirs.sort(key=os.path.getctime)
+        path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+    # Extract the step of the checkpoint to continue from there
+    training_difference = os.path.splitext(path)[0]
+    resume_step = int(training_difference.replace("step_", ""))
+
 # Train model
 model.train()
 completed_steps = 0
-config_model = accelerator.unwrap_model(model).config
 t_start = time.time()
 for step, batch in enumerate(train_dataloader, start=1):
+    if args.resume_from_checkpoint:
+        # We need to skip steps until we reach the resumed step
+        if step < resume_step:
+            logger.info(f"continuing step {step} from {resume_step}")
+            continue
     loss = model(batch, labels=batch, use_cache=False).loss
     log_metrics(
         step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
@@ -223,30 +258,17 @@ for step, batch in enumerate(train_dataloader, start=1):
         lr_scheduler.step()
         optimizer.zero_grad()
         completed_steps += 1
-        elapsed_time_per_iteration = time.time() - t_start
-        checkpoint_factor = 4 if args.gradient_checkpointing else 3
-        batch_size = args.train_batch_size * accelerator.state.num_processes * args.gradient_accumulation_steps
-        factor = (
-            24 * checkpoint_factor * batch_size * args.seq_length * config_model.n_layer * (config_model.n_embd**2)
-        )
-        flops_per_iteration = factor * (
-            1.0
-            + (args.seq_length / (6.0 * config_model.n_embd))
-            + (tokenizer.vocab_size / (16.0 * config_model.n_layer * config_model.n_embd))
-        )
-        tflops = flops_per_iteration / (elapsed_time_per_iteration * accelerator.state.num_processes * (10**12))
-        log_metrics(
-            step, {"steps": completed_steps, "tflops": tflops, "time_per_iteration": elapsed_time_per_iteration}
-        )
+        elapsed_time = time.time() - t_start
+        tflops = compute_tflops(elapsed_time, accelerator, args)
+        log_metrics(step, {"steps": completed_steps, "tflops": tflops, "time_per_iteration": elapsed_time})
         t_start = time.time()
     if step % args.save_checkpoint_steps == 0:
         logger.info("Evaluating and saving model checkpoint")
         eval_loss, perplexity = evaluate(args)
         log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
         accelerator.wait_for_everyone()
-        unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
-        accelerator.save_state(args.save_dir)
+        save_dir = os.path.join(args.save_dir, f"step_{step}")
+        accelerator.save_state(save_dir)
         if accelerator.is_main_process:
             hf_repo.push_to_hub(commit_message=f"step {step}")
         model.train()
@@ -260,6 +282,7 @@ log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
 accelerator.wait_for_everyone()
 unwrapped_model = accelerator.unwrap_model(model)
 unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
-accelerator.save_state(args.save_dir)
+save_dir = os.path.join(args.save_dir, f"step_{step}")
+accelerator.save_state(save_dir)
 if accelerator.is_main_process:
     hf_repo.push_to_hub(commit_message="final model")
