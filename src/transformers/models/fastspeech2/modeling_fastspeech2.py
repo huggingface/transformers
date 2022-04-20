@@ -34,7 +34,7 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_fastspeech2 import FastSpeech2Config, HiFiGANConfig
+from .configuration_fastspeech2 import FastSpeech2Config
 
 
 logger = logging.get_logger(__name__)
@@ -758,17 +758,11 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
         )
 
 
-def init_weights(m, mean=0.0, std=0.01):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        m.weight.data.normal_(mean, std)
-
-
 def get_padding(kernel_size, dilation=1):
     return (kernel_size * dilation - dilation) // 2
 
 
-class ResBlock(nn.Module):
+class FastSpeech2ResBlock(nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
         super().__init__()
         self.convs1 = nn.ModuleList(
@@ -805,7 +799,7 @@ class ResBlock(nn.Module):
                 ),
             ]
         )
-        self.convs1.apply(init_weights)
+        # self.convs1.apply(init_weights)
 
         self.convs2 = nn.ModuleList(
             [
@@ -841,7 +835,7 @@ class ResBlock(nn.Module):
                 ),
             ]
         )
-        self.convs2.apply(init_weights)
+        # self.convs2.apply(init_weights)
 
     def forward(self, x):
         for c1, c2 in zip(self.convs1, self.convs2):
@@ -859,17 +853,21 @@ class ResBlock(nn.Module):
             remove_weight_norm(layer)
 
 
-class HiFiGAN(PreTrainedModel):
-    config_class = HiFiGANConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_kernels = len(config.resblock_kernel_sizes)
-        self.num_upsamples = len(config.upsample_rates)
+class FastSpeech2HiFiGAN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        resblock_kernel_sizes = [3, 7, 11]
+        resblock_dilation_sizes = [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+        upsample_rates = [8, 8, 2, 2]
+        upsample_initial_channel = 512
+        upsample_kernel_sizes = [16, 16, 4, 4]
+        model_in_dim = 80
+        self.num_kernels = len(resblock_kernel_sizes)
+        self.num_upsamples = len(upsample_rates)
         self.conv_pre = weight_norm(
             nn.Conv1d(
-                config.model_in_dim,
-                config.upsample_initial_channel,
+                model_in_dim,
+                upsample_initial_channel,
                 7,
                 1,
                 padding=3,
@@ -878,13 +876,13 @@ class HiFiGAN(PreTrainedModel):
 
         self.ups = nn.ModuleList()
         for i, (u, k) in enumerate(
-            zip(config.upsample_rates, config.upsample_kernel_sizes)
+            zip(upsample_rates, upsample_kernel_sizes)
         ):
             self.ups.append(
                 weight_norm(
                     nn.ConvTranspose1d(
-                        config.upsample_initial_channel // (2**i),
-                        config.upsample_initial_channel // (2 ** (i + 1)),
+                        upsample_initial_channel // (2**i),
+                        upsample_initial_channel // (2 ** (i + 1)),
                         k,
                         u,
                         padding=(k - u) // 2,
@@ -894,15 +892,15 @@ class HiFiGAN(PreTrainedModel):
 
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
-            ch = config.upsample_initial_channel // (2 ** (i + 1))
+            ch = upsample_initial_channel // (2 ** (i + 1))
             for k, d in zip(
-                config.resblock_kernel_sizes, config.resblock_dilation_sizes
+                resblock_kernel_sizes, resblock_dilation_sizes
             ):
-                self.resblocks.append(ResBlock(ch, k, d))
+                self.resblocks.append(FastSpeech2ResBlock(ch, k, d))
 
         self.conv_post = weight_norm(nn.Conv1d(ch, 1, 7, 1, padding=3))
-        self.ups.apply(init_weights)
-        self.conv_post.apply(init_weights)
+        # self.ups.apply(init_weights)
+        # self.conv_post.apply(init_weights)
 
     def forward(self, x):
         x = self.conv_pre(x)
@@ -929,3 +927,21 @@ class HiFiGAN(PreTrainedModel):
             layer.remove_weight_norm()
         remove_weight_norm(self.conv_pre)
         remove_weight_norm(self.conv_post)
+
+
+@add_start_docstrings(
+    "The FastSpeech2 Model that outputs predicted raw waveforms.",
+    FASTSPEECH2_START_DOCSTRING,
+)
+class FastSpeech2ForWaveformGeneration(FastSpeech2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.fastspeech2 = FastSpeech2Model(config)
+        self.hifigan = FastSpeech2HiFiGAN()
+        self.post_init()
+
+    def forward(self, *args, **kwargs):
+        outputs = self.fastspeech2(*args, **kwargs)
+        mel_spectrograms = outputs[0]
+        waveform = self.hifigan(mel_spectrograms)
+        return waveform
