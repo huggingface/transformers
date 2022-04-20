@@ -400,6 +400,10 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_bitsandbytes_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+
 def is_faiss_available():
     return _faiss_available
 

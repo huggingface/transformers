@@ -679,3 +679,16 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
                 self.regulation_factor, cur_len - self.regulation_start
             )
         return scores
+
+
+class LogitNormalization(LogitsProcessor, LogitsWarper):
+    r"""
+    [`LogitsWarper`] and [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
+    the scores during beam search, after applying the logits processors or warpers, since the search algorithm used in
+    this library doesn't do it (it only does it before, but they may need re-normalization) but it still supposes that
+    the scores are normalized when comparing the hypotheses.
+    """
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+        scores = scores.log_softmax(dim=-1)
+        return scores

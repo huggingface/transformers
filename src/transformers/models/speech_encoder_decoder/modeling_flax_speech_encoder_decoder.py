@@ -20,7 +20,8 @@ from typing import Optional, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
@@ -226,10 +227,14 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         else:
             self.enc_to_dec_proj = None
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
         """
         Computes the output length of the convolutional layers
         """
+
+        add_adapter = self.config.encoder.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
@@ -238,6 +243,10 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
 
         for kernel_size, stride in zip(self.config.encoder.conv_kernel, self.config.encoder.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.encoder.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.encoder.adapter_stride)
 
         return input_lengths
 
@@ -335,8 +344,15 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
+
+        if not _do_init:
+            raise ValueError(
+                "`FlaxSpeechEncoderDecoderModel` cannot be created without initializing, `_do_init` must be `True`."
+            )
+
         if config.decoder.cross_attention_hidden_size is not None:
             # Raise ValueError or option to project enc to dec hidden_size (eg EncAdapterLayer)
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
@@ -357,9 +373,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             decoder_input_length = module._get_feat_extract_output_lengths(encoder_input_length)
             input_shape = ((1, encoder_input_length), (1, decoder_input_length))
 
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input DeviceArrays
@@ -382,7 +398,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
             inputs,
             attention_mask,
@@ -390,6 +406,16 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             decoder_attention_mask,
             decoder_position_ids,
         )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
@@ -432,8 +458,10 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
-        return self.module._get_feat_extract_output_lengths(input_lengths)
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
+        return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
 
     @add_start_docstrings(SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)

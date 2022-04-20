@@ -31,6 +31,11 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecTextOnnxConfig",
     ],
+    "configuration_data2vec_vision": [
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecVisionConfig",
+        "Data2VecVisionOnnxConfig",
+    ],
 }
 
 if is_torch_available():
@@ -54,6 +59,14 @@ if is_torch_available():
         "Data2VecTextModel",
         "Data2VecTextPreTrainedModel",
     ]
+    _import_structure["modeling_data2vec_vision"] = [
+        "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Data2VecVisionForImageClassification",
+        "Data2VecVisionForMaskedImageModeling",
+        "Data2VecVisionForSemanticSegmentation",
+        "Data2VecVisionModel",
+        "Data2VecVisionPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
@@ -61,6 +74,11 @@ if TYPE_CHECKING:
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Data2VecTextConfig,
         Data2VecTextOnnxConfig,
+    )
+    from .configuration_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecVisionConfig,
+        Data2VecVisionOnnxConfig,
     )
 
     if is_torch_available():
@@ -83,6 +101,14 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+        )
+        from .modeling_data2vec_vision import (
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForMaskedImageModeling,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
         )
 
 else:
