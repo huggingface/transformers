@@ -658,7 +658,7 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                # If we are in a multiprocessing environment, the last batch has duplicates
+                # If we are in a multiprocess environment, the last batch has duplicates
                 if accelerator.num_processes > 1:
                     if step == len(eval_dataloader):
                         decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]

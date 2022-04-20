@@ -511,7 +511,7 @@ def main():
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
             predictions, references = accelerator.gather((predictions, batch["labels"]))
-            # If we are in a multiprocessing environment, the last batch has duplicates
+            # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
                 if step == len(eval_dataloader):
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]

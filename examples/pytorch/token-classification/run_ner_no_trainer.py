@@ -668,7 +668,7 @@ def main():
                 predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
                 labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
             predictions_gathered, labels_gathered = accelerator.gather((predictions, labels))
-            # If we are in a multiprocessing environment, the last batch has duplicates
+            # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
                 if step == len(eval_dataloader):
                     predictions_gathered = predictions_gathered[: len(eval_dataloader.dataset) - samples_seen]
