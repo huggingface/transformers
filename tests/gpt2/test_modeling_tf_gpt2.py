@@ -294,21 +294,6 @@ class TFGPT2ModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_gpt2_xla_generate(self, config, input_ids, *args):
-        config.eos_token_id = None
-        config.max_length = 10
-        model = TFGPT2LMHeadModel(config=config)
-
-        # make sure there are no pad tokens in prompt
-        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
-
-        generated = model.generate(input_ids)
-
-        generate_xla = tf.function(model.generate, jit_compile=True)
-        generated_xla = generate_xla(input_ids)
-
-        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
-
     def create_and_check_gpt2_double_head(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
     ):
@@ -407,10 +392,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_gpt2_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
-
-    def test_gpt2_xla_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_xla_generate(*config_and_inputs)
 
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -536,41 +517,57 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    def test_lm_generate_gpt2(self):
+    @unittest.skipIf(not len(tf.config.list_physical_devices('GPU')), "XLA not reliable on CPU")
+    def test_lm_generate_gpt2_greedy_xla(self):
+        # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
+        # the underlying problem)
         model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
-        # fmt: on
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["The dog"]
+        expected_output_strings = [
+            "The dog was found in a field near the intersection of West and West Streets.\n\nThe dog",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
         output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
 
-    @slow
-    def test_lm_generate_gpt2_xla_greedy(self):
-        """This test gives the exact same results as the non-xla test above"""
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
-
-        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
-        # fmt: on
         xla_generate = tf.function(model.generate, jit_compile=True)
-
         output_ids = xla_generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
 
     @slow
-    def test_lm_generate_gpt2_xla_sample(self):
+    @unittest.skipIf(not len(tf.config.list_physical_devices('GPU')), "XLA not reliable on CPU")
+    def test_lm_generate_gpt2_sample_xla(self):
+        # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
+        # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
+        # and that we can seed both versions.
         model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        # fmt: off
-        expected_output_ids = [464, 3290, 550, 284, 307, 4376, 287, 281, 4044, 1363, 329, 734, 812, 878, 852, 4376, 757, 329, 2267, 0]
-        # fmt: on
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentence = ["The dog"]
+        expected_output_string = [
+            "The dog must be well educated to do anything. If anything, this must be her best friend"
+        ]
+        expected_output_string_xla = [
+            "The dog has been named in connection with the murder of a 20-year-old man in!"
+        ]
+        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+
+        output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_string)
+
         xla_generate = tf.function(model.generate, jit_compile=True)
-
-        output_ids = xla_generate(input_ids, do_sample=True, seed=[42, 0])
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_string_xla)
