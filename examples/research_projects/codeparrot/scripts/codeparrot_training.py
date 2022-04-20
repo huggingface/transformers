@@ -38,6 +38,7 @@ class ConstantLengthDataset(IterableDataset):
         self.input_characters = seq_length * chars_per_token * num_of_sequences
         self.epoch = 0
         self.infinite = infinite
+        self.current_size = 0
 
     def __iter__(self):
         iterator = iter(self.dataset)
@@ -65,6 +66,7 @@ class ConstantLengthDataset(IterableDataset):
             for i in range(0, len(all_token_ids), self.seq_length):
                 input_ids = all_token_ids[i : i + self.seq_length]
                 if len(input_ids) == self.seq_length:
+                    self.current_size += 1
                     yield torch.tensor(input_ids)
 
 
@@ -135,7 +137,10 @@ def evaluate(args):
         losses.append(accelerator.gather(loss))
         if args.max_eval_steps > 0 and step >= args.max_eval_steps:
             break
-    loss = torch.mean(torch.cat(losses))
+    losses = torch.cat(losses)
+    eval_size = eval_dataloader.dataset.current_size
+    losses = losses[:eval_size]
+    loss = torch.mean(losses)
     try:
         perplexity = torch.exp(loss)
     except OverflowError:
