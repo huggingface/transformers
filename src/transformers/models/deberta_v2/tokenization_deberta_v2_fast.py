@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model DeBERTa."""
+"""Fast Tokenization class for model DeBERTa."""
 
 import os
 from shutil import copyfile
@@ -66,11 +66,11 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
             contains the vocabulary necessary to instantiate a tokenizer.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        bos_token (`string`, *optional*, defaults to "[CLS]"):
+        bos_token (`string`, *optional*, defaults to `"[CLS]"`):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-        eos_token (`string`, *optional*, defaults to "[SEP]"):
+        eos_token (`string`, *optional*, defaults to `"[SEP]"`):
             The end of sequence token. When building a sequence using special tokens, this is not the token that is
             used for the end of sequence. The token used is the `sep_token`.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
