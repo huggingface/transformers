@@ -322,6 +322,8 @@ class FeaturesManager:
             "token-classification",
             "multiple-choice",
             "question-answering",
+            "sequence-classification",
+            "token-classification",
             onnx_config_cls=RoFormerOnnxConfig,
         ),
     }
