@@ -237,7 +237,6 @@ for step, batch in enumerate(train_dataloader, start=1):
     if args.resume_from_checkpoint:
         # We need to skip steps until we reach the resumed step
         if step < resume_step:
-            logger.info(f"continuing step {step} from {resume_step}")
             continue
     loss = model(batch, labels=batch, use_cache=False).loss
     log_metrics(
