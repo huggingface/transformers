@@ -942,6 +942,7 @@ class FastSpeech2ForWaveformGeneration(FastSpeech2PreTrainedModel):
 
     def forward(self, *args, **kwargs):
         outputs = self.fastspeech2(*args, **kwargs)
-        mel_spectrograms = outputs[0]
-        waveform = self.hifigan(mel_spectrograms)
+        mel_spectrograms = outputs[0].transpose(1, 2)
+        self.hifigan.remove_weight_norm()
+        waveform = self.hifigan(mel_spectrograms).squeeze().clamp(-1, 1)
         return waveform
