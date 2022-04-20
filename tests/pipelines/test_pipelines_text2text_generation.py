@@ -21,8 +21,13 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
+
+
+if is_torch_available():
+    import torch
 
 
 @is_pipeline_test
@@ -82,6 +87,37 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             {"generated_text": ""},
         ]
         self.assertEqual(outputs, target_outputs)
+
+        outputs = generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_token_ids": ANY(torch.Tensor)},
+                {"generated_token_ids": ANY(torch.Tensor)},
+            ],
+        )
+        generator.tokenizer.pad_token_id = generator.model.config.eos_token_id
+        generator.tokenizer.pad_token = "<pad>"
+        outputs = generator(
+            ["This is a test", "This is a second test"],
+            do_sample=True,
+            num_return_sequences=2,
+            batch_size=2,
+            return_tensors=True,
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                ],
+                [
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                    {"generated_token_ids": ANY(torch.Tensor)},
+                ],
+            ],
+        )
 
     @require_tf
     def test_small_model_tf(self):
