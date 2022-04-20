@@ -170,7 +170,13 @@ _import_structure = {
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
-    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
+    "models.data2vec": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecAudioConfig",
+        "Data2VecTextConfig",
+        "Data2VecVisionConfig",
+    ],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
@@ -455,6 +461,7 @@ if is_tokenizers_available():
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
+    _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
@@ -868,6 +875,7 @@ if is_torch_available():
         [
             "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Data2VecAudioForAudioFrameClassification",
             "Data2VecAudioForCTC",
             "Data2VecAudioForSequenceClassification",
@@ -882,6 +890,10 @@ if is_torch_available():
             "Data2VecTextForTokenClassification",
             "Data2VecTextModel",
             "Data2VecTextPreTrainedModel",
+            "Data2VecVisionForImageClassification",
+            "Data2VecVisionForSemanticSegmentation",
+            "Data2VecVisionModel",
+            "Data2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2555,7 +2567,13 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
+    from .models.data2vec import (
+        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecAudioConfig,
+        Data2VecTextConfig,
+        Data2VecVisionConfig,
+    )
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.decision_transformer import (
@@ -2812,6 +2830,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
+        from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
@@ -3151,6 +3170,7 @@ if TYPE_CHECKING:
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
             Data2VecAudioForSequenceClassification,
@@ -3165,6 +3185,10 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
