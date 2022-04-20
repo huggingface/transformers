@@ -105,18 +105,24 @@ python run_semantic_segmentation.py \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
+    --evaluation_strategy steps \
     --push_to_hub \
-    --push_to_hub_model_id segformer-finetuned-sidewalk \
-    --learning_rate 2e-5 \
-    --num_train_epochs 50 \
+    --push_to_hub_model_id segformer-finetuned-sidewalk-10k-steps \
+    --max_steps 10000 \
+    --learning_rate 0.00006 \
+    --lr_scheduler_type polynomial \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
-    --logging_steps 10 \
+    --logging_steps 100 \
     --evaluation_strategy epoch \
     --save_strategy epoch \
     --seed 1337
 ```
+
+The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk-10k-steps. The corresponding Weights and Biases report [here](https://wandb.ai/nielsrogge/huggingface/reports/SegFormer-fine-tuning--VmlldzoxODY5NTQ2). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. E.g. from the SegFormer paper:
+
+> We trained the models using AdamW optimizer for 160K iterations on ADE20K, Cityscapes, and 80K iterations on COCO-Stuff. (...) We used a batch size of 16 for ADE20K and COCO-Stuff, and a batch size of 8 for Cityscapes. The learning rate was set to an initial value of 0.00006 and then used a “poly” LR schedule with factor 1.0 by default.
 
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
 

@@ -351,9 +351,12 @@ def main():
             ignore_index=0,
             reduce_labels=feature_extractor.reduce_labels,
         )
-        # don't log per category metrics
-        del metrics["per_category_accuracy"]
-        del metrics["per_category_iou"]
+        # add per category metrics as individual key-value pairs
+        per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
+        per_category_iou = metrics.pop("per_category_iou").tolist()
+
+        metrics.update({f"accuracy_{id2label[i]}": v for i, v in enumerate(per_category_accuracy)})
+        metrics.update({f"iou_{id2label[i]}": v for i, v in enumerate(per_category_iou)})
 
         return metrics
 
