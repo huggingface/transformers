@@ -613,6 +613,7 @@ def main():
             "max_length": args.val_max_target_length if args is not None else config.max_length,
             "num_beams": args.num_beams,
         }
+        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
@@ -640,6 +641,14 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+
+                # If we are in a multiprocess environment, the last batch has duplicates
+                if accelerator.num_processes > 1:
+                    if step == len(eval_dataloader):
+                        decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
+                        decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
+                    else:
+                        samples_seen += decoded_labels.shape[0]
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
         eval_metric = metric.compute()

@@ -567,6 +567,7 @@ def main():
 
         logger.info("***** Running evaluation *****")
         model.eval()
+        samples_seen = 0
         for step, batch in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)):
             outputs = model(**batch)
 
@@ -575,9 +576,19 @@ def main():
             )
             predictions = upsampled_logits.argmax(dim=1)
 
+            predictions, references = accelerator.gather((predictions, batch["labels"]))
+
+            # If we are in a multiprocess environment, the last batch has duplicates
+            if accelerator.num_processes > 1:
+                if step == len(eval_dataloader):
+                    predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
+                    references = references[: len(eval_dataloader.dataset) - samples_seen]
+                else:
+                    samples_seen += references.shape[0]
+
             metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
+                predictions=predictions,
+                references=references,
             )
 
         eval_metrics = metric.compute(
