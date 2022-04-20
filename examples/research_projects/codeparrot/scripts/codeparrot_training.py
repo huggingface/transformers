@@ -8,10 +8,8 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 import transformers
-import wandb
 from accelerate import Accelerator, DistributedType
 from arguments import TrainingArguments
 from huggingface_hub import Repository
@@ -83,20 +81,17 @@ def setup_logging(args):
         handlers=[logging.FileHandler(log_dir / filename), logging.StreamHandler()],
     )
     if accelerator.is_main_process:  # we only want to setup logging once
-        wandb.init(project=project_name, config=args)
-        run_name = wandb.run.name
-        tb_writer = SummaryWriter()
-        tb_writer.add_hparams(vars(args), {"0": 0})
+        accelerator.init_trackers(project_name, vars(args))
+        run_name = accelerator.trackers[0].run.name
         logger.setLevel(logging.INFO)
         datasets.utils.logging.set_verbosity_info()
         transformers.utils.logging.set_verbosity_info()
     else:
-        tb_writer = None
         run_name = ""
         logger.setLevel(logging.ERROR)
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
-    return logger, tb_writer, run_name
+    return logger, run_name
 
 
 def create_dataloaders(args):
@@ -127,8 +122,7 @@ def get_grouped_params(model, args, no_decay=["bias", "LayerNorm.weight"]):
 def log_metrics(step, metrics):
     logger.info(f"Step {step}: {metrics}")
     if accelerator.is_main_process:
-        wandb.log(metrics)
-        [tb_writer.add_scalar(k, v, step) for k, v in metrics.items()]
+        accelerator.log(metrics, step)
 
 
 def evaluate(args):
@@ -150,7 +144,7 @@ def evaluate(args):
 
 
 # Accelerator
-accelerator = Accelerator()
+accelerator = Accelerator(log_with=["wandb", "tensorboard"])
 acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 # Settings
@@ -166,7 +160,7 @@ if accelerator.is_main_process:
     hf_repo = Repository(args.save_dir, clone_from=args.model_ckpt)
 
 # Logging
-logger, tb_writer, run_name = setup_logging(args)
+logger, run_name = setup_logging(args)
 logger.info(accelerator.state)
 
 # Checkout new branch on repo
@@ -249,6 +243,7 @@ for step, batch in enumerate(train_dataloader, start=1):
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
+        accelerator.save_state(args.save_dir)
         if accelerator.is_main_process:
             hf_repo.push_to_hub(commit_message=f"step {step}")
         model.train()
@@ -262,5 +257,6 @@ log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
 accelerator.wait_for_everyone()
 unwrapped_model = accelerator.unwrap_model(model)
 unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
+accelerator.save_state(args.save_dir)
 if accelerator.is_main_process:
     hf_repo.push_to_hub(commit_message="final model")
