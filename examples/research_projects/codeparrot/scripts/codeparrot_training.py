@@ -222,7 +222,7 @@ if args.resume_from_checkpoint:
         path = os.path.basename(args.resume_from_checkpoint)
     else:
         # Get the most recent checkpoint
-        dirs = [f.name for f in os.scandir(args.save_dir) if f.is_dir()]
+        dirs = [f.name for f in os.scandir(args.save_dir) if f.is_dir() and "step" in str(f)]
         dirs.sort(key=os.path.getctime)
         path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
     # Extract the step of the checkpoint to continue from there
