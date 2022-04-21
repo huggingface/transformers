@@ -223,6 +223,7 @@ def _make_global_fixed_block_ids(
 
     def handle_orphan_tokens(block_ids: torch.Tensor) -> torch.Tensor:
         block_ends = (torch.arange(seq_len) % global_block_size) == global_block_size - 1
+        block_ends = block_ends.to(block_ids.device)
         true_block_ends = torch.logical_and(block_ends, block_ids >= 0)
         full_blocks = true_block_ends.sum(-1).unsqueeze(-1)
         block_ids = torch.minimum(block_ids, full_blocks - 1)
@@ -243,8 +244,9 @@ def _make_global_fixed_block_ids(
     else:
         _sequence_block_ids_max = torch.zeros(batch_size, 0, dtype=global_block_ids.dtype)
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
+    global_segment_ids = global_segment_ids.to(attention_mask.device)
     global_segment_ids = global_segment_ids.where(
-        global_segment_ids <= _sequence_block_ids_max, -1 * torch.ones_like(global_segment_ids)
+        global_segment_ids <= _sequence_block_ids_max, -1 * torch.ones_like(global_segment_ids, device=attention_mask.device)
     )
     return global_block_ids.type(torch.int), global_segment_ids.type(torch.int)
 
@@ -253,7 +255,7 @@ def _make_side_relative_position_ids(attention_mask: torch.Tensor, global_block_
     """Create the relative position tensor for local -> global attention."""
     block_ids, global_segment_ids = _make_global_fixed_block_ids(attention_mask, global_block_size)
     global_seq_len = global_segment_ids.shape[-1]
-    global_positions = torch.arange(global_seq_len)
+    global_positions = torch.arange(global_seq_len, device=block_ids.device)
     side_relative_position = global_positions - block_ids[..., None]
     return side_relative_position.type(torch.int64)
 
@@ -263,7 +265,7 @@ def _create_global_aggregates(
 ) -> torch.Tensor:
     """Compute individual block aggregates by summing over individual blocks."""
     # (batch..., seq_len, global_seq_len))
-    block_ids = block_ids.where(block_ids >= 0, torch.tensor(global_seq_len, dtype=block_ids.dtype))
+    block_ids = block_ids.where(block_ids >= 0, torch.tensor(global_seq_len, dtype=block_ids.dtype, device=block_ids.device))
     one_hot_block_ids = nn.functional.one_hot(block_ids.type(torch.int64), global_seq_len + 1)[:, :, :-1]
     return torch.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids.type(hidden_states.dtype))
 
@@ -810,7 +812,7 @@ class LongT5LocalAttention(nn.Module):
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
-
+        attn_weights = attn_weights.type(value_states.dtype)
         attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
         attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
@@ -1116,7 +1118,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
-
+        attn_weights = attn_weights.type(value_states.dtype)
         attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
         attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
