@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import GPT2Config, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import get_gpu_count, require_tf, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -517,7 +517,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
+    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
     def test_lm_generate_gpt2_greedy_xla(self):
         # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
         # the underlying problem)
@@ -543,7 +543,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_strings)
 
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
+    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
     def test_lm_generate_gpt2_sample_xla(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible

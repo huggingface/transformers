@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import T5Config, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import get_gpu_count, require_sentencepiece, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
@@ -460,7 +460,7 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 @require_tokenizers
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
+    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
     def test_greedy_xla_generate_simple(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -512,7 +512,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings)
 
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
+    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
     def test_sample_xla_generate_simple(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed (unlike this example). We can, however, confirm that the
