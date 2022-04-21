@@ -20,12 +20,12 @@
 import argparse
 
 from t5x import checkpoints
-from transformers import AutoConfig, AutoModelForSeq2SeqLM
+from transformers import AutoConfig, FlaxAutoModelForSeq2SeqLM
 
 
 def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_folder_path):
     config = AutoConfig.from_pretrained(config_name)
-    flax_model = AutoModelForSeq2SeqLM(config=config)
+    flax_model = FlaxAutoModelForSeq2SeqLM(config=config)
     t5x_model = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
 
     split_mlp_wi = "wi_0" in t5x_model["target"]["encoder"]["layers_0"]["mlp"]
