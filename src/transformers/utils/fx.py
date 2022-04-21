@@ -17,17 +17,15 @@ import builtins
 import functools
 import inspect
 import math
-import random
 import operator
+import random
 import warnings
-from types import ModuleType
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from packaging import version
 from torch import nn
-from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
-from torch.fx.node import Argument
+from torch.fx import Graph, GraphModule, Proxy, Tracer
 
 from .. import (
     CONFIG_MAPPING,
@@ -125,11 +123,17 @@ _SUPPORTED_MODELS = tuple(
 
 
 def embedding_override(self, input):
-    return torch.empty(*input.shape, self.weight.shape[-1], device='meta')
+    return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
 
 
-def nn_layernorm_override(self, input):
+def torch_nn_layernorm_override(self, input):
     return input
+
+
+def torch_nn_linear_override(self, input):
+    # TODO: make this more efficient by not making concrete computation.
+    concrete_input = torch.empty_like(input, device="cpu")
+    return torch.empty_like(self.forward(concrete_input), device="meta")
 
 
 def torch_relu_override(x):
@@ -141,29 +145,109 @@ def torch_nn_relu_override(self, x):
 
 
 def functional_relu_override(x, inplace=False):
-    assert not inplace, 'dont support inplace functional.relu for metatensor analysis'
+    assert not inplace, "dont support inplace functional.relu for metatensor analysis"
     return x
 
 
 def torch_where_override(condition, x, y):
     # torch.where returns the broadcasted tensor of condition, x, and y,
     # so hack it by using addition
-    return condition.to(device='meta') + x.to(device='meta') + y.to(device='meta')
+    return condition.to(device="meta") + x.to(device="meta") + y.to(device="meta")
 
 
 def torch_abs_override(input, *, out=None):
-    assert out is None, 'Dont support in-place abs for MetaTensor analysis'
+    assert out is None, "Dont support in-place abs for MetaTensor analysis"
     return input
 
 
-manual_meta_overrides : Dict[Callable, Callable] = {
+def torch_arange_with_start_override(
+    start, end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
+):
+    return torch.empty((end - start) // step, dtype=dtype, layout=layout, device="meta")
+
+
+def torch_arange_without_start_override(
+    end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
+):
+    return torch_arange_with_start_override(0, end, step=step, dtype=dtype, layout=layout)
+
+
+def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
+    if dim is None and axis is None:
+        dim = 0
+    if dim is None and axis is not None:
+        dim = axis
+    if dim < 0:
+        dim = tensors[0].dim() + dim
+    shapes = [t.shape for t in tensors]
+    shape = list(shapes[0])
+    concatenated_dim = sum(shape[dim] for shape in shapes)
+    final_shape = shape[:dim] + [concatenated_dim] + shape[dim + 1 :]
+    return torch.empty(final_shape, device="meta")
+
+
+def torch_stack_override(tensors, dim=None, axis=None, *, out=None):
+    if dim is None and axis is None:
+        dim = 0
+    if dim is None and axis is not None:
+        dim = axis
+    if dim < 0:
+        dim = tensors[0].dim() + 1 + dim
+    shape = list(tensors[0].shape)
+    shape.insert(dim, len(tensors))
+    return torch.empty(shape, device="meta")
+
+
+def torch_add_override(input, other, *, alpha=1, out=None):
+    if not isinstance(input, torch.Tensor):
+        return torch.empty_like(other, device="meta")
+    if not isinstance(other, torch.Tensor):
+        return torch.empty_like(input, device="meta")
+    max_length = max(input.dim(), other.dim())
+    input_shape = list(input.shape) + [1] * (max_length - input.dim())
+    other_shape = list(other.shape) + [1] * (max_length - other.dim())
+    shape = []
+    for i in range(max_length):
+        shape.append(max(input_shape[i], other_shape[i]))
+    return torch.empty(shape, device="meta")
+
+
+def torch_mul_override(input, other, *, out=None):
+    return torch_add_override(input, other, out=out)
+
+
+def torch_matmul_override(input, other, *, out=None):
+    # TODO: make this more efficient by not making concrete computation.
+    concrete_input = torch.empty_like(input, device="cpu")
+    concrete_other = torch.empty_like(other, device="cpu")
+    return torch.empty_like(torch.matmul(concrete_input, concrete_other), device="meta")
+
+
+def torch_tensor_repeat_override(self, *sizes):
+    shape = list(self.shape)
+    for i, x in enumerate(sizes):
+        shape[i] *= x
+    return torch.empty(shape, device="meta")
+
+
+manual_meta_overrides: Dict[Callable, Callable] = {
     torch.nn.Embedding: embedding_override,
-    torch.nn.LayerNorm: nn_layernorm_override,
+    torch.nn.LayerNorm: torch_nn_layernorm_override,
+    torch.nn.Linear: torch_nn_linear_override,
     torch.relu: torch_relu_override,
     torch.nn.functional.relu: functional_relu_override,
     torch.nn.ReLU: torch_nn_relu_override,
     torch.where: torch_where_override,
     torch.abs: torch_abs_override,
+    torch.ops.aten.arange.start: torch_arange_with_start_override,
+    torch.ops.aten.arange.start_end: torch_arange_with_start_override,
+    torch.ops.aten.arange: torch_arange_with_start_override,
+    torch.cat: torch_cat_override,
+    torch.stack: torch_stack_override,
+    # torch.add: torch_add_override,
+    # torch.mul: torch_mul_override,
+    torch.matmul: torch_matmul_override,
+    torch.Tensor.repeat: torch_tensor_repeat_override,
 }
 
 
@@ -176,13 +260,15 @@ def gen_constructor_wrapper(target):
             if isinstance(v, Proxy):
                 nonlocal proxy
                 proxy = v
+
         torch.fx.node.map_aggregate(args, check_has_proxy)
         torch.fx.node.map_aggregate(kwargs, check_has_proxy)
 
         if proxy is not None:
-            return proxy.tracer.create_proxy('call_function', target, args, kwargs)
+            return proxy.tracer.create_proxy("call_function", target, args, kwargs)
         else:
             return target(*args, **kwargs)
+
     return wrapper, target
 
 
@@ -197,27 +283,27 @@ class HFProxy(Proxy):
     def dim(self):
         if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
             return self._tensor_meta.dim()
-        return self.tracer.create_proxy('call_method', 'dim', (self,), {})
+        return self.tracer.create_proxy("call_method", "dim", (self,), {})
 
     @property
     def shape(self):
-        return self.tracer.create_proxy('call_method', "size", (self,), {})
+        return self.tracer.create_proxy("call_method", "size", (self,), {})
 
     @property
     def dtype(self):
         return self.tracer.root.dtype
-        if hasattr(self, '_tensor_meta') and self._tensor_meta is not None:
+        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
             return self._tensor_meta.dtype
-        return self.tracer.create_proxy('call_function', builtins.getattr, (self, 'dtype'), {})
+        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
 
     @property
     def device(self):
         # Hack so we can track when devices are used. During meta-tensor propagation,
         # replace these values with a constant 'meta'
-        return MetaDeviceAttribute(self, 'device')
+        return MetaDeviceAttribute(self, "device")
 
     def __getattr__(self, k):
-        if k == '_tensor_meta':
+        if k == "_tensor_meta":
             return self.__getattribute__(k)
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
@@ -234,7 +320,10 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_function", operator.le, (self, other), {})
 
     def __contains__(self, key):
-        return False
+        # To handle kwargs.
+        if self.node.op == "placeholder":
+            return False
+        return super().__contains__(key)
 
 
 class MetaAttribute(HFProxy):
@@ -249,7 +338,7 @@ class MetaAttribute(HFProxy):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            proxy = self.tracer.create_proxy('call_function', getattr, (self.root, self.attr), {}).node
+            proxy = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
             # if hasattr(self.root, "_tensor_meta") and self.root._tensor_meta is not None:
             #     proxy.install_tensor_meta(getattr(self.root._tensor_meta, self.attr))
             # self._node = proxy.node
@@ -258,7 +347,7 @@ class MetaAttribute(HFProxy):
         return self._node
 
     def __call__(self, *args, **kwargs):
-        return self.tracer.create_proxy('call_method', self.attr, (self.root,) + args, kwargs)
+        return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
 
 
 class MetaDeviceAttribute(MetaAttribute):
@@ -267,12 +356,15 @@ class MetaDeviceAttribute(MetaAttribute):
 
 def proxys_to_metas(v):
     if isinstance(v, MetaDeviceAttribute):
-        return 'meta'
+        return "meta"
     if isinstance(v, torch.fx.Proxy):
-        assert isinstance(v, HFProxy), f'Expected MetaProxy but got {type(v)}'
-        assert hasattr(v, '_tensor_meta'), 'MetaProxy does not have an associated meta'
+        # assert isinstance(v, HFProxy), f'Expected MetaProxy but got {type(v)}'
+        # assert hasattr(v, '_tensor_meta'), 'MetaProxy does not have an associated meta'
+        if not (isinstance(v, HFProxy) and hasattr(v, "_tensor_meta")):
+            raise RuntimeError(f"No tensor meta data was found for {v}")
         return v._tensor_meta
     return v
+
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
     if forbidden_values is None:
@@ -290,14 +382,10 @@ class HFTracer(Tracer):
     """
 
     from transformers import modeling_utils
-    allow_insert_stateless_mods : bool = True
 
-    _TORCH_METHODS_TO_PATCH = ['arange', 'zeros', 'ones', 'full_like', 'eye']
+    allow_insert_stateless_mods: bool = True
 
-    _FUNCTIONS_TO_AUTOWRAP = {
-        torch: {"arange", "zeros", "ones", "full_like", "eye"},
-        modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
-    }
+    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full_like", "eye"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
 
@@ -311,9 +399,6 @@ class HFTracer(Tracer):
                 f"Found an incompatible version of torch. Found version {torch_version}, but only version "
                 f"{TORCH_FX_REQUIRED_VERSION} is supported."
             )
-
-        # self.prev_module = None
-        # self.recorded_methods = None
 
     def _generate_dummy_input(
         self, model: PreTrainedModel, input_name: str, shape: List[int]
@@ -362,7 +447,7 @@ class HFTracer(Tracer):
     def create_proxy(self, kind, target, args, kwargs, name=None, type_expr=None, proxy_factory_fn=None):
         rv = super().create_proxy(kind, target, args, kwargs, name, type_expr, proxy_factory_fn)
 
-        if kind == 'placeholder' and target in self.meta_args:
+        if kind == "placeholder" and target in self.meta_args:
             rv.install_tensor_meta(self.meta_args[target])
             return rv
 
@@ -372,20 +457,22 @@ class HFTracer(Tracer):
             # _TORCH_METHODS_TO_PATCH that do not define `device` as kwarg-only,
             # this will break and you will likely see issues where we cannot infer
             # the size of the output.
-            if 'device' in kwargs:
-                kwargs['device'] = 'meta'
+            if "device" in kwargs:
+                kwargs["device"] = "meta"
 
         try:
             args_metas = torch.fx.node.map_aggregate(args, proxys_to_metas)
             kwargs_metas = torch.fx.node.map_aggregate(kwargs, proxys_to_metas)
 
-            if kind == 'call_function':
+            if kind == "call_function":
                 meta_target = manual_meta_overrides.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
-            elif kind == 'call_method':
-                meta_out = getattr(args_metas[0], target)(*args_metas[1:], **kwargs_metas)
-            elif kind == 'call_module':
-                assert hasattr(self, 'orig_forward')
+            elif kind == "call_method":
+                method = getattr(args_metas[0].__class__, target)
+                meta_target = manual_meta_overrides.get(method, method)
+                meta_out = meta_target(*args_metas, **kwargs_metas)
+            elif kind == "call_module":
+                assert hasattr(self, "orig_forward")
                 self._disable_module_getattr = True
                 try:
                     mod = self.root.get_submodule(target)
@@ -396,16 +483,16 @@ class HFTracer(Tracer):
                         meta_out = self.orig_forward(*args_metas, **kwargs_metas)
                 finally:
                     self._disable_module_getattr = False
-            elif kind == 'get_attr':
+            elif kind == "get_attr":
                 self._disable_module_getattr = True
                 try:
                     attr_itr = self.root
-                    atoms = target.split('.')
+                    atoms = target.split(".")
                     for atom in atoms:
                         attr_itr = getattr(attr_itr, atom)
                     # assert isinstance(attr_itr, torch.Tensor)
                     if isinstance(attr_itr, torch.Tensor):
-                        meta_out = attr_itr.to(device='meta')
+                        meta_out = attr_itr.to(device="meta")
                     else:
                         meta_out = attr_itr
                 finally:
@@ -413,55 +500,15 @@ class HFTracer(Tracer):
             else:
                 return rv
 
-            # TODO
-            assert isinstance(rv, (Proxy, torch.Size, int)), 'Dont support composite output yet'
+            assert isinstance(rv, Proxy), "Dont support composite output yet"
             rv.install_tensor_meta(meta_out)
         except Exception as e:
-            warnings.warn(f'Could not compute metadata for {kind} target {target}: {e}')
+            warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
 
         return rv
-        # if proxy_factory_fn is not None:
-        #     raise RuntimeError("Don't support custom proxy factory function for MetaTensorTracer")
-
-        # proxy = super().create_proxy(kind, target, args, kwargs, name, type_expr, lambda n: HFProxy(n, self))
-
-        # def extract_meta(a):
-        #     if isinstance(a, HFProxy):
-        #         if getattr(a, "_tensor_meta", None) is not None:
-        #             return a._tensor_meta
-        #         else:
-        #             return None
-        #     return a
-
-        # try:
-        #     meta_args = torch.fx.node.map_aggregate(args if args else (), extract_meta)
-        #     meta_kwargs = torch.fx.node.map_aggregate(kwargs if kwargs else {}, extract_meta)
-
-        #     if kind == "call_function":
-        #         meta_target = target
-        #     elif kind == "call_method":
-        #         assert isinstance(args[0], torch.fx.Proxy)
-        #         meta_target = getattr(torch.Tensor, target)
-        #     elif kind == "call_module":
-        #         raise RuntimeError("Not yet implemented")
-        #     elif kind == "placeholder":
-        #         proxy.install_tensor_meta(next(self.concrete_meta_iter))
-        #         return proxy
-        #     else:
-        #         assert False, f"Unknown target {kind}"
-
-        #     meta_out = meta_target(*meta_args, **meta_kwargs)
-
-        #     if isinstance(meta_out, (torch.Tensor, int, torch.Size)):
-        #         proxy.install_tensor_meta(meta_out)
-
-        # except Exception as e:
-        #     warnings.warn(f"Could not compute shape for value {proxy}: {e}")
-
-        # return proxy
 
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
-        if getattr(self, '_disable_module_getattr', False):
+        if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
             return super()._module_getattr(attr, attr_val, parameter_proxy_cache)

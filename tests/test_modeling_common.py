@@ -725,13 +725,8 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    try:
-                        traced_model = symbolic_trace(model, input_names)
-                        traced_output = traced_model(**filtered_inputs)
-                    except:
-                        import pdb
-
-                        pdb.set_trace()
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
                     input_ids = inputs["input_ids"]
@@ -757,13 +752,8 @@ class ModelTesterMixin:
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    try:
-                        traced_model = symbolic_trace(model, input_names)
-                        traced_output = traced_model(**filtered_inputs)
-                    except:
-                        import pdb
-
-                        pdb.set_trace()
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
 
             except RuntimeError:
                 self.fail("Couldn't trace module.")
