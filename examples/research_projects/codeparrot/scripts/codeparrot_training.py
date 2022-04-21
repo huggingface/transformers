@@ -129,6 +129,7 @@ def log_metrics(step, metrics):
 
 
 def compute_tflops(elapsed_time, accelerator, args):
+    # TFLOPs formula (from Equation 3 in Section 5.1 of https://arxiv.org/pdf/2104.04473.pdf).
     config_model = accelerator.unwrap_model(model).config
     checkpoint_factor = 4 if args.gradient_checkpointing else 3
     batch_size = args.train_batch_size * accelerator.state.num_processes * args.gradient_accumulation_steps
@@ -235,7 +236,7 @@ completed_steps = 0
 t_start = time.time()
 for step, batch in enumerate(train_dataloader, start=1):
     if args.resume_from_checkpoint and step < resume_step:
-            continue # we need to skip steps until we reach the resumed step
+        continue  # we need to skip steps until we reach the resumed step
     loss = model(batch, labels=batch, use_cache=False).loss
     log_metrics(
         step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
