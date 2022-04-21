@@ -123,10 +123,11 @@ class GPTNeoXModelTester:
 
         return config, input_ids, input_mask, token_labels
 
-    def create_and_check_model(self, config, input_ids):
+    def create_and_check_model(self, config, input_ids, input_mask):
         model = GPTNeoXModel(config=config)
         model.to(torch_device)
         model.eval()
+        _ = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
@@ -211,7 +212,7 @@ class GPTNeoXModelTester:
             input_mask,
             token_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "token_labels": token_labels}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
@@ -240,16 +241,43 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        (
+            config,
+            input_ids,
+            input_mask,
+            token_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(
+            config,
+            input_ids,
+            input_mask,
+        )
 
     def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        (
+            config,
+            input_ids,
+            input_mask,
+            token_labels,
+        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            config,
+            input_ids,
+            input_mask,
+        )
 
     def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
+        (
+            config,
+            input_ids,
+            input_mask,
+            token_labels,
+        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_as_decoder(
+            config,
+            input_ids,
+            input_mask,
+        )
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3

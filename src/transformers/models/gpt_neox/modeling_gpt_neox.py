@@ -510,6 +510,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (layer, layer_past) in enumerate(zip(self.layers, past_key_values)):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
             outputs = layer(
                 hidden_states,
                 attention_mask=attention_mask,
