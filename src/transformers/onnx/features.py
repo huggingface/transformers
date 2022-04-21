@@ -250,7 +250,7 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
         ),
-        "gpt-j": supported_features_mapping(
+        "gptj": supported_features_mapping(
             "default",
             "default-with-past",
             "causal-lm",
