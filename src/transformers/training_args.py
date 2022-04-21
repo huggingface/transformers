@@ -561,6 +561,18 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    use_ipex: bool = field(default=False, metadata={"help": "Use Intel extension for PyTorch when it is available"})
+    ipex_opt_level: str = field(
+        default="O1",
+        metadata={
+            "help": (
+                "for use_ipex, IPEX optimization level selected in ['O0', 'O1']. "
+                "https://intel.github.io/intel-extension-for-pytorch/tutorials/api_doc.html"
+            )
+        },
+    )
+    auto_kernel_selection: bool = field(default=False, metadata={"help": "Try to use Intel oneDNN kernel for fp32 inference"})
+    jit_mode: bool = field(default=False, metadata={"help": "Try to use PyTorch jit trace for inference"})
     bf16: bool = field(
         default=False,
         metadata={
@@ -691,6 +703,7 @@ class TrainingArguments:
         default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
+    ipex_optimizer: str = field(default=None, metadata={"help": "Whether or not to use optimizer for training from IPEX.","choices": ["SGD", "Adagrad"]})
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
@@ -852,7 +865,7 @@ class TrainingArguments:
             self.half_precision_backend = self.fp16_backend
 
         if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
-            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, torch>=1.10, cuda>=11.0")
+            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, Coperlake CPU, torch>=1.10, cuda>=11.0")
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -877,6 +890,7 @@ class TrainingArguments:
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
+            and not self.use_ipex
         ):
             raise ValueError(
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."

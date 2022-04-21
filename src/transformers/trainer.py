@@ -136,7 +136,8 @@ from .utils import (
 
 
 _is_torch_generator_available = False
-_is_native_amp_available = False
+_is_native_cuda_amp_available = False
+_is_native_cpu_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -149,9 +150,12 @@ if is_in_notebook():
 if is_apex_available():
     from apex import amp
 
+if is_ipex_available() and "--use_ipex" in sys.argv:
+    import intel_extension_for_pytorch as ipex
+
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
-    _is_native_amp_available = True
+    _is_native_cuda_amp_available = True
     from torch.cuda.amp import autocast
 
 if is_datasets_available():
@@ -446,41 +450,57 @@ class Trainer:
 
         # Mixed precision setup
         self.use_apex = False
-        self.use_amp = False
+        self.use_cuda_amp = False
+        self.use_cpu_amp = False
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
-                if _is_native_amp_available:
-                    args.half_precision_backend = "amp"
-                else:
-                    if args.bf16:
-                        raise ValueError("Tried to use `bf16` but native amp is not available")
+                if args.device == "cuda":
+                    if _is_native_cuda_amp_available:
+                        args.half_precision_backend = "cuda_amp"
                     else:
-                        args.half_precision_backend = "apex"
+                        if args.bf16:
+                            raise ValueError("Tried to use `bf16` but native amp is not available")
+                        else:
+                            args.half_precision_backend = "apex"
+                elif args.device == "cpu":
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` but is not supported on cpu")
+                    else:
+                        if _is_native_cpu_amp_available:
+                            args.half_precision_backend = "cpu_amp"
+                        else:
+                            raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                else:
+                    raise ValueError("Tried to use amp but no supported device is available")
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
         if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
-            if args.half_precision_backend == "amp":
-                self.use_amp = True
+            if args.half_precision_backend == "cuda_amp":
+                self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 self.do_grad_scaling = True
                 if is_sagemaker_mp_enabled():
                     self.scaler = smp.amp.GradScaler()
                 elif self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
-                elif is_torch_tpu_available():
-                    from torch_xla.amp import GradScaler
-
-                    self.scaler = GradScaler()
                 else:
                     self.scaler = torch.cuda.amp.GradScaler()
-            else:
+            elif args.half_precision_backend == "apex":
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
+            else:
+                self.use_cpu_amp = True
+                if args.use_ipex:
+                    if not is_ipex_available():
+                        raise ImportError(
+                            "Using Bf16 with IPEX but IPEX is not installed, please refer to https://github.com/intel/intel-extension-for-pytorch."
+                        )
+
 
         # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
         if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
@@ -1052,7 +1072,53 @@ class Trainer:
 
         return model
 
-    def _wrap_model(self, model, training=True):
+    def ipex_optimize_model(self, model, training=False, dtype=torch.float32, auto_kernel_selection=None):
+        if not training:
+            if auto_kernel_selection != None:
+                model = ipex.optimize(model, dtype=dtype, level=self.args.ipex_opt_level, auto_kernel_selection=auto_kernel_selection)
+            else:
+                model = ipex.optimize(model, dtype=dtype, level=self.args.ipex_opt_level)
+        else:
+            if not model.training:
+                model.train()
+            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level=self.args.ipex_opt_level)
+
+        return model
+
+    def torch_jit_model(self, model, training=False, dataloader=None):
+        if not training:
+            jit_inputs=()
+            for _,batch in enumerate(dataloader):
+                for _,label in enumerate(batch):
+                    dumpy_tensor = torch.ones((batch[label].shape), dtype=torch.long)
+                    L1=list(jit_inputs)
+                    L1.append(dumpy_tensor)
+                    jit_inputs=tuple(L1)
+                break
+            try:
+                if self.args.bf16:
+                    with self.autocast_smart_context_manager(), torch.no_grad():
+                        model = torch.jit.trace(model, jit_inputs, strict=False)
+                    model = torch.jit.freeze(model)
+                else:
+                    with torch.no_grad():
+                        model = torch.jit.trace(model, jit_inputs, strict=False)
+                    model = torch.jit.freeze(model)
+            except RuntimeError:
+                logger.info(f"fail to use jit mode")
+                pass
+
+        return model
+
+    def _wrap_model(self, model, training=True, dataloader=None):
+        if self.args.use_ipex:
+            if self.use_cpu_amp:
+                model = self.ipex_optimize_model(model, training, dtype=torch.bfloat16)
+            else:
+                model = self.ipex_optimize_model(model, training, dtype=torch.float32, auto_kernel_selection=self.args.auto_kernel_selection)
+        if self.args.jit_mode:
+            model = self.torch_jit_model(model, training, dataloader)
+
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -1996,11 +2062,16 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if self.use_amp:
+        if self.use_cuda_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = autocast(dtype=self.amp_dtype)
+                ctx_manager = cuda.amp.autocast()(dtype=self.amp_dtype)
             else:
-                ctx_manager = autocast()
+                ctx_manager = cuda.amp.autocast()
+        elif self.use_cpu_amp:
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                ctx_manager = cpu.amp.autocast()(dtype=self.amp_dtype)
+            else:
+                ctx_manager = cpu.amp.autocast()
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
@@ -2426,7 +2497,7 @@ class Trainer:
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -2987,7 +3058,7 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
