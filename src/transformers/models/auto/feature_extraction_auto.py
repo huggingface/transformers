@@ -57,6 +57,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("regnet", "ConvNextFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("imagegpt", "ImageGPTFeatureExtractor"),
     ]
 )
 

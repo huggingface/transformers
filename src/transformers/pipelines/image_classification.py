@@ -89,6 +89,13 @@ class ImageClassificationPipeline(Pipeline):
     def preprocess(self, image):
         image = load_image(image)
         model_inputs = self.feature_extractor(images=image, return_tensors=self.framework)
+
+        if type(self.model).__name__ == "ImageGPTForImageClassification":
+            # Temporary workaround
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            model_inputs["pixel_values"].clamp_(max=self.model.config.vocab_size - 15 - 1)
+
         return model_inputs
 
     def _forward(self, model_inputs):

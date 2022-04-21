@@ -79,7 +79,14 @@ def _pad(items, key, padding_value, padding_side):
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
-        max_length = max(item[key].shape[1] for item in items)
+
+        # No need to perform padding if all lengths are equal
+        all_lengths = [item[key].shape[1] for item in items]
+        if len(set(all_lengths)) == 1:
+            tensor = torch.stack([item[key][0] for item in items], dim=0)
+            return tensor
+
+        max_length = max(all_lengths)
         dtype = items[0][key].dtype
 
         if dim == 2:
