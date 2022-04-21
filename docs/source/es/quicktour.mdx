@@ -133,8 +133,7 @@ Los archivos de audio se cargan y remuestrean automáticamente cuando se llama a
 Extraigamos las matrices de forma de onda cruda de las primeras 4 muestras y pasémosla como una lista al pipeline:
 
 ```py
->>> raw_audio_waveforms = [d["array"] for d in dataset[:4]["audio"]]
->>> speech_recognizer(raw_audio_waveforms)
+>>> speech_recognizer(dataset[:4]["audio"])
 [{'text': 'I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT'},
  {'text': "FONDERING HOW I'D SET UP A JOIN TO HET WITH MY WIFE AND WHERE THE AP MIGHT BE"}, 
  {'text': "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AND I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS"},

@@ -209,7 +209,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         extra = {}
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
-            _inputs = inputs.pop("raw")
+            # Accepting `"array"` which is the key defined in `datasets` for
+            # better integration
+            if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
+                raise ValueError(
+                    "When passing a dictionnary to AutomaticSpeechRecognitionPipeline, the dict needs to contain a "
+                    '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
+                    "containing the sampling_rate associated with that array"
+                )
+
+            _inputs = inputs.pop("raw", None)
+            if _inputs is None:
+                _inputs = inputs.pop("array", None)
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
