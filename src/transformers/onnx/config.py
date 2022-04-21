@@ -71,6 +71,7 @@ class OnnxConfig(ABC):
 
     default_fixed_batch = 2
     default_fixed_sequence = 8
+    default_fixed_num_choices = 4
     torch_onnx_minimum_version = version.parse("1.8")
     _tasks_to_common_outputs = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
@@ -175,6 +176,16 @@ class OnnxConfig(ABC):
         return OnnxConfig.default_fixed_sequence
 
     @property
+    def default_num_choices(self) -> int:
+        """
+        The default number of choices to use if no other indication
+
+        Returns:
+            Integer > 0
+        """
+        return OnnxConfig.default_fixed_num_choices
+
+    @property
     def default_onnx_opset(self) -> int:
         """
         Which onnx opset to use when exporting the model
@@ -240,6 +251,7 @@ class OnnxConfig(ABC):
         preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
+        num_choices: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
         num_channels: int = 3,
@@ -255,6 +267,8 @@ class OnnxConfig(ABC):
                 The preprocessor associated with this model configuration.
             batch_size (`int`, *optional*, defaults to -1):
                 The batch size to export the model for (-1 means dynamic axis).
+            num_choices (`int`, *optional*, defaults to -1):
+                The number of candidate answers provided for multiple choice task (-1 means dynamic axis).
             seq_length (`int`, *optional*, defaults to -1):
                 The sequence length to export the model for (-1 means dynamic axis).
             is_pair (`bool`, *optional*, defaults to `False`):
@@ -295,6 +309,19 @@ class OnnxConfig(ABC):
             )
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            if self.task == "multiple-choice":
+                # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations
+                # made by ONNX
+                num_choices = compute_effective_axis_dimension(
+                    num_choices, fixed_dimension=OnnxConfig.default_fixed_num_choices, num_token_to_add=0
+                )
+                dummy_input = dummy_input * num_choices
+                # The shape of the tokenized inputs values is [batch_size * num_choices, seq_length]
+                tokenized_input = preprocessor(dummy_input, text_pair=dummy_input)
+                # Unflatten the tokenized inputs values expanding it to the shape [batch_size, num_choices, seq_length]
+                for k, v in tokenized_input.items():
+                    tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
+                return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
             return dict(preprocessor(dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
@@ -408,7 +435,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     ) -> Mapping[str, Any]:
 
         # TODO: should we set seq_length = 1 when self.use_past = True?
-        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        common_inputs = super().generate_dummy_inputs(
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+        )
 
         if self.use_past:
             if not is_torch_available():
@@ -527,13 +556,13 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
     ) -> Mapping[str, Any]:
 
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=decoder_seq_length, is_pair=is_pair, framework=framework
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)

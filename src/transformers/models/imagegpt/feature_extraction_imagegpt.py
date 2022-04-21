@@ -68,7 +68,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             Whether or not to normalize the input to the range between -1 and +1.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["input_ids"]
 
     def __init__(self, clusters, do_resize=True, size=32, resample=Image.BILINEAR, do_normalize=True, **kwargs):
         super().__init__(**kwargs)
@@ -128,8 +128,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
+            - **input_ids** -- Input IDs to be fed to a model, of shape `(batch_size, height * width)`.
         """
         # Input type checking for clearer error
         valid_images = False
@@ -171,7 +170,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         images = images.reshape(batch_size, -1)
 
         # return as BatchFeature
-        data = {"pixel_values": images}
+        data = {"input_ids": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
