@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 R3M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "meta/r3m-resnet": "https://huggingface.co/meta/r3m-resnet/resolve/main/config.json",
+    "surajnair/r3m-50": "https://huggingface.co/surajnair/r3m-50/resolve/main/config.json",
     # See all R3M models at https://huggingface.co/models?filter=r3m
 }
 
@@ -31,7 +31,7 @@ class R3MConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`~R3MModel`].
     It is used to instantiate an R3M model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the R3M [meta/r3m-resnet](https://huggingface.co/meta/r3m-resnet) architecture.
+    the R3M [surajnair/r3m-50](https://huggingface.co/surajnair/r3m-50) architecture.
 
     Configuration objects inherit from  [`PretrainedConfig`] and can be used
     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
@@ -46,10 +46,10 @@ class R3MConfig(PretrainedConfig):
     ```python
     >>> from transformers import R3MModel, R3MConfig
 
-    >>> # Initializing a R3M meta/r3m-resnet style configuration
+    >>> # Initializing a R3M surajnair/r3m-50 style configuration
     >>> configuration = R3MConfig()
 
-    >>> # Initializing a model from the meta/r3m-resnet style configuration
+    >>> # Initializing a model from the surajnair/r3m-50 style configuration
     >>> model = R3MModel(configuration)
 
     >>> # Accessing the model configuration
@@ -66,9 +66,6 @@ class R3MConfig(PretrainedConfig):
     ):
         self.resnet_size = resnet_size
         super().__init__(
-#             pad_token_id=pad_token_id,
-#             bos_token_id=bos_token_id,
-#             eos_token_id=eos_token_id,
             **kwargs
         )
 

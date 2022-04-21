@@ -51,18 +51,12 @@ class R3MModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        input_images = torch.randint(0, 255, (self.batch_size, 3, 224, 225))
+        input_images = torch.randint(0, 255, (self.batch_size, 3, 224, 224))
         input_images.to(torch_device) 
         config = self.get_config()
 
         return config, input_images
       
-#     def prepare_config_and_inputs_for_common(self):
-#         input_images = torch.randint(0, 255, (self.batch_size, 3, 224, 225))
-#         input_images.to(torch_device) 
-#         config = self.get_config()
-
-#         return config, input_images
 
     def get_config(self):
         return R3MConfig(
@@ -128,7 +122,7 @@ class R3MModelTest(ModelTesterMixin, unittest.TestCase):
 class R3MModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = R3MModel.from_pretrained("meta/r3m-resnet")
+        model = R3MModel.from_pretrained("surajnair/r3m-50")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

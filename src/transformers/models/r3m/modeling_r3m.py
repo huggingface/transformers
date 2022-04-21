@@ -47,11 +47,11 @@ from .configuration_r3m import R3MConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "meta/r3m-resnet"
+_CHECKPOINT_FOR_DOC = "surajnair/r3m-50"
 _CONFIG_FOR_DOC = "R3MConfig"
 
 R3M_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "meta/r3m-resnet",
+    "surajnair/r3m-50",
     # See all R3M models at https://huggingface.co/models?filter=r3m
 ]
 
@@ -141,9 +141,6 @@ class R3MModel(R3MPreTrainedModel):
         self.post_init()
 
     @add_code_sample_docstrings(
-        # processor_class=_TOKENIZER_FOR_DOC,
-        # checkpoint=_CHECKPOINT_FOR_DOC,
-        # output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
