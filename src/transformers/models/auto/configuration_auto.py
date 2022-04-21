@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("jukebox", "JukeboxConfig"),
         ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
@@ -138,6 +139,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("jukebox", "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -231,6 +233,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("jukebox", "Jukebox"),
         ("tapex", "TAPEX"),
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),

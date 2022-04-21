@@ -117,6 +117,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -446,6 +447,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.jukebox"].append("JukeboxTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -648,6 +650,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.jukebox"].extend(
+        [
+            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "JukeboxForMaskedLM",
+            "JukeboxForCausalLM",
+            "JukeboxForMultipleChoice",
+            "JukeboxForQuestionAnswering",
+            "JukeboxForSequenceClassification",
+            "JukeboxForTokenClassification",
+            "JukeboxLayer",
+            "JukeboxModel",
+            "JukeboxPreTrainedModel",
+            "load_tf_weights_in_jukebox",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2521,6 +2539,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2819,6 +2838,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.jukebox import JukeboxTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2930,6 +2950,20 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JukeboxForMaskedLM,
+            JukeboxForCausalLM,
+            JukeboxForMultipleChoice,
+            JukeboxForQuestionAnswering,
+            JukeboxForSequenceClassification,
+            JukeboxForTokenClassification,
+            JukeboxLayer,
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            load_tf_weights_in_jukebox,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
