@@ -212,8 +212,9 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
     tx5_token_embeddings = t5x_model["target"]["token_embedder"]["embedding"]
     flax_model.params["shared"]["embedding"] = tx5_token_embeddings
 
-    # LM Head
-    flax_model.params["lm_head"]["kernel"] = t5x_model["target"]["decoder"]["logits_dense"]["kernel"]
+    # LM Head (only in v1.1 checkpoints)
+    if "logits_dense" in t5x_model["target"]["decoder"]:
+        flax_model.params["lm_head"]["kernel"] = t5x_model["target"]["decoder"]["logits_dense"]["kernel"]
 
     flax_model.save_pretrained(flax_dump_folder_path)
     print("T5X Model was sucessfully converted!")
