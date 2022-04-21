@@ -20,23 +20,26 @@
 import argparse
 
 from t5x import checkpoints
-from transformers import FlaxT5ForConditionalGeneration, T5Config
+from transformers import AutoConfig, AutoModelForSeq2SeqLM
 
 
 def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_folder_path):
-    config = T5Config.from_pretrained(config_name)
-    flax_model = FlaxT5ForConditionalGeneration(config=config)
+    config = AutoConfig.from_pretrained(config_name)
+    flax_model = AutoModelForSeq2SeqLM(config=config)
     t5x_model = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
 
     split_mlp_wi = "wi_0" in t5x_model["target"]["encoder"]["layers_0"]["mlp"]
 
-    if config.encoder_attention_type == "local":
+    if config.model_type == "t5":
+        encoder_attn_name = "SelfAttention"
+    if config.model_type == "longt5" and config.encoder_attention_type == "local":
         encoder_attn_name = "LocalSelfAttention"
-    elif config.encoder_attention_type == "trasient-global":
+    elif config.model_type == "longt5" and config.encoder_attention_type == "trasient-global":
         encoder_attn_name = "TransientGlobalSelfAttention"
     else:
         raise ValueError(
-            "Config is expectd to have `encoder_attention_type` attribute with a value from ['local', 'trasient-global]"
+            "Given config is expected to have `model_type='t5'`, or `model_type='longt5` with `encoder_attention_type` "
+            "attribute with a value from ['local', 'trasient-global]."
         )
 
     # Encoder
@@ -50,7 +53,7 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         t5x_attention_value = t5x_model["target"]["encoder"][layer_name]["attention"]["value"]["kernel"]
 
         # Global input layer norm
-        if config.encoder_attention_type == "transient-global":
+        if config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
             t5x_global_layer_norm = t5x_model["target"]["encoder"][layer_name]["attention"]["T5LayerNorm_0"]["scale"]
 
         # Layer Normalization
@@ -86,7 +89,7 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         ] = t5x_attention_layer_norm
 
         # Global input layer norm
-        if config.encoder_attention_type == "transient-global":
+        if config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
             flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name][
                 "global_input_layer_norm"
             ]["weight"] = t5x_global_layer_norm
@@ -117,7 +120,7 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
     ] = t5x_encoder_rel_embedding
 
     # Side/global relative position_bias + layer norm
-    if config.encoder_attention_type == "transient-global":
+    if config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
         t5x_encoder_global_rel_embedding = t5x_model["target"]["encoder"]["side_relpos_bias"]["rel_embedding"].T
         flax_model.params["encoder"]["block"]["0"]["layer"]["0"][encoder_attn_name]["global_relative_attention_bias"][
             "embedding"
@@ -240,8 +243,9 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
     tx5_token_embeddings = t5x_model["target"]["token_embedder"]["embedding"]
     flax_model.params["shared"]["embedding"] = tx5_token_embeddings
 
-    # LM Head
-    flax_model.params["lm_head"]["kernel"] = t5x_model["target"]["decoder"]["logits_dense"]["kernel"]
+    # LM Head (only in v1.1 and LongT5 checkpoints)
+    if "logits_dense" in t5x_model["target"]["decoder"]:
+        flax_model.params["lm_head"]["kernel"] = t5x_model["target"]["decoder"]["logits_dense"]["kernel"]
 
     flax_model.save_pretrained(flax_dump_folder_path)
     print("T5X Model was sucessfully converted!")
@@ -251,9 +255,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--t5x_checkpoint_path", default=None, type=str, required=True, help="Path the TX5 checkpoint."
+        "--t5x_checkpoint_path", default=None, type=str, required=True, help="Path the T5X checkpoint."
     )
-    parser.add_argument("--config_name", default=None, type=str, required=True, help="Config name of T5 model.")
+    parser.add_argument("--config_name", default=None, type=str, required=True, help="Config name of LongT5/T5 model.")
     parser.add_argument(
         "--flax_dump_folder_path", default=None, type=str, required=True, help="Path to the output FLAX model."
     )
