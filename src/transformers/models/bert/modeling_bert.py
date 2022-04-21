@@ -30,7 +30,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from hashedEmbeddingBag import HashedEmbeddingBag
 import numpy as np
 import pdb
-from RzLinear import RzLinear
+#from RzLinear import RzLinear
+from rz_linear import RzLinear
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -1175,7 +1176,7 @@ class BertModel(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForPreTraining(BertPreTrainedModel):
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
 
         seed_offset=int(seed_offset/2)
@@ -1291,7 +1292,7 @@ class BertLMHeadModel(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1449,7 +1450,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    def __init__(self, config, seed=0, seed_offset=1024):
+    def __init__(self, config, seed=1, seed_offset=1024):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1564,7 +1565,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
 
         if config.robez and config.robez_single:
@@ -1675,7 +1676,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1783,7 +1784,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForMultipleChoice(BertPreTrainedModel):
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
 
         if config.robez and config.robez_single:
@@ -1887,7 +1888,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
         self.num_labels = config.num_labels
         if config.robez and config.robez_single:
@@ -1977,7 +1978,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config, seed=0, seed_offset=4096):
+    def __init__(self, config, seed=1, seed_offset=4096):
         super().__init__(config)
         self.num_labels = config.num_labels
         if config.robez and config.robez_single:
