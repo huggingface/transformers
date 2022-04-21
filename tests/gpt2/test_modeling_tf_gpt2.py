@@ -517,7 +517,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices('GPU')), "XLA not reliable on CPU")
+    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
     def test_lm_generate_gpt2_greedy_xla(self):
         # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
         # the underlying problem)
@@ -543,7 +543,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_strings)
 
     @slow
-    @unittest.skipIf(not len(tf.config.list_physical_devices('GPU')), "XLA not reliable on CPU")
+    @unittest.skipIf(not len(tf.config.list_physical_devices("GPU")), "XLA not reliable on CPU")
     def test_lm_generate_gpt2_sample_xla(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
@@ -558,9 +558,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         expected_output_string = [
             "The dog must be well educated to do anything. If anything, this must be her best friend"
         ]
-        expected_output_string_xla = [
-            "The dog has been named in connection with the murder of a 20-year-old man in!"
-        ]
+        expected_output_string_xla = ["The dog has been named in connection with the murder of a 20-year-old man in!"]
         input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
 
         output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
