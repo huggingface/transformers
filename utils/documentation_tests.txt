@@ -2,7 +2,7 @@ docs/source/en/quicktour.mdx
 docs/source/en/task_summary.mdx
 docs/source/en/model_doc/speech_to_text.mdx
 docs/source/en/model_doc/t5.mdx
-docs/source/en/model_doc/t5v1_1.mdx
+docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
 src/transformers/generation_utils.py
