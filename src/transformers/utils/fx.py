@@ -166,12 +166,6 @@ def torch_arange_with_start_override(
     return torch.empty((end - start) // step, dtype=dtype, layout=layout, device="meta")
 
 
-def torch_arange_without_start_override(
-    end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
-):
-    return torch_arange_with_start_override(0, end, step=step, dtype=dtype, layout=layout)
-
-
 def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
@@ -239,8 +233,6 @@ manual_meta_overrides: Dict[Callable, Callable] = {
     torch.nn.ReLU: torch_nn_relu_override,
     torch.where: torch_where_override,
     torch.abs: torch_abs_override,
-    torch.ops.aten.arange.start: torch_arange_with_start_override,
-    torch.ops.aten.arange.start_end: torch_arange_with_start_override,
     torch.ops.aten.arange: torch_arange_with_start_override,
     torch.cat: torch_cat_override,
     torch.stack: torch_stack_override,
