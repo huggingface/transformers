@@ -75,7 +75,7 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if dim == 4:
+        if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
