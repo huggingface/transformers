@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import builtins
 import functools
 import inspect
 import math
@@ -202,6 +203,19 @@ class HFProxy(Proxy):
     def shape(self):
         return self.tracer.create_proxy('call_method', "size", (self,), {})
 
+    @property
+    def dtype(self):
+        return self.tracer.root.dtype
+        if hasattr(self, '_tensor_meta') and self._tensor_meta is not None:
+            return self._tensor_meta.dtype
+        return self.tracer.create_proxy('call_function', builtins.getattr, (self, 'dtype'), {})
+
+    @property
+    def device(self):
+        # Hack so we can track when devices are used. During meta-tensor propagation,
+        # replace these values with a constant 'meta'
+        return MetaDeviceAttribute(self, 'device')
+
     def __getattr__(self, k):
         if k == '_tensor_meta':
             return self.__getattribute__(k)
@@ -209,20 +223,18 @@ class HFProxy(Proxy):
         # we peephole optimize to the method invocation
         return MetaAttribute(self, k)
 
-    # def __eq__(self, other):
-    #     if self._tensor_meta is None:
-    #         return super().__getattr__("__eq__")
-    #     return self._tensor_meta == other
-
-    # def __lt__(self, other):
-    #     if self._tensor_meta is None:
-    #         return super().__getattr__("__lt__")
-    #     return self._tensor_meta < other
+    def __len__(self):
+        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+            return len(self._tensor_meta)
+        return super().__len__()
 
     def __le__(self, other):
         if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
             return self._tensor_meta <= other
         return self.tracer.create_proxy("call_function", operator.le, (self, other), {})
+
+    def __contains__(self, key):
+        return False
 
 
 class MetaAttribute(HFProxy):
@@ -488,9 +500,7 @@ class HFTracer(Tracer):
             inputs.update(self._generate_dummy_input(root, input_name, shape))
 
         concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
-
         self.meta_args = concrete_metas
-        # self.concrete_meta_iter = iter(self.meta_args)
         self.patched_torch_methods = {
             target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
         }
