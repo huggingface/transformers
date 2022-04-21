@@ -77,6 +77,7 @@ def _pad(items, key, padding_value, padding_side):
         dim = len(shape)
         if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
+            # ImageGPT actually will use B, SEQ_LEN not tensor of shape 4
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)

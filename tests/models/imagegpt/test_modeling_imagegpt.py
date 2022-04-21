@@ -173,7 +173,7 @@ class ImageGPTModelTester:
 
     def get_pipeline_config(self):
         config = self.get_config()
-        config.vocab_size = 1000
+        config.vocab_size = 513
         config.max_position_embeddings = 1024
         return config
 
