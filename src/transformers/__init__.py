@@ -447,14 +447,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
-    _import_structure["models.realm"].append("RealmTokenizerFast")
-    _import_structure["models.xglm"].append("XGLMTokenizerFast")
-    _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
-    _import_structure["models.clip"].append("CLIPTokenizerFast")
-    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
-    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -475,6 +467,7 @@ if is_tokenizers_available():
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
+    _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
