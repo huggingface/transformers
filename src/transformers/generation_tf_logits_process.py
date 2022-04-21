@@ -256,14 +256,12 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
         indexable_prev_input_ids = tf.concat(
             (
                 tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
-                tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1)
+                tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
             ),
             axis=1,
         )
         token_penalties = tf.tensor_scatter_nd_update(
-            token_penalties,
-            indices=indexable_prev_input_ids,
-            updates=tf.reshape(logit_penalties, [-1])
+            token_penalties, indices=indexable_prev_input_ids, updates=tf.reshape(logit_penalties, [-1])
         )
         return token_penalties
 

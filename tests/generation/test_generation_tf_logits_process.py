@@ -15,7 +15,6 @@
 
 
 import unittest
-from jax import jit
 
 import numpy as np
 
