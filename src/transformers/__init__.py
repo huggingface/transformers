@@ -118,6 +118,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -713,6 +714,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.jukebox"].extend(
+        [
+            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "JukeboxForMaskedLM",
+            "JukeboxForCausalLM",
+            "JukeboxForMultipleChoice",
+            "JukeboxForQuestionAnswering",
+            "JukeboxForSequenceClassification",
+            "JukeboxForTokenClassification",
+            "JukeboxLayer",
+            "JukeboxModel",
+            "JukeboxPreTrainedModel",
+            "load_tf_weights_in_jukebox",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2686,6 +2703,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3609,6 +3627,13 @@ if TYPE_CHECKING:
             ImageGPTModel,
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
+        )
+        from .models.jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JukeboxLayer,
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            load_tf_weights_in_jukebox,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
