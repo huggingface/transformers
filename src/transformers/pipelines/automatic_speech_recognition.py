@@ -202,7 +202,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "containing the sampling_rate associated with that array"
                 )
 
-            _inputs = inputs.pop("raw", inputs.pop("array"))
+            _inputs = inputs.pop("raw", None)
+            if _inputs is None:
+                _inputs = inputs.pop("array", None)
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
