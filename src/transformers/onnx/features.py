@@ -26,6 +26,7 @@ from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..models.deit import DeiTOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
@@ -286,6 +287,7 @@ class FeaturesManager:
         ),
         "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
         "beit": supported_features_mapping("default", "image-classification", onnx_config_cls=BeitOnnxConfig),
+        "deit": supported_features_mapping("default", "image-classification", onnx_config_cls=DeiTOnnxConfig),
         "blenderbot": supported_features_mapping(
             "default",
             "default-with-past",

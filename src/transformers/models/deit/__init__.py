@@ -21,7 +21,7 @@ from ...utils import _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
-    "configuration_deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
+    "configuration_deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig", "DeiTOnnxConfig"],
 }
 
 if is_vision_available():
@@ -39,7 +39,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
+    from .configuration_deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig, DeiTOnnxConfig
 
     if is_vision_available():
         from .feature_extraction_deit import DeiTFeatureExtractor
