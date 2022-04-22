@@ -14,13 +14,14 @@
 # limitations under the License.
 """ DeiT model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-from ...onnx import OnnxConfig
-
 from collections import OrderedDict
 from typing import Mapping
+
 from packaging import version
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -125,6 +126,7 @@ class DeiTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+
 
 class DeiTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")

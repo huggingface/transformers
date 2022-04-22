@@ -11,6 +11,7 @@ from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.data2vec import Data2VecTextOnnxConfig
+from ..models.deit import DeiTOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.flaubert import FlaubertOnnxConfig
@@ -26,7 +27,6 @@ from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
-from ..models.deit import DeiTOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
