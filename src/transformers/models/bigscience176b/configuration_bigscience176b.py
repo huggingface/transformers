@@ -70,7 +70,16 @@ class BigScience176BConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
+            If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
+        bias_dropout_fusion (`bool`, *optional*, defaults to `True`):
+            If enabled, apply dropout when adding the attention output together with the attention bias in the transformer blocks
+        skip_bias_add (`bool`, *optional*, defaults to `True`):
+            If set to ``True``, it will skip bias add for each linear layer in the transformer blocks
+        hidden_dropout (`float`, *optional*, defaults to 0.1):
+            Dropout rate of the dropout function in `bias_dropout_fusion`
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            Dropout rate applied to the attention probs
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
