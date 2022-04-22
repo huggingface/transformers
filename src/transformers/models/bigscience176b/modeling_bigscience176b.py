@@ -71,7 +71,8 @@ _CONFIG_FOR_DOC = "BigScience176BConfig"
 _TOKENIZER_FOR_DOC = "BigScience176BTokenizer"
 
 BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigscience/BigScience176B",
+    "bigscience/bigscience-small-testing",
+    # "bigscience/BigScience176B",
     # See all BigScience176B models at https://huggingface.co/models?filter=bigscience176b
 ]
 
@@ -92,7 +93,6 @@ def get_bias_dropout_add(training):
     def _bias_dropout_add(x, bias, residual, prob):
         return bias_dropout_add(x, bias, residual, prob, training)
     return _bias_dropout_add
-
 
 @torch.jit.script
 def bias_dropout_add_fused_train(x, bias, residual, prob):
