@@ -125,7 +125,7 @@ class BigScience176BAttention(nn.Module):
         coeff = self.layer_number
         self.norm_factor = math.sqrt(self.head_dim) * coeff
 
-        # self.scale_mask_softmax = nn.Softmax()
+        # self.scale_mask_softmax = nn.Softmax(dim=1)
         self.scale_mask_softmax = ScaleMaskSoftmax(  # TODO setup back
             input_in_fp16 = False,
             input_in_bf16 = True,
@@ -237,13 +237,12 @@ class BigScience176BAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
 
-        # softmax across tp ranks
-
+        # softmax across tp ranks: see here https://github.com/pytorch/pytorch/issues/76232
         aggregated_tensors = []
         slices = self.num_heads / self.pretraining_tp
         for i in range(self.pretraining_tp):
             aggregated_tensors.append(self.scale_mask_softmax(attention_scores[:, int(i*slices):int((i+1)*slices), :],
-                                                  attention_mask)) 
+                                                  attention_mask))
         
         attention_probs = torch.cat(aggregated_tensors, dim=1)
         attention_probs = self.attention_dropout(attention_probs)
@@ -287,7 +286,7 @@ class BigScience176BAttention(nn.Module):
         # Output. [sq, b, h]
         # =================
 
-        # aggregate results across tp ranks
+        # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         slices = context_layer.shape[-1] / self.pretraining_tp
         output_tensor = torch.zeros_like(context_layer)
         for i in range(self.pretraining_tp):
