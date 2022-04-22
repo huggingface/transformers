@@ -241,6 +241,24 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "nystromformer",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "yoso",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ]
     )
 
