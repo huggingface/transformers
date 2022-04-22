@@ -114,9 +114,14 @@ class BigScience176BConfig(PretrainedConfig):
         masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,  # TODO
         initializer_range=0.02,  # TODO
-        use_cache=True,  # TODO
+        use_cache=False,  # TODO
         bos_token_id=0, # 50256,  # TODO
         eos_token_id=0, # =50256,  # TODO
+        apply_residual_connection_post_layernorm=False,
+        bias_dropout_fusion=True,
+        skip_bias_add=True,
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
         pretraining_tp=2,  # TODO
         pretraining_pp=2,  # TODO
         dtype="bfloat16",
@@ -134,6 +139,11 @@ class BigScience176BConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.pretraining_tp = pretraining_tp
         self.pretraining_pp = pretraining_pp
+        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.bias_dropout_fusion = bias_dropout_fusion
+        self.hidden_dropout = hidden_dropout
+        self.skip_bias_add = skip_bias_add
+        self.attention_dropout = attention_dropout
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
