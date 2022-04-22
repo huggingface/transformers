@@ -308,7 +308,6 @@ class BigScience176BAttention(nn.Module):
         return outputs, output_bias  # a, present, (attentions)
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->BigScience176B
 class BigScience176BMLP(nn.Module):
     def __init__(self, config, dtype=torch.bfloat16):
         super().__init__()
@@ -345,7 +344,6 @@ class BigScience176BMLP(nn.Module):
         return output, output_bias
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->BigScience176B
 class BigScience176BBlock(nn.Module):
     def __init__(self, config, layer_number=None, dtype=torch.bfloat16):
         super().__init__()
@@ -499,7 +497,6 @@ class BigScience176BBlock(nn.Module):
         return outputs  # hidden_states, present, attentions
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->BigScience176B,gpt2->bigscience176b,OpenAI GPT-2->BigScience176B
 class BigScience176BPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
