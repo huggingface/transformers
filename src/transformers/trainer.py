@@ -843,10 +843,7 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through `optimizers`, or subclass and override this method in a subclass.
         """
-        if is_sagemaker_mp_enabled():
-            opt_model = self.model_wrapped
-        else:
-            opt_model = self.model
+        opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
         if self.optimizer is None:
             decay_parameters = get_parameter_names(opt_model, [nn.LayerNorm])
