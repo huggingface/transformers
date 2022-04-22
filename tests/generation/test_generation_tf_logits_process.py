@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import is_tf_available
-from transformers.testing_utils import get_gpu_count, require_tf
+from transformers.testing_utils import require_tf
 
 
 if is_tf_available():
@@ -133,7 +133,6 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = rep_penalty_proc(input_ids, tf.identity(scores), cur_len)
         self._check_repetition_penalty_outputs(scores, vocab_size)
 
-    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
     def test_repetition_penalty_dist_process_xla(self):
         vocab_size, cur_len, input_ids, scores = self._get_repetition_penalty_inputs()
         rep_penalty_proc = TFRepetitionPenaltyLogitsProcessor(penalty=2.0)
