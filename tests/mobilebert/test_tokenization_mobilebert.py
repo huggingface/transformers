@@ -56,10 +56,10 @@ class MobileBertTokenizationTest(BertTokenizationTest, unittest.TestCase):
 
     def test_mobilebert_tokenizer_uses_bert_params(self):
         with \
-            NamedTemporaryFile(buffering=0, delete=False) as bert_vocab_file, \
-            NamedTemporaryFile(buffering=0, delete=False) as bert_merge_file, \
-            NamedTemporaryFile(buffering=0, delete=False) as mobilebert_vocab_file, \
-            NamedTemporaryFile(buffering=0, delete=False) as mobilebert_merge_file:
+            NamedTemporaryFile(buffering=0) as bert_vocab_file, \
+            NamedTemporaryFile(buffering=0) as bert_merge_file, \
+            NamedTemporaryFile(buffering=0) as mobilebert_vocab_file, \
+            NamedTemporaryFile(buffering=0) as mobilebert_merge_file:
             bert_merge_file.write(
                 requests.get("https://huggingface.co/bert-base-uncased/raw/main/merges.txt").content
                 )
