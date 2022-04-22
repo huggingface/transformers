@@ -662,16 +662,15 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         dtype = getattr(torch, config.dtype)
         assert dtype in [torch.bfloat16, torch.float32, torch.float, torch.float16]
 
+        # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=dtype)
-        # self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
-        # self.word_embeddings_layernorm = MixedFusedLayerNorm(self.embed_dim, dtype=dtype, eps=config.layer_norm_epsilon)
         self.word_embeddings_layernorm = nn.LayerNorm(self.embed_dim, dtype=dtype, eps=config.layer_norm_epsilon)
-        # self.word_embeddings_layernorm = MixedFusedLayerNorm(self.embed_dim)
 
+        # Transformer blocks
         self.h = nn.ModuleList([BigScience176BBlock(config, layer_number=i, dtype=dtype) for i in range(config.num_hidden_layers)])
 
+        # Final Layer Norm
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon, dtype=dtype)
-        # self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
         self.model_parallel = False
