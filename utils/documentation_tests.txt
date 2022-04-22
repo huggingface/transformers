@@ -6,11 +6,14 @@ docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
 src/transformers/generation_utils.py
+src/transformers/models/albert/modeling_albert.py
+src/transformers/models/albert/modeling_tf_albert.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/modeling_beit.py
 src/transformers/models/bert/modeling_bert.py
 src/transformers/models/bert/modeling_tf_bert.py
 src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
+src/transformers/models/big_bird/modeling_big_bird.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/convnext/modeling_convnext.py
