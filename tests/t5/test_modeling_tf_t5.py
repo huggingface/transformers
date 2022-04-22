@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import T5Config, is_tf_available
-from transformers.testing_utils import get_gpu_count, require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
@@ -481,8 +481,6 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 @require_tokenizers
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
-    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_greedy_xla_generate_simple(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -534,30 +532,31 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings)
 
     @slow
-    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
-    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_sample_xla_generate_simple(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
-        # output out of the same seed is far from guaranteed (unlike this example). We can, however, confirm that the
-        # results are sensible and that we can seed both versions.
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
+        # and that we can seed both versions.
 
-        sentence = "Translate English to German: I have two bananas"
-        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
-        expected_output_string = ["Ich habe 2 Bananen"]
-        expected_output_string_xla = ["Ich habe 2 Bananen"]
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+            tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-        # seed set -> deterministic sampling sequence -> deterministic generation
-        output_ids = model.generate(input_ids, do_sample=True, seed=[42, 0])
-        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        self.assertListEqual(expected_output_string, output_strings)
+            sentence = "Translate English to German: I have two bananas"
+            input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+            expected_output_string = ["Ich habe zwei Bananen"]
+            expected_output_string_xla = ["Ich habe 2 Bananen"]
 
-        xla_generate = tf.function(model.generate, jit_compile=True)
-        # seed set -> deterministic sampling sequence -> deterministic generation
-        output_ids_xla = xla_generate(input_ids, do_sample=True, seed=[42, 0])
-        output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
-        self.assertListEqual(expected_output_string_xla, output_strings_xla)
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids = model.generate(input_ids, do_sample=True, seed=[42, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(expected_output_string, output_strings)
+
+            xla_generate = tf.function(model.generate, jit_compile=True)
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids_xla = xla_generate(input_ids, do_sample=True, seed=[42, 0])
+            output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+            self.assertListEqual(expected_output_string_xla, output_strings_xla)
 
     @slow
     def test_sample_generate(self):

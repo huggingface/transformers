@@ -1716,7 +1716,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         n_tokens = 10
 
         def masked_softmax(x, boolean_mask):
-            numerical_mask = (1. - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
+            numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
             masked_x = x + numerical_mask
             return stable_softmax(masked_x)
 
@@ -1729,7 +1729,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         boolean_mask = tf.convert_to_tensor([[1] * (n_tokens - masked_tokens) + [0] * masked_tokens], dtype=tf.int32)
 
         # We can randomly mask a random numerical input OUTSIDE XLA
-        numerical_mask = (1. - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
+        numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
         masked_x = x + numerical_mask
         xla_out = xla_stable_softmax(masked_x)
         out = stable_softmax(masked_x)
