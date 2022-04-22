@@ -43,7 +43,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.tf_utils import stable_softmax
 from transformers.utils import logging
 from transformers.utils.generic import ModelOutput
 
@@ -85,6 +84,7 @@ if is_tf_available():
         TFSampleEncoderDecoderOutput,
     )
     from transformers.modeling_tf_utils import unpack_inputs
+    from transformers.tf_utils import stable_softmax
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
