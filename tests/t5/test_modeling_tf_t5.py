@@ -461,6 +461,7 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
     @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
+    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_greedy_xla_generate_simple(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -513,6 +514,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
+    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_sample_xla_generate_simple(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed (unlike this example). We can, however, confirm that the

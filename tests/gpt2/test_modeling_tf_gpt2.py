@@ -518,6 +518,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
+    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_lm_generate_gpt2_greedy_xla(self):
         # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
         # the underlying problem)
@@ -544,6 +545,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
+    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_lm_generate_gpt2_sample_xla(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
