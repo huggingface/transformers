@@ -40,6 +40,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
+    pretrained_model_path = "bert-base-uncased"
 
     def setUp(self):
         super().setUp()
@@ -237,7 +238,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained(self.pretrained_model_path)
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
