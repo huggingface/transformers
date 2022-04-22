@@ -102,10 +102,11 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
 
 
 class BigScience176BAttention(nn.Module):
-    def __init__(self, config, layer_number=None, dtype=torch.bfloat16):
+    def __init__(self, config, layer_number=None):
         super().__init__()
 
         max_positions = config.max_position_embeddings
+        dtype = getattr(torch, config.dtype)
         self.pretraining_tp = config.pretraining_tp
 
         self.hidden_size = config.hidden_size
@@ -281,9 +282,10 @@ class BigScience176BAttention(nn.Module):
 
 
 class BigScience176BMLP(nn.Module):
-    def __init__(self, config, dtype=torch.bfloat16):
+    def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
+        dtype = getattr(torch, config.dtype)
         self.skip_bias_add = config.skip_bias_add
         self.pretraining_tp = config.pretraining_tp
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size, dtype=dtype)
@@ -320,16 +322,17 @@ class BigScience176BMLP(nn.Module):
 
 
 class BigScience176BBlock(nn.Module):
-    def __init__(self, config, layer_number=None, dtype=torch.bfloat16):
+    def __init__(self, config, layer_number=None):
         super().__init__()
         hidden_size = config.hidden_size
+        dtype = getattr(torch, config.dtype)
 
         self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon, dtype=dtype)
         self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
-        self.self_attention = BigScience176BAttention(config, layer_number=layer_number, dtype=dtype)
+        self.self_attention = BigScience176BAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon, dtype=dtype)
 
-        self.mlp = BigScience176BMLP(config, dtype=dtype)
+        self.mlp = BigScience176BMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.bias_dropout_fusion = config.bias_dropout_fusion
@@ -640,7 +643,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList(
-            [BigScience176BBlock(config, layer_number=i, dtype=dtype) for i in range(config.num_hidden_layers)]
+            [BigScience176BBlock(config, layer_number=i) for i in range(config.num_hidden_layers)]
         )
 
         # Final Layer Norm
