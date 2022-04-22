@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import gc
 import json
 import os
 import shutil
@@ -196,6 +197,7 @@ class RagTestMixin:
         shutil.rmtree(self.tmpdirname)
 
         # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
         torch.cuda.empty_cache()
 
     def get_retriever(self, config):
@@ -683,6 +685,7 @@ class RagModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
         torch.cuda.empty_cache()
 
     @cached_property
@@ -1035,6 +1038,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
         torch.cuda.empty_cache()
 
     def get_rag_config(self):
