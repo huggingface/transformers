@@ -54,12 +54,15 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
     `softmax(x) = softmax(x + c)` (see https://ogunlao.github.io/2020/04/26/you_dont_really_know_softmax.html).
 
     Args:
-        logits (`tf.Tensor`). Must be one of the following types: half, float32, float64.
-        axis (`int`, *optional*). The dimension softmax would be performed on. The default is -1 which indicates the
-            last dimension.
-        name (`str`, *optional*). A name for the operation.
+        logits (`tf.Tensor`):
+            Must be one of the following types: half, float32, float64.
+        axis (`int`, *optional*):
+            The dimension softmax would be performed on. The default is -1 which indicates the last dimension.
+        name (`str`, *optional*):
+            A name for the operation.
 
     Returns:
-        `tf.Tensor`: A Tensor. Has the same type and shape as logits.
+        `tf.Tensor`:
+            A Tensor. Has the same type and shape as `logits`.
     """
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
