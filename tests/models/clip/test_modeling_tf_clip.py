@@ -256,6 +256,41 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFCLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output_hidden_states = outputs["encoder_hidden_states"]
+                    output_attentions = outputs["encoder_attentions"]
+                else:
+                    output_hidden_states = outputs["hidden_states"]
+                    output_attentions = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
 class TFCLIPTextModelTester:
     def __init__(
@@ -367,6 +402,46 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output_hidden_states = outputs["encoder_hidden_states"]
+                    output_attentions = outputs["encoder_attentions"]
+                else:
+                    output_hidden_states = outputs["hidden_states"]
+                    output_attentions = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
 class TFCLIPModelTester:
     def __init__(self, parent, is_training=True):
@@ -502,6 +577,47 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output_hidden_states = outputs["encoder_hidden_states"]
+                    output_attentions = outputs["encoder_attentions"]
+                else:
+                    output_hidden_states = outputs["hidden_states"]
+                    output_attentions = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
 # We will verify our results on an image of cute cats
 def prepare_img():

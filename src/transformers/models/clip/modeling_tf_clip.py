@@ -552,10 +552,10 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
 
-        diag = tf.constant(0.0, shape=(seq_length,), dtype=dtype)
+        diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
-        to_mask = tf.constant(-10000.0, shape=(seq_length, seq_length), dtype=dtype)
+        to_mask = tf.cast(tf.fill((seq_length, seq_length,), -10000.0), dtype)
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
@@ -1082,6 +1082,18 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
         return outputs
 
+    @tf.function(input_signature=
+        [
+            {
+                'input_ids': tf.TensorSpec((None, None,), tf.int32, name='input_ids'),
+                'attention_mask': tf.TensorSpec((None, None,), tf.int32, name='attention_mask')
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+        return self.serving_output(output)
+
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -1375,4 +1387,32 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFCLIPOutput) -> TFCLIPOutput:
-        return output
+        text_hs = tf.convert_to_tensor(output.text_model_output.hidden_states) if self.config.output_hidden_states else None
+        text_attns = tf.convert_to_tensor(output.text_model_output.attentions) if self.config.output_attentions else None
+        text_model_output = TFBaseModelOutputWithPooling(
+            last_hidden_state=output.text_model_output.last_hidden_state,
+            pooler_output=output.text_model_output.pooler_output,
+            hidden_states=text_hs,
+            attentions=text_attns,
+        )
+
+        vision_hs = tf.convert_to_tensor(output.vision_model_output.hidden_states) if self.config.output_hidden_states else None
+        vision_attns = tf.convert_to_tensor(output.vision_model_output.attentions) if self.config.output_attentions else None
+        vision_model_output = TFBaseModelOutputWithPooling(
+            last_hidden_state=output.vision_model_output.last_hidden_state,
+            pooler_output=output.vision_model_output.pooler_output,
+            hidden_states=vision_hs,
+            attentions=vision_attns,
+        )
+
+        output = TFCLIPOutput(
+            loss=output.loss,
+            logits_per_image=output.logits_per_image,
+            logits_per_text=output.logits_per_text,
+            text_embeds=output.text_embeds,
+            image_embeds=output.image_embeds,
+            text_model_output=text_model_output,
+            vision_model_output=vision_model_output,
+        )
+
+        return output.to_tuple()
