@@ -292,6 +292,7 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(output_hidden_states), expected_num_layers)
                 self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
+
 class TFCLIPTextModelTester:
     def __init__(
         self,
@@ -443,6 +444,7 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
+
 class TFCLIPModelTester:
     def __init__(self, parent, is_training=True):
         self.parent = parent
@@ -577,7 +579,6 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -618,6 +619,7 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
                 )
 
                 self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

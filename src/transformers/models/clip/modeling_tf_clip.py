@@ -555,7 +555,16 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
-        to_mask = tf.cast(tf.fill((seq_length, seq_length,), -10000.0), dtype)
+        to_mask = tf.cast(
+            tf.fill(
+                (
+                    seq_length,
+                    seq_length,
+                ),
+                -10000.0,
+            ),
+            dtype,
+        )
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
@@ -1082,11 +1091,25 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
         return outputs
 
-    @tf.function(input_signature=
-        [
+    @tf.function(
+        input_signature=[
             {
-                'input_ids': tf.TensorSpec((None, None,), tf.int32, name='input_ids'),
-                'attention_mask': tf.TensorSpec((None, None,), tf.int32, name='attention_mask')
+                "input_ids": tf.TensorSpec(
+                    (
+                        None,
+                        None,
+                    ),
+                    tf.int32,
+                    name="input_ids",
+                ),
+                "attention_mask": tf.TensorSpec(
+                    (
+                        None,
+                        None,
+                    ),
+                    tf.int32,
+                    name="attention_mask",
+                ),
             }
         ]
     )
@@ -1387,8 +1410,12 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFCLIPOutput) -> TFCLIPOutput:
-        text_hs = tf.convert_to_tensor(output.text_model_output.hidden_states) if self.config.output_hidden_states else None
-        text_attns = tf.convert_to_tensor(output.text_model_output.attentions) if self.config.output_attentions else None
+        text_hs = (
+            tf.convert_to_tensor(output.text_model_output.hidden_states) if self.config.output_hidden_states else None
+        )
+        text_attns = (
+            tf.convert_to_tensor(output.text_model_output.attentions) if self.config.output_attentions else None
+        )
         text_model_output = TFBaseModelOutputWithPooling(
             last_hidden_state=output.text_model_output.last_hidden_state,
             pooler_output=output.text_model_output.pooler_output,
@@ -1396,8 +1423,14 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             attentions=text_attns,
         )
 
-        vision_hs = tf.convert_to_tensor(output.vision_model_output.hidden_states) if self.config.output_hidden_states else None
-        vision_attns = tf.convert_to_tensor(output.vision_model_output.attentions) if self.config.output_attentions else None
+        vision_hs = (
+            tf.convert_to_tensor(output.vision_model_output.hidden_states)
+            if self.config.output_hidden_states
+            else None
+        )
+        vision_attns = (
+            tf.convert_to_tensor(output.vision_model_output.attentions) if self.config.output_attentions else None
+        )
         vision_model_output = TFBaseModelOutputWithPooling(
             last_hidden_state=output.vision_model_output.last_hidden_state,
             pooler_output=output.vision_model_output.pooler_output,
