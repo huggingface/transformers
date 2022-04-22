@@ -81,9 +81,6 @@ BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def attention_mask_func(attention_scores, attention_mask):
         return attention_scores.masked_fill_(attention_mask, -10000.0)
 
-def transpose_tensor(x):
-    return x.transpose(0, 1).contiguous()
-
 def bias_dropout_add(x, bias, residual, prob, training):
     # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
     out = torch.nn.functional.dropout(x + bias, p=prob, training=training)
@@ -838,12 +835,12 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
             inputs_embeds = self.word_embeddings(input_ids)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
-        hidden_states = transpose_tensor(hidden_states)
+        hidden_states = hidden_states.transpose(0, 1).contiguous()
 
 
         if token_type_ids is not None:
             token_type_embeds = self.word_embeddings(token_type_ids)
-            token_type_embeds = transpose_tensor(hidden_states)
+            token_type_embeds = token_type_embeds.transpose(0, 1).contiguous()
             hidden_states = hidden_states + token_type_embeds
 
         output_shape = input_shape + (hidden_states.size(-1),)
