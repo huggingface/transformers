@@ -227,6 +227,23 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+    def create_and_check_t5_xla_generate_fast(self, config, input_ids, *args):
+        config.eos_token_id = None
+        config.max_length = 10
+        config.do_sample = False
+        config.num_beams = 1
+        model = TFT5ForConditionalGeneration(config=config)
+
+        # make sure there are no pad tokens in prompt
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id + 5)
+
+        generated = model.generate(input_ids)
+
+        generate_xla = tf.function(model.generate, jit_compile=True)
+        generated_xla = generate_xla(input_ids)
+
+        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
@@ -279,6 +296,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_t5_model_xla_generate_fast(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_xla_generate_fast(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
