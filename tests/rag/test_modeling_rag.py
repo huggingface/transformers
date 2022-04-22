@@ -1034,6 +1034,7 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         torch.cuda.empty_cache()
 
+
 @require_torch
 @require_retrieval
 class RagModelSaveLoadTests(unittest.TestCase):
