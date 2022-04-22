@@ -389,32 +389,6 @@ class BigScience176BBlock(nn.Module):
         alibi = alibi.to(dtype)
 
         return alibi
-    def forward_attention(
-        self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        # hidden_states: [b, s, h]
-
-        # Layer norm at the beginning of the transformer layer.
-        layernorm_output = self.input_layernorm(hidden_states)
-
-        # Self attention.
-        attn_outputs, _ = \
-            self.self_attention(layernorm_output,
-            layer_past=layer_past,
-            attention_mask=attention_mask,
-            alibi=self.alibi,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions)
-        
-        return attn_outputs[0]
-
 
     def forward(
         self,
