@@ -63,6 +63,6 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
 
     Returns:
         `tf.Tensor`:
-            A Tensor. Has the same type and shape as `logits`.
+            A Tensor. Has the same type and shape as logits.
     """
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)

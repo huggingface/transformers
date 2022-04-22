@@ -1714,6 +1714,7 @@ class UtilsFunctionsTest(unittest.TestCase):
     def test_xla_stable_softmax(self):
         large_penalty = -1e9
         n_tokens = 10
+        batch_size = 8
 
         def masked_softmax(x, boolean_mask):
             numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
@@ -1722,7 +1723,7 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         xla_masked_softmax = tf.function(masked_softmax, jit_compile=True)
         xla_stable_softmax = tf.function(stable_softmax, jit_compile=True)
-        x = tf.random.normal((1, n_tokens))
+        x = tf.random.normal((batch_size, n_tokens))
 
         # Same outcome regardless of the boolean mask here
         masked_tokens = random.randint(0, n_tokens)
