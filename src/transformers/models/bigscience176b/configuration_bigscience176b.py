@@ -31,13 +31,12 @@ BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class BigScience176BConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`BigScience176BModel`] or a [`TFBigScience176BModel`]. It is used to
-    instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-2
-    [small](https://huggingface.co/bigscience176b) architecture.
+    This is the configuration class to store the configuration of a [`BigScience176BModel`] or a
+    [`TFBigScience176BModel`]. It is used to instantiate a GPT-2 model according to the specified arguments, defining
+    the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the GPT-2 [small](https://huggingface.co/bigscience176b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -70,7 +69,17 @@ class BigScience176BConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
+            If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
+        bias_dropout_fusion (`bool`, *optional*, defaults to `True`):
+            If enabled, apply dropout when adding the attention output together with the attention bias in the
+            transformer blocks
+        skip_bias_add (`bool`, *optional*, defaults to `True`):
+            If set to ``True``, it will skip bias add for each linear layer in the transformer blocks
+        hidden_dropout (`float`, *optional*, defaults to 0.1):
+            Dropout rate of the dropout function in `bias_dropout_fusion`
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            Dropout rate applied to the attention probs
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -106,19 +115,25 @@ class BigScience176BConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=250880,
-        seq_length=20, # 2048,
-        hidden_size=64, # 14336,
-        n_layer=2, # 70,
-        n_head=8, # 122,
+        seq_length=20,  # 2048,
+        hidden_size=64,  # 14336,
+        n_layer=2,  # 70,
+        n_head=8,  # 122,
         n_inner=None,
         masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,  # TODO
         initializer_range=0.02,  # TODO
-        use_cache=True,  # TODO
-        bos_token_id=0, # 50256,  # TODO
-        eos_token_id=0, # =50256,  # TODO
+        use_cache=False,  # TODO
+        bos_token_id=0,  # 50256,  # TODO
+        eos_token_id=0,  # =50256,  # TODO
+        apply_residual_connection_post_layernorm=False,
+        bias_dropout_fusion=True,
+        skip_bias_add=True,
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
         pretraining_tp=2,  # TODO
         pretraining_pp=2,  # TODO
+        dtype="bfloat16",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -133,9 +148,15 @@ class BigScience176BConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.pretraining_tp = pretraining_tp
         self.pretraining_pp = pretraining_pp
+        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.bias_dropout_fusion = bias_dropout_fusion
+        self.hidden_dropout = hidden_dropout
+        self.skip_bias_add = skip_bias_add
+        self.attention_dropout = attention_dropout
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.dtype = dtype
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
