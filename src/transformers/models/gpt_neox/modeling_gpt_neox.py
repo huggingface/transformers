@@ -153,10 +153,15 @@ class GPTNeoXAttention(nn.Module):
 
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        if torch.isnan(attn_output).any():
+            raise RuntimeError()
 
         # Reshape outputs
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
         attn_output = self.dense(attn_output)
+
+        if torch.isnan(attn_output).any():
+            raise RuntimeError()
 
         outputs = (attn_output, present)
         if output_attentions:

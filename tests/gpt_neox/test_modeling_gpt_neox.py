@@ -253,19 +253,6 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         )
 
-    def test_decoder_model_past_with_large_inputs(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(
-            config,
-            input_ids,
-            input_mask,
-        )
-
     def test_model_as_decoder(self):
         (
             config,
