@@ -7,6 +7,7 @@ import numpy as np
 
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModel
+from transformers.models.bigscience176b import BigScience176BLMHeadModel
 
 class BigScienceEmbeddingTest(unittest.TestCase):
     """
@@ -103,6 +104,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # position_ids = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]])
 
         embeddings = model.word_embeddings(tensor_ids)
+        embeddings_ln = model.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min":{}, 'max':{}, "mean":{}, "sum":{"value":embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -112,9 +114,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         
         for key in TEST_EMBEDDINGS[str(model.dtype)].keys():
             self.assertDictEqual(TEST_EMBEDDINGS[str(model.dtype)][key], output_dict[key])
-
-        embeddings_ln = model.word_embeddings_layernorm(embeddings)
-        mean_output_embeddings = embeddings_ln.mean(dim=-1)
 
         output_dict_norm = {"min":{}, 'max':{}, "mean":{}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -127,6 +126,146 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         for i, key in enumerate(output_dict_norm.keys()):
             for j, idx in enumerate(output_dict[key].keys()):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
-        # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm) 
+        # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
+    
+    @torch.no_grad()
+    # @unittest.skip("demonstrating skipping")
+    def test_hidden_states_transformers(self):
+        # TODO ifelse device
+        cuda_available = torch.cuda.is_available()
+        # cuda_available = False
+        device = torch.device("cuda:0" if cuda_available else "cpu")
+        model = AutoModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model.eval()
+
+        EXAMPLE_IDS = [  3478,    368, 109586,  35433,      2,     77, 132619,   3478,    368,
+         109586,  35433,      2,   2175,  23714,  73173, 144252,      2,     77,
+         132619,   3478]
+
+        ATTN_MASK = torch.tensor([[[[False,  True,  True,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False,  True,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False, False,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False, False, False]]]])
+        
+        MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
+        MIN_MAX_DICT = {"min":-2.0625, "max":2.75}
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS])
+
+        logits = model(tensor_ids.to(device),  attention_mask=ATTN_MASK.to(device))
+        output_dict = {"min":logits.last_hidden_state.min(dim=-1).values[0][0].item(), "max":logits.last_hidden_state.max(dim=-1).values[0][0].item()}
+        
+        if cuda_available:
+            self.assertEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item())
+        else:
+            self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
+        
+        self.assertDictEqual(MIN_MAX_DICT, output_dict)
+
+
+
+    @torch.no_grad()
+    # @unittest.skip("demonstrating skipping")
+    def test_logits(self):
+        cuda_available = torch.cuda.is_available()
+        # cuda_available = False
+        device = torch.device("cuda:0" if cuda_available else "cpu")
+        model = BigScience176BLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model.eval()
+
+        EXAMPLE_IDS = [  3478,    368, 109586,  35433,      2,     77, 132619,   3478,    368,
+         109586,  35433,      2,   2175,  23714,  73173, 144252,      2,     77,
+         132619,   3478]
+
+        ATTN_MASK = torch.tensor([[[[False,  True,  True,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False,  True,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False,  True,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False,  True,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False,  True,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False,  True,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False,  True,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False,  True,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False,  True,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+            True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False,  True,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False,  True,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False,  True,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False,  True,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False,  True,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False,  True,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False,  True,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False, False,  True],
+          [False, False, False, False, False, False, False, False, False, False,
+           False, False, False, False, False, False, False, False, False, False]]]]).to(device)
+        
+        MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
+        MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
+
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(device)
+        output = model(tensor_ids,  attention_mask=ATTN_MASK).logits
+        
+        output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
+        if cuda_available:
+            self.assertEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1)
+            self.assertEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2)
+        else:
+            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6) # 1e-06 precision!!
+            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
+
 if __name__ == '__main__':
     unittest.main()
