@@ -44,6 +44,7 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
+        AutoModelForMaskedImageModeling,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -103,6 +104,7 @@ class FeaturesManager:
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -285,9 +287,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
-        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
-        "beit": supported_features_mapping("default", "image-classification", onnx_config_cls=BeitOnnxConfig),
-        "deit": supported_features_mapping("default", "image-classification", onnx_config_cls=DeiTOnnxConfig),
+        "vit": supported_features_mapping("default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig),
+        "beit": supported_features_mapping("default", "image-classification", "masked-im", onnx_config_cls=BeitOnnxConfig),
+        "deit": supported_features_mapping("default", "image-classification", "masked-im", onnx_config_cls=DeiTOnnxConfig),
         "blenderbot": supported_features_mapping(
             "default",
             "default-with-past",
