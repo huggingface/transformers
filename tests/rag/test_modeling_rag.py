@@ -761,8 +761,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.7368]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-        torch.cuda.empty_cache()
-
     @slow
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
@@ -801,8 +799,6 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         expected_loss = torch.tensor([36.3557]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
-
-        torch.cuda.empty_cache()
 
     @slow
     def test_rag_token_generate_beam(self):
@@ -843,8 +839,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
-        torch.cuda.empty_cache()
-
     @slow
     def test_rag_sequence_generate_beam(self):
         rag_config = self.get_rag_config()
@@ -883,8 +877,6 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
-
-        torch.cuda.empty_cache()
 
     @property
     def test_data_questions(self):
@@ -938,8 +930,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-        torch.cuda.empty_cache()
-
     @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
@@ -990,8 +980,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-        torch.cuda.empty_cache()
-
     @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
@@ -1031,8 +1019,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             " 13",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
-
-        torch.cuda.empty_cache()
 
 
 @require_torch
@@ -1122,8 +1108,6 @@ class RagModelSaveLoadTests(unittest.TestCase):
 
         self.assertAlmostEqual(loss_pretrained.item(), loss_init.item(), places=4)
 
-        torch.cuda.empty_cache()
-
     @slow
     def test_rag_token_from_pretrained(self):
         rag_config = self.get_rag_config()
@@ -1188,4 +1172,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
 
         self.assertAlmostEqual(loss_pretrained.item(), loss_init.item(), places=4)
 
-        torch.cuda.empty_cache()
+
+def tearDownModule():
+    # clean-up as much as possible GPU memory occupied by PyTorch
+    torch.cuda.empty_cache()
