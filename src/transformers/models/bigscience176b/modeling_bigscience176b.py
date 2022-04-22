@@ -76,6 +76,8 @@ BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BigScience176B models at https://huggingface.co/models?filter=bigscience176b
 ]
 
+# Utility functions below:
+
 def attention_mask_func(attention_scores, attention_mask):
         return attention_scores.masked_fill_(attention_mask, -10000.0)
 
@@ -142,8 +144,7 @@ class BigScience176BAttention(nn.Module):
         self.dense = nn.Linear(self.hidden_size, self.hidden_size, dtype=dtype)
         self.skip_bias_add = config.skip_bias_add
         self.attention_dropout = torch.nn.Dropout(config.attention_dropout)
-        # self.dense = BigScience176Dense(config, self.hidden_size, self.hidden_size, dtype=dtype)
-
+        
     def forward(
         self,
         hidden_states,
@@ -155,8 +156,6 @@ class BigScience176BAttention(nn.Module):
         output_attentions=False,
     ):
         # hidden_states: [sq, b, h]
-        # hidden_states = torch.permute(hidden_states, (1, 0, 2))
-        # hidden_states = hidden_states.transpose(0, 1).contiguous()
         alibi = alibi.repeat(1, hidden_states.shape[1], 1).to(hidden_states.device)  # repeat with batch size
 
         # Attention heads [sq, b, h] --> [sq, b, (np * 3 * hn)]
@@ -247,9 +246,7 @@ class BigScience176BAttention(nn.Module):
         slices = self.num_heads / self.pretraining_tp
         for i in range(self.pretraining_tp):
             aggregated_tensors.append(self.scale_mask_softmax(attention_scores[:, int(i*slices):int((i+1)*slices), :],
-                                                  attention_mask))
-            # aggregated_tensors.append(nn.Softmax(dim=-1)(attention_scores[:, int(i*slices):int((i+1)*slices), :]))
-        
+                                                  attention_mask)) 
         
         attention_probs = torch.cat(aggregated_tensors, dim=1)
         attention_probs = self.attention_dropout(attention_probs)
