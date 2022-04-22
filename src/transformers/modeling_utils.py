@@ -145,7 +145,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     Example:
 
     ```py
-    >>> convert_file_size_to_int("1MB")
+    >>> convert_file_size_to_int("1MiB")
     1048576
     ```
     """
@@ -158,11 +158,14 @@ def convert_file_size_to_int(size: Union[int, str]):
     if size.upper().endswith("KIB"):
         return int(size[:-3]) * (2**10)
     if size.upper().endswith("GB"):
-        return int(size[:-2]) * (10**9)
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("MB"):
-        return int(size[:-2]) * (10**6)
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("KB"):
-        return int(size[:-2]) * (10**3)
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
