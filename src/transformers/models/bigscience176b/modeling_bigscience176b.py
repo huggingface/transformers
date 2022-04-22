@@ -56,10 +56,6 @@ from ...modeling_utils import (
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_bigscience176b import BigScience176BConfig
-# from torch.nn import LayerNorm as MixedFusedLayerNorm
-# from .fused_layer_norm import MixedFusedLayerNorm  # TODO use fused layer norm
-# from megatron import fused_kernels
-from .scale_mask_softmax import AttnMaskType, ScaleMaskSoftmax  # TODO scaled softmax
 from .fused_bias_gelu import bias_gelu_impl
 from .mpu_utils import split_tensor_along_last_dim
 
@@ -79,7 +75,7 @@ BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Utility functions below:
 
 def attention_mask_func(attention_scores, attention_mask):
-        return attention_scores.masked_fill_(attention_mask, -10000.0)
+    return attention_scores.masked_fill_(attention_mask, -10000.0)
 
 def bias_dropout_add(x, bias, residual, prob, training):
     # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
@@ -125,16 +121,8 @@ class BigScience176BAttention(nn.Module):
         coeff = self.layer_number
         self.norm_factor = math.sqrt(self.head_dim) * coeff
 
-        # self.scale_mask_softmax = nn.Softmax(dim=1)
-        self.scale_mask_softmax = ScaleMaskSoftmax(  # TODO setup back
-            input_in_fp16 = False,
-            input_in_bf16 = True,
-            attn_mask_type=AttnMaskType.causal,
-            scaled_masked_softmax_fusion=config.masked_softmax_fusion,
-            mask_func=attention_mask_func,
-            softmax_in_fp32=True,
-            scale=coeff
-        )
+        self.scale_mask_softmax = nn.Softmax(dim=1)
+        self.mask_func = attention_mask_func
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype)
         # TODO : Try a custom class
@@ -241,8 +229,9 @@ class BigScience176BAttention(nn.Module):
         aggregated_tensors = []
         slices = self.num_heads / self.pretraining_tp
         for i in range(self.pretraining_tp):
-            aggregated_tensors.append(self.scale_mask_softmax(attention_scores[:, int(i*slices):int((i+1)*slices), :],
-                                                  attention_mask))
+            input_ = attention_scores[:, int(i*slices):int((i+1)*slices), :]
+            mask_output = self.mask_func(input_, attention_mask) if attention_mask is not None else input_
+            aggregated_tensors.append(torch.nn.Softmax(dim=-1)(mask_output))
         
         attention_probs = torch.cat(aggregated_tensors, dim=1)
         attention_probs = self.attention_dropout(attention_probs)
