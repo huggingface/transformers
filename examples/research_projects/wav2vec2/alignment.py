@@ -160,7 +160,7 @@ class Wav2Vec2_Aligner:
             for seg in segments:
                 out_align.write(str(seg) + "\n")
 
-    def align_data(self, wav_dir, text_file, output_dir, num_workers):
+    def align_data(self, wav_dir, text_file, output_dir):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -202,7 +202,7 @@ def main():
     args = parser.parse_args()
 
     aligner = Wav2Vec2_Aligner(args.model_name, args.input_wavs_sr, args.cuda)
-    aligner.align_data(args.wav_dir, args.text_file, args.output_dir, args.num_workers)
+    aligner.align_data(args.wav_dir, args.text_file, args.output_dir)
 
 
 if __name__ == "__main__":
