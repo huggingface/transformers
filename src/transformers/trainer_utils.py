@@ -46,7 +46,27 @@ if is_tf_available():
     import tensorflow as tf
 
 
-def set_seed(seed: int):
+def seed_worker():
+    worker_seed = torch.initial_seed() % 2**32
+    set_seed(worker_seed)
+
+
+def set_deterministic_seed_for_cuda():
+    #  Enable PyTorch deterministic mode. This potentially requires either the environment
+    #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+    # depending on the CUDA version, so we set them both here
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+
+    if is_torch_available():
+        torch.use_deterministic_algorithms(True)
+
+        # Enable CUDNN deterministic mode
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
+def set_seed(seed: int, set_seed_for_cuda: bool = True):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
@@ -61,6 +81,8 @@ def set_seed(seed: int):
         # ^^ safe to call this function even if cuda is not available
     if is_tf_available():
         tf.random.set_seed(seed)
+    if set_seed_for_cuda:
+        set_deterministic_seed_for_cuda()
 
 
 class EvalPrediction:
