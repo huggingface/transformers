@@ -664,6 +664,9 @@ def main():
 
     all_start_logits = []
     all_end_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -711,6 +714,9 @@ def main():
 
         all_start_logits = []
         all_end_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)

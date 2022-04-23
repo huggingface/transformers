@@ -607,6 +607,9 @@ def main():
     all_end_top_log_probs = []
     all_end_top_index = []
     all_cls_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -675,6 +678,9 @@ def main():
         all_end_top_log_probs = []
         all_end_top_index = []
         all_cls_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
