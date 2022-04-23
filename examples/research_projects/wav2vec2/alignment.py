@@ -2,21 +2,24 @@
 # The Full tutorial can be found here: https://pytorch.org/audio/stable/tutorials/forced_alignment_tutorial.html
 
 import argparse
-import torchaudio
-import transformers
 import os
-import torch 
 from dataclasses import dataclass
-from tqdm import tqdm 
 
-class Wav2Vec2_Aligner():
+import torch
+import torchaudio
+from tqdm import tqdm
+
+import transformers
+
+
+class Wav2Vec2_Aligner:
     def __init__(self, model_name, input_wavs_sr, cuda):
         self.cuda = cuda
         self.config = AutoConfig.from_pretrained(model_name)
         self.model = AutoModelForCTC.from_pretrained(model_name)
         self.model.eval()
         if self.cuda:
-            self.model.to(device='cuda')
+            self.model.to(device="cuda")
         self.processor = AutoProcessor.from_pretrained(model_name)
         self.resampler = torchaudio.transforms.Resample(input_wavs_sr, 16_000)
         blank_id = 0
@@ -27,21 +30,21 @@ class Wav2Vec2_Aligner():
         print("Blank Token id [PAD]/<pad>", blank_id)
         self.blank_id = blank_id
 
-    def speech_file_to_array_fn(self,wav_path):
+    def speech_file_to_array_fn(self, wav_path):
         speech_array, sampling_rate = torchaudio.load(wav_path)
-        speech =  self.resampler(speech_array).squeeze().numpy()
+        speech = self.resampler(speech_array).squeeze().numpy()
         return speech
 
     def align_single_sample(self, item):
         blank_id = self.blank_id
-        transcript = "|".join(item['sent'].split(" "))
-        if not os.path.isfile(item['wav_path']):
-            print(item['wav_path'],"not found in wavs directory")
+        transcript = "|".join(item["sent"].split(" "))
+        if not os.path.isfile(item["wav_path"]):
+            print(item["wav_path"], "not found in wavs directory")
 
-        speech_array = self.speech_file_to_array_fn(item['wav_path'])
+        speech_array = self.speech_file_to_array_fn(item["wav_path"])
         inputs = self.processor(speech_array, sampling_rate=16_000, return_tensors="pt", padding=True)
         if self.cuda:
-            inputs = inputs.to(device='cuda')
+            inputs = inputs.to(device="cuda")
 
         with torch.no_grad():
             logits = self.model(inputs.input_values).logits
@@ -51,7 +54,9 @@ class Wav2Vec2_Aligner():
         emission = emissions[0].cpu().detach()
 
         # get labels from vocab
-        labels = (['']+list(self.processor.tokenizer.get_vocab().keys()))[:-1] # logits doesnt align with tokenizer vocab
+        labels = ([""] + list(self.processor.tokenizer.get_vocab().keys()))[
+            :-1
+        ]  # logits doesnt align with tokenizer vocab
 
         dictionary = {c: i for i, c in enumerate(labels)}
         tokens = []
@@ -84,7 +89,6 @@ class Wav2Vec2_Aligner():
             token_index: int
             time_index: int
             score: float
-
 
         def backtrack(trellis, emission, tokens, blank_id=0):
             # Note:
@@ -121,7 +125,6 @@ class Wav2Vec2_Aligner():
                 raise ValueError("Failed to align")
             return path[::-1]
 
-
         path = backtrack(trellis, emission, tokens)
 
         @dataclass
@@ -138,7 +141,6 @@ class Wav2Vec2_Aligner():
             def length(self):
                 return self.end - self.start
 
-
         def merge_repeats(path):
             i1, i2 = 0, 0
             segments = []
@@ -147,59 +149,54 @@ class Wav2Vec2_Aligner():
                     i2 += 1
                 score = sum(path[k].score for k in range(i1, i2)) / (i2 - i1)
                 segments.append(
-                    Segment(
-                        transcript[path[i1].token_index],
-                        path[i1].time_index,
-                        path[i2 - 1].time_index + 1,
-                        score,
-                    )
+                    Segment(transcript[path[i1].token_index], path[i1].time_index, path[i2 - 1].time_index + 1, score,)
                 )
                 i1 = i2
             return segments
 
-
         segments = merge_repeats(path)
-        with open(item['out_path'],'w') as out_align:
+        with open(item["out_path"], "w") as out_align:
             for seg in segments:
-                out_align.write(str(seg)+"\n")
-                
-
+                out_align.write(str(seg) + "\n")
 
     def align_data(self, wav_dir, text_file, output_dir, num_workers):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        #load text file
-        lines = open(text_file, encoding='utf8').readlines()
-        
+        # load text file
+        lines = open(text_file, encoding="utf8").readlines()
+
         items = []
         for line in lines:
-            if len(line.strip().split("\t")) !=2:
+            if len(line.strip().split("\t")) != 2:
                 print("Script must be in format: 00001  this is my sentence")
                 exit()
-            
+
             wav_name, sentence = line.strip().split("\t")
-            wav_path = os.path.join(wav_dir,wav_name+".wav")
-            out_path = os.path.join(output_dir,wav_name+".txt")
-            
-            items.append({'sent': sentence, 'wav_path':wav_path, 'out_path':out_path})
+            wav_path = os.path.join(wav_dir, wav_name + ".wav")
+            out_path = os.path.join(output_dir, wav_name + ".txt")
+
+            items.append({"sent": sentence, "wav_path": wav_path, "out_path": out_path})
         print("Number of samples found in script file", len(items))
 
         for it in tqdm(items):
             self.align_single_sample(it)
 
-        
 
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_name', type=str, default="arijitx/wav2vec2-xls-r-300m-bengali", help='wav2vec model name')
-    parser.add_argument('--wav_dir', type=str, default="./wavs", help='directory containing wavs')
-    parser.add_argument('--text_file', type=str, default="script.txt", help='file containing text')
-    parser.add_argument('--input_wavs_sr', type=int, default=16000, help="sampling rate of input audios")
-    parser.add_argument('--output_dir', type=str, default="./out_alignment", help='output directory containing the alignment files')
-    parser.add_argument('--cuda', action='store_true')
+    parser.add_argument(
+        "--model_name", type=str, default="arijitx/wav2vec2-xls-r-300m-bengali", help="wav2vec model name"
+    )
+    parser.add_argument("--wav_dir", type=str, default="./wavs", help="directory containing wavs")
+    parser.add_argument("--text_file", type=str, default="script.txt", help="file containing text")
+    parser.add_argument("--input_wavs_sr", type=int, default=16000, help="sampling rate of input audios")
+    parser.add_argument(
+        "--output_dir", type=str, default="./out_alignment", help="output directory containing the alignment files"
+    )
+    parser.add_argument("--cuda", action="store_true")
 
     args = parser.parse_args()
 
