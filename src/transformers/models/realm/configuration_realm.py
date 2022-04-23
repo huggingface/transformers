@@ -46,7 +46,7 @@ class RealmConfig(PretrainedConfig):
 
     It is used to instantiate an REALM model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the REALM
-    [google/realm-cc-news-pretrained](https://huggingface.co/google/realm-cc-news-pretrained-embedder) architecture.
+    [google/realm-cc-news-pretrained-embedder](https://huggingface.co/google/realm-cc-news-pretrained-embedder) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
