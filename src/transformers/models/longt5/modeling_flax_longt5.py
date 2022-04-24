@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 LongT5 Authors and HuggingFace Inc. team.
+# Copyright 2022 LongT5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
-def _pad_to_multiple(x: np.ndarray, block_len: int, axis: int, pad_value: int = 0) -> np.ndarray:
+def _pad_to_multiple(x: jnp.ndarray, block_len: int, axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Pad an array so that a sequence length will be a multiple of `block_len`"""
     pad_len = -x.shape[axis] % block_len
     pad = [(0, 0)] * x.ndim
@@ -76,7 +76,7 @@ def _pad_to_multiple(x: np.ndarray, block_len: int, axis: int, pad_value: int = 
     return x
 
 
-def _split_into_blocks(x: np.ndarray, block_len: int, axis: int) -> np.ndarray:
+def _split_into_blocks(x: jnp.ndarray, block_len: int, axis: int) -> jnp.ndarray:
     """Split an input array into blocks of a given `block_len` along the given `axis`. If the dimension length
     is not a multiple of `block_len`, it will be padded first with selected `pad_value`.
     """
@@ -88,7 +88,7 @@ def _split_into_blocks(x: np.ndarray, block_len: int, axis: int) -> np.ndarray:
     return x.reshape(output_shape)
 
 
-def _concatenate_3_blocks(x: np.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> np.ndarray:
+def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
     For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
     """
@@ -118,7 +118,7 @@ def _make_3block_relative_position_ids(block_len: int) -> np.ndarray:
     return relative_position_ids
 
 
-def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int) -> np.ndarray:
+def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
     """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = jnp.abs(relative_position_ids) < block_len
@@ -126,11 +126,10 @@ def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int)
     return jnp.logical_and(local_attention_mask, locality_mask)
 
 
-def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> np.ndarray:
+def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
     """Prepare attention mask to be applied for a local attention."""
-    _blocked_attention_mask = _split_into_blocks(
-        attention_mask, block_len, axis=1
-    )  # [batch_size, num_blocks, block_len]
+    # [batch_size, num_blocks, block_len]
+    _blocked_attention_mask = _split_into_blocks(attention_mask, block_len, axis=1)
     # [batch_size, num_block, 3 * block_len]
     _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_axis=1, sequence_axis=2)
 
@@ -142,7 +141,7 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> np.
     return local_attention_mask[:, None, ...]  # [batch_size, 1, num_block, block_len, 3 * block_len]
 
 
-def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[np.ndarray, np.ndarray]:
+def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
     This implementation is a simlified version of the original Flaxformr implementation adopted from:
@@ -155,7 +154,7 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     """
     batch_size, seq_len = attention_mask.shape[:2]
 
-    def handle_orphan_tokens(block_ids: np.ndarray) -> np.ndarray:
+    def handle_orphan_tokens(block_ids: np.ndarray) -> jnp.ndarray:
         block_ends = (jnp.arange(seq_len) % global_block_size) == global_block_size - 1
         true_block_ends = jnp.logical_and(block_ends, block_ids >= 0)
         full_blocks = true_block_ends.sum(-1)[..., None]

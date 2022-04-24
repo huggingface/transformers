@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, The LongT5 Authors and HuggingFace Inc.
+# Copyright 2022, The LongT5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LongT5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`TFLongT5Model`]. It is used
+    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is used
     to instantiate a LongT5 model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the LongT5
     [](https://huggingface.co/) architecture.
@@ -40,7 +40,7 @@ class LongT5Config(PretrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the LongT5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LongT5Model`] or [`TFLongT5Model`].
+            `inputs_ids` passed when calling [`LongT5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
