@@ -71,47 +71,30 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         t5x_mlp_layer_norm = t5x_model["target"]["encoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
 
         # Assigning
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name]["k"][
-            "kernel"
-        ] = t5x_attention_key
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name]["o"][
-            "kernel"
-        ] = t5x_attention_out
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name]["q"][
-            "kernel"
-        ] = t5x_attention_query
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name]["v"][
-            "kernel"
-        ] = t5x_attention_value
+        flax_model_encoder_layer_block = flax_model.params["encoder"]["block"][str(layer_index)]["layer"]
+        flax_model_encoder_layer_block["0"][encoder_attn_name]["k"]["kernel"] = t5x_attention_key
+        flax_model_encoder_layer_block["0"][encoder_attn_name]["o"]["kernel"] = t5x_attention_out
+        flax_model_encoder_layer_block["0"][encoder_attn_name]["q"]["kernel"] = t5x_attention_query
+        flax_model_encoder_layer_block["0"][encoder_attn_name]["v"]["kernel"] = t5x_attention_value
 
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"]["layer_norm"][
-            "weight"
-        ] = t5x_attention_layer_norm
+        flax_model_encoder_layer_block["0"]["layer_norm"]["weight"] = t5x_attention_layer_norm
 
         # Global input layer norm
         if config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
-            flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"][encoder_attn_name][
-                "global_input_layer_norm"
-            ]["weight"] = t5x_global_layer_norm
+            flax_model_encoder_layer_block["0"][encoder_attn_name]["global_input_layer_norm"][
+                "weight"
+            ] = t5x_global_layer_norm
 
         if split_mlp_wi:
-            flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["1"]["DenseReluDense"]["wi_0"][
-                "kernel"
-            ] = t5x_mlp_wi_0
-            flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["1"]["DenseReluDense"]["wi_1"][
-                "kernel"
-            ] = t5x_mlp_wi_1
+            flax_model_encoder_layer_block["1"]["DenseReluDense"]["wi_0"]["kernel"] = t5x_mlp_wi_0
+            flax_model_encoder_layer_block["1"]["DenseReluDense"]["wi_1"]["kernel"] = t5x_mlp_wi_1
         else:
-            flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["1"]["DenseReluDense"]["wi"][
-                "kernel"
-            ] = t5x_mlp_wi
+            flax_model_encoder_layer_block["1"]["DenseReluDense"]["wi"]["kernel"] = t5x_mlp_wi
 
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["1"]["DenseReluDense"]["wo"][
-            "kernel"
-        ] = t5x_mlp_wo
-        flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["1"]["layer_norm"][
-            "weight"
-        ] = t5x_mlp_layer_norm
+        flax_model_encoder_layer_block["1"]["DenseReluDense"]["wo"]["kernel"] = t5x_mlp_wo
+        flax_model_encoder_layer_block["1"]["layer_norm"]["weight"] = t5x_mlp_layer_norm
+
+        flax_model.params["encoder"]["block"][str(layer_index)]["layer"] = flax_model_encoder_layer_block
 
     # Only for layer 0:
     t5x_encoder_rel_embedding = t5x_model["target"]["encoder"]["relpos_bias"]["rel_embedding"].T
@@ -146,18 +129,11 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         ]
 
         # Encoder-Decoder-Attention
-        t5x_enc_dec_attention_key = t5x_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["key"][
-            "kernel"
-        ]
-        t5x_enc_dec_attention_out = t5x_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["out"][
-            "kernel"
-        ]
-        t5x_enc_dec_attention_query = t5x_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["query"][
-            "kernel"
-        ]
-        t5x_enc_dec_attention_value = t5x_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["value"][
-            "kernel"
-        ]
+        t5x_enc_dec_attention_module = t5x_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]
+        t5x_enc_dec_attention_key = t5x_enc_dec_attention_module["key"]["kernel"]
+        t5x_enc_dec_attention_out = t5x_enc_dec_attention_module["out"]["kernel"]
+        t5x_enc_dec_attention_query = t5x_enc_dec_attention_module["query"]["kernel"]
+        t5x_enc_dec_attention_value = t5x_enc_dec_attention_module["value"]["kernel"]
 
         # Layer Normalization
         t5x_cross_layer_norm = t5x_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"]["scale"]
@@ -175,59 +151,32 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         tx5_mlp_layer_norm = t5x_model["target"]["decoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
 
         # Assigning
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["k"][
-            "kernel"
-        ] = t5x_attention_key
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["o"][
-            "kernel"
-        ] = t5x_attention_out
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["q"][
-            "kernel"
-        ] = t5x_attention_query
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["v"][
-            "kernel"
-        ] = t5x_attention_value
+        flax_model_decoder_layer_block = flax_model.params["decoder"]["block"][str(layer_index)]["layer"]
+        flax_model_decoder_layer_block["0"]["SelfAttention"]["k"]["kernel"] = t5x_attention_key
+        flax_model_decoder_layer_block["0"]["SelfAttention"]["o"]["kernel"] = t5x_attention_out
+        flax_model_decoder_layer_block["0"]["SelfAttention"]["q"]["kernel"] = t5x_attention_query
+        flax_model_decoder_layer_block["0"]["SelfAttention"]["v"]["kernel"] = t5x_attention_value
 
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["0"]["layer_norm"][
-            "weight"
-        ] = t5x_pre_attention_layer_norm
+        flax_model_decoder_layer_block["0"]["layer_norm"]["weight"] = t5x_pre_attention_layer_norm
 
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["1"]["EncDecAttention"]["k"][
-            "kernel"
-        ] = t5x_enc_dec_attention_key
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["1"]["EncDecAttention"]["o"][
-            "kernel"
-        ] = t5x_enc_dec_attention_out
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["1"]["EncDecAttention"]["q"][
-            "kernel"
-        ] = t5x_enc_dec_attention_query
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["1"]["EncDecAttention"]["v"][
-            "kernel"
-        ] = t5x_enc_dec_attention_value
+        flax_model_decoder_layer_block["1"]["EncDecAttention"]["k"]["kernel"] = t5x_enc_dec_attention_key
+        flax_model_decoder_layer_block["1"]["EncDecAttention"]["o"]["kernel"] = t5x_enc_dec_attention_out
+        flax_model_decoder_layer_block["1"]["EncDecAttention"]["q"]["kernel"] = t5x_enc_dec_attention_query
+        flax_model_decoder_layer_block["1"]["EncDecAttention"]["v"]["kernel"] = t5x_enc_dec_attention_value
 
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["1"]["layer_norm"][
-            "weight"
-        ] = t5x_cross_layer_norm
+        flax_model_decoder_layer_block["1"]["layer_norm"]["weight"] = t5x_cross_layer_norm
 
         if split_mlp_wi:
-            flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["2"]["DenseReluDense"]["wi_0"][
-                "kernel"
-            ] = t5x_mlp_wi_0
-            flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["2"]["DenseReluDense"]["wi_1"][
-                "kernel"
-            ] = t5x_mlp_wi_1
+            flax_model_decoder_layer_block["2"]["DenseReluDense"]["wi_0"]["kernel"] = t5x_mlp_wi_0
+            flax_model_decoder_layer_block["2"]["DenseReluDense"]["wi_1"]["kernel"] = t5x_mlp_wi_1
         else:
-            flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["2"]["DenseReluDense"]["wi"][
-                "kernel"
-            ] = t5x_mlp_wi
+            flax_model_decoder_layer_block["2"]["DenseReluDense"]["wi"]["kernel"] = t5x_mlp_wi
 
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["2"]["DenseReluDense"]["wo"][
-            "kernel"
-        ] = t5x_mlp_wo
+        flax_model_decoder_layer_block["2"]["DenseReluDense"]["wo"]["kernel"] = t5x_mlp_wo
 
-        flax_model.params["decoder"]["block"][str(layer_index)]["layer"]["2"]["layer_norm"][
-            "weight"
-        ] = tx5_mlp_layer_norm
+        flax_model_decoder_layer_block["2"]["layer_norm"]["weight"] = tx5_mlp_layer_norm
+
+        flax_model.params["decoder"]["block"][str(layer_index)]["layer"] = flax_model_decoder_layer_block
 
     # Decoder Normalization
     tx5_decoder_norm = t5x_model["target"]["decoder"]["decoder_norm"]["scale"]

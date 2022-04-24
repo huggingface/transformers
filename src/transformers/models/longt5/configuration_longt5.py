@@ -23,7 +23,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
+    "Stancld/LongT5-Local-Base": "https://huggingface.co/Stancld/LongT5-Local-Base/blob/main/config.json",
+    "Stancld/LongT5-Local-Large": "https://huggingface.co/Stancld/LongT5-Local-Large/blob/main/config.json",
+    "Stancld/LongT5-TGlobal-Base": "https://huggingface.co/Stancld/LongT5-TGlobal-Base/blob/main/config.json",
+    "Stancld/LongT5-TGlobal-Large": "https://huggingface.co/Stancld/LongT5-TGlobal-Large/blob/main/config.json",
 }
 
 
@@ -32,7 +35,7 @@ class LongT5Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
     used to instantiate a LongT5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the LongT5
-    [](https://huggingface.co/) architecture.
+    [Stancld/LongT5-Local-Base](https://huggingface.co/Stancld/LongT5-Local-Base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -107,14 +110,19 @@ class LongT5Config(PretrainedConfig):
         eos_token_id=1,
         **kwargs
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
+        # default = symmetry
+        self.num_decoder_layers = num_decoder_layers if num_decoder_layers is not None else self.num_layers
         self.num_heads = num_heads
         self.local_radius = local_radius
         self.global_block_size = global_block_size
@@ -126,12 +134,6 @@ class LongT5Config(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
 
 
 class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
