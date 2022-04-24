@@ -42,7 +42,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_longt5 import LongT5Config
 
 
@@ -59,66 +58,6 @@ LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Stancld/LongT5-TGlobal-Base",
     "Stancld/LongT5-TGlobal-Large",
 ]
-
-
-####################################################
-# PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of nn.Module)
-####################################################
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the longt5 models have the
-            following number of attention modules:
-
-                - LongT5-Local-Base: 12
-                - LongT5-TGlobal-Base: 12
-                - LongT5-Local-Large: 24
-                - LongT5-TGlobal-Large: 24
-                - LongT5-TGlobal-XL: 24
-
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using /LongT5-TGlobal-Large, which has a total of 24
-    # attention modules:
-    model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-TGlobal-Large")
-    device_map = {
-        0: [0, 1, 2],
-        1: [3, 4, 5, 6, 7, 8, 9],
-        2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with longt5-3b:
-    model = LongT5ForConditionalGeneration.from_pretrained("longt5-3b")
-    device_map = {
-        0: [0, 1, 2],
-        1: [3, 4, 5, 6, 7, 8, 9],
-        2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
 
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:
@@ -170,14 +109,16 @@ def _concatenate_3_blocks(x: torch.Tensor, block_dim: int, sequence_dim: int, pa
         indices[block_dim] = slice(i, i + num_blocks)
         indices = tuple(indices)
         blocks_list.append(x[indices])
-    return torch.cat(blocks_list, dim=sequence_dim)  # [batch_size, num_blocks, 3 * block_len, ...]
+    # [batch_size, num_blocks, 3 * block_len, ...]
+    return torch.cat(blocks_list, dim=sequence_dim)
 
 
 def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
     """Makes 3-blocked relative position ids for local attention."""
     position_ids = torch.arange(3 * block_len, dtype=torch.int32)
     center_position_ids = position_ids[block_len:-block_len]
-    relative_position_ids = position_ids.unsqueeze(0) - center_position_ids.unsqueeze(1)  # [block_len, 3 * block_len]
+    # [block_len, 3 * block_len]
+    relative_position_ids = position_ids.unsqueeze(0) - center_position_ids.unsqueeze(1)
     return relative_position_ids
 
 
@@ -192,9 +133,8 @@ def _mask_local_attention_mask(local_attention_mask: torch.Tensor, block_len: in
 
 def _get_local_attention_mask(attention_mask: torch.Tensor, block_len: int, device: torch.device) -> torch.Tensor:
     """Prepare attention mask to be applied for a local attention."""
-    _blocked_attention_mask = _split_into_blocks(
-        attention_mask, block_len, dim=1
-    )  # [batch_size, num_blocks, block_len]
+    # [batch_size, num_blocks, block_len]
+    _blocked_attention_mask = _split_into_blocks(attention_mask, block_len, dim=1)
     # [batch_size, num_block, 3 * block_len]
     _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_dim=1, sequence_dim=2)
 
@@ -203,7 +143,8 @@ def _get_local_attention_mask(attention_mask: torch.Tensor, block_len: int, devi
     # [batch_size, num_block, block_len, 3 * block_len]
     local_attention_mask = torch.logical_and(_blocked_attention_mask, _3blocked_attention_mask)
     local_attention_mask = _mask_local_attention_mask(local_attention_mask, block_len)
-    return local_attention_mask.unsqueeze(1).to(device)  # [batch_size, 1, num_block, block_len, 3 * block_len]
+    # [batch_size, 1, num_block, block_len, 3 * block_len]
+    return local_attention_mask.unsqueeze(1).to(device)
 
 
 def _make_global_fixed_block_ids(
@@ -246,7 +187,8 @@ def _make_global_fixed_block_ids(
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
     global_segment_ids = global_segment_ids.to(attention_mask.device)
     global_segment_ids = global_segment_ids.where(
-        global_segment_ids <= _sequence_block_ids_max, -1 * torch.ones_like(global_segment_ids, device=attention_mask.device)
+        global_segment_ids <= _sequence_block_ids_max,
+        -1 * torch.ones_like(global_segment_ids, device=attention_mask.device),
     )
     return global_block_ids.type(torch.int), global_segment_ids.type(torch.int)
 
@@ -265,7 +207,9 @@ def _create_global_aggregates(
 ) -> torch.Tensor:
     """Compute individual block aggregates by summing over individual blocks."""
     # (batch..., seq_len, global_seq_len))
-    block_ids = block_ids.where(block_ids >= 0, torch.tensor(global_seq_len, dtype=block_ids.dtype, device=block_ids.device))
+    block_ids = block_ids.where(
+        block_ids >= 0, torch.tensor(global_seq_len, dtype=block_ids.dtype, device=block_ids.device)
+    )
     one_hot_block_ids = nn.functional.one_hot(block_ids.type(torch.int64), global_seq_len + 1)[:, :, :-1]
     return torch.einsum("...nd,...ng->...gd", hidden_states, one_hot_block_ids.type(hidden_states.dtype))
 
@@ -318,10 +262,11 @@ class LongT5DenseReluDense(nn.Module):
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
+        self.relu_act = ACT2FN["relu"]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = nn.functional.relu(hidden_states)
+        hidden_states = self.relu_act(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -693,14 +638,16 @@ class LongT5LocalAttention(nn.Module):
         memory_position = torch.arange(
             3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
         )[None, :]
-        relative_position = memory_position - context_position  # (block_length, 3 * block_length)
+        # (block_length, 3 * block_length)
+        relative_position = memory_position - context_position
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
-        values = self.relative_attention_bias(relative_position_bucket)  # (block_length, 3 * block_length, num_heads)
+        # (block_length, 3 * block_length, num_heads)
+        values = self.relative_attention_bias(relative_position_bucket)
         # (1, 1, num_heads, block_length, 3 * block_length)
         values = values.permute([2, 0, 1]).unsqueeze(0).unsqueeze(0)
         return values
@@ -755,8 +702,8 @@ class LongT5LocalAttention(nn.Module):
                     hidden_states = past_key_value.transpose(1, 2)
             return hidden_states
 
-        # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, seq_length, n_heads, dim_per_head)
+        # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
+        query_states = shape(self.q(hidden_states))
 
         # get key/value states
         key_states = project(
@@ -802,12 +749,10 @@ class LongT5LocalAttention(nn.Module):
                 position_bias = position_bias + mask.transpose(1, 2)
 
         scores += position_bias
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -931,14 +876,16 @@ class LongT5TransientGlobalAttention(nn.Module):
         memory_position = torch.arange(
             3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
         )[None, :]
-        relative_position = memory_position - context_position  # (block_length, 3 * block_length)
+        # (block_length, 3 * block_length)
+        relative_position = memory_position - context_position
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
-        values = self.relative_attention_bias(relative_position_bucket)  # (block_length, 3 * block_length, num_heads)
+        # (block_length, 3 * block_length, num_heads)
+        values = self.relative_attention_bias(relative_position_bucket)
         # (1, 1, num_heads, block_length, 3 * block_length)
         values = values.permute([2, 0, 1]).unsqueeze(0).unsqueeze(0)
         return values
@@ -1027,8 +974,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         global_inputs = _create_global_aggregates(hidden_states, block_ids, _global_seq_len)
         global_inputs = self.global_input_layer_norm(global_inputs)
 
-        # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, seq_length, n_heads, dim_per_head)
+        # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
+        query_states = shape(self.q(hidden_states))
 
         # get key/value states
         key_states = project(
@@ -1063,10 +1010,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         key_states = torch.cat([key_states, side_key_states], dim=2)
         value_states = torch.cat([value_states, side_value_states], dim=2)
 
-        # Compute scores
-        scores = torch.einsum(
-            "...qhd,...khd->...hqk", query_states, key_states
-        )  # (batch_size, num_block, n_heads, block_len, 3 * block_len + global_seq_len)
+        # Compute scores -> (batch_size, num_block, n_heads, block_len, 3 * block_len + global_seq_len)
+        scores = torch.einsum("...qhd,...khd->...hqk", query_states, key_states)
 
         if mask is not None:
             # We need to adjust position bias shape to be sum with mask
@@ -1094,8 +1039,8 @@ class LongT5TransientGlobalAttention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if local_attention_mask is not None:
-                position_bias = position_bias + local_attention_mask.transpose(1, 2)
                 # (batch_size, 1, n_heads, block_len, 3 * block_len)
+                position_bias = position_bias + local_attention_mask.transpose(1, 2)
 
             # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
             if mask is None:
@@ -1108,12 +1053,9 @@ class LongT5TransientGlobalAttention(nn.Module):
             position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
         scores += position_bias
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -1520,41 +1462,6 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.parallelize
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.block))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for layer in v:
-                cuda_device = "cuda:" + str(k)
-                self.block[layer] = self.block[layer].to(cuda_device)
-
-        # Set embed_tokens to first layer
-        self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
-        self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.deparallelize
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        for i in range(len(self.block)):
-            self.block[i] = self.block[i].to("cpu")
-        self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm = self.final_layer_norm.to("cpu")
-        torch.cuda.empty_cache()
 
     # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
     def get_input_embeddings(self):
@@ -1983,28 +1890,6 @@ class LongT5Model(LongT5PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.decoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
     def get_input_embeddings(self):
         return self.shared
 
@@ -2176,30 +2061,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.decoder.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.decoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.shared
@@ -2454,25 +2315,6 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.shared
