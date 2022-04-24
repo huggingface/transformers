@@ -127,7 +127,7 @@ def gelu(x):
     return gelu_impl(x)
 
 
-class ParallelMLP(torch.nn.Module):
+class MLP(torch.nn.Module):
     """MLP for GPT2.
 
     MLP will take the input with h hidden state, project it to 4*h
@@ -148,7 +148,7 @@ class ParallelMLP(torch.nn.Module):
 
     def __init__(self, hidden_size, output_dropout_prob, init_method,
                  output_layer_init_method=None):
-        super(ParallelMLP, self).__init__()
+        super(MLP, self).__init__()
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
             output_layer_init_method = init_method
@@ -173,7 +173,7 @@ class ParallelMLP(torch.nn.Module):
         return output
 
 
-class VocabParallelEmbedding(torch.nn.Module):
+class VocabEmbedding(torch.nn.Module):
     """Embedding parallelized in the vocabulary dimension.
 
     This is mainly adapted from torch.nn.Embedding and all the default
@@ -184,7 +184,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         init_method: method to initialize weights.
     """
     def __init__(self, config):
-        super(VocabParallelEmbedding, self).__init__()
+        super(VocabEmbedding, self).__init__()
         # Keep the input dimensions.
         self.num_embeddings = config.vocab_size
         self.embedding_dim = config.hidden_size
@@ -207,22 +207,12 @@ class VocabParallelEmbedding(torch.nn.Module):
         init.xavier_normal_(self.weight)
 
     def forward(self, input_):
-        # Build the mask.
-        input_mask = (input_ < self.vocab_start_index) | \
-                     (input_ >= self.vocab_end_index)
-        # Mask the input.
-        masked_input = input_.clone() - self.vocab_start_index
-        masked_input[input_mask] = 0
         # Get the embeddings.
-        output_parallel = F.embedding(masked_input, self.weight,
+        output = F.embedding(input_, self.weight,
                                       self.padding_idx, self.max_norm,
                                       self.norm_type, self.scale_grad_by_freq,
                                       self.sparse)
-        # Mask the output embedding.
-        output_parallel[input_mask, :] = 0.0
-        # Reduce across all the model parallel GPUs.
-
-        return output_parallel
+        return output
 
 
 class PositionalEmbedding(torch.nn.Module):
@@ -245,8 +235,8 @@ class PositionalEmbedding(torch.nn.Module):
             return pos_emb[None, :, :]
 
 
-class ParallelSelfAttention(torch.nn.Module):
-    """Parallel self-attention layer for GPT2.
+class SelfAttention(torch.nn.Module):
+    """self-attention layer for GLM.
 
     Self-attention layer takes input with size [b, s, h] where b is
     the batch size, s is the sequence lenght, and h is the hidden size
@@ -276,17 +266,17 @@ class ParallelSelfAttention(torch.nn.Module):
                  attention_dropout_prob, output_dropout_prob,
                  init_method, output_layer_init_method=None, relative_encoding=False,
                  performer=False, attention_scale=1.0):
-        super(ParallelSelfAttention, self).__init__()
+        super(SelfAttention, self).__init__()
         self.performer = performer
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
             output_layer_init_method = init_method
         # Per attention head and per partition values.
-        self.hidden_size_per_partition = hidden_size
+        self.hidden_size = hidden_size
         self.hidden_size_per_attention_head = divide(hidden_size,
                                                      num_attention_heads)
 
-        self.num_attention_heads_per_partition = num_attention_heads
+        self.num_attention_heads = num_attention_heads
         self.relative_encoding = relative_encoding
         self.attention_scale = attention_scale
         # Strided linear layer.
@@ -309,7 +299,7 @@ class ParallelSelfAttention(torch.nn.Module):
         size [b, np, s, hn].
         """
         new_tensor_shape = tensor.size()[:-1] + \
-                           (self.num_attention_heads_per_partition,
+                           (self.num_attention_heads,
                             self.hidden_size_per_attention_head)
         tensor = tensor.view(*new_tensor_shape)
         return tensor.permute(0, 2, 1, 3)
@@ -399,7 +389,7 @@ class ParallelSelfAttention(torch.nn.Module):
         # [b, s, np, hn]
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + \
-                                  (self.hidden_size_per_partition,)
+                                  (self.hidden_size,)
         # [b, s, hp]
         context_layer = context_layer.view(*new_context_layer_shape)
 
@@ -410,194 +400,7 @@ class ParallelSelfAttention(torch.nn.Module):
         return output
 
 
-class ParallelCrossAttention(torch.nn.Module):
-    """Parallel cross-attention layer for Transformer"""
-
-    def __init__(self, hidden_size, num_attention_heads, attention_dropout_prob, output_dropout_prob, init_method,
-                 output_layer_init_method=None):
-        super(ParallelCrossAttention, self).__init__()
-        # Set output layer initialization if not provided.
-        if output_layer_init_method is None:
-            output_layer_init_method = init_method
-        # Per attention head and per partition values.
-        self.hidden_size_per_partition = hidden_size
-        self.hidden_size_per_attention_head = divide(hidden_size,
-                                                     num_attention_heads)
-
-        self.num_attention_heads_per_partition = num_attention_heads
-        # Strided linear layer.
-        self.query = Linear(hidden_size, hidden_size)
-
-        self.key_value = Linear(hidden_size, 2 * hidden_size)
-
-        # Dropout. Note that for a single iteration, this layer will generate
-        # different outputs on different number of parallel partitions but
-        # on average it should not be partition dependent.
-        self.attention_dropout = torch.nn.Dropout(attention_dropout_prob)
-
-        # Output.
-        self.dense = Linear(hidden_size,
-                                       hidden_size)
-
-        self.output_dropout = torch.nn.Dropout(output_dropout_prob)
-
-    def _transpose_for_scores(self, tensor):
-        """Transpose a 3D tensor [b, s, np*hn] into a 4D tensor with
-        size [b, np, s, hn].
-        """
-        new_tensor_shape = tensor.size()[:-1] + \
-                           (self.num_attention_heads_per_partition,
-                            self.hidden_size_per_attention_head)
-        tensor = tensor.view(*new_tensor_shape)
-        return tensor.permute(0, 2, 1, 3)
-
-    def forward(self, hidden_states, encoder_states, cross_mask):
-        # hidden_states: [b, s, h]
-        # ltor_mask: [1, 1, s, s]
-
-        # Attention heads. [b, s, hp]
-        mixed_query_layer = self.query(hidden_states)
-        mixed_x_layer = self.key_value(encoder_states)
-        (mixed_key_layer, mixed_value_layer) = split_tensor_along_last_dim(mixed_x_layer, 2)
-
-        # Reshape and transpose [b, np, s, hn]
-        query_layer = self._transpose_for_scores(mixed_query_layer)
-        key_layer = self._transpose_for_scores(mixed_key_layer)
-        value_layer = self._transpose_for_scores(mixed_value_layer)
-        # Raw attention scores. [b, np, s, s]
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(
-            self.hidden_size_per_attention_head)
-        if cross_mask is not None:
-            # Apply the left to right attention mask.
-            attention_scores = torch.mul(attention_scores, cross_mask) - \
-                               10000.0 * (1.0 - cross_mask)
-
-        # Attention probabilities. [b, np, s, s]
-        attention_probs = torch.nn.Softmax(dim=-1)(attention_scores)
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.attention_dropout(attention_probs)
-
-        # Context layer.
-        # [b, np, s, hn]
-        context_layer = torch.matmul(attention_probs, value_layer)
-        # [b, s, np, hn]
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + \
-                                  (self.hidden_size_per_partition,)
-        # [b, s, hp]
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        # Output. [b, s, h]
-        output = self.dense(context_layer)
-        output = self.output_dropout(output)
-
-        return output
-
-
-class ParallelDecoderLayer(torch.nn.Module):
-    """A single layer transformer for GPT2.
-
-    We use the following notation:
-        h: hidden size
-        n: number of attention heads
-        b: batch size
-        s: sequence length
-    Transformore layer takes input with size [b, s, h] and returns an
-    output of the same size.
-
-    Arguments:
-        hidden_size: The hidden size of the self attention.
-        num_attention_heads: number of attention head in the self
-                             attention.
-        attention_dropout_prob: dropout probability of the attention
-                                score in self attention.
-        output_dropout_prob: dropout probability for the outputs
-                             after self attention and final output.
-        layernorm_epsilon: epsilon used in layernorm to avoid
-                           division by zero.
-        init_method: initialization method used for the weights. Note
-                     that all biases are initialized to zero and
-                     layernorm weight are initialized to one.
-        output_layer_init_method: output layers (attention output and
-                                  mlp output) initialization. If None,
-                                  use `init_method`.
-    """
-
-    def __init__(self,
-                 hidden_size,
-                 num_attention_heads,
-                 attention_dropout_prob,
-                 output_dropout_prob,
-                 layernorm_epsilon,
-                 init_method,
-                 output_layer_init_method=None):
-        super(ParallelDecoderLayer, self).__init__()
-        # Set output layer initialization if not provided.
-        if output_layer_init_method is None:
-            output_layer_init_method = init_method
-
-        # Layernorm on the input data.
-        self.input_layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
-
-        # Self attention.
-        self.self_attention = ParallelSelfAttention(
-            hidden_size,
-            num_attention_heads,
-            attention_dropout_prob,
-            output_dropout_prob,
-            init_method,
-            output_layer_init_method=output_layer_init_method)
-
-        # Layernorm after the self attention.
-        self.post_self_layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
-
-        self.cross_attention = ParallelCrossAttention(
-            hidden_size,
-            num_attention_heads,
-            attention_dropout_prob,
-            output_dropout_prob,
-            init_method,
-            output_layer_init_method=output_layer_init_method
-        )
-
-        # Layernorm after the cross attention.
-        self.post_attention_layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
-
-        # MLP
-        self.mlp = ParallelMLP(
-            hidden_size,
-            output_dropout_prob,
-            init_method,
-            output_layer_init_method=output_layer_init_method)
-
-    def forward(self, hidden_states, encoder_states, ltor_mask, cross_mask=None):
-        # hidden_states: [b, s, h]
-        # ltor_mask: [1, 1, s, s]
-
-        # Layer norm at the begining of the transformer layer.
-        layernorm_output = self.input_layernorm(hidden_states)
-        # Self attention.
-        self_attention_output = self.self_attention(layernorm_output, ltor_mask)
-        # Residual connection.
-        self_layernorm_input = hidden_states + self_attention_output
-        # Layer norm post the self attention.
-        self_layernorm_output = self.post_self_layernorm(self_layernorm_input)
-        # Cross attention
-        attention_output = self.cross_attention(self_layernorm_output, encoder_states, cross_mask)
-        # Residual connection
-        layernorm_input = self_layernorm_input + attention_output
-        # Layer norm post the cross attention
-        layernorm_output = self.post_attention_layernorm(layernorm_input)
-        # MLP.
-        mlp_output = self.mlp(layernorm_output)
-        # Second residual connection.
-        output = layernorm_input + mlp_output
-        return output
-
-
-class GLMParallelTransformerLayer(torch.nn.Module):
+class TransformerLayer(torch.nn.Module):
     """A single layer transformer for GLM.
 
     We use the following notation:
@@ -637,7 +440,7 @@ class GLMParallelTransformerLayer(torch.nn.Module):
                  relative_encoding=False,
                  performer=False,
                  attention_scale=1.0):
-        super(GLMParallelTransformerLayer, self).__init__()
+        super(TransformerLayer, self).__init__()
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
             output_layer_init_method = init_method
@@ -646,7 +449,7 @@ class GLMParallelTransformerLayer(torch.nn.Module):
         self.input_layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
 
         # Self attention.
-        self.attention = ParallelSelfAttention(
+        self.attention = SelfAttention(
             hidden_size,
             num_attention_heads,
             attention_dropout_prob,
@@ -662,7 +465,7 @@ class GLMParallelTransformerLayer(torch.nn.Module):
                                                   eps=layernorm_epsilon)
 
         # MLP
-        self.mlp = ParallelMLP(
+        self.mlp = MLP(
             hidden_size,
             output_dropout_prob,
             init_method,
@@ -689,7 +492,7 @@ class GLMParallelTransformerLayer(torch.nn.Module):
         return output
 
 
-class GLMParallelTransformer(torch.nn.Module):
+class Transformer(torch.nn.Module):
     """GLM transformer.
 
     This module takes input from embedding layer and it's output can
@@ -741,17 +544,15 @@ class GLMParallelTransformer(torch.nn.Module):
                  relative_encoding=False,
                  block_position_encoding=False,
                  performer=False,
-                 use_decoder_layer=False,
                  attention_scale=1.0,
                  ):
-        super(GLMParallelTransformer, self).__init__()
+        super(Transformer, self).__init__()
         self.hidden_size = hidden_size
         # Store activation checkpoiting flag.
         self.checkpoint_activations = checkpoint_activations
         self.checkpoint_num_layers = checkpoint_num_layers
         self.max_memory_length = max_memory_length
         self.performer = performer
-        self.use_decoder_layer = use_decoder_layer
         assert not (performer and relative_encoding)
 
         output_layer_init_method = None
@@ -769,12 +570,11 @@ class GLMParallelTransformer(torch.nn.Module):
 
             self.hidden_size_per_attention_head = divide(hidden_size,
                                                          num_attention_heads)
-            self.num_attention_heads_per_partition = num_attention_heads
             self.r_w_bias = torch.nn.Parameter(
-                torch.Tensor(self.num_attention_heads_per_partition, self.hidden_size_per_attention_head))
+                torch.Tensor(num_attention_heads, self.hidden_size_per_attention_head))
             self.r_w_bias.model_parallel = True
             self.r_r_bias = torch.nn.Parameter(
-                torch.Tensor(self.num_attention_heads_per_partition, self.hidden_size_per_attention_head))
+                torch.Tensor(num_attention_heads, self.hidden_size_per_attention_head))
             self.r_r_bias.model_parallel = True
             # Always initialize bias to zero.
             with torch.no_grad():
@@ -792,28 +592,18 @@ class GLMParallelTransformer(torch.nn.Module):
             torch.nn.init.normal_(self.position_embeddings.weight, mean=0.0, std=init_method_std)
 
         def get_layer():
-            if use_decoder_layer:
-                return ParallelDecoderLayer(
-                    hidden_size,
-                    num_attention_heads,
-                    attention_dropout_prob,
-                    output_dropout_prob,
-                    layernorm_epsilon,
-                    unscaled_init_method(init_method_std),
-                    output_layer_init_method=output_layer_init_method
-                )
-            else:
-                return GLMParallelTransformerLayer(
-                    hidden_size,
-                    num_attention_heads,
-                    attention_dropout_prob,
-                    output_dropout_prob,
-                    layernorm_epsilon,
-                    unscaled_init_method(init_method_std),
-                    output_layer_init_method=output_layer_init_method,
-                    relative_encoding=relative_encoding,
-                    performer=performer,
-                    attention_scale=attention_scale)
+
+            return TransformerLayer(
+                hidden_size,
+                num_attention_heads,
+                attention_dropout_prob,
+                output_dropout_prob,
+                layernorm_epsilon,
+                unscaled_init_method(init_method_std),
+                output_layer_init_method=output_layer_init_method,
+                relative_encoding=relative_encoding,
+                performer=performer,
+                attention_scale=attention_scale)
 
         # Transformer layers.
         self.layers = torch.nn.ModuleList(
@@ -889,13 +679,26 @@ class GLMParallelTransformer(torch.nn.Module):
             mem_layers = []
 
         for i, layer in enumerate(self.layers):
-            args = [hidden_states, attention_mask] if not self.use_decoder_layer else [hidden_states,
-                                                                                       encoder_states,
-                                                                                       attention_mask]
+
+            args = [hidden_states, attention_mask]
+
+            def create_custom_forward(module):
+                def custom_forward(*inputs):
+                    # None for past_key_value
+                    return module(*inputs)
+
             if self.relative_encoding:
                 args += [position_embeddings, self.r_w_bias, self.r_r_bias]
-            mem_i = memory_states[i] if (memory_states and len(memory_states)>i) else None
-            hidden_states = layer(*args, mem=mem_i)
+            mem_i = memory_states[i] if (memory_states and len(memory_states) > i) else None
+
+            if self.gradient_checkpointing:
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer),
+                    hidden_states,
+                    mem=mem_i,
+                )
+            else:
+                hidden_states = layer(*args, mem=mem_i)
             if self.max_memory_length > 0 or return_memory:
                 mem_layers.append(check_detach(hidden_states))
 
@@ -1039,10 +842,10 @@ class GLMModel(GLMPreTrainedModel):
         self.config = config
         self.output_predict = config.output_predict
         # Word embeddings (parallel).
-        self.word_embeddings = VocabParallelEmbedding(config)
+        self.word_embeddings = VocabEmbedding(config)
 
         # Transformer
-        self.transformer = GLMParallelTransformer(config.num_layers,
+        self.transformer = Transformer(config.num_layers,
                                                   config.hidden_size,
                                                   config.num_attention_heads,
                                                   config.max_sequence_length,
