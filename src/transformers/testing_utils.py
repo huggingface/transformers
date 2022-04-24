@@ -17,6 +17,7 @@ import inspect
 import logging
 import os
 import re
+import shlex
 import shutil
 import sys
 import tempfile
@@ -30,8 +31,16 @@ from unittest import mock
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
+from .integrations import (
+    is_fairscale_available,
+    is_optuna_available,
+    is_ray_available,
+    is_sigopt_available,
+    is_wandb_available,
+)
 from .utils import (
+    is_apex_available,
+    is_bitsandbytes_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -637,6 +646,36 @@ def require_deepspeed(test_case):
         return test_case
 
 
+def require_fairscale(test_case):
+    """
+    Decorator marking a test that requires fairscale
+    """
+    if not is_fairscale_available():
+        return unittest.skip("test requires fairscale")(test_case)
+    else:
+        return test_case
+
+
+def require_apex(test_case):
+    """
+    Decorator marking a test that requires apex
+    """
+    if not is_apex_available():
+        return unittest.skip("test requires apex")(test_case)
+    else:
+        return test_case
+
+
+def require_bitsandbytes(test_case):
+    """
+    Decorator for bits and bytes (bnb) dependency
+    """
+    if not is_bitsandbytes_available():
+        return unittest.skip("test requires bnb")(test_case)
+    else:
+        return test_case
+
+
 def require_phonemizer(test_case):
     """
     Decorator marking a test that requires phonemizer
@@ -663,6 +702,20 @@ def require_librosa(test_case):
     """
     if not is_librosa_available():
         return unittest.skip("test requires librosa")(test_case)
+    else:
+        return test_case
+
+
+def cmd_exists(cmd):
+    return shutil.which(cmd) is not None
+
+
+def require_usr_bin_time(test_case):
+    """
+    Decorator marking a test that requires `/usr/bin/time`
+    """
+    if not cmd_exists("/usr/bin/time"):
+        return unittest.skip("test requires /usr/bin/time")(test_case)
     else:
         return test_case
 
@@ -1177,6 +1230,39 @@ class TestCasePlus(unittest.TestCase):
             self.teardown_tmp_dirs.append(tmp_dir)
 
         return tmp_dir
+
+    def python_one_liner_max_rss(self, one_liner_str):
+        """
+        Runs the passed python one liner (just the code) and returns how much max cpu memory was used to run the
+        program.
+
+        Args:
+            one_liner_str (`string`):
+                a python one liner code that gets passed to `python -c`
+
+        Returns:
+            max cpu memory bytes used to run the program. This value is likely to vary slightly from run to run.
+
+        Requirements:
+            this helper needs `/usr/bin/time` to be installed (`apt install time`)
+
+        Example:
+
+        ```
+        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("t5-large")'
+        max_rss = self.python_one_liner_max_rss(one_liner_str)
+        ```
+        """
+
+        if not cmd_exists("/usr/bin/time"):
+            raise ValueError("/usr/bin/time is required, install with `apt install time`")
+
+        cmd = shlex.split(f"/usr/bin/time -f %M python -c '{one_liner_str}'")
+        with CaptureStd() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        # returned data is in KB so convert to bytes
+        max_rss = int(cs.err.split("\n")[-2].replace("stderr: ", "")) * 1024
+        return max_rss
 
     def tearDown(self):
 

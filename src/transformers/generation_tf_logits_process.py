@@ -19,7 +19,6 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
-from .tf_utils import set_tensor_by_indices_to_value
 from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
@@ -221,7 +220,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         # generate is not XLA - compileable anyways
         if cur_len < self.min_length:
             eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
-            scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
+            scores = tf.where(eos_token_id_mask, float("-inf"), scores)
 
         return scores
 
@@ -242,18 +241,29 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         self.penalty = penalty
 
-    def _create_score_penalties(self, input_ids, logits):
-        # create logit penalties for already seen input_ids
-        token_penalties = np.ones(logits.shape)
-        prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
-        for i, prev_input_id in enumerate(prev_input_ids):
-            logit_penalized = logits[i].numpy()[prev_input_id]
-            logit_penalties = np.zeros(logit_penalized.shape)
-            # if previous logit score is < 0 then multiply repetition penalty else divide
-            logit_penalties[logit_penalized < 0] = self.penalty
-            logit_penalties[logit_penalized > 0] = 1 / self.penalty
-            np.put(token_penalties[i], prev_input_id, logit_penalties)
-        return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
+    def _create_score_penalties(self, input_ids: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        # We want to populate the penalties in the positions of `input_ids`. Since XLA can't handle shapes unknown
+        # before runtime, `tf.unique` can't be used. Therefore, we may have redundant updates, when a given row has
+        # the same token multiple times.
+
+        # Gathers the penalties to apply
+        logit_penalties = tf.gather(logits, input_ids, axis=1, batch_dims=1)
+        logit_penalties = tf.where(logit_penalties > 0, 1 / self.penalty, logit_penalties)
+        logit_penalties = tf.where(logit_penalties < 0, self.penalty, logit_penalties)
+
+        # Scatters the penalties
+        token_penalties = tf.ones(logits.shape)
+        indexable_prev_input_ids = tf.concat(
+            (
+                tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
+                tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
+            ),
+            axis=1,
+        )
+        token_penalties = tf.tensor_scatter_nd_update(
+            token_penalties, indices=indexable_prev_input_ids, updates=tf.reshape(logit_penalties, [-1])
+        )
+        return token_penalties
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         score_penalties = self._create_score_penalties(input_ids[:, :cur_len], scores)
@@ -339,9 +349,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
         return scores
 
@@ -397,9 +405,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
         return scores
 

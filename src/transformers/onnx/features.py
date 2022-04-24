@@ -6,9 +6,12 @@ from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.beit import BeitOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.big_bird import BigBirdOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
+from ..models.convbert import ConvBertOnnxConfig
+from ..models.data2vec import Data2VecTextOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.flaubert import FlaubertOnnxConfig
@@ -119,7 +122,7 @@ class FeaturesManager:
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=AlbertOnnxConfig,
@@ -151,16 +154,26 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=BertOnnxConfig,
+        ),
+        "bigbird": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=BigBirdOnnxConfig,
         ),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=IBertOnnxConfig,
@@ -170,16 +183,25 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
+        ),
+        "convbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ConvBertOnnxConfig,
         ),
         "distilbert": supported_features_mapping(
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
@@ -189,6 +211,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=FlaubertOnnxConfig,
@@ -210,7 +233,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=RobertaOnnxConfig,
@@ -223,7 +246,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=XLMRobertaOnnxConfig,
@@ -237,7 +260,7 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
         ),
-        "gpt-j": supported_features_mapping(
+        "gptj": supported_features_mapping(
             "default",
             "default-with-past",
             "causal-lm",
@@ -266,6 +289,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
@@ -289,6 +313,15 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
+        "data2vec-text": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=Data2VecTextOnnxConfig,
         ),
     }
 
