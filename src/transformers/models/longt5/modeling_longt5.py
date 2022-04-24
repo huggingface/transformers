@@ -18,7 +18,7 @@
 import copy
 import math
 import warnings
-from typing import Any, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -656,11 +656,22 @@ class LongT5LocalAttention(nn.Module):
         self,
         hidden_states,
         mask=None,
+        key_value_states=None,
         position_bias=None,
+        past_key_value=None,
         layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
         output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            assert (
+                len(past_key_value) == 2
+            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         def shape(states):
             """projection"""
@@ -670,10 +681,37 @@ class LongT5LocalAttention(nn.Module):
             """reshape"""
             return states.contiguous().view(batch_size, -1, self.inner_dim)
 
-        # get query/key/value states -> (batch_size, seq_length, n_heads, dim_per_head)
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, seq_length, n_heads, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, seq_length, n_heads, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
+
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, seq_length, n_heads, dim_per_head)
+                    hidden_states = torch.cat([past_key_value.transpose(1, 2), hidden_states], dim=2)
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value.transpose(1, 2)
+            return hidden_states
+
+        # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
         query_states = shape(self.q(hidden_states))
-        key_states = shape(self.k(hidden_states))
-        value_states = shape(self.v(hidden_states))
+
+        # get key/value states
+        key_states = project(
+            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
         query_states = _split_into_blocks(query_states, self.block_len, dim=1)
@@ -684,8 +722,10 @@ class LongT5LocalAttention(nn.Module):
         key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
         value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
 
-        # Compute scores -> (batch_size, num_block, n_heads, block_len, 3 * block_len)
-        scores = torch.einsum("...qhd,...khd->...hqk", query_states, key_states)
+        # Compute scores
+        scores = torch.einsum(
+            "...qhd,...khd->...hqk", query_states, key_states
+        )  # (batch_size, num_block, n_heads, block_len, 3 * block_len)
 
         if position_bias is None:
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
@@ -697,6 +737,10 @@ class LongT5LocalAttention(nn.Module):
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(self.block_len)
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
                 # Replace masked positions with -10_000 (according to the original implementation)
@@ -718,7 +762,8 @@ class LongT5LocalAttention(nn.Module):
         attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output,) + (position_bias,)
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -752,8 +797,9 @@ class LongT5TransientGlobalAttention(nn.Module):
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
-        # Relative attention bias & Layer norm for global attention - global relative attention bias is always applied
-        self.global_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+        # Relativen attention bias & Layer norm for global attention
+        if self.has_relative_attention_bias:
+            self.global_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.global_input_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     # Copied from transformers.models.t5.modeling_t5.T5Attention.prune_heads
@@ -833,7 +879,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         # (block_length, 3 * block_length)
         relative_position = memory_position - context_position
         relative_position_bucket = self._relative_position_bucket(
-            relative_position,
+            relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
@@ -869,11 +915,22 @@ class LongT5TransientGlobalAttention(nn.Module):
         self,
         hidden_states,
         mask=None,
+        key_value_states=None,
         position_bias=None,
+        past_key_value=None,
         layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
         output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            assert (
+                len(past_key_value) == 2
+            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         def shape(states):
             """projection"""
@@ -882,6 +939,27 @@ class LongT5TransientGlobalAttention(nn.Module):
         def unshape(states):
             """reshape"""
             return states.contiguous().view(batch_size, -1, self.inner_dim)
+
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, seq_length, n_heads, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, seq_length, n_heads, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
+
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, seq_length, n_heads, dim_per_head)
+                    hidden_states = torch.cat([past_key_value.transpose(1, 2), hidden_states], dim=2)
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value.transpose(1, 2)
+            return hidden_states
 
         # Prepare components for transient-global attention
         # Obtain block_ids and global_segment_ids
@@ -896,14 +974,20 @@ class LongT5TransientGlobalAttention(nn.Module):
         global_inputs = _create_global_aggregates(hidden_states, block_ids, _global_seq_len)
         global_inputs = self.global_input_layer_norm(global_inputs)
 
-        # get query/key/value states -> (batch_size, seq_length, n_heads, dim_per_head)
+        # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
         query_states = shape(self.q(hidden_states))
-        key_states = shape(self.k(hidden_states))
-        value_states = shape(self.v(hidden_states))
+
+        # get key/value states
+        key_states = project(
+            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
 
         # Get global/side key/value states  shape: (batch_size, global_seq_len, n_heads, dim_per_head)
-        side_key_states = shape(self.k(global_inputs))
-        side_value_states = shape(self.v(global_inputs))
+        side_key_states = project(global_inputs, self.k, None, None)
+        side_value_states = project(global_inputs, self.v, None, None)
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
         query_states = _split_into_blocks(query_states, self.block_len, dim=1)
@@ -949,6 +1033,10 @@ class LongT5TransientGlobalAttention(nn.Module):
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(self.block_len)
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if local_attention_mask is not None:
                 # (batch_size, 1, n_heads, block_len, 3 * block_len)
@@ -977,7 +1065,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output,) + (position_bias,)
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -1032,8 +1121,9 @@ class LongT5LayerLocalSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
         output_attentions=False,
-        **kwargs: Any,  # to accept past_key_value and use_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.LocalSelfAttention(
@@ -1041,6 +1131,8 @@ class LongT5LayerLocalSelfAttention(nn.Module):
             mask=attention_mask,
             position_bias=position_bias,
             layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
             output_attentions=output_attentions,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
@@ -1065,8 +1157,9 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
         output_attentions=False,
-        **kwargs: Any,  # to accept past_key_value and use_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.TransientGlobalSelfAttention(
@@ -1074,6 +1167,8 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
             mask=attention_mask,
             position_bias=position_bias,
             layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
             output_attentions=output_attentions,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
@@ -1307,8 +1402,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-            if isinstance(module, LongT5TransientGlobalAttention):
-                module.global_relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                if isinstance(module, LongT5TransientGlobalAttention):
+                    module.global_relative_attention_bias.weight.data.normal_(
+                        mean=0.0, std=factor * ((d_model) ** -0.5)
+                    )
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1547,7 +1644,7 @@ class LongT5Stack(LongT5PreTrainedModel):
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[2] if self.is_decoder else layer_outputs[1]
+            position_bias = layer_outputs[2]
             if self.is_decoder and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
@@ -1555,11 +1652,9 @@ class LongT5Stack(LongT5PreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
-                    all_attentions = all_attentions + (layer_outputs[3],)
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
-                else:
-                    all_attentions = all_attentions + (layer_outputs[2],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
