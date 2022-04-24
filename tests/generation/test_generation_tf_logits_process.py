@@ -15,10 +15,10 @@
 
 
 import unittest
-from parameterized import parameterized
 
 import numpy as np
 
+from parameterized import parameterized
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
@@ -143,7 +143,9 @@ class TFLogitsProcessorTest(unittest.TestCase):
         batch_size = 2
 
         # create ramp distribution
-        ramp_logits = np.broadcast_to(np.arange(vocab_size, dtype=np.float32)[None, :], (batch_size, vocab_size)).copy()
+        ramp_logits = np.broadcast_to(
+            np.arange(vocab_size, dtype=np.float32)[None, :], (batch_size, vocab_size)
+        ).copy()
         ramp_logits[1:, : vocab_size // 2] = ramp_logits[1:, : vocab_size // 2] + vocab_size
 
         top_k_warp = TFTopKLogitsWarper(3)
