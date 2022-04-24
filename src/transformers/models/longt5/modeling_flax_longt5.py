@@ -16,7 +16,7 @@
 
 
 import copy
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -730,10 +730,8 @@ class FlaxLongT5LocalAttention(nn.Module):
         attention_mask=None,
         key_value_states=None,
         position_bias=None,
-        use_cache=False,
         output_attentions=False,
         deterministic=True,
-        init_cache=False,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -867,13 +865,12 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
                 embedding_init=jax.nn.initializers.normal(kv_init_std),
             )
 
-        # Relativen attention bias & Layer norm for global attention
-        if self.has_relative_attention_bias:
-            self.global_relative_attention_bias = nn.Embed(
-                self.relative_attention_num_buckets,
-                self.n_heads,
-                embedding_init=jax.nn.initializers.normal(kv_init_std),
-            )
+        # Relative attention bias & Layer norm for global attention - global relative attention bias is always applied
+        self.global_relative_attention_bias = nn.Embed(
+            self.relative_attention_num_buckets,
+            self.n_heads,
+            embedding_init=jax.nn.initializers.normal(kv_init_std),
+        )
         self.global_input_layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -980,10 +977,8 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         attention_mask=None,
         key_value_states=None,
         position_bias=None,
-        use_cache=False,
         output_attentions=False,
         deterministic=True,
-        init_cache=False,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -1127,7 +1122,7 @@ class FlaxLongT5LayerLocalSelfAttention(nn.Module):
         position_bias=None,
         output_attentions=False,
         deterministic=True,
-        init_cache=False,
+        **kwargs: Any,  # to accept init_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.LocalSelfAttention(
@@ -1136,7 +1131,6 @@ class FlaxLongT5LayerLocalSelfAttention(nn.Module):
             position_bias=position_bias,
             output_attentions=output_attentions,
             deterministic=deterministic,
-            init_cache=init_cache,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -1166,7 +1160,7 @@ class FlaxLongT5LayerTransientGlobalSelfAttention(nn.Module):
         position_bias=None,
         output_attentions=False,
         deterministic=True,
-        init_cache=False,
+        **kwargs: Any,  # to accept init_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.TransientGlobalSelfAttention(
@@ -1175,7 +1169,6 @@ class FlaxLongT5LayerTransientGlobalSelfAttention(nn.Module):
             position_bias=position_bias,
             output_attentions=output_attentions,
             deterministic=deterministic,
-            init_cache=init_cache,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
