@@ -533,7 +533,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         # embed positions
         positions = tf.gather(self.embed_positions, position_ids, axis=0)
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = tf.cast(inputs_embeds, dtype=tf.float32) + positions
 
         hidden_states = self.dropout(hidden_states, training=training)
 
