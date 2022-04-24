@@ -865,12 +865,13 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
                 embedding_init=jax.nn.initializers.normal(kv_init_std),
             )
 
-        # Relativen attention bias & Layer norm for global attention - global relative attention bias is always applied
-        self.global_relative_attention_bias = nn.Embed(
-            self.relative_attention_num_buckets,
-            self.n_heads,
-            embedding_init=jax.nn.initializers.normal(kv_init_std),
-        )
+        # Relativen attention bias & Layer norm for global attention
+        if self.has_relative_attention_bias:
+            self.global_relative_attention_bias = nn.Embed(
+                self.relative_attention_num_buckets,
+                self.n_heads,
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
+            )
         self.global_input_layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
