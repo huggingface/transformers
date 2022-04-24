@@ -748,7 +748,7 @@ def has_file(
         logger.error(e)
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
-            "model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
+            f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
         )
     except requests.HTTPError:
         # We return false for EntryNotFoundError (logical) as well as any connection error.
