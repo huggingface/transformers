@@ -545,6 +545,7 @@ class Transformer(torch.nn.Module):
                  block_position_encoding=False,
                  performer=False,
                  attention_scale=1.0,
+                 gradient_checkpointing=False,
                  ):
         super(Transformer, self).__init__()
         self.hidden_size = hidden_size
@@ -553,6 +554,7 @@ class Transformer(torch.nn.Module):
         self.checkpoint_num_layers = checkpoint_num_layers
         self.max_memory_length = max_memory_length
         self.performer = performer
+        self.gradient_checkpointing = gradient_checkpointing
         assert not (performer and relative_encoding)
 
         output_layer_init_method = None
