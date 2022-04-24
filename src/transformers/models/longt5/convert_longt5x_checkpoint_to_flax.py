@@ -25,7 +25,7 @@ from transformers import AutoConfig, FlaxAutoModelForSeq2SeqLM
 
 def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_folder_path):
     config = AutoConfig.from_pretrained(config_name)
-    flax_model = FlaxAutoModelForSeq2SeqLM(config=config)
+    flax_model = FlaxAutoModelForSeq2SeqLM.from_config(config=config)
     t5x_model = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
 
     split_mlp_wi = "wi_0" in t5x_model["target"]["encoder"]["layers_0"]["mlp"]
@@ -34,12 +34,12 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         encoder_attn_name = "SelfAttention"
     if config.model_type == "longt5" and config.encoder_attention_type == "local":
         encoder_attn_name = "LocalSelfAttention"
-    elif config.model_type == "longt5" and config.encoder_attention_type == "trasient-global":
+    elif config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
         encoder_attn_name = "TransientGlobalSelfAttention"
     else:
         raise ValueError(
             "Given config is expected to have `model_type='t5'`, or `model_type='longt5` with `encoder_attention_type` "
-            "attribute with a value from ['local', 'trasient-global]."
+            "attribute with a value from ['local', 'transient-global]."
         )
 
     # Encoder

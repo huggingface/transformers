@@ -110,12 +110,7 @@ class LongT5Config(PretrainedConfig):
         eos_token_id=1,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -134,6 +129,13 @@ class LongT5Config(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
 
 
 class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
