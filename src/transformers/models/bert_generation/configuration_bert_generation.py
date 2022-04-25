@@ -21,6 +21,9 @@ class BertGenerationConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BertGenerationPreTrainedModel`]. It is used to
     instantiate a BertGeneration model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the BertGeneration
+    [google/bert_for_seq_generation_L-24_bbc_encoder](https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
