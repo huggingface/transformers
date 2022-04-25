@@ -641,7 +641,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         unexpected_keys = set(state.keys()) - model.required_params
 
         if missing_keys and not _do_init:
-            logger.warn(
+            logger.warning(
                 f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
                 f"Make sure to call model.init_weights to initialize the missing weights."
             )
