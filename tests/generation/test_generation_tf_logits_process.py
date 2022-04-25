@@ -144,7 +144,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # create ramp distribution
         ramp_logits = np.broadcast_to(
-            np.arange(vocab_size, dtype=np.float32)[None, :], (batch_size, vocab_size)
+            np.arange(vocab_size, dtype=np.float32), (batch_size, vocab_size)
         ).copy()
         ramp_logits[1:, : vocab_size // 2] = ramp_logits[1:, : vocab_size // 2] + vocab_size
 
@@ -170,7 +170,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         # uniform dist is not changed
         self.assertListEqual(tf.math.reduce_sum(tf.where(scores == 0.0, 1, 0), axis=-1).numpy().tolist(), [0, 0])
 
-        ramp_logits = np.broadcast_to(np.arange(length, dtype=np.float32)[None, :], (batch_size, length)).copy()
+        ramp_logits = np.broadcast_to(np.arange(length, dtype=np.float32), (batch_size, length)).copy()
         scores = top_k_warp_safety_check(input_ids, ramp_logits)
 
         # min_tokens overwrites k: 3 tokens are kept => 2 tokens are nullified
