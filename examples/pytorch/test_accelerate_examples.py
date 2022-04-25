@@ -200,7 +200,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         testargs = f"""
             run_qa_no_trainer.py
             --model_name_or_path bert-base-uncased
-            --version_2_with_negative=False
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
@@ -217,7 +216,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             run_squad_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_f1"], 30)
-            self.assertGreaterEqual(result["eval_exact"], 30)
+            self.assertGreaterEqual(result["eval_exact_match"], 30)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 

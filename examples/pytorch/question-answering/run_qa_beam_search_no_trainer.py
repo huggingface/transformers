@@ -19,10 +19,12 @@ Fine-tuning XLNet for question answering with beam search using 🤗 Accelerate.
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
 import argparse
+import json
 import logging
 import math
 import os
 import random
+from functools import partial
 from pathlib import Path
 
 import datasets
@@ -39,7 +41,6 @@ from huggingface_hub import Repository
 from transformers import (
     AdamW,
     DataCollatorWithPadding,
-    EvalPrediction,
     SchedulerType,
     XLNetConfig,
     XLNetForQuestionAnswering,
@@ -49,7 +50,13 @@ from transformers import (
 )
 from transformers.utils import check_min_version, get_full_repo_name
 from transformers.utils.versions import require_version
-from utils_qa import postprocess_qa_predictions_with_beam_search
+from utils_qa_add import (
+    create_and_fill_np_array,
+    post_processing_function_with_beam_search,
+    prepare_train_features_with_beam_search,
+    prepare_validation_features_with_beam_search,
+    save_prefixed_metrics,
+)
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -171,8 +178,7 @@ def parse_args():
     )
     parser.add_argument(
         "--version_2_with_negative",
-        type=bool,
-        default=False,
+        action="store_true",
         help="If true, some of the examples do not have an answer.",
     )
     parser.add_argument(
@@ -197,7 +203,7 @@ def parse_args():
         "value if set.",
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_predict_samples",
@@ -355,107 +361,6 @@ def main():
 
     max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
 
-    # Training preprocessing
-    def prepare_train_features(examples):
-        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
-        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
-        # left whitespace
-        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
-
-        # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
-        # in one example possible giving several features when a context is long, each of those features having a
-        # context that overlaps a bit the context of the previous feature.
-        tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
-            truncation="only_second" if pad_on_right else "only_first",
-            max_length=max_seq_length,
-            stride=args.doc_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            return_token_type_ids=True,
-            padding="max_length",
-        )
-
-        # Since one example might give us several features if it has a long context, we need a map from a feature to
-        # its corresponding example. This key gives us just that.
-        sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
-        # The offset mappings will give us a map from token to character position in the original context. This will
-        # help us compute the start_positions and end_positions.
-        offset_mapping = tokenized_examples.pop("offset_mapping")
-        # The special tokens will help us build the p_mask (which indicates the tokens that can't be in answers).
-        special_tokens = tokenized_examples.pop("special_tokens_mask")
-
-        # Let's label those examples!
-        tokenized_examples["start_positions"] = []
-        tokenized_examples["end_positions"] = []
-        tokenized_examples["is_impossible"] = []
-        tokenized_examples["cls_index"] = []
-        tokenized_examples["p_mask"] = []
-
-        for i, offsets in enumerate(offset_mapping):
-            # We will label impossible answers with the index of the CLS token.
-            input_ids = tokenized_examples["input_ids"][i]
-            cls_index = input_ids.index(tokenizer.cls_token_id)
-            tokenized_examples["cls_index"].append(cls_index)
-
-            # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples["token_type_ids"][i]
-            for k, s in enumerate(special_tokens[i]):
-                if s:
-                    sequence_ids[k] = 3
-            context_idx = 1 if pad_on_right else 0
-
-            # Build the p_mask: non special tokens and context gets 0.0, the others get 1.0.
-            # The cls token gets 1.0 too (for predictions of empty answers).
-            tokenized_examples["p_mask"].append(
-                [
-                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
-                    for k, s in enumerate(sequence_ids)
-                ]
-            )
-
-            # One example can give several spans, this is the index of the example containing this span of text.
-            sample_index = sample_mapping[i]
-            answers = examples[answer_column_name][sample_index]
-            # If no answers are given, set the cls_index as answer.
-            if len(answers["answer_start"]) == 0:
-                tokenized_examples["start_positions"].append(cls_index)
-                tokenized_examples["end_positions"].append(cls_index)
-                tokenized_examples["is_impossible"].append(1.0)
-            else:
-                # Start/end character index of the answer in the text.
-                start_char = answers["answer_start"][0]
-                end_char = start_char + len(answers["text"][0])
-
-                # Start token index of the current span in the text.
-                token_start_index = 0
-                while sequence_ids[token_start_index] != context_idx:
-                    token_start_index += 1
-
-                # End token index of the current span in the text.
-                token_end_index = len(input_ids) - 1
-                while sequence_ids[token_end_index] != context_idx:
-                    token_end_index -= 1
-                # Detect if the answer is out of the span (in which case this feature is labeled with the CLS index).
-                if not (offsets[token_start_index][0] <= start_char and offsets[token_end_index][1] >= end_char):
-                    tokenized_examples["start_positions"].append(cls_index)
-                    tokenized_examples["end_positions"].append(cls_index)
-                    tokenized_examples["is_impossible"].append(1.0)
-                else:
-                    # Otherwise move the token_start_index and token_end_index to the two ends of the answer.
-                    # Note: we could go after the last offset if the answer is the last word (edge case).
-                    while token_start_index < len(offsets) and offsets[token_start_index][0] <= start_char:
-                        token_start_index += 1
-                    tokenized_examples["start_positions"].append(token_start_index - 1)
-                    while offsets[token_end_index][1] >= end_char:
-                        token_end_index -= 1
-                    tokenized_examples["end_positions"].append(token_end_index + 1)
-                    tokenized_examples["is_impossible"].append(0.0)
-
-        return tokenized_examples
-
     if "train" not in raw_datasets:
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
@@ -465,7 +370,16 @@ def main():
     # Create train feature from dataset
     with accelerator.main_process_first():
         train_dataset = train_dataset.map(
-            prepare_train_features,
+            partial(
+                prepare_train_features_with_beam_search,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                doc_stride=args.doc_stride,
+                pad_on_right=pad_on_right,
+                question_column_name=question_column_name,
+                answer_column_name=answer_column_name,
+                context_column_name=context_column_name,
+            ),
             batched=True,
             num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
@@ -476,77 +390,6 @@ def main():
         # Number of samples might increase during Feature Creation, We select only specified max samples
         train_dataset = train_dataset.select(range(args.max_train_samples))
 
-    # Validation preprocessing
-    def prepare_validation_features(examples):
-        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
-        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
-        # left whitespace
-        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
-
-        # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
-        # in one example possible giving several features when a context is long, each of those features having a
-        # context that overlaps a bit the context of the previous feature.
-        tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
-            truncation="only_second" if pad_on_right else "only_first",
-            max_length=max_seq_length,
-            stride=args.doc_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            return_token_type_ids=True,
-            padding="max_length",
-        )
-
-        # Since one example might give us several features if it has a long context, we need a map from a feature to
-        # its corresponding example. This key gives us just that.
-        sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
-
-        # The special tokens will help us build the p_mask (which indicates the tokens that can't be in answers).
-        special_tokens = tokenized_examples.pop("special_tokens_mask")
-
-        # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
-        # corresponding example_id and we will store the offset mappings.
-        tokenized_examples["example_id"] = []
-
-        # We still provide the index of the CLS token and the p_mask to the model, but not the is_impossible label.
-        tokenized_examples["cls_index"] = []
-        tokenized_examples["p_mask"] = []
-
-        for i, input_ids in enumerate(tokenized_examples["input_ids"]):
-            # Find the CLS token in the input ids.
-            cls_index = input_ids.index(tokenizer.cls_token_id)
-            tokenized_examples["cls_index"].append(cls_index)
-
-            # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples["token_type_ids"][i]
-            for k, s in enumerate(special_tokens[i]):
-                if s:
-                    sequence_ids[k] = 3
-            context_idx = 1 if pad_on_right else 0
-
-            # Build the p_mask: non special tokens and context gets 0.0, the others 1.0.
-            tokenized_examples["p_mask"].append(
-                [
-                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
-                    for k, s in enumerate(sequence_ids)
-                ]
-            )
-
-            # One example can give several spans, this is the index of the example containing this span of text.
-            sample_index = sample_mapping[i]
-            tokenized_examples["example_id"].append(examples["id"][sample_index])
-
-            # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
-            # position is part of the context or not.
-            tokenized_examples["offset_mapping"][i] = [
-                (o if sequence_ids[k] == context_idx else None)
-                for k, o in enumerate(tokenized_examples["offset_mapping"][i])
-            ]
-
-        return tokenized_examples
-
     if "validation" not in raw_datasets:
         raise ValueError("--do_eval requires a validation dataset")
     eval_examples = raw_datasets["validation"]
@@ -556,7 +399,15 @@ def main():
     # Validation Feature Creation
     with accelerator.main_process_first():
         eval_dataset = eval_examples.map(
-            prepare_validation_features,
+            partial(
+                prepare_validation_features_with_beam_search,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length,
+                doc_stride=args.doc_stride,
+                pad_on_right=pad_on_right,
+                question_column_name=question_column_name,
+                context_column_name=context_column_name,
+            ),
             batched=True,
             num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
@@ -578,7 +429,15 @@ def main():
         # Predict Feature Creation
         with accelerator.main_process_first():
             predict_dataset = predict_examples.map(
-                prepare_validation_features,
+                partial(
+                    prepare_validation_features_with_beam_search,
+                    tokenizer=tokenizer,
+                    max_seq_length=max_seq_length,
+                    doc_stride=args.doc_stride,
+                    pad_on_right=pad_on_right,
+                    question_column_name=question_column_name,
+                    context_column_name=context_column_name,
+                ),
                 batched=True,
                 num_proc=args.preprocessing_num_workers,
                 remove_columns=column_names,
@@ -619,65 +478,7 @@ def main():
             predict_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
         )
 
-    # Post-processing:
-    def post_processing_function(examples, features, predictions, stage="eval"):
-        # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions, scores_diff_json = postprocess_qa_predictions_with_beam_search(
-            examples=examples,
-            features=features,
-            predictions=predictions,
-            version_2_with_negative=args.version_2_with_negative,
-            n_best_size=args.n_best_size,
-            max_answer_length=args.max_answer_length,
-            start_n_top=model.config.start_n_top,
-            end_n_top=model.config.end_n_top,
-            output_dir=args.output_dir,
-            prefix=stage,
-        )
-        # Format the result to the format the metric expects.
-        if args.version_2_with_negative:
-            formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": scores_diff_json[k]}
-                for k, v in predictions.items()
-            ]
-        else:
-            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
-
-        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
-        return EvalPrediction(predictions=formatted_predictions, label_ids=references)
-
     metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
-
-    def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
-        """
-        Create and fill numpy array of size len_of_validation_data * max_length_of_output_tensor
-
-        Args:
-            start_or_end_logits(:obj:`tensor`):
-                This is the output predictions of the model. We can only enter either start or end logits.
-            eval_dataset: Evaluation dataset
-            max_len(:obj:`int`):
-                The maximum length of the output tensor. ( See the model.eval() part for more details )
-        """
-
-        step = 0
-        # create a numpy array and fill it with -100.
-        logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float32)
-        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
-        for i, output_logit in enumerate(start_or_end_logits):  # populate columns
-            # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
-            # And after every iteration we have to change the step
-
-            batch_size = output_logit.shape[0]
-            cols = output_logit.shape[1]
-            if step + batch_size < len(dataset):
-                logits_concat[step : step + batch_size, :cols] = output_logit
-            else:
-                logits_concat[step:, :cols] = output_logit[: len(dataset) - step]
-
-            step += batch_size
-
-        return logits_concat
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
@@ -807,6 +608,9 @@ def main():
     all_end_top_log_probs = []
     all_end_top_index = []
     all_cls_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -852,7 +656,18 @@ def main():
         end_top_index_concat,
         cls_logits_concat,
     )
-    prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+    prediction = post_processing_function_with_beam_search(
+        eval_examples,
+        eval_dataset,
+        outputs_numpy,
+        answer_column_name=answer_column_name,
+        version_2_with_negative=args.version_2_with_negative,
+        n_best_size=args.n_best_size,
+        max_answer_length=args.max_answer_length,
+        start_n_top=model.config.start_n_top,
+        end_n_top=model.config.end_n_top,
+        output_dir=args.output_dir,
+    )
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
     logger.info(f"Evaluation metrics: {eval_metric}")
 
@@ -864,6 +679,9 @@ def main():
         all_end_top_log_probs = []
         all_end_top_index = []
         all_cls_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
@@ -910,7 +728,18 @@ def main():
             cls_logits_concat,
         )
 
-        prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
+        prediction = post_processing_function_with_beam_search(
+            predict_examples,
+            predict_dataset,
+            outputs_numpy,
+            version_2_with_negative=args.version_2_with_negative,
+            n_best_size=args.n_best_size,
+            max_answer_length=args.max_answer_length,
+            start_n_top=model.config.start_n_top,
+            end_n_top=model.config.end_n_top,
+            output_dir=args.output_dir,
+            log_level=logging.WARNING,
+        )
         predict_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
         logger.info(f"Predict metrics: {predict_metric}")
 
@@ -937,6 +766,11 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+            logger.info(json.dumps(eval_metric, indent=4))
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(eval_metric, f, indent=4)
+            save_prefixed_metrics(eval_metric, args.output_dir)
 
 
 if __name__ == "__main__":
