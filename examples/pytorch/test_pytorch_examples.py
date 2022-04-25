@@ -243,7 +243,6 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_qa.py
             --model_name_or_path bert-base-uncased
-            --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
@@ -261,7 +260,7 @@ class ExamplesTests(TestCasePlus):
             run_squad.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_f1"], 30)
-            self.assertGreaterEqual(result["eval_exact"], 30)
+            self.assertGreaterEqual(result["eval_exact_match"], 30)
 
     def test_run_squad_seq2seq(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
