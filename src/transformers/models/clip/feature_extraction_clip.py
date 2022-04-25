@@ -124,7 +124,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
             valid_images = True
         elif isinstance(images, (list, tuple)):
-            if isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
+            if (len(images) > 0) and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0])):
                 valid_images = True
 
         if not valid_images:
