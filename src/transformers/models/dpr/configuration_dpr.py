@@ -38,10 +38,7 @@ class DPRConfig(PretrainedConfig):
     [`DPRReader`]. It is used to instantiate the components of the DPR model according to the specified arguments,
     defining the model component architectures. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the DPRContextEncoder
-    [facebook/dpr-ctx_encoder-single-nq-base](https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base),
-    DPRQuestionEncoder
-    [facebook/dpr-question_encoder-single-nq-base](https://huggingface.co/facebook/dpr-question_encoder-single-nq-base),
-    or DPRReader [facebook/dpr-reader-single-nq-base](https://huggingface.co/facebook/dpr-reader-single-nq-base)
+    [facebook/dpr-ctx_encoder-single-nq-base](https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base)
     architecture.
 
     This class is a subclass of [`BertConfig`]. Please check the superclass for the documentation of all kwargs.
