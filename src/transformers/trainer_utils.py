@@ -54,7 +54,7 @@ def seed_worker():
     set_seed(worker_seed)
 
 
-def enable_determinism():
+def enable_determinism_for_distributed_training():
     """
     Helper function for reproducible behavior during distributed training. See
     - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
@@ -93,7 +93,7 @@ def set_seed(seed: int, enable_determinism: bool = True):
     if is_tf_available():
         tf.random.set_seed(seed)
     if enable_determinism:
-        enable_determinism()
+        enable_determinism_for_distributed_training()
 
 
 class EvalPrediction:
