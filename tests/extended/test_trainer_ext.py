@@ -266,7 +266,7 @@ class TestTrainerExt(TestCasePlus):
         )
 
         self.assertEqual(
-            loss_orig, loss_bnb, "loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
+            loss_orig, loss_bnb, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
         )
 
         # Additionally let's test that the absolute gpu memory difference is larger or about the

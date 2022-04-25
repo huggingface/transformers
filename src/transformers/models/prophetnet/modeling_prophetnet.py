@@ -757,7 +757,7 @@ class ProphetNetAttention(nn.Module):
             batch_size * self.num_attn_heads,
             tgt_len,
             self.head_dim,
-        ), "`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of shape {attn_output.size()}"
+        ), f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of shape {attn_output.size()}"
 
         attn_output = (
             attn_output.view(batch_size, self.num_attn_heads, tgt_len, self.head_dim)
