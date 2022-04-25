@@ -39,7 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -159,7 +159,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 attn_score = attn_score - 1e30 * attn_mask
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=1)
+        attn_prob = stable_softmax(attn_score, axis=1)
 
         attn_prob = self.dropout(attn_prob, training=training)
 

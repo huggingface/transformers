@@ -34,7 +34,7 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from .tf_utils import shape_list
+from .tf_utils import shape_list, stable_softmax
 from .utils import ModelOutput, logging
 
 
@@ -3060,7 +3060,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
             logits, sorted_indices, axis=-1, batch_dims=1
         )  # expects logits to be of dim (batch_size, vocab_size)
 
-        cumulative_probs = tf.math.cumsum(tf.nn.softmax(sorted_logits, axis=-1), axis=-1)
+        cumulative_probs = tf.math.cumsum(stable_softmax(sorted_logits, axis=-1), axis=-1)
 
         # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
         sorted_indices_to_remove = cumulative_probs > top_p
