@@ -503,7 +503,8 @@ class BatchEncoding(UserDict):
                 the sequence.
 
         Returns:
-            [`~tokenization_utils_base.CharSpan`]: Span of characters in the original string.
+            [`~tokenization_utils_base.CharSpan`]: Span of characters in the original string, or None, if the token
+            (e.g. <s>, </s>) doesn't correspond to any chars in the origin string.
         """
 
         if not self._encodings:
@@ -513,7 +514,9 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             token_index = batch_or_token_index
-        return CharSpan(*(self._encodings[batch_index].token_to_chars(token_index)))
+        span_indices = self._encodings[batch_index].token_to_chars(token_index)
+
+        return CharSpan(*span_indices) if span_indices is not None else None
 
     def char_to_token(
         self, batch_or_char_index: int, char_index: Optional[int] = None, sequence_index: int = 0

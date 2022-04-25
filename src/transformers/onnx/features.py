@@ -10,6 +10,7 @@ from ..models.big_bird import BigBirdOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
 from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
+from ..models.convbert import ConvBertOnnxConfig
 from ..models.data2vec import Data2VecTextOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
@@ -187,6 +188,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
         ),
+        "convbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ConvBertOnnxConfig,
+        ),
         "distilbert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -250,7 +260,7 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
         ),
-        "gpt-j": supported_features_mapping(
+        "gptj": supported_features_mapping(
             "default",
             "default-with-past",
             "causal-lm",

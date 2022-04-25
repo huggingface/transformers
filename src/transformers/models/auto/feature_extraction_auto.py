@@ -57,6 +57,10 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("regnet", "ConvNextFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
+        ("data2vec-vision", "BeitFeatureExtractor"),
+        ("dpt", "DPTFeatureExtractor"),
+        ("glpn", "GLPNFeatureExtractor"),
     ]
 )
 
