@@ -2276,6 +2276,7 @@ class Trainer:
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
+        return_output_obj: bool=False
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -2296,10 +2297,15 @@ class Trainer:
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is "eval" (default)
+            return_output_obj (bool):
+                If True, returns entire output object along with metrics. This can be useful for analyses using predicted labels.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
+            
+            If `return_output_obj` is True, entire output object is also returned.
+            Type of output object: `PredictionOutput` if `self.args.use_legacy_prediction_loop` is True. `EvalLoopOutput` otherwise.
         """
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -2337,6 +2343,9 @@ class Trainer:
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
+        
+        if return_output_obj: 
+            return output.metrics, output
 
         return output.metrics
 
