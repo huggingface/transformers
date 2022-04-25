@@ -216,7 +216,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def _apply_eos_token_mask(self, scores: tf.Tensor) -> tf.Tensor:
-        eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
+        eos_token_id_mask = tf.range(scores.shape[-1]) == self.eos_token_id
         scores = tf.where(eos_token_id_mask, float("-inf"), scores)
         return scores
 
