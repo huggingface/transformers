@@ -12,6 +12,7 @@ from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.convbert import ConvBertOnnxConfig
 from ..models.data2vec import Data2VecTextOnnxConfig
+from ..models.deit import DeiTOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.flaubert import FlaubertOnnxConfig
@@ -38,6 +39,7 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
@@ -103,6 +105,7 @@ class FeaturesManager:
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -294,8 +297,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
-        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
-        "beit": supported_features_mapping("default", "image-classification", onnx_config_cls=BeitOnnxConfig),
+        "vit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
+        ),
+        "beit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=BeitOnnxConfig
+        ),
+        "deit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=DeiTOnnxConfig
+        ),
         "blenderbot": supported_features_mapping(
             "default",
             "default-with-past",
