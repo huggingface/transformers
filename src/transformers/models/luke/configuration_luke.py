@@ -30,7 +30,7 @@ class LukeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LukeModel`]. It is used to instantiate a LUKE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Luke
+    defaults will yield a similar configuration to that of the LUKE
     [studio-ousia/luke-base](https://huggingface.co/studio-ousia/luke-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

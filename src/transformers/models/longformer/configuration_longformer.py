@@ -37,7 +37,7 @@ class LongformerConfig(RobertaConfig):
 
     This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
     Longformer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Longformer
+    configuration with the defaults will yield a similar configuration to that of the LongFormer
     [allenai/longformer-base-4096](https://huggingface.co/allenai/longformer-base-4096) architecture with a sequence
     length 4,096.
 

@@ -38,7 +38,7 @@ class XLMRobertaConfig(RobertaConfig):
     """
     This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
     usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    XLMRoberta [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
+    XLMRoBERTa [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
     """
 
     model_type = "xlm-roberta"

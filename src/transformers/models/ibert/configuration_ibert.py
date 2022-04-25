@@ -37,7 +37,7 @@ class IBertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IBertModel`]. It is used to instantiate a I-BERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the IBert
+    defaults will yield a similar configuration to that of the IBERT
     [kssteven/ibert-roberta-base](https://huggingface.co/kssteven/ibert-roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

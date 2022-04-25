@@ -29,7 +29,7 @@ class MobileBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileBertModel`] or a [`TFMobileBertModel`]. It
     is used to instantiate a MobileBERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the MobileBert
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the MobileBERT
     [google/mobilebert-uncased](https://huggingface.co/google/mobilebert-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
