@@ -1,38 +1,35 @@
 import json
 import os
-import torch
+import struct
+from functools import lru_cache
+from itertools import accumulate
 
 import numpy as np
-from itertools import accumulate
-from functools import lru_cache
-import struct
+import torch
+
 
 def read_longs(f, n):
     a = np.empty(n, dtype=np.int64)
     f.readinto(a)
     return a
 
-dtypes = {
-    1: np.uint8,
-    2: np.int8,
-    3: np.int16,
-    4: np.int32,
-    5: np.int64,
-    6: np.float,
-    7: np.double,
-    8: np.uint16
-}
+
+dtypes = {1: np.uint8, 2: np.int8, 3: np.int16, 4: np.int32, 5: np.int64, 6: np.float, 7: np.double, 8: np.uint16}
+
 
 def index_file_path(prefix_path):
-    return prefix_path + '.idx'
+    return prefix_path + ".idx"
+
 
 def _warmup_mmap_file(path):
-    with open(path, 'rb') as stream:
+    with open(path, "rb") as stream:
         while stream.read(100 * 1024 * 1024):
             pass
 
+
 def data_file_path(prefix_path):
-    return prefix_path + '.bin'
+    return prefix_path + ".bin"
+
 
 def print_rank_0(message):
     """If distributed is initialized, print only on rank 0."""
@@ -41,6 +38,7 @@ def print_rank_0(message):
             print(message, flush=True)
     else:
         print(message, flush=True)
+
 
 def exscan_from_cumsum_(arr):
     # given an array holding the result of an inclusive scan (cumsum),
@@ -73,15 +71,17 @@ def get_pointers_with_total(sizes, elemsize, dtype):
 
     return pointers, bytes_last
 
+
 def code(dtype):
     for k in dtypes.keys():
         if dtypes[k] == dtype:
             return k
     raise ValueError(dtype)
 
+
 class MMapIndexedDataset(torch.utils.data.Dataset):
     class Index(object):
-        _HDR_MAGIC = b'MMIDIDX\x00\x00'
+        _HDR_MAGIC = b"MMIDIDX\x00\x00"
 
         @staticmethod
         def write_header(fout, dtype, numsizes, numdocs):
@@ -89,10 +89,10 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             startpos = fout.tell()
 
             fout.write(MMapIndexedDataset.Index._HDR_MAGIC)
-            fout.write(struct.pack('<Q', 1))
-            fout.write(struct.pack('<B', code(dtype)))
-            fout.write(struct.pack('<Q', numsizes))
-            fout.write(struct.pack('<Q', numdocs))
+            fout.write(struct.pack("<Q", 1))
+            fout.write(struct.pack("<B", code(dtype)))
+            fout.write(struct.pack("<Q", numsizes))
+            fout.write(struct.pack("<Q", numdocs))
 
             endpos = fout.tell()
             return endpos - startpos
@@ -101,7 +101,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         def writer(cls, path, dtype):
             class _Writer(object):
                 def __enter__(self):
-                    self._file = open(path, 'wb')
+                    self._file = open(path, "wb")
                     return self
 
                 @staticmethod
@@ -120,15 +120,15 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     MMapIndexedDataset.Index.write_header(self._file, dtype, len(sizes), len(doc_idx))
 
                     sizes32 = np.array(sizes, dtype=np.int32)
-                    self._file.write(sizes32.tobytes(order='C'))
+                    self._file.write(sizes32.tobytes(order="C"))
                     del sizes32
 
                     pointers = self._get_pointers(sizes, np.int64)
-                    self._file.write(pointers.tobytes(order='C'))
+                    self._file.write(pointers.tobytes(order="C"))
                     del pointers
 
                     doc_idx = np.array(doc_idx, dtype=np.int64)
-                    self._file.write(doc_idx.tobytes(order='C'))
+                    self._file.write(doc_idx.tobytes(order="C"))
 
                 def __exit__(self, exc_type, exc_val, exc_tb):
                     self._file.close()
@@ -136,41 +136,42 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             return _Writer()
 
         def __init__(self, path, skip_warmup=False):
-            with open(path, 'rb') as stream:
+            with open(path, "rb") as stream:
                 magic_test = stream.read(9)
                 assert self._HDR_MAGIC == magic_test, (
-                    'Index file doesn\'t match expected format. '
-                    'Make sure that --dataset-impl is configured properly.'
+                    "Index file doesn't match expected format. "
+                    "Make sure that --dataset-impl is configured properly."
                 )
-                version = struct.unpack('<Q', stream.read(8))
+                version = struct.unpack("<Q", stream.read(8))
                 assert (1,) == version
 
-                dtype_code, = struct.unpack('<B', stream.read(1))
+                (dtype_code,) = struct.unpack("<B", stream.read(1))
                 self._dtype = dtypes[dtype_code]
                 self._dtype_size = self._dtype().itemsize
 
-                self._len = struct.unpack('<Q', stream.read(8))[0]
-                self._doc_count = struct.unpack('<Q', stream.read(8))[0]
+                self._len = struct.unpack("<Q", stream.read(8))[0]
+                self._doc_count = struct.unpack("<Q", stream.read(8))[0]
                 offset = stream.tell()
 
             if not skip_warmup:
                 print_rank_0("    warming up index mmap file...")
                 _warmup_mmap_file(path)
 
-            self._bin_buffer_mmap = np.memmap(path, mode='r', order='C')
+            self._bin_buffer_mmap = np.memmap(path, mode="r", order="C")
             self._bin_buffer = memoryview(self._bin_buffer_mmap)
             print_rank_0("    reading sizes...")
-            self._sizes = np.frombuffer(
-                self._bin_buffer,
-                dtype=np.int32,
-                count=self._len,
-                offset=offset)
+            self._sizes = np.frombuffer(self._bin_buffer, dtype=np.int32, count=self._len, offset=offset)
             print_rank_0("    reading pointers...")
-            self._pointers = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._len,
-                                           offset=offset + self._sizes.nbytes)
+            self._pointers = np.frombuffer(
+                self._bin_buffer, dtype=np.int64, count=self._len, offset=offset + self._sizes.nbytes
+            )
             print_rank_0("    reading document index...")
-            self._doc_idx = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._doc_count,
-                                          offset=offset + self._sizes.nbytes + self._pointers.nbytes)
+            self._doc_idx = np.frombuffer(
+                self._bin_buffer,
+                dtype=np.int64,
+                count=self._doc_count,
+                offset=offset + self._sizes.nbytes + self._pointers.nbytes,
+            )
 
         def __del__(self):
             self._bin_buffer_mmap._mmap.close()
@@ -218,7 +219,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             print_rank_0("    warming up data mmap file...")
             _warmup_mmap_file(data_file_path(self._path))
         print_rank_0("    creating numpy buffer of mmap...")
-        self._bin_buffer_mmap = np.memmap(data_file_path(self._path), mode='r', order='C')
+        self._bin_buffer_mmap = np.memmap(data_file_path(self._path), mode="r", order="C")
         print_rank_0("    creating memory view of numpy buffer...")
         self._bin_buffer = memoryview(self._bin_buffer_mmap)
 
@@ -234,8 +235,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         if isinstance(idx, int):
             ptr, size = self._index[idx]
-            np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype,
-                                     count=size, offset=ptr)
+            np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype, count=size, offset=ptr)
             return np_array
         elif isinstance(idx, slice):
             start, stop, step = idx.indices(len(self))
@@ -245,13 +245,12 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             sizes = self._index._sizes[idx]
             offsets = list(accumulate(sizes))
             total_size = sum(sizes)
-            np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype,
-                                     count=total_size, offset=ptr)
+            np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype, count=total_size, offset=ptr)
             sents = np.split(np_array, offsets[:-1])
             return sents
 
     def get(self, idx, offset=0, length=None):
-        """ Retrieves a single item from the dataset with the option to only
+        """Retrieves a single item from the dataset with the option to only
         return a portion of the item.
 
         get(idx) is the same as [idx] but get() does not support slicing.
@@ -260,8 +259,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         if length is None:
             length = size - offset
         ptr += offset * np.dtype(self._index.dtype).itemsize
-        np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype,
-                                 count=length, offset=ptr)
+        np_array = np.frombuffer(self._bin_buffer, dtype=self._index.dtype, count=length, offset=ptr)
         return np_array
 
     @property
@@ -284,9 +282,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def exists(path):
-        return (
-            os.path.exists(index_file_path(path)) and os.path.exists(data_file_path(path))
-        )
+        return os.path.exists(index_file_path(path)) and os.path.exists(data_file_path(path))
 
     @property
     def dtype(self):

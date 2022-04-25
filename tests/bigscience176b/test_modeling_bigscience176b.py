@@ -94,9 +94,7 @@ class BigScience176BModelTester:
     def get_large_model_config(self):
         return BigScience176BConfig.from_pretrained("bigscience176b")
 
-    def prepare_config_and_inputs(
-        self, gradient_checkpointing=False
-    ):
+    def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -113,9 +111,7 @@ class BigScience176BModelTester:
             input_mask,
         )
 
-    def get_config(
-        self, gradient_checkpointing=False
-    ):
+    def get_config(self, gradient_checkpointing=False):
         return BigScience176BConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
@@ -168,9 +164,7 @@ class BigScience176BModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -180,9 +174,7 @@ class BigScience176BModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bigscience176b_model_attention_mask_past(
-        self, config, input_ids, input_mask, *args
-    ):
+    def create_and_check_bigscience176b_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BigScience176BModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -222,9 +214,7 @@ class BigScience176BModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bigscience176b_model_past_large_inputs(
-        self, config, input_ids, input_mask, *args
-    ):
+    def create_and_check_bigscience176b_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BigScience176BModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -242,12 +232,10 @@ class BigScience176BModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(
-            next_input_ids, attention_mask=next_attention_mask
-        )["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, attention_mask=next_attention_mask, past_key_values=past
-        )["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
+            "last_hidden_state"
+        ]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -307,11 +295,7 @@ class BigScience176BModelTester:
 @require_torch
 class BigScience176BModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (BigScience176BModel, BigScience176BLMHeadModel)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (BigScience176BModel, BigScience176BLMHeadModel) if is_torch_available() else ()
     all_generative_model_classes = (BigScience176BLMHeadModel,) if is_torch_available() else ()
     all_parallelizable_model_classes = (BigScience176BLMHeadModel,) if is_torch_available() else ()
     fx_compatible = False

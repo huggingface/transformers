@@ -222,7 +222,9 @@ class BigScience176BAttention(nn.Module):
         #     aggregated_tensors.append(torch.nn.Softmax(dim=-1)(mask_output))
 
         # attention_probs = torch.cat(aggregated_tensors, dim=1)
-        mask_output = self.mask_func(attention_scores, attention_mask) if attention_mask is not None else attention_scores
+        mask_output = (
+            self.mask_func(attention_scores, attention_mask) if attention_mask is not None else attention_scores
+        )
         attention_probs = torch.nn.Softmax(dim=-1)(mask_output)
         attention_probs = self.attention_dropout(attention_probs)
 
@@ -644,9 +646,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         self.word_embeddings_layernorm = nn.LayerNorm(self.embed_dim, dtype=dtype, eps=config.layer_norm_epsilon)
 
         # Transformer blocks
-        self.h = nn.ModuleList(
-            [BigScience176BBlock(config, layer_number=i) for i in range(config.num_hidden_layers)]
-        )
+        self.h = nn.ModuleList([BigScience176BBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon, dtype=dtype)

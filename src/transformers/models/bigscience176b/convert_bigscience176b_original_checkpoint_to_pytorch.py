@@ -16,10 +16,10 @@
 
 
 import argparse
-
-import torch
 import os
 import re
+
+import torch
 
 from transformers import BigScience176BConfig, BigScience176BModel
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
@@ -29,16 +29,16 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 WEIGHTS_TO_AVERAGE_ENDSWITH = [
-        "word_embeddings_layernorm.weight",  # "word_embeddings.norm.weight",
-        "word_embeddings_layernorm.bias",  # "word_embeddings.norm.bias",
-        "input_layernorm.weight",
-        "input_layernorm.bias",
-        "post_attention_layernorm.weight",
-        "post_attention_layernorm.bias",
-        "self_attention.dense.bias",
-        "mlp.dense_4h_to_h.bias",
-        "ln_f.weight",
-        "ln_f.bias"
+    "word_embeddings_layernorm.weight",  # "word_embeddings.norm.weight",
+    "word_embeddings_layernorm.bias",  # "word_embeddings.norm.bias",
+    "input_layernorm.weight",
+    "input_layernorm.bias",
+    "post_attention_layernorm.weight",
+    "post_attention_layernorm.bias",
+    "self_attention.dense.bias",
+    "mlp.dense_4h_to_h.bias",
+    "ln_f.weight",
+    "ln_f.bias",
 ]
 
 WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
@@ -46,8 +46,9 @@ WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
     "self_attention.dense.weight",
 ]
 
+
 def layer_name_mapping(key, file):
-    """ Convert Megatron-DeepSpeed TP/PP weights mapping in transformers PP only"""
+    """Convert Megatron-DeepSpeed TP/PP weights mapping in transformers PP only"""
     # Handle first and last layers
     if key == "word_embeddings.weight":
         return key
@@ -61,12 +62,14 @@ def layer_name_mapping(key, file):
         return "ln_f.bias"
 
     # Handle transformer blocks
-    layer_number = int(re.match(r'.*layer_(\d*).*', file)[1])
+    layer_number = int(re.match(r".*layer_(\d*).*", file)[1])
     layer_number -= 3
-    return f'h.{layer_number}.' + key
+    return f"h.{layer_number}." + key
 
 
-def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path, bigscience176b_config_file, pytorch_dump_folder_path):
+def convert_bigscience176b_checkpoint_to_pytorch(
+    bigscience176b_checkpoint_path, bigscience176b_config_file, pytorch_dump_folder_path
+):
     # Construct model
     if bigscience176b_config_file == "":
         config = BigScience176BConfig()
@@ -76,15 +79,15 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
     print(model.state_dict().keys())
 
     file_names = os.listdir(bigscience176b_checkpoint_path)
-    file_names = list(sorted(filter(lambda s: s.startswith('layer') and 'model_00' in s, file_names)))
+    file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
 
     missing_keys = None
     for file in file_names:
         tensors = None
         for i in range(config.pretraining_tp):
             # load all TP files
-            f_name = file.replace('model_00', f'model_0{i}')
-            temp = torch.load(os.path.join(bigscience176b_checkpoint_path, f_name), map_location='cpu')
+            f_name = file.replace("model_00", f"model_0{i}")
+            temp = torch.load(os.path.join(bigscience176b_checkpoint_path, f_name), map_location="cpu")
 
             # Rename keys in the transformers names
             keys = list(temp.keys())
@@ -96,15 +99,21 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
             else:
                 for key in tensors.keys():
                     if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
-                        tensors[key] += temp[key]  # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
+                        tensors[key] += temp[
+                            key
+                        ]  # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                     else:
-                        cat_dim = 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0  # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
-                        tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)  # We concatenate these weights accross TP ranks
+                        cat_dim = (
+                            1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
+                        )  # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
+                        tensors[key] = torch.cat(
+                            [tensors[key], temp[key]], dim=cat_dim
+                        )  # We concatenate these weights accross TP ranks
 
         # Divide by the number of TP the weights we want to average
         for key in tensors.keys():
             if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
-                tensors[key] = tensors[key]/config.pretraining_tp
+                tensors[key] = tensors[key] / config.pretraining_tp
 
         other_keys = model.load_state_dict(tensors, strict=False)
         assert not other_keys.unexpected_keys
@@ -114,8 +123,6 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
             missing_keys = missing_keys.intersection(set(other_keys.missing_keys))
 
     assert not missing_keys
-
-
 
     # Save pytorch-model
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
@@ -132,7 +139,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--bigscience176b_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--bigscience176b_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
@@ -145,4 +156,6 @@ if __name__ == "__main__":
         "This specifies the model architecture.",
     )
     args = parser.parse_args()
-    convert_bigscience176b_checkpoint_to_pytorch(args.bigscience176b_checkpoint_path, args.bigscience176b_config_file, args.pytorch_dump_folder_path)
+    convert_bigscience176b_checkpoint_to_pytorch(
+        args.bigscience176b_checkpoint_path, args.bigscience176b_config_file, args.pytorch_dump_folder_path
+    )

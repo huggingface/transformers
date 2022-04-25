@@ -22,7 +22,11 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 
 
 _import_structure = {
-    "configuration_bigscience176b": ["BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigScience176BConfig", "BigScience176BOnnxConfig"],
+    "configuration_bigscience176b": [
+        "BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigScience176BConfig",
+        "BigScience176BOnnxConfig",
+    ],
     "tokenization_bigscience176b": ["BigScience176BTokenizer"],
 }
 
@@ -41,7 +45,11 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bigscience176b import BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP, BigScience176BConfig, BigScience176BOnnxConfig
+    from .configuration_bigscience176b import (
+        BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BigScience176BConfig,
+        BigScience176BOnnxConfig,
+    )
     from .tokenization_bigscience176b import BigScience176BTokenizer
 
     if is_tokenizers_available():
