@@ -689,6 +689,8 @@ class Transformer(torch.nn.Module):
                     # None for past_key_value
                     return module(*inputs)
 
+                return custom_forward
+
             if self.relative_encoding:
                 args += [position_embeddings, self.r_w_bias, self.r_r_bias]
             mem_i = memory_states[i] if (memory_states and len(memory_states) > i) else None
