@@ -89,7 +89,7 @@ wandb login
 Note that during the `accelerate` configuration we enabled FP16. Then to train the large model you can run
 
 ```bash
-python scripts/codeparrot_training.py
+accelerate launch scripts/codeparrot_training.py
 ```
 
 If you want to train the small model you need to make some modifications:
