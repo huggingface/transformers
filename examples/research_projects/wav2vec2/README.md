@@ -221,7 +221,7 @@ PYTHONPATH=../../../src deepspeed --num_gpus 4 run_pretrain.py \
 ### Forced Alignment
 
 Character level forced alignment for audio and text pairs with wav2vec2 models finetuned on ASR task for a specific language.
-Inspired from [this](https://pytorch.org/tutorials/intermediate/forced_alignment_with_torchaudio_tutorial.html) Pytorch tutorial.
+Inspired by [this](https://pytorch.org/tutorials/intermediate/forced_alignment_with_torchaudio_tutorial.html) Pytorch tutorial.
 
 #### Input Formats
 
@@ -245,5 +245,5 @@ python alignment.py  \
 --text_file="script.txt" \
 --input_wavs_sr=48000 \
 --output_dir="./out_alignment" \
---cuda \
+--cuda
 ```
