@@ -85,6 +85,7 @@ from .import_utils import (
     DummyObject,
     _LazyModule,
     is_apex_available,
+    is_ipex_available,
     is_bitsandbytes_available,
     is_coloredlogs_available,
     is_datasets_available,
