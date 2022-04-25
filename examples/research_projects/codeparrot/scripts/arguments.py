@@ -53,9 +53,7 @@ class TrainingArguments:
         default=None,
         metadata={"help": "States path if the training should continue from a checkpoint folder."},
     )
-    tokenized: Optional[bool] = field(
-        default=False, metadata={"help": "If True the data is pretokenized."}
-    )
+    tokenized: Optional[bool] = field(default=False, metadata={"help": "If True the data is pretokenized."})
 
 
 @dataclass
@@ -174,12 +172,13 @@ class TokenizerTrainingArguments:
     tokenizer_name: Optional[str] = field(default="codeparrot", metadata={"help": "Name of new tokenizer."})
     push_to_hub: Optional[bool] = field(default=True, metadata={"help": "Push saved tokenizer to the hub."})
 
-    
+
 @dataclass
 class PretokenizationArguments:
     """
     Configuration for data pretokenization.
     """
+
     tokenizer_dir: Optional[str] = field(
         default="lvwerra/codeparrot",
         metadata={"help": "Name or path to the tokenizer."},
@@ -187,9 +186,12 @@ class PretokenizationArguments:
     dataset_name: Optional[str] = field(
         default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path to the dataset to pretokenize."}
     )
-    tokenized_data_repo: Optional[str] = field(default="lvwerra/tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."})
+    tokenized_data_repo: Optional[str] = field(
+        default="lvwerra/tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."}
+    )
     num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
-    
+
+
 @dataclass
 class InitializationArguments:
     """

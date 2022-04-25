@@ -16,6 +16,7 @@ from arguments import TrainingArguments
 from huggingface_hub import Repository
 from transformers import AdamW, AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
 
+
 class ConstantLengthDataset(IterableDataset):
     """
     Iterable dataset that returns constant length chunks of tokens from stream of text files.
@@ -28,8 +29,16 @@ class ConstantLengthDataset(IterableDataset):
             chars_per_token: Number of characters per token used to estimate number of tokens in text buffer.
             tokenized: If true we use a pretokenized dataset.
     """
+
     def __init__(
-        self, tokenizer, dataset, infinite=False, seq_length=1024, num_of_sequences=1024, chars_per_token=3.6, tokenized=False
+        self,
+        tokenizer,
+        dataset,
+        infinite=False,
+        seq_length=1024,
+        num_of_sequences=1024,
+        chars_per_token=3.6,
+        tokenized=False,
     ):
         self.tokenizer = tokenizer
         self.concat_token_id = tokenizer.bos_token_id
@@ -39,7 +48,7 @@ class ConstantLengthDataset(IterableDataset):
         self.infinite = infinite
         self.current_size = 0
         self.tokenized = tokenized
-        
+
         if self.tokenized:
             self.max_buffer_size = seq_length * num_of_sequences
             self.content_field = "input_ids"
@@ -111,8 +120,12 @@ def create_dataloaders(args):
     train_data = load_dataset(args.dataset_name_train, split="train", **ds_kwargs)
     train_data = train_data.shuffle(buffer_size=args.shuffle_buffer, seed=args.seed)
     valid_data = load_dataset(args.dataset_name_valid, split="train", **ds_kwargs)
-    train_dataset = ConstantLengthDataset(tokenizer, train_data, infinite=True, seq_length=args.seq_length, tokenized=args.tokenized)
-    valid_dataset = ConstantLengthDataset(tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized)
+    train_dataset = ConstantLengthDataset(
+        tokenizer, train_data, infinite=True, seq_length=args.seq_length, tokenized=args.tokenized
+    )
+    valid_dataset = ConstantLengthDataset(
+        tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
+    )
     train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
