@@ -159,7 +159,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=BertOnnxConfig,
         ),
-        "bigbird": supported_features_mapping(
+        "big-bird": supported_features_mapping(
             "default",
             "masked-lm",
             "causal-lm",

@@ -172,7 +172,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 PYTORCH_EXPORT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
-    ("bigbird", "google/bigbird-roberta-base"),
+    ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("convbert", "YituTech/conv-bert-base"),
