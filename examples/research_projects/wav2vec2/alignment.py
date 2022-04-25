@@ -1,5 +1,5 @@
-# The code is inspired from the pytorch tutorial on doing force alignment with wav2vec models
-# The Full tutorial can be found here: https://pytorch.org/audio/stable/tutorials/forced_alignment_tutorial.html
+# Parts of the code are adapted from the snippets provided in the TorchAudio Wav2Vec forced alignment tutorial.
+# The full tutorial can be found here: https://pytorch.org/audio/stable/tutorials/forced_alignment_tutorial.html
 
 import argparse
 import os
@@ -9,11 +9,10 @@ import torch
 import torchaudio
 from tqdm import tqdm
 
-import transformers
 from transformers import AutoConfig, AutoModelForCTC, AutoProcessor
 
 
-class Wav2Vec2_Aligner:
+class Wav2Vec2Aligner:
     def __init__(self, model_name, input_wavs_sr, cuda):
         self.cuda = cuda
         self.config = AutoConfig.from_pretrained(model_name)
@@ -50,14 +49,14 @@ class Wav2Vec2_Aligner:
         with torch.no_grad():
             logits = self.model(inputs.input_values).logits
 
-        # get emission probablity at frame level
+        # get the emission probability at frame level
         emissions = torch.log_softmax(logits, dim=-1)
         emission = emissions[0].cpu().detach()
 
         # get labels from vocab
         labels = ([""] + list(self.processor.tokenizer.get_vocab().keys()))[
             :-1
-        ]  # logits doesnt align with tokenizer vocab
+        ]  # logits don't align with the tokenizer's vocab
 
         dictionary = {c: i for i, c in enumerate(labels)}
         tokens = []
@@ -66,15 +65,19 @@ class Wav2Vec2_Aligner:
                 tokens.append(dictionary[c])
 
         def get_trellis(emission, tokens, blank_id=0):
-            num_frame = emission.size(0)
+            """
+            Build a trellis matrix of shape (num_frames + 1, num_tokens + 1)
+            that represents the probabilities of each source token being at a certain time step
+            """
+            num_frames = emission.size(0)
             num_tokens = len(tokens)
 
             # Trellis has extra diemsions for both time axis and tokens.
             # The extra dim for tokens represents <SoS> (start-of-sentence)
             # The extra dim for time axis is for simplification of the code.
-            trellis = torch.full((num_frame + 1, num_tokens + 1), -float("inf"))
+            trellis = torch.full((num_frames + 1, num_tokens + 1), -float("inf"))
             trellis[:, 0] = 0
-            for t in range(num_frame):
+            for t in range(num_frames):
                 trellis[t + 1, 1:] = torch.maximum(
                     # Score for staying at the same token
                     trellis[t, 1:] + emission[t, blank_id],
@@ -92,6 +95,9 @@ class Wav2Vec2_Aligner:
             score: float
 
         def backtrack(trellis, emission, tokens, blank_id=0):
+            """
+            Walk backwards from the last (sentence_token, time_step) pair to build the optimal sequence alignment path
+            """
             # Note:
             # j and t are indices for trellis, which has extra dimensions
             # for time and tokens at the beginning.
@@ -143,6 +149,10 @@ class Wav2Vec2_Aligner:
                 return self.end - self.start
 
         def merge_repeats(path):
+            """
+            Merge repeated tokens into a single segment. Note: this shouldn't affect repeated characters from the
+            original sentences (e.g. `ll` in `hello`)
+            """
             i1, i2 = 0, 0
             segments = []
             while i1 < len(path):
@@ -150,7 +160,12 @@ class Wav2Vec2_Aligner:
                     i2 += 1
                 score = sum(path[k].score for k in range(i1, i2)) / (i2 - i1)
                 segments.append(
-                    Segment(transcript[path[i1].token_index], path[i1].time_index, path[i2 - 1].time_index + 1, score,)
+                    Segment(
+                        transcript[path[i1].token_index],
+                        path[i1].time_index,
+                        path[i2 - 1].time_index + 1,
+                        score,
+                    )
                 )
                 i1 = i2
             return segments
@@ -181,8 +196,8 @@ class Wav2Vec2_Aligner:
             items.append({"sent": sentence, "wav_path": wav_path, "out_path": out_path})
         print("Number of samples found in script file", len(items))
 
-        for it in tqdm(items):
-            self.align_single_sample(it)
+        for item in tqdm(items):
+            self.align_single_sample(item)
 
 
 def main():
@@ -201,7 +216,7 @@ def main():
 
     args = parser.parse_args()
 
-    aligner = Wav2Vec2_Aligner(args.model_name, args.input_wavs_sr, args.cuda)
+    aligner = Wav2Vec2Aligner(args.model_name, args.input_wavs_sr, args.cuda)
     aligner.align_data(args.wav_dir, args.text_file, args.output_dir)
 
 

@@ -5,4 +5,4 @@ python alignment.py  \
 --text_file="script.txt" \
 --input_wavs_sr=48000 \
 --output_dir="./out_alignment" \
---cuda \
+--cuda
