@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import GPT2Config, is_tf_available
-from transformers.testing_utils import get_gpu_count, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -536,8 +536,6 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
-    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_lm_generate_gpt2_greedy_xla(self):
         # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
         # the underlying problem)
@@ -563,30 +561,33 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_strings)
 
     @slow
-    @unittest.skipIf(not get_gpu_count(), "XLA not reliable on CPU")
-    # TODO: remove the skip when the XLA CPU softmax issue gets sorted
     def test_lm_generate_gpt2_sample_xla(self):
         # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
         # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
         # and that we can seed both versions.
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+            tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        sentence = ["The dog"]
-        expected_output_string = [
-            "The dog must be well educated to do anything. If anything, this must be her best friend"
-        ]
-        expected_output_string_xla = ["The dog has been named in connection with the murder of a 20-year-old man in!"]
-        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.padding_side = "left"
 
-        output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
-        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        self.assertListEqual(output_strings, expected_output_string)
+            sentence = ["The dog"]
+            expected_output_string = [
+                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most puppies"
+            ]
+            expected_output_string_xla = [
+                "The dog has been named in connection with the murder of a 20-year-old man in!"
+            ]
+            input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
 
-        xla_generate = tf.function(model.generate, jit_compile=True)
-        output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
-        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        self.assertListEqual(output_strings, expected_output_string_xla)
+            output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(output_strings, expected_output_string)
+
+            xla_generate = tf.function(model.generate, jit_compile=True)
+            output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(output_strings, expected_output_string_xla)
