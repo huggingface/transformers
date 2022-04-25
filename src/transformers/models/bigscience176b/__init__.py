@@ -36,9 +36,6 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_bigscience176b"] = [
         "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BigScience176BDoubleHeadsModel",
-        "BigScience176BForSequenceClassification",
-        "BigScience176BForTokenClassification",
         "BigScience176BLMHeadModel",
         "BigScience176BModel",
         "BigScience176BPreTrainedModel",
@@ -58,9 +55,6 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_bigscience176b import (
             BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigScience176BDoubleHeadsModel,
-            BigScience176BForSequenceClassification,
-            BigScience176BForTokenClassification,
             BigScience176BLMHeadModel,
             BigScience176BModel,
             BigScience176BPreTrainedModel,

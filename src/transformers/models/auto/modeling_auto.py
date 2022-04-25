@@ -470,7 +470,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForSequenceClassification"),
         ("deberta-v2", "DebertaV2ForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
-        ("bigscience176b", "BigScience176BForSequenceClassification"),
         ("gpt_neo", "GPTNeoForSequenceClassification"),
         ("openai-gpt", "OpenAIGPTForSequenceClassification"),
         ("reformer", "ReformerForSequenceClassification"),
@@ -568,7 +567,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForTokenClassification"),
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
-        ("bigscience176b", "BigScience176BForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
         ("data2vec-text", "Data2VecTextForTokenClassification"),
     ]

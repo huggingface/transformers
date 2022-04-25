@@ -843,9 +843,6 @@ else:
     _import_structure["models.bigscience176b"].extend(
         [
             "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BigScience176BDoubleHeadsModel",
-            "BigScience176BForSequenceClassification",
-            "BigScience176BForTokenClassification",
             "BigScience176BLMHeadModel",
             "BigScience176BModel",
             "BigScience176BPreTrainedModel",
@@ -1900,8 +1897,6 @@ else:
     _import_structure["models.bigscience176b"].extend(
         [
             "TF_BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFBigScience176BDoubleHeadsModel",
-            "TFBigScience176BForSequenceClassification",
             "TFBigScience176BLMHeadModel",
             "TFBigScience176BMainLayer",
             "TFBigScience176BModel",
@@ -3275,9 +3270,6 @@ if TYPE_CHECKING:
         )
         from .models.bigscience176b import (
             BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigScience176BDoubleHeadsModel,
-            BigScience176BForSequenceClassification,
-            BigScience176BForTokenClassification,
             BigScience176BLMHeadModel,
             BigScience176BModel,
             BigScience176BPreTrainedModel,
