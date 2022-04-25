@@ -302,6 +302,14 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.emformer": [
+        "EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "EmformerConfig",
+       
+       
+       
+        "EmformerTokenizer",
+    ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.wavlm": [
@@ -1588,6 +1596,19 @@ if is_torch_available():
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.emformer"].extend(
+        [
+            "EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EmformerForAudioFrameClassification",
+            "EmformerForCTC",
+            "EmformerForMaskedLM",
+            "EmformerForPreTraining",
+            "EmformerForSequenceClassification",
+            "EmformerForXVector",
+            "EmformerModel",
+            "EmformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2162,6 +2183,14 @@ if is_tf_available():
             "TFWav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.emformer"].extend(
+        [
+            "TF_EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFEmformerForCTC",
+            "TFEmformerModel",
+            "TFEmformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2414,6 +2443,9 @@ if is_flax_available():
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
+    )
+    _import_structure["models.emformer"].extend(
+        ["FlaxEmformerForCTC", "FlaxEmformerForPreTraining", "FlaxEmformerModel", "FlaxEmformerPreTrainedModel"]
     )
     _import_structure["models.xglm"].extend(
         [
@@ -2668,6 +2700,14 @@ if TYPE_CHECKING:
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
+    )
+    from .models.emformer import (
+        EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EmformerConfig,
+       
+       
+       
+        EmformerTokenizer,
     )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
@@ -3745,6 +3785,17 @@ if TYPE_CHECKING:
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
+        from .models.emformer import (
+            EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EmformerForAudioFrameClassification,
+            EmformerForCTC,
+            EmformerForMaskedLM,
+            EmformerForPreTraining,
+            EmformerForSequenceClassification,
+            EmformerForXVector,
+            EmformerModel,
+            EmformerPreTrainedModel,
+        )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             WavLMForAudioFrameClassification,
@@ -4207,6 +4258,12 @@ if TYPE_CHECKING:
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
         )
+        from .models.emformer import (
+            TF_EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFEmformerForCTC,
+            TFEmformerModel,
+            TFEmformerPreTrainedModel,
+        )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
@@ -4415,6 +4472,12 @@ if TYPE_CHECKING:
             FlaxWav2Vec2ForPreTraining,
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
+        )
+        from .models.emformer import (
+            FlaxEmformerForCTC,
+            FlaxEmformerForPreTraining,
+            FlaxEmformerModel,
+            FlaxEmformerPreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (

@@ -44,6 +44,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("emformer", "EmformerFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),

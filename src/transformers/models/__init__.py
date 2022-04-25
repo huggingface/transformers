@@ -126,6 +126,7 @@ from . import (
     vit,
     vit_mae,
     wav2vec2,
+    emformer,
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,
