@@ -65,4 +65,6 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
         `tf.Tensor`:
             A Tensor. Has the same type and shape as logits.
     """
+    # TODO: When the issue linked above gets sorted, add a check on TF version here and use the original function if
+    # it has the fix. After we drop the support for unfixed versions, remove this function.
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
