@@ -2,8 +2,6 @@ import json
 import os
 import unittest
 
-import numpy as np
-import torch
 from datasets import load_dataset
 
 from transformers import AutoTokenizer
@@ -58,7 +56,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         """
         try:
             _ = AutoTokenizer.from_pretrained(self.path_tokenizer)
-        except:
+        except BaseException:
             self.fail("Failed loading tokenizer")
 
     @unittest.skipUnless(local_tokenizer_exists, "requires tokenizer stored in the local machine!")
@@ -68,7 +66,7 @@ class BigScienceTokenizationTest(unittest.TestCase):
         """
         try:
             _ = AutoTokenizer.from_pretrained(self.path_local_tokenizer)
-        except:
+        except BaseException:
             self.fail("Failed loading tokenizer")
 
     @unittest.skipUnless(file_exists, "requires data stored in the local machine!")

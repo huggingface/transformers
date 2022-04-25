@@ -1,10 +1,6 @@
-import json
-import os
 import unittest
 
-import numpy as np
 import torch
-from datasets import load_dataset
 
 from transformers import AutoModel, AutoTokenizer
 from transformers.models.bigscience176b import BigScience176BLMHeadModel
@@ -43,7 +39,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # TODO load the model (.bin file)
         try:
             _ = AutoModel.from_pretrained(self.path_bigscience_model)
-        except:
+        except BaseException:
             self.fail("Failed loading the model")
         # pass
 

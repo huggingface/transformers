@@ -33,60 +33,60 @@ BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BigScience176BConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`BigScience176BModel`] or a
-    [`TFBigScience176BModel`]. It is used to instantiate a GPT-2 model according to the specified arguments, defining
+    This is the configuration class to store the configuration of a [*BigScience176BModel*] or a
+    [*TFBigScience176BModel*]. It is used to instantiate a GPT-2 model according to the specified arguments, defining
     the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the GPT-2 [small](https://huggingface.co/bigscience176b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
+    documentation from [*PretrainedConfig*] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
+        vocab_size (*int*, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BigScience176BModel`] or [`TFBigScience176BModel`].
-        seq_length (`int`, *optional*, defaults to 1024):
+            *inputs_ids* passed when calling [*BigScience176BModel*] or [*TFBigScience176BModel*].
+        seq_length (*int*, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (*int*, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (*int*, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (*int*, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times hidden_size
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
+        n_inner (*int*, *optional*, defaults to None):
+            Dimensionality of the inner feed-forward layers. *None* will set it to 4 times hidden_size
+        activation_function (*str*, *optional*, defaults to *"gelu"*):
+            Activation function, to be selected in the list *["relu", "silu", "gelu", "tanh", "gelu_new"]*.
+        resid_pdrop (*float*, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
+        embd_pdrop (*int*, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
+        attn_pdrop (*float*, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (*float*, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (*float*, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
+        apply_residual_connection_post_layernorm (*bool*, *optional*, defaults to *False*):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
-        bias_dropout_fusion (`bool`, *optional*, defaults to `True`):
+        bias_dropout_fusion (*bool*, *optional*, defaults to *True*):
             If enabled, apply dropout when adding the attention output together with the attention bias in the
             transformer blocks
-        skip_bias_add (`bool`, *optional*, defaults to `True`):
-            If set to ``True``, it will skip bias add for each linear layer in the transformer blocks
-        hidden_dropout (`float`, *optional*, defaults to 0.1):
-            Dropout rate of the dropout function in `bias_dropout_fusion`
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        skip_bias_add (*bool*, *optional*, defaults to *True*):
+            If set to `True`, it will skip bias add for each linear layer in the transformer blocks
+        hidden_dropout (*float*, *optional*, defaults to 0.1):
+            Dropout rate of the dropout function in *bias_dropout_fusion*
+        attention_dropout (*float*, *optional*, defaults to 0.1):
             Dropout rate applied to the attention probs
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
+        scale_attn_weights (*bool*, *optional*, defaults to *True*):
             Scale attention weights by dividing by sqrt(hidden_size)..
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (*bool*, *optional*, defaults to *True*):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
+        scale_attn_by_inverse_layer_idx (*bool*, *optional*, defaults to *False*):
+            Whether to additionally scale attention weights by *1 / layer_idx + 1*.
+        reorder_and_upcast_attn (*bool*, *optional*, defaults to *False*):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
 

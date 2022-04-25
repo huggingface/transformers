@@ -21,14 +21,6 @@ torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
 
-###### BIAS GELU FUSION/ NO AUTOGRAD ################
-# 1/sqrt(2*pi)-> 0.3989423
-# 1/sqrt(2)   -> 0.70710678
-# sqrt(2/pi)  -> 0.79788456
-# this function is tanh approximation of gelu
-# actual gelu is:
-# x * 0.5 * (1.0 + torch.erf(x * 0.70710678))
-
 
 @torch.jit.script
 def bias_gelu(bias, y):

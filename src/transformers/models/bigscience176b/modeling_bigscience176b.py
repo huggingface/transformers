@@ -16,44 +16,29 @@
 """PyTorch BigScience176B model."""
 
 import math
-import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from packaging import version
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch import Tensor, nn
+from torch.nn import CrossEntropyLoss
 
-
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    is_amp_available = True
-    from torch.cuda.amp import autocast
-else:
-    is_amp_available = False
-
-from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
-from ...modeling_utils import Conv1D, PreTrainedModel, SequenceSummary
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import Conv1D, PreTrainedModel
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_bigscience176b import BigScience176BConfig
 from .fused_bias_gelu import bias_gelu_impl
 from .mpu_utils import split_tensor_along_last_dim
+
+
+# if version.parse(torch.__version__) >= version.parse("1.6"):
+#     is_amp_available = True
+#     from torch.cuda.amp import autocast
+# else:
+#     is_amp_available = False
 
 
 logger = logging.get_logger(__name__)
@@ -105,7 +90,6 @@ class BigScience176BAttention(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
 
-        max_positions = config.max_position_embeddings
         dtype = getattr(torch, config.dtype)
         self.pretraining_tp = config.pretraining_tp
 
@@ -731,10 +715,8 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
