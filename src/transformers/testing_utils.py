@@ -61,6 +61,7 @@ from .utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_sparse_available,
     is_tensorflow_probability_available,
     is_tf2onnx_available,
     is_tf_available,
@@ -303,6 +304,16 @@ def require_torch_scatter(test_case):
     return unittest.skipUnless(is_scatter_available(), "test requires PyTorch scatter")(test_case)
 
 
+def require_torch_sparse(test_case):
+    """
+    Decorator marking a test that requires PyTorch sparse.
+
+    These tests are skipped when PyTorch sparse isn't installed.
+
+    """
+    return unittest.skipUnless(is_sparse_available(), "test requires PyTorch sparse")(test_case)
+
+
 def require_tensorflow_probability(test_case):
     """
     Decorator marking a test that requires TensorFlow probability.
@@ -377,6 +388,13 @@ def require_scatter(test_case):
     installed.
     """
     return unittest.skipUnless(is_scatter_available(), "test requires PyTorch Scatter")(test_case)
+
+
+def require_sparse(test_case):
+    """
+    Decorator marking a test that requires PyTorch Sparse. These tests are skipped when PyTorch Sparse isn't installed.
+    """
+    return unittest.skipUnless(is_sparse_available(), "test requires PyTorch Sparse")(test_case)
 
 
 def require_pytorch_quantization(test_case):

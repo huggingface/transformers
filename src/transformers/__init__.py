@@ -46,7 +46,6 @@ from .utils import (
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 # Base objects, independent of any specific backend
 _import_structure = {
     "benchmark": [],
@@ -216,6 +215,10 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.greaselm": [
+        "GREASELM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GreaseLMConfig",
+    ],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -543,7 +546,6 @@ else:
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
@@ -658,7 +660,6 @@ else:
             "load_tf_weights_in_tapas",
         ]
     )
-
 
 # PyTorch-backed objects
 try:
@@ -1179,6 +1180,16 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.greaselm"].extend(
+        [
+            "GREASELM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GreaseLMForMultipleChoice",
+            "GreaseLMModel",
+            "GreaseLMPreTrainedModel",
+            "GreaseLMFeatureExtractor",
+            "GreaseLMProcessor",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -2417,7 +2428,6 @@ else:
     _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
-
 # FLAX-backed objects
 try:
     if not is_flax_available():
@@ -2663,7 +2673,6 @@ else:
         ]
     )
 
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -2824,6 +2833,7 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.greaselm import GREASELM_PRETRAINED_CONFIG_ARCHIVE_MAP, GreaseLMConfig
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -3644,6 +3654,14 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.greaselm import (
+            GREASELM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GreaseLMFeatureExtractor,
+            GreaseLMForMultipleChoice,
+            GreaseLMModel,
+            GreaseLMPreTrainedModel,
+            GreaseLMProcessor,
         )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4839,7 +4857,6 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
-
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
     logger.warning(

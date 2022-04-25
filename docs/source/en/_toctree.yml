@@ -236,6 +236,8 @@
       title: Funnel Transformer
     - local: model_doc/glpn
       title: GLPN
+    - local: model_doc/greaselm
+      title: GreaseLM
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/ibert

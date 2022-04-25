@@ -65,6 +65,7 @@ from . import (
     gpt_neo,
     gpt_neox,
     gptj,
+    greaselm,
     herbert,
     hubert,
     ibert,

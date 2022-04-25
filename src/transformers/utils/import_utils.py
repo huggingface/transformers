@@ -182,6 +182,14 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
+_sparse_available = importlib.util.find_spec("torch_sparse") is not None
+try:
+    _sparse_version = importlib_metadata.version("torch_sparse")
+    logger.debug(f"Successfully imported torch-sparse version {_sparse_version}")
+except importlib_metadata.PackageNotFoundError:
+    _sparse_available = False
+
+
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
 try:
     _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
@@ -487,6 +495,10 @@ def is_scatter_available():
     return _scatter_available
 
 
+def is_sparse_available():
+    return _sparse_available
+
+
 def is_pytorch_quantization_available():
     return _pytorch_quantization_available
 
@@ -686,6 +698,18 @@ explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
 # docstyle-ignore
+SPACY_IMPORT_ERROR = """
+{0} requires the spacy library but it was not found in your environment. You can install it with pip as
+explained here: https://spacy.io/usage.
+"""
+
+# docstyle-ignore
+SPARSE_IMPORT_ERROR = """
+{0} requires the torch-sparse library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/rusty1s/pytorch_sparse.
+"""
+
+# docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
@@ -770,6 +794,8 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("sparse", (is_sparse_available, SPARSE_IMPORT_ERROR)),
+        ("spacy", (is_spacy_available, SPACY_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),

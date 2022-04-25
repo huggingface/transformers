@@ -1,0 +1,113 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# GreaseLM
+
+## Overview
+
+The GreaseLM model was proposed in [GreaseLM: Graph REASoning Enhanced Language Models for Question Answering](https://arxiv.org/abs/2201.08860) by Xikun Zhang, Antoine Bosselut, Michihiro Yasunaga, Hongyu Ren, Percy Liang, Christopher D. Manning, Jure Leskovec.
+GreaseLM enables the fusion and exchange of information from the language model and the knowledge graph (KG) in multiple
+layers of its architecture. GreaseLM takes as input the natural language context and a graph neural network that reasons
+over the KG, ultimately demonstrating superior results in commonsense reasoning.
+
+The abstract from the paper is the following:
+
+Answering complex questions about textual narratives requires reasoning over both stated context and the world
+knowledge that underlies it. However, pretrained language models (LM), the foundation of most modern QA systems,
+do not robustly represent latent relationships between concepts, which is necessary for reasoning. While knowledge
+graphs (KG) are often used to augment LMs with structured representations of world knowledge, it remains an open
+question how to effectively fuse and reason over the KG representations and the language context, which provides
+situational constraints and nuances. In this work, we propose GreaseLM, a new model that fuses encoded representations
+from pretrained LMs and graph neural networks over multiple layers of modality interaction operations. Information
+from both modalities propagates to the other, allowing language context representations to be grounded by structured
+world knowledge, and allowing linguistic nuances (e.g., negation, hedging) in the context to inform the graph
+representations of knowledge. Our results on three benchmarks in the commonsense reasoning (i.e., CommonsenseQA,
+OpenbookQA) and medical question answering (i.e., MedQA-USMLE) domains demonstrate that GreaseLM can more reliably
+answer questions that require reasoning over both situational constraints and structured knowledge, even outperforming
+models 8x larger.
+
+Tips:
+
+```python
+import torch
+from transformers import GreaseLMProcessor, GreaseLMForMultipleChoice
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def index_to_answer(index, choices=["A", "B", "C", "D", "E"]):
+    return choices[index]
+
+
+processor = GreaseLMProcessor.from_pretrained("Xikun/greaselm-csqa")
+
+model = GreaseLMForMultipleChoice.from_pretrained("Xikun/greaselm-csqa")
+model.to(device)
+
+common_sense_qa_example = {
+    "answerKey": "A",
+    "id": "1afa02df02c908a558b4036e80242fac",
+    "question": {
+        "question_concept": "revolving door",
+        "choices": [
+            {"label": "A", "text": "bank"},
+            {"label": "B", "text": "library"},
+            {"label": "C", "text": "department store"},
+            {"label": "D", "text": "mall"},
+            {"label": "E", "text": "new york"},
+        ],
+        "stem": "A revolving door is convenient for two direction travel, but it also serves as a security measure at a what?",
+    },
+}
+
+batch = processor(common_sense_qa_example)
+
+output = model(**batch.to(device))
+labels = batch["labels"]
+
+results = output.logits.argmax(1) == labels
+for idx, r in enumerate(results):
+    model_answer = index_to_answer(output.logits.argmax(1)[idx].item())
+    correct_answer = index_to_answer(labels[idx].item())
+    if r:
+        print(f"For the question {idx}, model answered correctly, answer is {model_answer}")
+    else:
+        print(f"For the question {idx}, model answered incorrectly, answer is not {model_answer} but {correct_answer}")
+```
+
+This model was contributed by [vblagoje](https://huggingface.co/vblagoje).
+The original code can be found [here](https://github.com/snap-stanford/GreaseLM).
+
+
+## GreaseLMConfig
+
+[[autodoc]] GreaseLMConfig
+
+## GreaseLMFeatureExtractor
+
+[[autodoc]] GreaseLMFeatureExtractor
+    - __call__
+
+## GreaseLMProcessor
+
+[[autodoc]] GreaseLMProcessor
+    - __call__
+
+## GreaseLMModel
+
+[[autodoc]] GreaseLMModel
+    - forward
+
+## GreaseLMForMultipleChoice
+
+[[autodoc]] GreaseLMForMultipleChoice
+    - forward

@@ -117,6 +117,7 @@ from .import_utils import (
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_sparse_available,
     is_speech_available,
     is_tensorflow_probability_available,
     is_tf2onnx_available,
