@@ -864,8 +864,8 @@ class TrainingArguments:
             )
             self.half_precision_backend = self.fp16_backend
 
-        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
-            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, Coperlake CPU, torch>=1.10, cuda>=11.0")
+        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
+            raise ValueError("Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU")
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -889,11 +889,10 @@ class TrainingArguments:
             is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
-            and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
-            and not self.use_ipex
+            and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
-                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
+                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation (`--fp16_full_eval`) can only be used on CUDA devices."
             )
 
         if is_torch_available() and self.tf32 is not None:

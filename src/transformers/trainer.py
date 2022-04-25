@@ -126,6 +126,7 @@ from .utils import (
     find_labels,
     get_full_repo_name,
     is_apex_available,
+    is_ipex_available,
     is_datasets_available,
     is_in_notebook,
     is_sagemaker_dp_enabled,
@@ -156,7 +157,9 @@ if is_ipex_available() and "--use_ipex" in sys.argv:
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_cuda_amp_available = True
-    from torch.cuda.amp import autocast
+
+if version.parse(torch.__version__) >= version.parse("1.10"):
+    _is_native_cpu_amp_available = True
 
 if is_datasets_available():
     import datasets
@@ -455,7 +458,7 @@ class Trainer:
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
-                if args.device == "cuda":
+                if args.device == torch.device("cuda"):
                     if _is_native_cuda_amp_available:
                         args.half_precision_backend = "cuda_amp"
                     else:
@@ -463,7 +466,7 @@ class Trainer:
                             raise ValueError("Tried to use `bf16` but native amp is not available")
                         else:
                             args.half_precision_backend = "apex"
-                elif args.device == "cpu":
+                elif args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but is not supported on cpu")
                     else:
@@ -495,6 +498,7 @@ class Trainer:
                 self.use_apex = True
             else:
                 self.use_cpu_amp = True
+                self.amp_dtype = torch.bfloat16
                 if args.use_ipex:
                     if not is_ipex_available():
                         raise ImportError(
@@ -2064,14 +2068,14 @@ class Trainer:
         """
         if self.use_cuda_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = cuda.amp.autocast()(dtype=self.amp_dtype)
+                ctx_manager = torch.amp.autocast()(dtype=self.amp_dtype)
             else:
-                ctx_manager = cuda.amp.autocast()
+                ctx_manager = torch.amp.autocast()
         elif self.use_cpu_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = cpu.amp.autocast()(dtype=self.amp_dtype)
+                ctx_manager = torch.cpu.amp.autocast(dtype=self.amp_dtype)
             else:
-                ctx_manager = cpu.amp.autocast()
+                ctx_manager = torch.cpu.amp.autocast()
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
