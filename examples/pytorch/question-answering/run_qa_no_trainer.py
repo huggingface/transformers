@@ -767,7 +767,7 @@ def main():
 
             logger.info(json.dumps(eval_metric, indent=4))
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump(eval_metric, f, indent=4)
+                json.dump({"eval_f1": eval_metric["f1"], "eval_exact": eval_metric["exact_match"]}, f)
 
 
 if __name__ == "__main__":
