@@ -11,13 +11,13 @@ NINGÚN TIPO. Ver la Licencia para el idioma específico que rige los permisos y
 
 # Filosofía
 
-🤗 Transformers es una libreria dogmática construida para:
+🤗 Transformers es una biblioteca construida para:
 
 - Los investigadores y educadores de NLP que busquen usar/estudiar/extender modelos transformers a gran escala 
 - Profesionales que quieren optimizar esos modelos y/o ponerlos en producción 
 - Ingenieros que sólo quieren descargar un modelo preentrenado y usarlo para resolver una tarea NLP dada. 
 
-La librería fue diseñada con dos fuertes objetivos en mente:
+La biblioteca fue diseñada con dos fuertes objetivos en mente:
 
 - Que sea tan fácil y rápida de utilizar como sea posible:
 
@@ -28,10 +28,10 @@ La librería fue diseñada con dos fuertes objetivos en mente:
     `from_pretrained()` común de solicitud que se encargará de descargar (si es necesario), almacenar y cargar la solicitud de clase relacionada y datos asociados
     (configurations' hyper-parameters, tokenizers' vocabulary, and models' weights) a partir de un control pre-entrenado proporcionado en
     [Hugging Face Hub](https://huggingface.co/models) o de tu propio control guardado.
-  - Por encima de esas tres clases estandar, la libreria proporciona dos APIs: [`pipeline`] para usar rápidamente un modelo (junto a su configuracion y tokenizer asociados)
+  - Por encima de esas tres clases estandar, la biblioteca proporciona dos APIs: [`pipeline`] para usar rápidamente un modelo (junto a su configuracion y tokenizer asociados)
     sobre una tarea dada, y [`Trainer`]/`Keras.fit` para entrenar u optimizar de forma rápida un modelo dado.
-  - Como consecuencia, esta libreria NO es una caja de herramientas modular de bloques individuales para redes neuronales. Si quieres extender/construir sobre la librería,
-    usa simplemente los módulos regulares de Python/PyTorch/TensorFlow/Keras y emplea las clases estandar de la librería como punto de partida para reutilizar funcionalidades
+  - Como consecuencia, esta biblioteca NO es una caja de herramientas modular de bloques individuales para redes neuronales. Si quieres extender/construir sobre la biblioteca,
+    usa simplemente los módulos regulares de Python/PyTorch/TensorFlow/Keras y emplea las clases estandar de la biblioteca como punto de partida para reutilizar funcionalidades
     tales como abrir/guardar modelo.
     
 - Proporciona modelos modernos con rendimientos lo más parecido posible a los modelos originales:
@@ -56,10 +56,10 @@ Unos cuantos objetivos adicionales:
 
 ## Conceptos principales 
 
-La librería está construida alrededor de tres tipos de clases para cada modelo:
+La biblioteca está construida alrededor de tres tipos de clases para cada modelo:
 
 - **Model classes** como [`BertModel`], que consisten en más de 30 modelos PyTorch ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)) o modelos Keras ([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)) que funcionan con pesos preentrenados proporcionados en la
-  librería.
+  biblioteca.
 - **Configuration classes** como [`BertConfig`], que almacena todos los parámetros necesarios para construir un modelo. 
   No siempre tienes que generarla tu. En particular, si estas usando un modelo preentrenado sin ninguna modificación,
   la creación del modelo se encargará automáticamente de generar la configuración (que es parte del modelo).
@@ -69,7 +69,7 @@ La librería está construida alrededor de tres tipos de clases para cada modelo
 Todas estas clases pueden ser generadas a partir de ejemplos preentrenados, y guardados localmente usando dos métodos:
 
 - `from_pretrained()` permite generar un modelo/configuración/tokenizer a partir de una versión preentrenada proporcionada ya sea por
-  la propia librería (los modelos soportados se pueden encontrar en [Model Hub](https://huggingface.co/models)) o
+  la propia biblioteca (los modelos soportados se pueden encontrar en [Model Hub](https://huggingface.co/models)) o
   guardados localmente (o en un servidor) por el usuario. 
 - `save_pretrained()` permite guardar un modelo/configuración/tokenizer localmente, de forma que puede ser empleado de nuevo usando
   `from_pretrained()`.
