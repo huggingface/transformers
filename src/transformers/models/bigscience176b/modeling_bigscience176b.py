@@ -214,14 +214,16 @@ class BigScience176BAttention(nn.Module):
         # attention scores and attention mask [b, np, sq, sk]
 
         # softmax across tp ranks: see here https://github.com/pytorch/pytorch/issues/76232
-        aggregated_tensors = []
-        slices = self.num_heads / self.pretraining_tp
-        for i in range(self.pretraining_tp):
-            input_ = attention_scores[:, int(i * slices) : int((i + 1) * slices), :]
-            mask_output = self.mask_func(input_, attention_mask) if attention_mask is not None else input_
-            aggregated_tensors.append(torch.nn.Softmax(dim=-1)(mask_output))
+        # aggregated_tensors = []
+        # slices = self.num_heads / self.pretraining_tp
+        # for i in range(self.pretraining_tp):
+        #     input_ = attention_scores[:, int(i * slices) : int((i + 1) * slices), :]
+        #     mask_output = self.mask_func(input_, attention_mask) if attention_mask is not None else input_
+        #     aggregated_tensors.append(torch.nn.Softmax(dim=-1)(mask_output))
 
-        attention_probs = torch.cat(aggregated_tensors, dim=1)
+        # attention_probs = torch.cat(aggregated_tensors, dim=1)
+        mask_output = self.mask_func(attention_scores, attention_mask) if attention_mask is not None else attention_scores
+        attention_probs = torch.nn.Softmax(dim=-1)(mask_output)
         attention_probs = self.attention_dropout(attention_probs)
 
         # =========================
