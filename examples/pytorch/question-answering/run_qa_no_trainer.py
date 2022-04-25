@@ -766,7 +766,7 @@ def main():
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
             logger.info(json.dumps(eval_metric, indent=4))
-            with open(os.path.join(args.output_dir, "eval_results.json"), "w") as f:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(eval_metric, f, indent=4)
 
 

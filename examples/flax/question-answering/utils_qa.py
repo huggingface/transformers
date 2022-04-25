@@ -350,9 +350,12 @@ def postprocess_qa_predictions_with_beam_search(
                         start_index >= len(offset_mapping)
                         or end_index >= len(offset_mapping)
                         or offset_mapping[start_index] is None
+                        or len(offset_mapping[start_index]) < 2
                         or offset_mapping[end_index] is None
+                        or len(offset_mapping[end_index]) < 2
                     ):
                         continue
+
                     # Don't consider answers with a length negative or > max_answer_length.
                     if end_index < start_index or end_index - start_index + 1 > max_answer_length:
                         continue
