@@ -552,6 +552,7 @@ if is_vision_available():
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.yolos"].append("YolosFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -2911,6 +2912,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
+        from .models.yolos import YolosFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 

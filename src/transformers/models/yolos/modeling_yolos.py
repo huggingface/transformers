@@ -53,10 +53,10 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "YolosConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "YolosFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/yolos-base-patch16-224-in21k"
+_CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 

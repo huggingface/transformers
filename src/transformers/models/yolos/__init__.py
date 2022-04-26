@@ -17,12 +17,15 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
 }
+
+if is_vision_available():
+    _import_structure["feature_extraction_yolos"] = ["YolosFeatureExtractor"]
 
 if is_torch_available():
     _import_structure["modeling_yolos"] = [
@@ -35,6 +38,9 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
+
+    if is_vision_available():
+        from .feature_extraction_yolos import YolosFeatureExtractor
 
     if is_torch_available():
         from .modeling_yolos import (
