@@ -23,7 +23,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from ..test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
 from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
 
 

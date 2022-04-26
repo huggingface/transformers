@@ -21,8 +21,8 @@ from transformers import BeitConfig
 from transformers.testing_utils import require_flax, require_vision, slow
 from transformers.utils import cached_property, is_flax_available, is_vision_available
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_flax_available():

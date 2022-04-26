@@ -20,8 +20,8 @@ import numpy as np
 from transformers import ViTConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
 if is_flax_available():

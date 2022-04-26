@@ -8,7 +8,7 @@ import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
-from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():

@@ -19,7 +19,7 @@ import numpy as np
 from transformers import AlbertConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
