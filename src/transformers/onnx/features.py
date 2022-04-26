@@ -26,6 +26,7 @@ from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.resnet import ResNetOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
+from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
@@ -334,6 +335,17 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=Data2VecTextOnnxConfig,
+        ),
+        "roformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "multiple-choice",
+            "question-answering",
+            "token-classification",
+            onnx_config_cls=RoFormerOnnxConfig,
         ),
     }
 
