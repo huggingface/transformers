@@ -23,7 +23,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use the [`AutoFeatureExtractor`] API for preparing images for the model. This will instantiate a [`DetrFeatureExtractor`] behind the scenes.  
+- One can use [`YolosFeatureExtractor`] for preparing images (and optional targets) for the model.
 - Contrary to [DETR](detr), YOLOS doesn't require a `pixel_mask` to be created.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/hustvl/YOLOS).
@@ -31,6 +31,16 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 ## YolosConfig
 
 [[autodoc]] YolosConfig
+
+
+## YolosFeatureExtractor
+
+[[autodoc]] YolosFeatureExtractor
+    - __call__
+    - pad
+    - post_process
+    - post_process_segmentation
+    - post_process_panoptic
 
 
 ## YolosModel
