@@ -18,7 +18,7 @@ import unittest
 from os.path import dirname
 
 from transformers import AlbertTokenizer, AlbertTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
