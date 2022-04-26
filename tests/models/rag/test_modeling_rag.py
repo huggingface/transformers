@@ -20,7 +20,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from os.path import dirname
 from unittest.mock import patch
 
 import numpy as np

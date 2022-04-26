@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import inspect
-import os
 import shutil
 import tempfile
 import unittest

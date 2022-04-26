@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import importlib
-import os
 import sys
 import tempfile
 import unittest
