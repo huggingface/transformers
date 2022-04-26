@@ -216,7 +216,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
             tf.math.reduce_sum(tf.where(filtered_dist != 0.0, 1, 0), axis=-1).numpy().tolist(), [3, 2]
         )
 
-    def test_no_repeat_ngram_dist_processor(self):
+    @parameterized.expand([(False,), (True,)])
+    def test_no_repeat_ngram_dist_processor(self, use_xla):
         vocab_size = 3
         batch_size = 2
         cur_len = 4
@@ -228,6 +229,9 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         no_repeat_proc_2_gram = TFNoRepeatNGramLogitsProcessor(2)
         no_repeat_proc_3_gram = TFNoRepeatNGramLogitsProcessor(3)
+        if use_xla:
+            no_repeat_proc_2_gram = tf.function(no_repeat_proc_2_gram, jit_compile=True)
+            no_repeat_proc_3_gram = tf.function(no_repeat_proc_3_gram, jit_compile=True)
 
         filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, tf.identity(scores), cur_len)
         filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, tf.identity(scores), cur_len)
@@ -242,7 +246,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
             tf.math.is_inf(filtered_scores_3_gram).numpy().tolist(), [[False, False, False], [True, False, False]]
         )
 
-    def test_no_bad_words_dist_processor(self):
+    @parameterized.expand([(False,), (True,)])
+    def test_no_bad_words_dist_processor(self, use_xla):
         vocab_size = 5
         batch_size = 2
         eos_token_id = 4
@@ -255,6 +260,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
+        if use_xla:
+            no_bad_words_dist_proc = tf.function(no_bad_words_dist_proc, jit_compile=True)
 
         filtered_scores = no_bad_words_dist_proc(input_ids, tf.identity(scores), cur_len)
 

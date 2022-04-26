@@ -305,58 +305,77 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        self.bad_words_ids = bad_words_ids
+        # stores the information about bad words in three tensors:
+        # 1. a rectangular tensor with the forbidden sequences (padded with `-1`), for full data comparisons
+        self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
+        # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
+        bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
+        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+            raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
+        self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
+        # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned
+        self.seq_forbidden_tokens = tf.convert_to_tensor([bad_words[-1] for bad_words in bad_words_ids])
 
-    def calc_banned_bad_words_ids(self, prev_input_ids):
-        banned_tokens = []
+    def _calc_row_banned_bad_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
 
-        def _tokens_match(prev_tokens, tokens):
-            if len(tokens) == 0:
-                # if bad word tokens is just one token always ban it
-                return True
-            if len(tokens) > len(prev_tokens):
-                # if bad word tokens are longer than prev tokens they can't be equal
-                return False
+        def _tokens_match(bad_word_seq_number):
+            def _len_one():
+                # If the bad sequence only has one token, always mask it
+                return tf.cond(
+                    tf.math.equal(self.bad_word_seqs_len[bad_word_seq_number], 1),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    _len_greater_then_cur_len,
+                )
 
-            if prev_tokens[-len(tokens) :] == tokens:
-                # if tokens match
-                return True
-            else:
-                return False
+            def _len_greater_then_cur_len():
+                # Otherwise, if the bad sequence are longer than the current length they can't ever match
+                return tf.cond(
+                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], row_input_ids.shape[0]),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                    _match_found,
+                )
 
-        for prev_input_ids_slice in prev_input_ids:
-            banned_tokens_slice = []
+            def _match_found():
+                # Finaly, runs the actual comparison. Can only be called if the previous comparisons do not yield
+                # an answer (otherwise we get indexing exceptions)
+                compare_len = self.bad_word_seqs_len[bad_word_seq_number] - 1
+                return tf.cond(
+                    tf.math.reduce_all(
+                        tf.math.equal(
+                            row_input_ids[-compare_len:], self.bad_word_seqs_ids[bad_word_seq_number, :compare_len]
+                        )
+                    ),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                )
 
-            for banned_token_seq in self.bad_words_ids:
-                assert (
-                    len(banned_token_seq) > 0
-                ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
+            match = _len_one()
+            return match
 
-                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
-                    # if tokens do not match continue
-                    continue
-
-                banned_tokens_slice.append(banned_token_seq[-1])
-
-            banned_tokens.append(banned_tokens_slice)
-
-        return banned_tokens
+        # Compares the current row against all bad word sequences, obtaining a mask with the matches.
+        match_mask = tf.map_fn(_tokens_match, tf.range(self.bad_word_seqs_ids.shape[0]), fn_output_signature=tf.bool)
+        row_banned_tokens = self.seq_forbidden_tokens[match_mask]
+        return row_banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-
-        vocab_size = scores.shape[-1]
-
-        # calculate a list of banned tokens according to bad words
-        banned_tokens = self.calc_banned_bad_words_ids(input_ids[:, :cur_len])
-
-        banned_tokens_indices_mask = []
-        for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+        # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
+        # `input_ids`, they may have a different length for each row, and they may even be empty for some rows.
+        # To remain simple and XLA-compatible, we work on a per-row fashion.
+        # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
+        # a frequent choke point. (make `cur_len` a tensor?)
+        def _get_row_updated_score(cur_row: tf.Tensor) -> tf.Tensor:
+            row_score = scores[cur_row, :]
+            row_input_ids = input_ids[cur_row, :]
+            banned_tokens = self._calc_row_banned_bad_tokens(row_input_ids[:cur_len])
+            banned_tokens_mask = tf.scatter_nd(
+                indices=tf.expand_dims(banned_tokens, axis=-1),
+                updates=tf.ones_like(banned_tokens, dtype=tf.bool),
+                shape=row_score.shape,
             )
+            row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
+            return row_score
 
-        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
-
+        scores = tf.map_fn(_get_row_updated_score, tf.range(scores.shape[0]), fn_output_signature=tf.float32)
         return scores
 
 
@@ -375,44 +394,53 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
-        # Copied from fairseq for no_repeat_ngram in beam_search
-        if cur_len + 1 < self.ngram_size:
-            # return no banned tokens if we haven't generated ngram_size tokens yet
-            return [[] for _ in range(num_hypos)]
-        generated_ngrams = [{} for _ in range(num_hypos)]
-        prev_input_ids = input_ids[:, :cur_len]
-        for idx in range(num_hypos):
-            gen_tokens = prev_input_ids[idx].numpy().tolist()
-            generated_ngram = generated_ngrams[idx]
-            for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
-                prev_ngram_tuple = tuple(ngram[:-1])
-                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+    def _calc_row_banned_ngram_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
 
-        def _get_generated_ngrams(hypo_idx):
-            # Before decoding the next token, prevent decoding of ngrams that have already appeared
-            start_idx = cur_len + 1 - self.ngram_size
-            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
-            return generated_ngrams[hypo_idx].get(ngram_idx, [])
+        def _get_banned_tokens_from_ngrams():
+            # get the tokens that may trigger previously seen ngrams
+            ngram_start_idx = row_input_ids.shape[0] + 1 - self.ngram_size
+            latest_tokens = row_input_ids[ngram_start_idx:]
+            # get all possible ngrams so far and compare with tokens above
+            all_ngrams = tf.map_fn(
+                lambda x: row_input_ids[x:x + self.ngram_size],
+                tf.range(ngram_start_idx),
+                fn_output_signature=tf.int32
+            )
+            ngrams_mask = tf.map_fn(
+                lambda ngram: tf.math.reduce_all(tf.math.equal(latest_tokens, ngram[:-1])),
+                all_ngrams,
+                fn_output_signature=tf.bool
+            )
+            matching_ngrams = tf.boolean_mask(all_ngrams, ngrams_mask, axis=0)
+            banned_tokens = matching_ngrams[:, -1]
+            return banned_tokens
 
-        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
-
-        return banned_tokens
+        banned_tokens = tf.cond(
+            tf.math.less(row_input_ids.shape[0] + 1, self.ngram_size),
+            lambda: tf.constant([], dtype=tf.int32),
+            _get_banned_tokens_from_ngrams
+        )
+        return tf.convert_to_tensor(banned_tokens, dtype=tf.int32)
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-
-        batch_size, vocab_size = scores.shape
-        banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
-
-        # create banned_tokens boolean mask
-        banned_tokens_indices_mask = []
-        for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+        # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
+        # `input_ids`, they may have a different length for each row, and they may even be empty for some rows.
+        # To remain simple and XLA-compatible, we work on a per-row fashion.
+        # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
+        # a frequent choke point. (make `cur_len` a tensor?)
+        def _get_row_updated_score(cur_row: tf.Tensor) -> tf.Tensor:
+            row_score = scores[cur_row, :]
+            row_input_ids = input_ids[cur_row, :]
+            banned_tokens = self._calc_row_banned_ngram_tokens(row_input_ids[:cur_len])
+            banned_tokens_mask = tf.scatter_nd(
+                indices=tf.expand_dims(banned_tokens, axis=-1),
+                updates=tf.ones_like(banned_tokens, dtype=tf.bool),
+                shape=row_score.shape,
             )
+            row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
+            return row_score
 
-        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
-
+        scores = tf.map_fn(_get_row_updated_score, tf.range(scores.shape[0]), fn_output_signature=tf.float32)
         return scores
 
 
