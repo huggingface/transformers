@@ -20,13 +20,13 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
 from ..bert.test_modeling_bert import BertModelTester
 from ..bert_generation.test_modeling_bert_generation import BertGenerationEncoderTester
 from ..gpt2.test_modeling_gpt2 import GPT2ModelTester
 from ..prophetnet.test_modeling_prophetnet import ProphetNetStandaloneDecoderModelTester
 from ..roberta.test_modeling_roberta import RobertaModelTester
-from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():

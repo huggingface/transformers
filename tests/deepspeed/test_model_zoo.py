@@ -22,9 +22,9 @@ from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
-    get_tests_dir,
     execute_subprocess_async,
     get_gpu_count,
+    get_tests_dir,
     require_deepspeed,
     require_torch_gpu,
     slow,

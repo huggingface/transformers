@@ -20,10 +20,10 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
 from ..speech_to_text.test_modeling_speech_to_text import Speech2TextModelTester
 from ..speech_to_text_2.test_modeling_speech_to_text_2 import Speech2Text2StandaloneDecoderModelTester
-from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..wav2vec2.test_modeling_wav2vec2 import Wav2Vec2ModelTester
 
 

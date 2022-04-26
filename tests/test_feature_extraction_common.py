@@ -25,7 +25,7 @@ from pathlib import Path
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import PASS, USER, is_staging_test, get_tests_dir
+from transformers.testing_utils import PASS, USER, get_tests_dir, is_staging_test
 from transformers.utils import is_torch_available, is_vision_available
 
 
