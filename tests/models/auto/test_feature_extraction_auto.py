@@ -39,9 +39,9 @@ from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures")
 SAMPLE_FEATURE_EXTRACTION_CONFIG = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "../fixtures/dummy_feature_extractor_config.json"
+    os.path.dirname(os.path.abspath(__file__)), ".../fixtures/dummy_feature_extractor_config.json"
 )
-SAMPLE_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/dummy-config.json")
+SAMPLE_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/dummy-config.json")
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):

@@ -32,7 +32,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
-SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/dummy-config.json")
+SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/dummy-config.json")
 
 
 class AutoConfigTest(unittest.TestCase):

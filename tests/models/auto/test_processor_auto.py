@@ -50,9 +50,9 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 
 SAMPLE_PROCESSOR_CONFIG = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "../fixtures/dummy_feature_extractor_config.json"
+    os.path.dirname(os.path.abspath(__file__)), ".../fixtures/dummy_feature_extractor_config.json"
 )
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/vocab.json")
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/vocab.json")
 
 SAMPLE_PROCESSOR_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures")
 
