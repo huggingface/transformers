@@ -66,7 +66,6 @@ JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 def load_tf_weights_in_jukebox(model, config, jukebox_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:

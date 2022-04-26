@@ -427,7 +427,13 @@ class JukeboxModelTester:
 class JukeboxModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (JukeboxModel, JukeboxLMHeadModel, JukeboxDoubleHeadsModel, JukeboxForSequenceClassification, JukeboxForTokenClassification)
+        (
+            JukeboxModel,
+            JukeboxLMHeadModel,
+            JukeboxDoubleHeadsModel,
+            JukeboxForSequenceClassification,
+            JukeboxForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )

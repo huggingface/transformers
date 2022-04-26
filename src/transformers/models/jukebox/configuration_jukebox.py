@@ -31,12 +31,11 @@ JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class JukeboxConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`JukeboxModel`] or a [`TFJukeboxModel`]. It is used to
-    instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-2
+    This is the configuration class to store the configuration of a [`JukeboxModel`] or a [`TFJukeboxModel`]. It is
+    used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT-2
     [small](https://huggingface.co/jukebox) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

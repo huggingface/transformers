@@ -539,7 +539,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-("jukebox", "JukeboxForTokenClassification"),
+        ("jukebox", "JukeboxForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
         ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
@@ -580,7 +580,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-("jukebox", "JukeboxForMultipleChoice"),
+        ("jukebox", "JukeboxForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
         ("nystromformer", "NystromformerForMultipleChoice"),
         ("qdqbert", "QDQBertForMultipleChoice"),

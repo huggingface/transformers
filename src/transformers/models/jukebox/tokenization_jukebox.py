@@ -50,12 +50,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 class JukeboxTokenizer(PreTrainedTokenizer):
     """
     Construct a Jukebox tokenizer. Jukebox can be conditioned on 3 different inputs :
-        - Artists, unique ids are associated to each artist from the provided dictionary. 
+        - Artists, unique ids are associated to each artist from the provided dictionary.
         - Genres, unique ids are associated to each genre from the provided dictionary.
-        - Lyrics, character based tokenization. Must be initialized with the list of characters that are inside the vocabulary.  
+        - Lyrics, character based tokenization. Must be initialized with the list of characters that are inside the
+          vocabulary.
 
-    This tokenizer is straight forward and does not require trainingg. It should be able to process a different number of inputs
-    as the conditioning of the model can be done on the three different queries. If None is provided, defaults values will be used. 
+    This tokenizer is straight forward and does not require trainingg. It should be able to process a different number of inputs:
+    as the conditioning of the model can be done on the three different queries. If None is provided, defaults values will be used.:
 
     ```
     >>> from transformers import JukeboxTokenizer
@@ -75,13 +76,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to:
     this superclass for more information regarding those methods.
 
     Args:
         artitst_vocab_file (`str`):
-            Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and 'lyrics' 
-            and the values are their corresponding vocabulary files. 
+            Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
+            'lyrics' and the values are their corresponding vocabulary files.
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -92,12 +93,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(
-        self,
-        vocab_file,
-        unk_token="<|endoftext|>",
-        **kwargs
-    ):
+    def __init__(self, vocab_file, unk_token="<|endoftext|>", **kwargs):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
@@ -110,7 +106,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             self.genre_encoder = vocabulary["genre"]
             self.lyrics_encoder = vocabulary["lyrics"]
 
-        self.out_of_vocab = re.compile('[^A-Za-z0-9.,:;!?\-+\'\"()\[\] \t\n]+')  # FIXME: should be an argument?
+        self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")  # FIXME: should be an argument?
 
         self.artist_decoder = {v: k for k, v in self.artist_encoder.items()}
         self.genre_decoder = {v: k for k, v in self.genre_encoder.items()}
@@ -121,7 +117,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         return len(self.artist_encoder) + len(self.genre_encoder) + len(self.lyrics_encoder)
 
     def get_vocab(self):
-        return dict(self.artist_encoder, self.genre_encoder, self.lyrics_encoder , **self.added_tokens_encoder)
+        return dict(self.artist_encoder, self.genre_encoder, self.lyrics_encoder, **self.added_tokens_encoder)
 
     def get_relevant_lyric_tokens(self, full_tokens, n_tokens, total_length, offset, duration):
         if len(full_tokens) < n_tokens:
@@ -131,7 +127,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             assert 0 <= offset < total_length
             midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
             midpoint = min(max(midpoint, n_tokens // 2), len(full_tokens) - n_tokens // 2)
-            tokens = full_tokens[midpoint - n_tokens // 2:midpoint + n_tokens // 2]
+            tokens = full_tokens[midpoint - n_tokens // 2 : midpoint + n_tokens // 2]
             indices = list(range(midpoint - n_tokens // 2, midpoint + n_tokens // 2))
         assert len(tokens) == n_tokens, f"Expected length {n_tokens}, got {len(tokens)}"
         assert len(indices) == n_tokens, f"Expected length {n_tokens}, got {len(indices)}"
@@ -143,8 +139,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artist_id = self.artist_encoder.get(artist)
         genre_id = self.genre_encoder.get(genre)
         lyrics = unidecode(lyrics)
-        lyrics = lyrics.replace('\\', '\n')
-        lyrics = self.out_of_vocab.sub('', lyrics)  # Remove characters that are outside the vocabulary vocab
+        lyrics = lyrics.replace("\\", "\n")
+        lyrics = self.out_of_vocab.sub("", lyrics)  # Remove characters that are outside the vocabulary vocab
         lyric_ids = [self.genre_encoder.get(character) for character in lyrics]
         lyric_ids = self.get_relevant_lyric_tokens(lyric_ids)
         return artist_id, genre_id, lyric_ids
@@ -158,7 +154,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist')
-    # TODO : is a call function required ? 
+    # TODO : is a call function required ?
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
@@ -168,8 +164,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps({'artist': self.artist_encoder,
-                                'genre': self.genre_encoder,
-                                'lyrics': self.lyrics_encoder}, ensure_ascii=False))
+            f.write(
+                json.dumps(
+                    {"artist": self.artist_encoder, "genre": self.genre_encoder, "lyrics": self.lyrics_encoder},
+                    ensure_ascii=False,
+                )
+            )
 
         return vocab_file
