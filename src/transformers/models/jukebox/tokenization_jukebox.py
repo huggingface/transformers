@@ -17,7 +17,7 @@
 
 import json
 import os
-from typing import Optional, Tuple, Dict, Any
+from typing import Any, Dict, Optional, Tuple
 
 import regex as re
 from unidecode import unidecode
@@ -133,10 +133,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     def get_relevant_lyric_tokens(self, full_tokens, total_length, offset, duration):
         """Extract only the relevant tokens based on the character position. A total of
-        `max_n_lyric_tokens` tokens will be returned. If the provided token sequence is smaller,
-        it will be padded, othewise, only characters ranging from the midpoint - `max_n_lyric_tokens//2`
-        to the midpoint + `max_n_lyric_tokens//2` will be returned. This *focuses* on the most relevant tokens
-        (in time) for the sequence.
+        `max_n_lyric_tokens` tokens will be returned. If the provided token sequence is smaller, it will be padded,
+        othewise, only characters ranging from the midpoint - `max_n_lyric_tokens//2` to the midpoint +
+        `max_n_lyric_tokens//2` will be returned. This *focuses* on the most relevant tokens (in time) for the
+        sequence.
 
         Args: # TODO : args to prettify
             full_tokens (`_type_`):
@@ -168,8 +168,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, artist, genre, lyrics, total_length, offset, duration):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
-        The total_length, offset and duration have to be provided in order to select relevant
-        lyrics and add padding to the lyrics token sequence.
+        The total_length, offset and duration have to be provided in order to select relevant lyrics and add padding to
+        the lyrics token sequence.
 
         Args:
             artist (`_type_`):
@@ -197,8 +197,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
         vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
 
-        Do NOT take care of added tokens.
-        Only the lytrics are split into character for the character-based vocabulary.
+        Do NOT take care of added tokens. Only the lytrics are split into character for the character-based vocabulary.
         """
         # only lyrics are not tokenized, but character based is easily handled
         return [character for character in lyrics]
@@ -261,7 +260,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             genre (`str`):
                 The gnere name to prepare. This will mostly lower the string.
             lyrics (`str`):
-                The lyrics  to prepare.
+                The lyrics to prepare.
             is_split_into_words (`bool`, *optional*, defaults to `False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
