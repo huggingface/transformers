@@ -1443,7 +1443,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings (save_config=True) to avoid race conditions.
+            if (
+                filename.startswith(WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+                and save_config
+            ):
                 os.remove(full_filename)
 
         # Save the model
