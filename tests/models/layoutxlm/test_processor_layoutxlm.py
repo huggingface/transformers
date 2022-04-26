@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from os.path import dirname
 from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast

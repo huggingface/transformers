@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import unittest
-from os.path import dirname
 
 from transformers import BertGenerationTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, slow

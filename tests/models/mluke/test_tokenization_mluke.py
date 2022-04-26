@@ -14,9 +14,7 @@
 # limitations under the License.
 
 
-import os
 import unittest
-from os.path import dirname
 from typing import Tuple
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
