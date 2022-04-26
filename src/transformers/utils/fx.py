@@ -17,7 +17,6 @@ import builtins
 import functools
 import inspect
 import math
-import operator
 import random
 import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
