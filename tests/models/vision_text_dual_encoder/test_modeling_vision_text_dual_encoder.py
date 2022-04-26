@@ -28,7 +28,7 @@ from ..bert.test_modeling_bert import BertModelTester
 from ..clip.test_modeling_clip import CLIPVisionModelTester
 from ..deit.test_modeling_deit import DeiTModelTester
 from ..roberta.test_modeling_roberta import RobertaModelTester
-from ..test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..vit.test_modeling_vit import ViTModelTester
 
 

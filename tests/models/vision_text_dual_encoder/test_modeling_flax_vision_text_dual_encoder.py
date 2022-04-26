@@ -33,7 +33,7 @@ from transformers.utils import is_flax_available, is_torch_available, is_vision_
 
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..clip.test_modeling_flax_clip import FlaxCLIPVisionModelTester
-from ..test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
 from ..vit.test_modeling_flax_vit import FlaxViTModelTester
 
 

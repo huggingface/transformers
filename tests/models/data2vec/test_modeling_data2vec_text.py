@@ -20,9 +20,9 @@ from tests.test_modeling_common import floats_tensor, ids_tensor, random_attenti
 from transformers import Data2VecTextConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from ..generation.test_generation_utils import GenerationTesterMixin
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():

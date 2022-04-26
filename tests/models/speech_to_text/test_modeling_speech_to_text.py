@@ -32,9 +32,9 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 
-from ..generation.test_generation_utils import GenerationTesterMixin
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():

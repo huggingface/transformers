@@ -21,8 +21,8 @@ from typing import List, Tuple
 from transformers import CanineConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
