@@ -30,6 +30,7 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
+    get_tests_dir,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -46,7 +47,7 @@ from ..t5.test_modeling_t5 import T5ModelTester
 
 TOLERANCE = 1e-3
 
-T5_SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+T5_SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 if is_torch_available() and is_datasets_available() and is_faiss_available():
     import torch
     from datasets import Dataset

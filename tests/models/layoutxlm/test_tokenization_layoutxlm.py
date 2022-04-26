@@ -24,6 +24,7 @@ from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin,
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
+    get_tests_dir,
     require_pandas,
     require_scatter,
     require_sentencepiece,
@@ -40,7 +41,7 @@ from ...test_tokenization_common import (
 )
 
 
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece
