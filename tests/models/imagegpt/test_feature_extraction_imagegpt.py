@@ -25,7 +25,7 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ..test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 if is_torch_available():
