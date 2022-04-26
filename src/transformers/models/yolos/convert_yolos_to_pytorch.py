@@ -225,9 +225,18 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
+        model_mapping = {
+            "yolos_ti": "yolos-tiny",
+            "yolos_s_200_pre": "yolos-small",
+            "yolos_s_300_pre": "yolos-small-300",
+            "yolos_s_dWr": "yolos-small-dwr",
+            "yolos_base": "yolos-base",
+        }
+
         print("Pushing to the hub...")
-        feature_extractor.push_to_hub("nielsr/yolos-s")
-        model.push_to_hub("nielsr/yolos-s")
+        model_name = model_mapping[yolos_name]
+        feature_extractor.push_to_hub(model_name, organization="hustvl")
+        model.push_to_hub(model_name, organization="hustvl")
 
 
 if __name__ == "__main__":

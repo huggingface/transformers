@@ -31,7 +31,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import YolosForObjectDetection, YolosModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.yolos.modeling_yolos import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
@@ -156,11 +156,7 @@ class YolosModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -172,14 +168,7 @@ class YolosModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            YolosModel,
-            YolosForObjectDetection,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (YolosModel, YolosForObjectDetection) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -339,7 +328,7 @@ class YolosModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = YolosModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -355,13 +344,11 @@ def prepare_img():
 class YolosModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO rename nielsr to organization
-        return AutoFeatureExtractor.from_pretrained("nielsr/yolos-s") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("hustvl/yolos-small") if is_vision_available() else None
 
     @slow
     def test_inference_object_detection_head(self):
-        # TODO rename nielsr to organization
-        model = YolosForObjectDetection.from_pretrained("nielsr/yolos-s").to(torch_device)
+        model = YolosForObjectDetection.from_pretrained("hustvl/yolos-small").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/yolos-s": "https://huggingface.co/yolos-s/resolve/main/config.json",
+    "hustvl/yolos-small": "https://huggingface.co/hustvl/yolos-small/resolve/main/config.json",
     # See all YOLOS models at https://huggingface.co/models?filter=yolos
 }
 
@@ -31,7 +31,7 @@ class YolosConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`YolosModel`]. It is used to instantiate a YOLOS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the YOLOS
-    [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
+    [hustvl/yolos-base](https://huggingface.co/hustvl/yolos-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -88,10 +88,10 @@ class YolosConfig(PretrainedConfig):
     ```python
     >>> from transformers import YolosModel, YolosConfig
 
-    >>> # Initializing a YOLOS vit-base-patch16-224 style configuration
+    >>> # Initializing a YOLOS hustvl/yolos-base style configuration
     >>> configuration = YolosConfig()
 
-    >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> # Initializing a model from the hustvl/yolos-base style configuration
     >>> model = YolosModel(configuration)
 
     >>> # Accessing the model configuration
