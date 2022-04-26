@@ -117,6 +117,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.scformer": ["SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ScFormerConfig", "ScFormerTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -446,6 +447,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.scformer"].append("ScFormerTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -648,6 +650,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.scformer"].extend(
+        [
+            "SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ScFormerForMaskedLM",
+            "ScFormerForCausalLM",
+            "ScFormerForMultipleChoice",
+            "ScFormerForQuestionAnswering",
+            "ScFormerForSequenceClassification",
+            "ScFormerForTokenClassification",
+            "ScFormerLayer",
+            "ScFormerModel",
+            "ScFormerPreTrainedModel",
+            "load_tf_weights_in_scformer",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2521,6 +2539,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.scformer import SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ScFormerConfig, ScFormerTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2819,6 +2838,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.scformer import ScFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2930,6 +2950,20 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.scformer import (
+            SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ScFormerForMaskedLM,
+            ScFormerForCausalLM,
+            ScFormerForMultipleChoice,
+            ScFormerForQuestionAnswering,
+            ScFormerForSequenceClassification,
+            ScFormerForTokenClassification,
+            ScFormerLayer,
+            ScFormerModel,
+            ScFormerPreTrainedModel,
+            load_tf_weights_in_scformer,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
