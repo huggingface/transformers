@@ -28,7 +28,7 @@ from transformers.models.bert.tokenization_bert import (
 from transformers.models.prophetnet.tokenization_prophetnet import VOCAB_FILES_NAMES, ProphetNetTokenizer
 from transformers.testing_utils import require_torch, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):

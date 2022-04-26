@@ -27,7 +27,7 @@ from transformers.utils import is_sentencepiece_available
 if is_sentencepiece_available():
     from transformers.models.m2m_100.tokenization_m2m_100 import save_json, VOCAB_FILES_NAMES
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_sentencepiece_available():

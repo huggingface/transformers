@@ -21,7 +21,7 @@ from typing import Tuple
 from transformers import AddedToken, LukeTokenizer
 from transformers.testing_utils import require_torch, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/vocab.json")

@@ -28,7 +28,7 @@ from transformers.models.bert.tokenization_bert import (
 from transformers.models.realm.tokenization_realm import RealmTokenizer
 from transformers.testing_utils import require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin, filter_non_english
+from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
 @require_tokenizers

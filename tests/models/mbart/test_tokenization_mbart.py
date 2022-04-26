@@ -20,7 +20,7 @@ import unittest
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
 from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/test_sentencepiece.model")
