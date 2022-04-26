@@ -21,7 +21,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
-from ..utils.test_modeling_tf_core import TFCoreModelTesterMixin
+from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
