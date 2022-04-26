@@ -555,16 +555,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
-        to_mask = tf.cast(
-            tf.fill(
-                (
-                    seq_length,
-                    seq_length,
-                ),
-                -10000.0,
-            ),
-            dtype,
-        )
+        to_mask = tf.cast(tf.fill((seq_length, seq_length), -10000.0), dtype)
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
