@@ -1090,7 +1090,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
         output = self.call(inputs)
         return self.serving_output(output)
 
@@ -1135,7 +1135,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
         """
         Method used for serving the model.
 
@@ -1238,7 +1238,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFCLIPOutput:
         """
         Method used for serving the model.
 
@@ -1415,4 +1415,4 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             vision_model_output=vision_model_output,
         )
 
-        return output.to_tuple()
+        return output
