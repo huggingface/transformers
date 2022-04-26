@@ -37,40 +37,21 @@ class JukeboxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "<unk>",
-            "<|endoftext|>",
-        ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
+        vocab = {
+            "artist": {"Marron 5": 0, "Bob Marley": 1},
+            "genres": {"Pop": 0, "Rap": 1},
+            "lyrics": {
+                c: i
+                for c, i in enumerate(
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-'\"()[] \t\n"
+                )
+            },
+        }
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
+            fp.write(json.dumps(vocab) + "\n")
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
@@ -85,6 +66,7 @@ class JukeboxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "lower newer"
         return input_text, output_text
 
+    # TODO: mostly modify this part
     def test_full_tokenizer(self):
         tokenizer = JukeboxTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"

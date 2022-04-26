@@ -32,90 +32,59 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "jukebox": "https://huggingface.co/jukebox/resolve/main/vocab.json",
-        "jukebox-medium": "https://huggingface.co/jukebox-medium/resolve/main/vocab.json",
-        "jukebox-large": "https://huggingface.co/jukebox-large/resolve/main/vocab.json",
-        "jukebox-xl": "https://huggingface.co/jukebox-xl/resolve/main/vocab.json",
-        "distiljukebox": "https://huggingface.co/distiljukebox/resolve/main/vocab.json",
     },
-    "merges_file": {
-        "jukebox": "https://huggingface.co/jukebox/resolve/main/merges.txt",
-        "jukebox-medium": "https://huggingface.co/jukebox-medium/resolve/main/merges.txt",
-        "jukebox-large": "https://huggingface.co/jukebox-large/resolve/main/merges.txt",
-        "jukebox-xl": "https://huggingface.co/jukebox-xl/resolve/main/merges.txt",
-        "distiljukebox": "https://huggingface.co/distiljukebox/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "jukebox": "https://huggingface.co/jukebox/resolve/main/tokenizer.json",
-        "jukebox-medium": "https://huggingface.co/jukebox-medium/resolve/main/tokenizer.json",
-        "jukebox-large": "https://huggingface.co/jukebox-large/resolve/main/tokenizer.json",
-        "jukebox-xl": "https://huggingface.co/jukebox-xl/resolve/main/tokenizer.json",
-        "distiljukebox": "https://huggingface.co/distiljukebox/resolve/main/tokenizer.json",
-    },
+    "tokenizer_file": {"jukebox": "https://huggingface.co/jukebox/resolve/main/tokenizer.json"},
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "jukebox": 1024,
-    "jukebox-medium": 1024,
-    "jukebox-large": 1024,
-    "jukebox-xl": 1024,
-    "distiljukebox": 1024,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"jukebox": 1024}
 
 
 class JukeboxTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" GPT-2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
-    Byte-Pair-Encoding.
+    Construct a "fast" Jukebox tokenizer, backed by HuggingFace's tokenizers library. Jukebox can be conditioned on 3
+    different inputs :
+        - Artists, unique ids are associated to each artist from the provided dictionary.
+        - Genres, unique ids are associated to each genre from the provided dictionary.
+        - Lyrics, character based tokenization. Must be initialized with the list of characters that are inside the
+        vocabulary.
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
+    This tokenizer is straight forward and does not require trainingg. It should be able to process a different number
+    of inputs: as the conditioning of the model can be done on the three different queries. If None is provided,
+    defaults values will be used.:
 
     ```
-    >>> from transformers import JukeboxTokenizerFast
-    >>> tokenizer = JukeboxTokenizerFast.from_pretrained("jukebox")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> from transformers import JukeboxTokenizer
+    >>> tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
+    >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
+    >>> tokenizer("Alan Jackson", "Country Rock")['input_ids']
+    [15496, 995]
     ```
 
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
-    the model was not pretrained this way, it might yield a decrease in performance.
+    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
     <Tip>
 
-    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
+    If nothing is provided, the genres and the artist will either be selected randomly or set to None
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer
+    to: this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        artitst_vocab_file (`str`):
+            Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
+            'lyrics' and the values are their corresponding vocabulary files.
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
-            The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
-            The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (Jukebox tokenizer detect beginning of words by the preceding space).
-        trim_offsets (`bool`, *optional*, defaults to `True`):
-            Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -125,27 +94,17 @@ class JukeboxTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = JukeboxTokenizer
 
     def __init__(
-        self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        add_prefix_space=False,
-        **kwargs
+        self, vocab_file=None, tokenizer_file=None, unk_token="<|endoftext|>", add_prefix_space=False, **kwargs
     ):
         super().__init__(
             vocab_file,
-            merges_file,
             tokenizer_file=tokenizer_file,
             unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
+        # TODO: should it be using WordLevel tokenizer ? Don't really know how that works yet
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
