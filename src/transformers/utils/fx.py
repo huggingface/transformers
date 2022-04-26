@@ -130,9 +130,7 @@ def torch_nn_layernorm_override(self, input):
 
 
 def torch_nn_linear_override(self, input):
-    # TODO: make this more efficient by not making concrete computation.
-    concrete_input = torch.empty_like(input, device="cpu")
-    return torch.empty_like(self.forward(concrete_input), device="meta")
+    return torch.empty(input.shape[:-1] + (self.out_features,), device="meta")
 
 
 def torch_relu_override(x):
@@ -226,10 +224,32 @@ def torch_tensor_mul_override(self, other):
 
 
 def torch_matmul_override(input, other, *, out=None):
-    # TODO: make this more efficient by not making concrete computation.
-    concrete_input = torch.empty_like(input, device="cpu")
-    concrete_other = torch.empty_like(other, device="cpu")
-    return torch.empty_like(torch.matmul(concrete_input, concrete_other), device="meta")
+    # TODO: validate that.
+    d1 = input.dim()
+    d2 = other.dim()
+    shape = None
+    if d1 == 1 and d2 == 1:
+        shape = (1,)
+    elif d1 == 2 and d2 == 2:
+        shape = (input.size(0), other.size(1))
+    elif d1 == 1 and d2 == 2:
+        shape = (other.size(1),)
+    elif d1 == 2 and d1 == 1:
+        shape = (input.size(0),)
+    else:
+        max_length = max(input.dim(), other.dim())
+        shape1 = list(input.shape) + [1] * (max_length - d1)
+        shape2 = list(other.shape) + [1] * (max_length - d2)
+        shape = []
+        for i in range(max_length):
+            shape.append(max(shape1[i], shape2[i]))
+        shape[-2] = shape1[-2]
+        shape[-1] = shape2[-1]
+        if d1 == 1:
+            shape.pop(-2)
+        if d2 == 1:
+            shape.pop(-1)
+    return torch.empty(shape, device="meta")
 
 
 def torch_tensor_repeat_override(self, *sizes):
@@ -719,5 +739,12 @@ def symbolic_trace(
     tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
+
+    regular_module_attributes = dir(nn.Module())
+    for name in dir(model):
+        attr = getattr(model, name)
+        if name.startswith("_") or name in regular_module_attributes:
+            continue
+        setattr(traced, name, attr)
 
     return traced
