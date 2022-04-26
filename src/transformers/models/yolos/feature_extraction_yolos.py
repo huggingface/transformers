@@ -419,8 +419,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s) and optional annotations. Images are by default
-        padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
-        real/which are padding.
+        padded up to the largest image in a batch.
 
         <Tip warning={true}>
 
@@ -580,7 +579,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
                 ]
 
         if padding:
-            # pad images up to largest image in batch and create pixel_mask
+            # pad images up to largest image in batch
             max_size = self._max_by_axis([list(image.shape) for image in images])
             c, h, w = max_size
             padded_images = []
