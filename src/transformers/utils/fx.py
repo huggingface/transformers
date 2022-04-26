@@ -160,10 +160,24 @@ def torch_abs_override(input, *, out=None):
     return input
 
 
-def torch_arange_with_start_override(
-    start, end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
-):
-    return torch.empty((end - start) // step, dtype=dtype, layout=layout, device="meta")
+def torch_arange_with_start_override(*args, **kwargs):
+    n = len(args)
+    step = 1
+    if n == 1:
+        start = 0
+        end = args[0]
+    elif n == 2:
+        start, end = args
+    else:
+        start, end, step = args
+    step = kwargs.get("step", step)
+    dtype = kwargs.get("dtype")
+    return torch.empty((end - start) // step, dtype=dtype, device="meta")
+
+# def torch_arange_with_start_override(
+#     start, end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
+# ):
+#     return torch.empty((end - start) // step, dtype=dtype, layout=layout, device="meta")
 
 
 def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
@@ -207,7 +221,12 @@ def torch_add_override(input, other, *, alpha=1, out=None):
 
 
 def torch_mul_override(input, other, *, out=None):
+    import pdb; pdb.set_trace()
     return torch_add_override(input, other, out=out)
+
+
+def torch_tensor_mul_override(self, other):
+    return torch_mul_override(self, other)
 
 
 def torch_matmul_override(input, other, *, out=None):
@@ -233,11 +252,13 @@ manual_meta_overrides: Dict[Callable, Callable] = {
     torch.nn.ReLU: torch_nn_relu_override,
     torch.where: torch_where_override,
     torch.abs: torch_abs_override,
-    torch.ops.aten.arange: torch_arange_with_start_override,
+    # torch.ops.aten.arange: torch_arange_with_start_override,
+    torch.arange: torch_arange_with_start_override,
     torch.cat: torch_cat_override,
     torch.stack: torch_stack_override,
-    # torch.add: torch_add_override,
-    # torch.mul: torch_mul_override,
+    torch.add: torch_add_override,
+    torch.mul: torch_mul_override,
+    torch.Tensor.mul: torch_tensor_mul_override,
     torch.matmul: torch_matmul_override,
     torch.Tensor.repeat: torch_tensor_repeat_override,
 }
@@ -272,10 +293,10 @@ class HFProxy(Proxy):
     def install_tensor_meta(self, tensor_meta):
         self._tensor_meta = tensor_meta
 
-    def dim(self):
-        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-            return self._tensor_meta.dim()
-        return self.tracer.create_proxy("call_method", "dim", (self,), {})
+    # def dim(self):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta.dim()
+    #     return self.tracer.create_proxy("call_method", "dim", (self,), {})
 
     @property
     def shape(self):
@@ -306,10 +327,41 @@ class HFProxy(Proxy):
             return len(self._tensor_meta)
         return super().__len__()
 
-    def __le__(self, other):
+    def __bool__(self):
         if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-            return self._tensor_meta <= other
-        return self.tracer.create_proxy("call_function", operator.le, (self, other), {})
+            print("BOOL", self._tensor_meta)
+            return self._tensor_meta
+        return super().__bool__()
+
+    # def __lt__(self, other):
+    #     # if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #     #     return self._tensor_meta < other
+    #     return self.tracer.create_proxy("call_function", operator.lt, (self, other), {})
+
+    # def __le__(self, other):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta <= other
+    #     return self.tracer.create_proxy("call_function", operator.le, (self, other), {})
+
+    # def __eq__(self, other):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta == other
+    #     return self.tracer.create_proxy("call_function", operator.eq, (self, other), {})
+
+    # def __ne__(self, other):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta != other
+    #     return self.tracer.create_proxy("call_function", operator.ne, (self, other), {})
+
+    # def __ge__(self, other):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta >= other
+    #     return self.tracer.create_proxy("call_function", operator.ge, (self, other), {})
+
+    # def __gt__(self, other):
+    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
+    #         return self._tensor_meta > other
+    #     return self.tracer.create_proxy("call_function", operator.gt, (self, other), {})
 
     def __contains__(self, key):
         # To handle kwargs.
@@ -482,7 +534,6 @@ class HFTracer(Tracer):
                     atoms = target.split(".")
                     for atom in atoms:
                         attr_itr = getattr(attr_itr, atom)
-                    # assert isinstance(attr_itr, torch.Tensor)
                     if isinstance(attr_itr, torch.Tensor):
                         meta_out = attr_itr.to(device="meta")
                     else:
