@@ -20,8 +20,8 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
-from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils import get_tests_dir, is_sentencepiece_available
+from transformers.testing_utils import get_tests_dir, nested_simplify, require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
