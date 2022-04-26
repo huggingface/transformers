@@ -100,7 +100,7 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
     flax_model.params["encoder"]["final_layer_norm"]["weight"] = t5x_encoder_norm
 
     # Decoder
-    for layer_index in range(config.num_layers):
+    for layer_index in range(config.num_decoder_layers):
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
