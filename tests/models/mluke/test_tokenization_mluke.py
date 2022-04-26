@@ -20,13 +20,13 @@ from os.path import dirname
 from typing import Tuple
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
-SAMPLE_ENTITY_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_entity_vocab.json")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

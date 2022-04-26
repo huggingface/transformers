@@ -23,6 +23,7 @@ from typing import List
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
+    get_tests_dir,
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
@@ -38,7 +39,7 @@ if is_pytesseract_available():
     from transformers import LayoutLMv2FeatureExtractor, LayoutXLMProcessor
 
 
-SAMPLE_SP = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_pytesseract

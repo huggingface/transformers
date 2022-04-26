@@ -19,14 +19,14 @@ from os.path import dirname
 from typing import Tuple
 
 from transformers import AddedToken, LukeTokenizer
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/vocab.json")
-SAMPLE_MERGE_FILE = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/merges.txt")
-SAMPLE_ENTITY_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_entity_vocab.json")
+SAMPLE_VOCAB = get_test_dir("fixtures/vocab.json")
+SAMPLE_MERGE_FILE = get_test_dir("fixtures/merges.txt")
+SAMPLE_ENTITY_VOCAB = get_test_dir("fixtures/test_entity_vocab.json")
 
 
 class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

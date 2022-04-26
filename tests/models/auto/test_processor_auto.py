@@ -36,7 +36,7 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
-from transformers.testing_utils import PASS, USER, is_staging_test
+from transformers.testing_utils import PASS, USER, is_staging_test, get_tests_dir
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 
@@ -49,12 +49,9 @@ from test_module.custom_processing import CustomProcessor  # noqa E402
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 
-SAMPLE_PROCESSOR_CONFIG = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), ".../fixtures/dummy_feature_extractor_config.json"
-)
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/vocab.json")
-
-SAMPLE_PROCESSOR_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures")
+SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
+SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
+SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
