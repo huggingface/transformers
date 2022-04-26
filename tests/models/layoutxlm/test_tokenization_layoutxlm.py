@@ -23,8 +23,8 @@ from typing import List
 from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
     get_tests_dir,
+    is_pt_tf_cross_test,
     require_pandas,
     require_scatter,
     require_sentencepiece,

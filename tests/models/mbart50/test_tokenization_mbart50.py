@@ -19,7 +19,14 @@ import unittest
 from os.path import dirname
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBart50Tokenizer, MBart50TokenizerFast, is_torch_available
-from transformers.testing_utils import get_tests_dir, nested_simplify, require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    nested_simplify,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
