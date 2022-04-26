@@ -177,9 +177,6 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     outputs = model(pixel_values)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
 
-    print("Actual logits:", logits[0, :3, :3])
-    print("Actual boxes:", pred_boxes[0, :3, :3])
-
     expected_slice_logits, expected_slice_boxes = None, None
     if yolos_name == "yolos_ti":
         expected_slice_logits = torch.tensor(
@@ -196,8 +193,12 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
             [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]]
         )
     elif yolos_name == "yolos_s_300_pre":
-        expected_slice_logits = torch.tensor()
-        expected_slice_boxes = torch.tensor()
+        expected_slice_logits = torch.tensor(
+            [[-36.2220, -14.4385, -23.5457], [-35.6970, -14.7583, -21.3935], [-31.5939, -13.6042, -16.8049]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7614, 0.2316, 0.4728], [0.7168, 0.4495, 0.3855], [0.4996, 0.1466, 0.9996]]
+        )
     elif yolos_name == "yolos_s_dWr":
         expected_slice_logits = torch.tensor(
             [[-42.8668, -24.1049, -41.1690], [-34.7456, -14.1274, -24.9194], [-33.7898, -12.1946, -25.6495]]
