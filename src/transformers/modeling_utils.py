@@ -16,7 +16,6 @@
 
 import gc
 import hashlib
-import inspect
 import json
 import os
 import re
@@ -386,7 +385,7 @@ def load_sharded_checkpoint(model, folder, strict=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike], download=None):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -419,8 +418,8 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
 
                 return sha256_hash.hexdigest()
 
-            actual_sha = sha256(resolved_archive_file)
-            metafilename = f"{resolved_archive_file}.json"
+            actual_sha = sha256(checkpoint_file)
+            metafilename = f"{checkpoint_file}.json"
             try:
                 with open(metafilename, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -429,25 +428,16 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             except Exception:
                 expected_sha = None
 
-            if actual_sha != expected_sha:
+            if download and actual_sha != expected_sha:
                 logger.warning(
                     f"Look like a corrupted file is on disk ({actual_sha}!={expected_sha}), attempting to recover by downloading again."
                 )
 
                 # Remove corrupted file
-                os.remove(resolved_archive_file)
+                os.remove(checkpoint_file)
                 # Redownload file
-                resolved_archive_file = cached_path(
-                    archive_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
-                    user_agent=user_agent,
-                )
-                state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                checkpoint_file = download()
+                return torch.load(checkpoint_file, map_location="cpu")
             else:
                 raise OSError(
                     f"Unable to load weights from pytorch checkpoint file for '{checkpoint_file}' "
@@ -2015,13 +2005,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 mirror=mirror,
             )
 
+        def download():
+            return cached_path(
+                archive_file,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+            )
+
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file)
->>>>>>> c33de7041 (Recovering on corrupted files on disk.)
 
+                state_dict = load_state_dict(resolved_archive_file, download=download)
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -2036,7 +2037,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         elif not is_sharded:
                             torch_dtype = next(iter(state_dict.values())).dtype
                         else:
-                            one_state_dict = load_state_dict(resolved_archive_file)
+                            one_state_dict = load_state_dict(resolved_archive_file, download=download)
                             torch_dtype = next(iter(one_state_dict.values())).dtype
                             del one_state_dict  # free CPU memory
                     else:
