@@ -187,7 +187,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artist_id = self.artist_encoder.get(artist)
         genre_id = self.genre_encoder.get(genre)
-        lyrics 
+        lyrics
         lyric_ids = [self.genre_encoder.get(character) for character in lyrics]
         lyric_ids = self.get_relevant_lyric_tokens(lyric_ids, total_length, offset, duration)
         return artist_id, genre_id, lyric_ids
@@ -201,7 +201,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Only the lytrics are split into character for the character-based vocabulary.
         """
         # only lyrics are not tokenized, but character based is easily handled
-        return  [character for character in lyrics]
+        return [character for character in lyrics]
 
     def tokenize(self, artist, genre, lyrics, total_length, offset, duration):
         """
@@ -220,34 +220,34 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
             duration (`_type_`):
                 _description_
-        """        
+        """
         artist, genre, lyrics, kwargs = self.prepare_for_tokenization(artist, genre, lyrics, **kwargs)
         # TODO deal with the kwargs here
-        lyrics = self._tokenize(lyrics,**kwargs)
+        lyrics = self._tokenize(lyrics, **kwargs)
         return artist, genre, lyrics
-        
-    def _normalize(self,text:str)->str:
+
+    def _normalize(self, text: str) -> str:
         """Normalizes the input text. This process is for the genres and the artit
 
         Args:
             text (`str`):
                 Artist or Genre string to normalize
-        """        
-        import re 
-        accepted = frozenset([chr(i) for i in range(ord('a'), ord('z') + 1)] +
-                     [chr(i) for i in range(ord('A'), ord('Z') + 1)] +
-                     [chr(i) for i in range(ord('0'), ord('9') + 1)])
+        """
+        import re
 
-        rex = re.compile(r'_+')
-        text = ''.join([c if c in accepted else '_' for c in text.lower()])
-        text = rex.sub('_', text).strip('_')
+        accepted = frozenset(
+            [chr(i) for i in range(ord("a"), ord("z") + 1)]
+            + [chr(i) for i in range(ord("A"), ord("Z") + 1)]
+            + [chr(i) for i in range(ord("0"), ord("9") + 1)]
+        )
+
+        rex = re.compile(r"_+")
+        text = "".join([c if c in accepted else "_" for c in text.lower()])
+        text = rex.sub("_", text).strip("_")
         return text
-    
+
     def prepare_for_tokenization(
-        self, artist: str, 
-        genre:str,
-        lyrics:str,
-        is_split_into_words: bool = False, **kwargs
+        self, artist: str, genre: str, lyrics: str, is_split_into_words: bool = False, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -259,7 +259,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             artist (`str`):
                 The artist name to prepare. This will mostly lower the string
             genre (`str`):
-                The gnere name to prepare. This will mostly lower the string. 
+                The gnere name to prepare. This will mostly lower the string.
             lyrics (`str`):
                 The lyrics  to prepare.
             is_split_into_words (`bool`, *optional*, defaults to `False`):
@@ -274,12 +274,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artist = self._normalize(artist)
         genre = self._normalize(genre)
-        
+
         lyrics = unidecode(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = self.out_of_vocab.sub("", lyrics)
         return (artist, genre, lyrics, kwargs)
-        
 
     def _convert_id_to_token(self, artist_index, genre_index, lyric_index):
         """Converts an index (integer) in a token (str) using the vocab.
