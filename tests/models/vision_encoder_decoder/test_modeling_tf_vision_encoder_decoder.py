@@ -32,8 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ..gpt2.test_modeling_tf_gpt2 import TFGPT2ModelTester
 from ...test_modeling_tf_common import floats_tensor, ids_tensor
+from ..gpt2.test_modeling_tf_gpt2 import TFGPT2ModelTester
 from ..vit.test_modeling_tf_vit import TFViTModelTester
 
 
