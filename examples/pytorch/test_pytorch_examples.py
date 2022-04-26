@@ -573,6 +573,7 @@ class ExamplesTests(TestCasePlus):
             --remove_unused_columns False
             --overwrite_output_dir True
             --max_steps 10
+            --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
             --seed 32
@@ -584,5 +585,4 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_semantic_segmentation.main()
             result = get_results(tmp_dir)
-            print("Result:", result)
             self.assertGreaterEqual(result["eval_overall_accuracy"], 0.1)
