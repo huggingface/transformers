@@ -23,7 +23,7 @@ from transformers import is_flax_available, is_torch_available, is_vision_availa
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_vision, slow, torch_device
 
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from ..test_modeling_flax_common import floats_tensor, ids_tensor
+from ...test_modeling_flax_common import floats_tensor, ids_tensor
 from ..vit.test_modeling_flax_vit import FlaxViTModelTester
 
 

@@ -27,7 +27,7 @@ from ..bart.test_modeling_bart import BartModelTester
 from ..bert.test_modeling_bert import BertModelTester
 from ..deit.test_modeling_deit import DeiTModelTester
 from ..swin.test_modeling_swin import SwinModelTester
-from ..test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..trocr.test_modeling_trocr import TrOCRStandaloneDecoderModelTester
 from ..vit.test_modeling_vit import ViTModelTester
 

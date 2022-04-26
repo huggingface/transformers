@@ -22,7 +22,7 @@ from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_sentencepiece, slow
 
 from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():

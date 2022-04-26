@@ -26,7 +26,7 @@ from ..bert_generation.test_modeling_bert_generation import BertGenerationEncode
 from ..gpt2.test_modeling_gpt2 import GPT2ModelTester
 from ..prophetnet.test_modeling_prophetnet import ProphetNetStandaloneDecoderModelTester
 from ..roberta.test_modeling_roberta import RobertaModelTester
-from ..test_modeling_common import ids_tensor
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():

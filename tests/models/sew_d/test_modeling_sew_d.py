@@ -23,8 +23,8 @@ import pytest
 from transformers import SEWDConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import (
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,

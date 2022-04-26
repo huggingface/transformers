@@ -23,7 +23,7 @@ from transformers import GPT2Tokenizer, GPTNeoConfig, is_flax_available, is_torc
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():

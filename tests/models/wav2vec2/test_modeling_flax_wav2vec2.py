@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
 
 
 if is_flax_available():

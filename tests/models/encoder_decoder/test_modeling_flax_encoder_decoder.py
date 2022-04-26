@@ -25,7 +25,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from ..test_modeling_flax_common import ids_tensor
+from ...test_modeling_flax_common import ids_tensor
 
 
 if is_flax_available():
