@@ -22,7 +22,7 @@ from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
+    "configuration_resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig", "ResNetOnnxConfig"],
 }
 
 if is_torch_available():
@@ -35,7 +35,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
+    from .configuration_resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig, ResNetOnnxConfig
 
     if is_torch_available():
         from .modeling_resnet import (

@@ -24,6 +24,7 @@ from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
+from ..models.resnet import ResNetOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
@@ -297,6 +298,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
+        "resnet": supported_features_mapping("default", "image-classification", onnx_config_cls=ResNetOnnxConfig),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
         ),
