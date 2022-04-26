@@ -144,7 +144,7 @@ def torch_nn_relu_override(self, x):
     return x
 
 
-def functional_relu_override(x, inplace=False):
+def torch_nn_functional_relu_override(x, inplace=False):
     assert not inplace, "dont support inplace functional.relu for metatensor analysis"
     return x
 
@@ -240,12 +240,36 @@ def torch_tensor_repeat_override(self, *sizes):
     return torch.empty(shape, device="meta")
 
 
+def torch_nn_mseloss(self, input, target):
+    if self.reduction == "none":
+        shape = target.shape
+    else:
+        shape = (1,)
+    return torch.empty(shape, device="meta")
+
+
+def torch_nn_crossentropyloss(self, input, target):
+    if self.reduction == "none":
+        shape = target.shape
+    else:
+        shape = (1,)
+    return torch.empty(shape, device="meta")
+
+
+def torch_nn_bcewithlogitsloss(self, input, target):
+    if self.reduction == "none":
+        shape = target.shape
+    else:
+        shape = (1,)
+    return torch.empty(shape, device="meta")
+
+
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: embedding_override,
     torch.nn.LayerNorm: torch_nn_layernorm_override,
     torch.nn.Linear: torch_nn_linear_override,
     torch.relu: torch_relu_override,
-    torch.nn.functional.relu: functional_relu_override,
+    torch.nn.functional.relu: torch_nn_functional_relu_override,
     torch.nn.ReLU: torch_nn_relu_override,
     torch.where: torch_where_override,
     torch.abs: torch_abs_override,
@@ -257,6 +281,9 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.mul: torch_tensor_mul_override,
     torch.matmul: torch_matmul_override,
     torch.Tensor.repeat: torch_tensor_repeat_override,
+    torch.nn.MSELoss: torch_nn_mseloss,
+    torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
+    torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
 }
 
 
@@ -333,7 +360,7 @@ class MetaDeviceAttribute(HFAttribute):
     pass
 
 
-def _proxys_to_metas(v):
+def _proxies_to_metas(v):
     """Returns the underlying metadata for HFProxies, and behaves like identity for the others."""
     if isinstance(v, MetaDeviceAttribute):
         return "meta"
@@ -405,6 +432,7 @@ class HFTracer(Tracer):
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
+
             batch_size = shape[0]
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
@@ -414,8 +442,32 @@ class HFTracer(Tracer):
             ]:
                 inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
                 inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
+            elif model_class in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                if not hasattr(model.config, "problem_type") or model.config.problem_type is None:
+                    raise ValueError(
+                        "Could not retrieve the problem type for the sequence classification task, please set "
+                        'model.config.problem_type to one of the following values: "regression", '
+                        '"single_label_classification", or "multi_label_classification".'
+                    )
+
+                if model.config.problem_type == "regression":
+                    labels_shape = (batch_size, model.config.num_labels)
+                    labels_dtype = torch.float32
+                elif model.config.problem_type == "single_label_classification":
+                    labels_shape = (batch_size,)
+                    labels_dtype = torch.long
+                elif model.config.problem_type == "multi_label_classification":
+                    labels_shape = (batch_size, model.config.num_labels)
+                    labels_dtype = torch.float32
+                    pass
+                else:
+                    raise ValueError(
+                        'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
+                        f', or "multi_label_classification", but "{model.config.problem_type}" was provided.'
+                    )
+                inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
+
             elif model_class in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
             ]:
@@ -457,8 +509,8 @@ class HFTracer(Tracer):
                 kwargs["device"] = "meta"
 
         try:
-            args_metas = torch.fx.node.map_aggregate(args, _proxys_to_metas)
-            kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxys_to_metas)
+            args_metas = torch.fx.node.map_aggregate(args, _proxies_to_metas)
+            kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxies_to_metas)
 
             if kind == "call_function":
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
@@ -573,18 +625,35 @@ class HFTracer(Tracer):
 
         return self.graph
 
+    def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
+        """
+        Whether the module was instantiated with Proxies. If that is the case, such module cannot be a leaf module
+        because its attributes are input-dependent.
+        """
+        return any(isinstance(attr, Proxy) for attr in mod.__dict__.values())
+
     def _insert_module_as_submodule(self, mod: nn.Module) -> str:
         """
         Helper method which tries to insert a module that was not declared as submodule.
         """
+        # If one of the module attributes is a Proxy, it means that its instantiation is input-dependent.
+        # It is not possible to insert such modules, those should be traced through.
+        if self._stateless_mod_instanciation_depends_on_proxies(mod):
+            return ""
         idx = 0
         mod_name = mod.__class__.__name__.lower()
         path = f"{mod_name}_{idx}"
+        already_inserted = False
         while hasattr(self.root, path):
+            if getattr(self.root, path) is mod:
+                already_inserted = True
+                break
             path = f"{mod_name}_{idx}"
             idx += 1
 
-        self.root.add_module(path, mod)
+        # No need to add multiple instances of the same module.
+        if not already_inserted:
+            self.root.add_module(path, mod)
         return path
 
     def path_of_module(self, mod: nn.Module) -> str:
@@ -601,9 +670,13 @@ class HFTracer(Tracer):
         except NameError as e:
             if self.allow_insert_stateless_mods and len(list(mod.parameters())) == 0 and len(list(mod.buffers())) == 0:
                 path = self._insert_module_as_submodule(mod)
-                self.prev_module = path
                 return path
             raise e
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
+            m, module_qualified_name
+        )
 
 
 def symbolic_trace(
