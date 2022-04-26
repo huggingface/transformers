@@ -23,7 +23,7 @@ from transformers.models.blenderbot_small.tokenization_blenderbot_small import (
     BlenderbotSmallTokenizer,
 )
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

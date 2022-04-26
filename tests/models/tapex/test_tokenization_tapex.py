@@ -27,7 +27,7 @@ from transformers import AddedToken, TapexTokenizer
 from transformers.models.tapex.tokenization_tapex import VOCAB_FILES_NAMES
 from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_pandas

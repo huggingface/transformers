@@ -28,7 +28,7 @@ from transformers.utils import is_sentencepiece_available, is_tf_available, is_t
 if is_sentencepiece_available():
     from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_SP = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")

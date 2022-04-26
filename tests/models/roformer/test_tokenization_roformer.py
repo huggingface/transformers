@@ -18,7 +18,7 @@ import unittest
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
 from transformers.testing_utils import require_rjieba, require_tokenizers
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_rjieba

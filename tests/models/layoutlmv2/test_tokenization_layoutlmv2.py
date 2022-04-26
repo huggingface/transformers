@@ -33,7 +33,7 @@ from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
 )
 from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
 
-from ..test_tokenization_common import (
+from ...test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,

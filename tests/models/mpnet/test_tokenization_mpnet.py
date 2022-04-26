@@ -21,7 +21,7 @@ from transformers import MPNetTokenizerFast
 from transformers.models.mpnet.tokenization_mpnet import VOCAB_FILES_NAMES, MPNetTokenizer
 from transformers.testing_utils import require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

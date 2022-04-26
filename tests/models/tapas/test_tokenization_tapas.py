@@ -41,7 +41,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ..test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
+from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
 
 @require_tokenizers

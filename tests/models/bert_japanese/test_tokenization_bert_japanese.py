@@ -29,7 +29,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
 )
 from transformers.testing_utils import custom_tokenizers
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @custom_tokenizers

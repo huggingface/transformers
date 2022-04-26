@@ -21,7 +21,7 @@ from transformers import BigBirdTokenizer, BigBirdTokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 from transformers.utils import cached_property
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SPIECE_UNDERLINE = "▁"

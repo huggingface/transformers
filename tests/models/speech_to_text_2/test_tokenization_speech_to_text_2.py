@@ -21,7 +21,7 @@ import unittest
 from transformers.models.speech_to_text_2 import Speech2Text2Tokenizer
 from transformers.models.speech_to_text_2.tokenization_speech_to_text_2 import VOCAB_FILES_NAMES
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
