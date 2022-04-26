@@ -15,15 +15,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import _LazyModule, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig"],
+    "configuration_jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxOnnxConfig"],
     "tokenization_jukebox": ["JukeboxTokenizer"],
 }
 
@@ -33,23 +32,17 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_jukebox"] = [
         "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "JukeboxForMaskedLM",
-        "JukeboxForCausalLM",
-        "JukeboxForMultipleChoice",
-        "JukeboxForQuestionAnswering",
+        "JukeboxDoubleHeadsModel",
         "JukeboxForSequenceClassification",
         "JukeboxForTokenClassification",
-        "JukeboxLayer",
+        "JukeboxLMHeadModel",
         "JukeboxModel",
         "JukeboxPreTrainedModel",
         "load_tf_weights_in_jukebox",
     ]
 
-
-
-
 if TYPE_CHECKING:
-    from .configuration_jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig
+    from .configuration_jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxOnnxConfig
     from .tokenization_jukebox import JukeboxTokenizer
 
     if is_tokenizers_available():
@@ -58,19 +51,14 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            JukeboxForMaskedLM,
-            JukeboxForCausalLM,
-            JukeboxForMultipleChoice,
-            JukeboxForQuestionAnswering,
+            JukeboxDoubleHeadsModel,
             JukeboxForSequenceClassification,
             JukeboxForTokenClassification,
-            JukeboxLayer,
+            JukeboxLMHeadModel,
             JukeboxModel,
             JukeboxPreTrainedModel,
             load_tf_weights_in_jukebox,
         )
-
-
 
 else:
     import sys

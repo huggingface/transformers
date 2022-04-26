@@ -62,6 +62,7 @@ from . import (
     funnel,
     glpn,
     gpt2,
+    jukebox,
     gpt_neo,
     gpt_neox,
     gptj,
