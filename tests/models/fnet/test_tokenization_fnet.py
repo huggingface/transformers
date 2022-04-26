@@ -23,7 +23,7 @@ from transformers.tokenization_utils import AddedToken
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/spiece.model")
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/spiece.model")
 
 
 @require_sentencepiece

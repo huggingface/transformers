@@ -23,7 +23,7 @@ from transformers.testing_utils import nested_simplify, require_sentencepiece, r
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".../fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
