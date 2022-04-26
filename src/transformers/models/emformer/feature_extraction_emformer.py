@@ -16,14 +16,17 @@
 Feature extractor class for Emformer
 """
 
+import json
+import math
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
+from torchaudio.transforms import MelSpectrogram
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from torchaudio.transforms import MelSpectrogram
 
 
 logger = logging.get_logger(__name__)
@@ -38,6 +41,8 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
 
+        global_stats_file (`str`):
+            Path to the global stats file containing the `mean` and `invstddev` statistics of the dataset.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in samples per second (Hz).
         n_fft (`int`, defaults to 400):
@@ -54,6 +59,7 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
+        global_stats_file,
         sampling_rate=16000,
         n_fft=400,
         n_mels=128,
@@ -69,28 +75,30 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             sample_rate=self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels, hop_length=self.hop_length
         )
 
+        decibel = 2 * 20 * math.log10(torch.iinfo(torch.int16).max)
+        self.gain = pow(10, 0.05 * decibel)
+
+        with open(global_stats_file, "r") as f:
+            global_stats = json.load(f)
+        self.mean = global_stats["mean"]
+        self.invstddev = global_stats["invstddev"]
 
     @staticmethod
-    def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+    def piecewise_linear_log(features: torch.FloatTensor):
+        features[features > math.e] = torch.log(features[features > math.e])
+        features[features <= math.e] = features[features <= math.e] / math.e
+        return features
+
+    def extract_features(self, waveform: np.ndarray) -> np.ndarray:
         """
-        Every array in the list is normalized to have zero mean and unit variance
+        Extract the mel spectrogram features and normalize them
         """
-        if attention_mask is not None:
-            attention_mask = np.array(attention_mask, np.int32)
-            normed_input_values = []
+        features = self.mel_transform(waveform)
+        features = features.transpose(1, 0)
+        features = self.piecewise_linear_log(features * self.gain)
+        features = (features - self.mean) * self.invstddev
 
-            for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length < normed_slice.shape[0]:
-                    normed_slice[length:] = padding_value
-
-                normed_input_values.append(normed_slice)
-        else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
-
-        return normed_input_values
+        return features
 
     def __call__(
         self,
@@ -184,8 +192,8 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        # extract fbank features
-        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+        # extract spectrogram features
+        features = [self.extract_features(waveform) for waveform in raw_speech]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
@@ -208,17 +216,6 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
-
-        # Utterance-level cepstral mean and variance normalization
-        if self.do_ceptral_normalize:
-            attention_mask = (
-                np.array(attention_mask, dtype=np.int32)
-                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
-                else None
-            )
-            padded_inputs["input_features"] = self.normalize(
-                padded_inputs["input_features"], attention_mask=attention_mask
-            )
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

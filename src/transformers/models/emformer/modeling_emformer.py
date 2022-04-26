@@ -71,7 +71,6 @@ EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2BaseModelOutput with Wav2Vec2->Emformer
 class EmformerBaseModelOutput(ModelOutput):
@@ -1216,8 +1215,8 @@ EMFORMER_INPUTS_DOCSTRING = r"""
 
             `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [emformer-base](https://huggingface.co/anton-l/emformer-base-librispeech), `attention_mask` should **not** be
-            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
+            [emformer-base](https://huggingface.co/anton-l/emformer-base-librispeech), `attention_mask` should **not**
+            be passed to avoid degraded performance when doing batched inference. For such models `input_values` should
             simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
             different results depending on whether `input_values` is padded or not.
 

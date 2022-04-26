@@ -28,7 +28,6 @@ EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class EmformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EmformerModel`]. It is used to instantiate an

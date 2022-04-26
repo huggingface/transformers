@@ -47,7 +47,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2FeatureExtractor,
         EmformerForAudioFrameClassification,
         EmformerForCTC,
         EmformerForMaskedLM,
@@ -55,6 +54,7 @@ if is_torch_available():
         EmformerForSequenceClassification,
         EmformerForXVector,
         EmformerModel,
+        Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
     from transformers.models.emformer.modeling_emformer import (
