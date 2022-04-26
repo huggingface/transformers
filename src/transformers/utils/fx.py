@@ -160,7 +160,7 @@ def torch_abs_override(input, *, out=None):
     return input
 
 
-def torch_arange_with_start_override(*args, **kwargs):
+def torch_arange_override(*args, **kwargs):
     n = len(args)
     step = 1
     if n == 1:
@@ -173,11 +173,6 @@ def torch_arange_with_start_override(*args, **kwargs):
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
-
-# def torch_arange_with_start_override(
-#     start, end, *, step=1, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False
-# ):
-#     return torch.empty((end - start) // step, dtype=dtype, layout=layout, device="meta")
 
 
 def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
@@ -221,7 +216,9 @@ def torch_add_override(input, other, *, alpha=1, out=None):
 
 
 def torch_mul_override(input, other, *, out=None):
-    import pdb; pdb.set_trace()
+    import pdb
+
+    pdb.set_trace()
     return torch_add_override(input, other, out=out)
 
 
@@ -243,7 +240,7 @@ def torch_tensor_repeat_override(self, *sizes):
     return torch.empty(shape, device="meta")
 
 
-manual_meta_overrides: Dict[Callable, Callable] = {
+_MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: embedding_override,
     torch.nn.LayerNorm: torch_nn_layernorm_override,
     torch.nn.Linear: torch_nn_linear_override,
@@ -252,8 +249,7 @@ manual_meta_overrides: Dict[Callable, Callable] = {
     torch.nn.ReLU: torch_nn_relu_override,
     torch.where: torch_where_override,
     torch.abs: torch_abs_override,
-    # torch.ops.aten.arange: torch_arange_with_start_override,
-    torch.arange: torch_arange_with_start_override,
+    torch.arange: torch_arange_override,
     torch.cat: torch_cat_override,
     torch.stack: torch_stack_override,
     torch.add: torch_add_override,
@@ -264,7 +260,91 @@ manual_meta_overrides: Dict[Callable, Callable] = {
 }
 
 
-def gen_constructor_wrapper(target):
+class HFProxy(Proxy):
+    """
+    Proxy that uses metadata to handle data-dependent control-flow.
+    """
+
+    def install_metadata(self, metadata):
+        self._metadata = metadata
+
+    @property
+    def shape(self):
+        return self.tracer.create_proxy("call_method", "size", (self,), {})
+
+    @property
+    def dtype(self):
+        return self.tracer.root.dtype
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return self._metadata.dtype
+        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
+
+    @property
+    def device(self):
+        # Hack so we can track when devices are used. During meta-tensor propagation,
+        # replace these values with a constant 'meta'
+        return MetaDeviceAttribute(self, "device")
+
+    def __len__(self):
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return len(self._metadata)
+        return super().__len__()
+
+    def __bool__(self):
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return self._metadata
+        return super().__bool__()
+
+    def __getattr__(self, k):
+        if k == "_metadata":
+            return self.__getattribute__(k)
+        # note: not added to the graph yet, if this is a method call
+        # we peephole optimize to the method invocation
+        return HFAttribute(self, k)
+
+    def __contains__(self, key):
+        # To handle cases such as :
+        # `"some_key" in kwargs`
+        if self.node.op == "placeholder":
+            return False
+        return super().__contains__(key)
+
+
+class HFAttribute(HFProxy):
+    def __init__(self, root, attr: str):
+        self.root = root
+        self.attr = attr
+        self.tracer = root.tracer
+        self._node = None
+
+    @property
+    def node(self):
+        # the node for attributes is added lazily, since most will just be method calls
+        # which do not rely on the getitem call
+        if self._node is None:
+            self._node = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
+        return self._node
+
+    def __call__(self, *args, **kwargs):
+        return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
+
+
+class MetaDeviceAttribute(HFAttribute):
+    pass
+
+
+def _proxys_to_metas(v):
+    """Returns the underlying metadata for HFProxies, and behaves like identity for the others."""
+    if isinstance(v, MetaDeviceAttribute):
+        return "meta"
+    if isinstance(v, torch.fx.Proxy):
+        if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
+            raise RuntimeError(f"No metadata was found for {v}")
+        return v._metadata
+    return v
+
+
+def _gen_constructor_wrapper(target):
     @functools.wraps(target)
     def wrapper(*args, **kwargs):
         proxy = None
@@ -285,131 +365,6 @@ def gen_constructor_wrapper(target):
     return wrapper, target
 
 
-class HFProxy(Proxy):
-    """
-    Proxy that uses meta data to handle data-dependent control-flow.
-    """
-
-    def install_tensor_meta(self, tensor_meta):
-        self._tensor_meta = tensor_meta
-
-    # def dim(self):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta.dim()
-    #     return self.tracer.create_proxy("call_method", "dim", (self,), {})
-
-    @property
-    def shape(self):
-        return self.tracer.create_proxy("call_method", "size", (self,), {})
-
-    @property
-    def dtype(self):
-        return self.tracer.root.dtype
-        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-            return self._tensor_meta.dtype
-        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
-
-    @property
-    def device(self):
-        # Hack so we can track when devices are used. During meta-tensor propagation,
-        # replace these values with a constant 'meta'
-        return MetaDeviceAttribute(self, "device")
-
-    def __getattr__(self, k):
-        if k == "_tensor_meta":
-            return self.__getattribute__(k)
-        # note: not added to the graph yet, if this is a method call
-        # we peephole optimize to the method invocation
-        return MetaAttribute(self, k)
-
-    def __len__(self):
-        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-            return len(self._tensor_meta)
-        return super().__len__()
-
-    def __bool__(self):
-        if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-            print("BOOL", self._tensor_meta)
-            return self._tensor_meta
-        return super().__bool__()
-
-    # def __lt__(self, other):
-    #     # if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #     #     return self._tensor_meta < other
-    #     return self.tracer.create_proxy("call_function", operator.lt, (self, other), {})
-
-    # def __le__(self, other):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta <= other
-    #     return self.tracer.create_proxy("call_function", operator.le, (self, other), {})
-
-    # def __eq__(self, other):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta == other
-    #     return self.tracer.create_proxy("call_function", operator.eq, (self, other), {})
-
-    # def __ne__(self, other):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta != other
-    #     return self.tracer.create_proxy("call_function", operator.ne, (self, other), {})
-
-    # def __ge__(self, other):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta >= other
-    #     return self.tracer.create_proxy("call_function", operator.ge, (self, other), {})
-
-    # def __gt__(self, other):
-    #     if hasattr(self, "_tensor_meta") and self._tensor_meta is not None:
-    #         return self._tensor_meta > other
-    #     return self.tracer.create_proxy("call_function", operator.gt, (self, other), {})
-
-    def __contains__(self, key):
-        # To handle kwargs.
-        if self.node.op == "placeholder":
-            return False
-        return super().__contains__(key)
-
-
-class MetaAttribute(HFProxy):
-    def __init__(self, root, attr: str):
-        self.root = root
-        self.attr = attr
-        self.tracer = root.tracer
-        self._node = None
-
-    @property
-    def node(self):
-        # the node for attributes is added lazily, since most will just be method calls
-        # which do not rely on the getitem call
-        if self._node is None:
-            proxy = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
-            # if hasattr(self.root, "_tensor_meta") and self.root._tensor_meta is not None:
-            #     proxy.install_tensor_meta(getattr(self.root._tensor_meta, self.attr))
-            # self._node = proxy.node
-            self._node = proxy
-
-        return self._node
-
-    def __call__(self, *args, **kwargs):
-        return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
-
-
-class MetaDeviceAttribute(MetaAttribute):
-    pass
-
-
-def proxys_to_metas(v):
-    if isinstance(v, MetaDeviceAttribute):
-        return "meta"
-    if isinstance(v, torch.fx.Proxy):
-        # assert isinstance(v, HFProxy), f'Expected MetaProxy but got {type(v)}'
-        # assert hasattr(v, '_tensor_meta'), 'MetaProxy does not have an associated meta'
-        if not (isinstance(v, HFProxy) and hasattr(v, "_tensor_meta")):
-            raise RuntimeError(f"No tensor meta data was found for {v}")
-        return v._tensor_meta
-    return v
-
-
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
     if forbidden_values is None:
         forbidden_values = []
@@ -425,10 +380,7 @@ class HFTracer(Tracer):
     regular PyTorch torch.fx.Proxy.
     """
 
-    from transformers import modeling_utils
-
     allow_insert_stateless_mods: bool = True
-
     _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full_like", "eye"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
@@ -492,7 +444,7 @@ class HFTracer(Tracer):
         rv = super().create_proxy(kind, target, args, kwargs, name, type_expr, proxy_factory_fn)
 
         if kind == "placeholder" and target in self.meta_args:
-            rv.install_tensor_meta(self.meta_args[target])
+            rv.install_metadata(self.meta_args[target])
             return rv
 
         if target in self.orig_fns:
@@ -505,15 +457,15 @@ class HFTracer(Tracer):
                 kwargs["device"] = "meta"
 
         try:
-            args_metas = torch.fx.node.map_aggregate(args, proxys_to_metas)
-            kwargs_metas = torch.fx.node.map_aggregate(kwargs, proxys_to_metas)
+            args_metas = torch.fx.node.map_aggregate(args, _proxys_to_metas)
+            kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxys_to_metas)
 
             if kind == "call_function":
-                meta_target = manual_meta_overrides.get(target, target)
+                meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
             elif kind == "call_method":
                 method = getattr(args_metas[0].__class__, target)
-                meta_target = manual_meta_overrides.get(method, method)
+                meta_target = _MANUAL_META_OVERRIDES.get(method, method)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
             elif kind == "call_module":
                 assert hasattr(self, "orig_forward")
@@ -521,8 +473,8 @@ class HFTracer(Tracer):
                 try:
                     mod = self.root.get_submodule(target)
                     mod_type = type(mod)
-                    if mod_type in manual_meta_overrides:
-                        meta_out = manual_meta_overrides[mod_type](mod, *args_metas, **kwargs_metas)
+                    if mod_type in _MANUAL_META_OVERRIDES:
+                        meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
                     else:
                         meta_out = self.orig_forward(*args_metas, **kwargs_metas)
                 finally:
@@ -544,7 +496,7 @@ class HFTracer(Tracer):
                 return rv
 
             assert isinstance(rv, Proxy), "Dont support composite output yet"
-            rv.install_tensor_meta(meta_out)
+            rv.install_metadata(meta_out)
         except Exception as e:
             warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
 
@@ -592,7 +544,7 @@ class HFTracer(Tracer):
         concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
-            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+            target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
         }
         self.orig_fns = set()
 
@@ -652,15 +604,6 @@ class HFTracer(Tracer):
                 self.prev_module = path
                 return path
             raise e
-
-    # def is_leaf_module(self, m: nn.Module, module_qualified_name: str) -> bool:
-    #     is_loss_module = m.__module__.startswith("torch.nn.modules.loss")
-    #     return (not is_loss_module) and super().is_leaf_module(m, module_qualified_name)
-
-    # def create_arg(self, a: Any) -> Argument:
-    #     if isinstance(a, range):
-    #         return super().create_arg(list(a))
-    #     return super().create_arg(a)
 
 
 def symbolic_trace(
