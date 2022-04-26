@@ -177,16 +177,16 @@ class InterpolateInitialPositionEmbeddings(nn.Module):
         det_pos_embed = pos_embed[:, -self.config.num_detection_tokens :, :]
         patch_pos_embed = pos_embed[:, 1 : -self.config.num_detection_tokens, :]
         patch_pos_embed = patch_pos_embed.transpose(1, 2)
-        B, E, Q = patch_pos_embed.shape
+        batch_size, hidden_size, seq_len = patch_pos_embed.shape
 
         patch_height, patch_width = (
             self.config.image_size[0] // self.config.patch_size,
             self.config.image_size[1] // self.config.patch_size,
         )
-        patch_pos_embed = patch_pos_embed.view(B, E, patch_height, patch_width)
+        patch_pos_embed = patch_pos_embed.view(batch_size, hidden_size, patch_height, patch_width)
 
-        H, W = img_size
-        new_patch_heigth, new_patch_width = H // self.config.patch_size, W // self.config.patch_size
+        height, width = img_size
+        new_patch_heigth, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed, size=(new_patch_heigth, new_patch_width), mode="bicubic", align_corners=False
         )
@@ -206,20 +206,23 @@ class InterpolateMidPositionEmbeddings(nn.Module):
         det_pos_embed = pos_embed[:, :, -self.config.num_detection_tokens :, :]
         patch_pos_embed = pos_embed[:, :, 1 : -self.config.num_detection_tokens, :]
         patch_pos_embed = patch_pos_embed.transpose(2, 3)
-        D, B, E, Q = patch_pos_embed.shape
+        depth, batch_size, hidden_size, seq_len = patch_pos_embed.shape
 
         patch_height, patch_width = (
             self.config.image_size[0] // self.config.patch_size,
             self.config.image_size[1] // self.config.patch_size,
         )
-        patch_pos_embed = patch_pos_embed.view(D * B, E, patch_height, patch_width)
+        patch_pos_embed = patch_pos_embed.view(depth * batch_size, hidden_size, patch_height, patch_width)
         height, width = img_size
         new_patch_height, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed, size=(new_patch_height, new_patch_width), mode="bicubic", align_corners=False
         )
         patch_pos_embed = (
-            patch_pos_embed.flatten(2).transpose(1, 2).contiguous().view(D, B, new_patch_height * new_patch_width, E)
+            patch_pos_embed.flatten(2)
+            .transpose(1, 2)
+            .contiguous()
+            .view(depth, batch_size, new_patch_height * new_patch_width, hidden_size)
         )
         scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=2)
         return scale_pos_embed
@@ -460,14 +463,15 @@ class YolosEncoder(nn.Module):
         self.layer = nn.ModuleList([YolosLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+        seq_length = (
+            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
+        )
         self.mid_position_embeddings = (
             nn.Parameter(
                 torch.zeros(
                     config.num_hidden_layers - 1,
                     1,
-                    1
-                    + (config.image_size[0] * config.image_size[1] // config.patch_size**2)
-                    + config.num_detection_tokens,
+                    seq_length,
                     config.hidden_size,
                 )
             )
@@ -748,9 +752,10 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            following 2 keys: `'class_labels'` and `'boxes'` (the class labels and bounding boxes of an image in the
+            batch respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding
+            boxes in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image,
+            4)`.
 
         Returns:
 
