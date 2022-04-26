@@ -456,13 +456,9 @@ def main():
         )
     if data_args.language_group is not None:
         if data_args.task != "fleurs-asr":
-            raise ValueError(
-                "--language_group should only be used with --task=fleurs-asr"
-            )
+            raise ValueError("--language_group should only be used with --task=fleurs-asr")
         if data_args.language != "all":
-            raise ValueError(
-                "--language_group should only be used with --language=all"
-            )
+            raise ValueError("--language_group should only be used with --language=all")
 
     if data_args.target_column_name is None:
         target_column_name = TASK_TO_TARGET_COLUMN_NAME[task_name]
