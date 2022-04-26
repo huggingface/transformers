@@ -18,13 +18,13 @@ import unittest
 from os.path import dirname
 
 from transformers.models.xlm_prophetnet.tokenization_xlm_prophetnet import SPIECE_UNDERLINE, XLMProphetNetTokenizer
-from transformers.testing_utils import require_sentencepiece, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
 from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece

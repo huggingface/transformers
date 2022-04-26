@@ -21,7 +21,7 @@ from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
 from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils import is_sentencepiece_available
+from transformers.utils import get_tests_dir, is_sentencepiece_available
 
 
 if is_sentencepiece_available():
@@ -31,7 +31,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_sentencepiece_available():
-    SAMPLE_SP = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+    SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():

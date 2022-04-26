@@ -17,13 +17,13 @@ import unittest
 from os.path import dirname
 
 from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
 from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece

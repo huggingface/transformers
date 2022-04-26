@@ -22,7 +22,7 @@ from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
 from transformers.testing_utils import require_sentencepiece, slow
-from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
+from transformers.utils import get_tests_dir, is_sentencepiece_available, is_tf_available, is_torch_available
 
 
 if is_sentencepiece_available():
@@ -31,7 +31,7 @@ if is_sentencepiece_available():
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_SP = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")
+SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"

@@ -22,7 +22,7 @@ from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece_bpe.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe.model")
 
 
 class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
