@@ -23,7 +23,7 @@ import numpy as np
 from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import require_torch, slow
 
-from ..test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
+from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 global_rng = random.Random()
