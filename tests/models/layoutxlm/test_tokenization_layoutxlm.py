@@ -32,7 +32,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ..test_tokenization_common import (
+from ...test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,

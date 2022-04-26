@@ -21,7 +21,7 @@ from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
 from transformers.models.layoutlm.tokenization_layoutlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

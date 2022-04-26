@@ -20,7 +20,7 @@ from os.path import dirname
 from transformers import DebertaV2Tokenizer, DebertaV2TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/spiece.model")

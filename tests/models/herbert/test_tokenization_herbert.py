@@ -22,7 +22,7 @@ from transformers import HerbertTokenizer, HerbertTokenizerFast
 from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

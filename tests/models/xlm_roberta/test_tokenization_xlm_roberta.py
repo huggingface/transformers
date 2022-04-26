@@ -24,7 +24,7 @@ from transformers import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokeni
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")

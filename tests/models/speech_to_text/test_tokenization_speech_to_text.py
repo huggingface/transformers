@@ -23,7 +23,7 @@ from transformers.models.speech_to_text import Speech2TextTokenizer
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_SP = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures/test_sentencepiece.model")

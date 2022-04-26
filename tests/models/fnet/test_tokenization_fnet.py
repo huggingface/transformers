@@ -20,7 +20,7 @@ from transformers import FNetTokenizer, FNetTokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow, tooslow
 from transformers.tokenization_utils import AddedToken
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../fixtures/spiece.model")

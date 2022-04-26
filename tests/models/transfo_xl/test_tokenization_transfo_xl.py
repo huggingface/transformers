@@ -19,7 +19,7 @@ import unittest
 
 from transformers.models.transfo_xl.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
