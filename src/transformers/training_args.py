@@ -1219,7 +1219,7 @@ class TrainingArguments:
             return self.local_process_index == 0
         else:
             if is_sagemaker_mp_enabled():
-                return smp.rank() == 0
+                return smp.rdp_rank() == 0
             else:
                 return self.process_index == 0
 
