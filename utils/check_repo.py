@@ -97,21 +97,21 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
-    "decision_transformer/test_modeling_decision_transformer.py",
-    "camembert/test_modeling_camembert.py",
-    "mt5/test_modeling_flax_mt5.py",
-    "mbart/test_modeling_mbart.py",
-    "mt5/test_modeling_mt5.py",
-    "pegasus/test_modeling_pegasus.py",
-    "camembert/test_modeling_tf_camembert.py",
-    "mt5/test_modeling_tf_mt5.py",
-    "xlm_roberta/test_modeling_tf_xlm_roberta.py",
-    "xlm_roberta/test_modeling_flax_xlm_roberta.py",
-    "xlm_prophetnet/test_modeling_xlm_prophetnet.py",
-    "xlm_roberta/test_modeling_xlm_roberta.py",
-    "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
-    "vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
-    "decision_transformer/test_modeling_decision_transformer.py",
+    "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/camembert/test_modeling_camembert.py",
+    "models/mt5/test_modeling_flax_mt5.py",
+    "models/mbart/test_modeling_mbart.py",
+    "models/mt5/test_modeling_mt5.py",
+    "models/pegasus/test_modeling_pegasus.py",
+    "models/camembert/test_modeling_tf_camembert.py",
+    "models/mt5/test_modeling_tf_mt5.py",
+    "models/xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "models/xlm_roberta/test_modeling_flax_xlm_roberta.py",
+    "models/xlm_prophetnet/test_modeling_xlm_prophetnet.py",
+    "models/xlm_roberta/test_modeling_xlm_roberta.py",
+    "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
+    "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
+    "models/decision_transformer/test_modeling_decision_transformer.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -308,7 +308,12 @@ def check_models_are_in_init():
 # If some test_modeling files should be ignored when checking models are all tested, they should be added in the
 # nested list _ignore_files of this function.
 def get_model_test_files():
-    """Get the model test files."""
+    """Get the model test files.
+
+    The returned files should NOT contain the `tests` (i.e. `PATH_TO_TESTS` defined in this script). They will be
+    considered as paths relative to `tests`. A caller has to use `os.path.join(PATH_TO_TESTS, ...)` to access the files.
+    """
+
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
@@ -319,20 +324,23 @@ def get_model_test_files():
         "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
-    for file_or_dir in os.listdir(PATH_TO_TESTS):
-        path = os.path.join(PATH_TO_TESTS, file_or_dir)
-        if os.path.isdir(path):
-            filenames = [os.path.join(file_or_dir, file) for file in os.listdir(path)]
-        else:
-            filenames = [file_or_dir]
+    # Check both `PATH_TO_TESTS` and `PATH_TO_TESTS/models`
+    model_test_root = os.path.join(PATH_TO_TESTS, "models")
+    model_test_dirs = []
+    for x in os.listdir(model_test_root):
+        x = os.path.join(model_test_root, x)
+        if os.path.isdir(x):
+            model_test_dirs.append(x)
 
-        for filename in filenames:
-            if (
-                os.path.isfile(os.path.join(PATH_TO_TESTS, filename))
-                and "test_modeling" in filename
-                and not os.path.splitext(filename)[0] in _ignore_files
-            ):
-                test_files.append(filename)
+    for target_dir in [PATH_TO_TESTS] + model_test_dirs:
+        for file_or_dir in os.listdir(target_dir):
+            path = os.path.join(target_dir, file_or_dir)
+            if os.path.isfile(path):
+                filename = os.path.split(path)[-1]
+                if "test_modeling" in filename and not os.path.splitext(filename)[0] in _ignore_files:
+                    file = os.path.join(*path.split(os.sep)[1:])
+                    test_files.append(file)
+
     return test_files
 
 
