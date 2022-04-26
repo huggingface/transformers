@@ -350,7 +350,7 @@ def module_to_test_file(module_fname):
     elif len(splits) > 0 and splits[0] == "utils":
         default_test_file = f"tests/utils/test_utils_{module_name}"
     elif len(splits) > 4 and splits[2] == "models":
-        default_test_file = f"tests/{splits[3]}/test_{module_name}"
+        default_test_file = f"tests/models/{splits[3]}/test_{module_name}"
     elif len(splits) > 2 and splits[2].startswith("generation"):
         default_test_file = f"tests/generation/test_{module_name}"
     elif len(splits) > 2 and splits[2].startswith("trainer"):
