@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    jukebox,
     albert,
     auto,
     bart,
@@ -62,7 +61,6 @@ from . import (
     funnel,
     glpn,
     gpt2,
-    jukebox,
     gpt_neo,
     gpt_neox,
     gptj,
@@ -70,6 +68,7 @@ from . import (
     hubert,
     ibert,
     imagegpt,
+    jukebox,
     layoutlm,
     layoutlmv2,
     layoutlmv3,

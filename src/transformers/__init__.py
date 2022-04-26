@@ -118,7 +118,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -213,7 +212,6 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
-    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxTokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -221,7 +219,7 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
-    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig"],
+    "models.jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxTokenizer"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -717,21 +715,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.jukebox"].extend(
-        [
-            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxForMaskedLM",
-            "JukeboxForCausalLM",
-            "JukeboxForMultipleChoice",
-            "JukeboxForQuestionAnswering",
-            "JukeboxForSequenceClassification",
-            "JukeboxForTokenClassification",
-            "JukeboxLayer",
-            "JukeboxModel",
-            "JukeboxPreTrainedModel",
-            "load_tf_weights_in_jukebox",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1154,18 +1137,6 @@ else:
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
-        ]
-    )
-    _import_structure["models.jukebox"].extend(
-        [
-            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxDoubleHeadsModel",
-            "JukeboxForSequenceClassification",
-            "JukeboxForTokenClassification",
-            "JukeboxLMHeadModel",
-            "JukeboxModel",
-            "JukeboxPreTrainedModel",
-            "load_tf_weights_in_jukebox",
         ]
     )
     _import_structure["models.gpt_neo"].extend(
@@ -2157,17 +2128,6 @@ else:
             "TFGPT2PreTrainedModel",
         ]
     )
-    _import_structure["models.jukebox"].extend(
-        [
-            "TF_JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFJukeboxDoubleHeadsModel",
-            "TFJukeboxForSequenceClassification",
-            "TFJukeboxLMHeadModel",
-            "TFJukeboxMainLayer",
-            "TFJukeboxModel",
-            "TFJukeboxPreTrainedModel",
-        ]
-    )
     _import_structure["models.gptj"].extend(
         [
             "TFGPTJForCausalLM",
@@ -2183,6 +2143,17 @@ else:
             "TFHubertForCTC",
             "TFHubertModel",
             "TFHubertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.jukebox"].extend(
+        [
+            "TF_JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFJukeboxDoubleHeadsModel",
+            "TFJukeboxForSequenceClassification",
+            "TFJukeboxLMHeadModel",
+            "TFJukeboxMainLayer",
+            "TFJukeboxModel",
+            "TFJukeboxPreTrainedModel",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -2590,11 +2561,13 @@ else:
     )
     _import_structure["models.encoder_decoder"].append("FlaxEncoderDecoderModel")
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"])
-    _import_structure["models.jukebox"].extend(["FlaxJukeboxLMHeadModel", "FlaxJukeboxModel", "FlaxJukeboxPreTrainedModel"])
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
+    _import_structure["models.jukebox"].extend(
+        ["FlaxJukeboxLMHeadModel", "FlaxJukeboxModel", "FlaxJukeboxPreTrainedModel"]
+    )
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -2738,7 +2711,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3048,6 +3020,7 @@ if TYPE_CHECKING:
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.fnet import FNetTokenizer
+        from .models.jukebox import JukeboxTokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
@@ -3666,7 +3639,6 @@ if TYPE_CHECKING:
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            JukeboxLayer,
             JukeboxModel,
             JukeboxPreTrainedModel,
             load_tf_weights_in_jukebox,
