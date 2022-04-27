@@ -100,7 +100,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     max_lyric_input_size = PRETRAINED_LYRIC_TOKENS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(self, vocab_file, max_n_lyric_tokens=512, n_genres=1, unk_token="<|endoftext|>", **kwargs):
+    def __init__(self, vocab_file, max_n_lyric_tokens=20, n_genres=1, unk_token="<|endoftext|>", **kwargs):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
@@ -161,9 +161,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             len(indices) == self.max_n_lyric_tokens
         ), f"Expected length {self.max_n_lyric_tokens}, got {len(indices)}"
         assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
-        return tokens, indices
+        return tokens
 
-    def _convert_token_to_id(self, artist, genre, lyrics, total_length, offset, duration):
+    def _convert_token_to_id(self, artist, genres, lyrics, total_length, offset, duration):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
         The total_length, offset and duration have to be provided in order to select relevant lyrics and add padding to
         the lyrics token sequence.
@@ -183,10 +183,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
         """
         artists_id = self.artists_encoder.get(artist)
-        genres_id = self.genres_encoder.get(genre)
-        lyric_ids = [self.genres_encoder.get(character) for character in lyrics]
+        genres_ids = [self.genres_encoder.get(genre) for genre in genres]
+        lyric_ids = [self.lyrics_encoder.get(character) for character in lyrics]
         lyric_ids = self.get_relevant_lyric_tokens(lyric_ids, total_length, offset, duration)
-        return artists_id, genres_id, lyric_ids
+        return artists_id, genres_ids, lyric_ids
 
     def _tokenize(self, lyrics):
         """
@@ -247,7 +247,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         lyrics = unidecode(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = self.out_of_vocab.sub("", lyrics)
-        return (artist, genres, lyrics, kwargs)
+        return artist, genres, lyrics, kwargs
 
     def _normalize(self, text: str) -> str:
         """Normalizes the input text. This process is for the genres and the artit
@@ -280,9 +280,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
         """
         artist = self.artists_decoder.get(artists_index)
-        genre = self.genres_decoder.get(genres_index)
-        lyrics = [self.genres_decoder.get(character) for character in lyric_index]
-        return artist, genre, lyrics
+        genres = [self.genres_decoder.get(genre) for genre in genres_index]
+        lyrics = [self.lyrics_decoder.get(character) for character in lyric_index]
+        return artist, genres, lyrics
 
     def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
         return " ".join(lyrics)
@@ -291,7 +291,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     # a type argument to add an artist token with self.getattr('artist') ?
     # TODO : is a call function required ?
 
-    def __call__(self, artist, genre, lyrics, total_length, sample_length, offset, duration):
+    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset, duration):
         """Convert the raw string to token ids
 
         Args:
@@ -311,11 +311,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
         """
         input_ids = [total_length, offset, sample_length]
-        artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genre, lyrics)
-        input_ids.append(
-            self._convert_token_to_id(artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, duration)
+        artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
+        artists_id, genres_ids, lyric_ids = self._convert_token_to_id(
+            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, duration
         )
-        attention_masks = [-INFINITY] * [self.max_n_lyric_tokens - len(lyrics_tokens)] + [0] * len(lyrics_tokens)
+        input_ids += [artists_id] + genres_ids + lyric_ids
+        attention_masks = [-INFINITY] * (self.max_n_lyric_tokens - len(lyrics_tokens)) + [0] * len(lyrics_tokens)
         return {"input_ids": input_ids, "attention_masks": attention_masks}
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

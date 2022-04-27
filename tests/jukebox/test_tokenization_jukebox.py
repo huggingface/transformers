@@ -14,149 +14,198 @@
 # limitations under the License.
 
 
-import json
-import os
+# import json
+# import os
+# import unittest
+
+# from transformers import JukeboxTokenizer, JukeboxTokenizerFast
+# from transformers.models.jukebox.tokenization_jukebox import VOCAB_FILES_NAMES
+# from transformers.testing_utils import require_tokenizers
+
 import unittest
 
-from transformers import JukeboxTokenizer, JukeboxTokenizerFast
-from transformers.models.jukebox.tokenization_jukebox import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
-
-from ..test_tokenization_common import TokenizerTesterMixin
+# from ..test_tokenization_common import TokenizerTesterMixin
+from transformers import JukeboxTokenizer
 
 
-@require_tokenizers
-class JukeboxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class JukeBoxIntegrationTest(unittest.TestCase):
 
-    tokenizer_class = JukeboxTokenizer
-    rust_tokenizer_class = JukeboxTokenizerFast
-    test_rust_tokenizer = True
-    from_pretrained_kwargs = {"add_prefix_space": True}
-    test_seq2seq = False
+    # @slow
+    def test_tokenizer(self):
+        """
+        how to run the same test with openAI
+        ...
+        """
 
-    def setUp(self):
-        super().setUp()
+        tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
+        tokens = tokenizer("Alan Jackson", "rock", "old town road", 4 * 60 * 44100, 8192 * 8 * 4 * 4, 0, 1)
+        inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
+        EXPECTED_OUTPUT = [
+            10584000,
+            0,
+            1048576,
+            145,
+            8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            41,
+            38,
+            30,
+            77,
+            46,
+            41,
+            49,
+            40,
+            77,
+            44,
+            41,
+            27,
+            30,
+        ]
 
-        vocab = {
-            "artist": {"Marron 5": 0, "Bob Marley": 1},
-            "genres": {"Pop": 0, "Rap": 1},
-            "lyrics": {
-                c: i
-                for c, i in enumerate(
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-'\"()[] \t\n"
-                )
-            },
-        }
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        self.assertTrue(inputs == EXPECTED_OUTPUT)
+        INFINITY = float("inf")
+        EXPECTED_MASK_OUTPUT = [-INFINITY] * 7 + [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.assertTrue(attention_masks == EXPECTED_MASK_OUTPUT)
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return JukeboxTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+# @require_tokenizers
+# class JukeboxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return JukeboxTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+#     tokenizer_class = JukeboxTokenizer
+#     rust_tokenizer_class = JukeboxTokenizerFast
+#     test_rust_tokenizer = True
+#     from_pretrained_kwargs = {"add_prefix_space": True}
+#     test_seq2seq = False
 
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
+#     def setUp(self):
+#         super().setUp()
 
-    # TODO: mostly modify this part
-    def test_full_tokenizer(self):
-        tokenizer = JukeboxTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower newer"
-        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
-        self.assertListEqual(tokens, bpe_tokens)
+#         vocab = {
+#             "artist": {"Marron 5": 0, "Bob Marley": 1},
+#             "genres": {"Pop": 0, "Rap": 1},
+#             "lyrics": {
+#                 c: i
+#                 for c, i in enumerate(
+#                     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-'\"()[] \t\n"
+#                 )
+#             },
+#         }
+#         self.special_tokens_map = {"unk_token": "<unk>"}
 
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+#         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+#         with open(self.vocab_file, "w", encoding="utf-8") as fp:
+#             fp.write(json.dumps(vocab) + "\n")
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            return
+#     def get_tokenizer(self, **kwargs):
+#         kwargs.update(self.special_tokens_map)
+#         return JukeboxTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
+#     def get_rust_tokenizer(self, **kwargs):
+#         kwargs.update(self.special_tokens_map)
+#         return JukeboxTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-        sequence = "lower newer"
+#     def get_input_output_texts(self, tokenizer):
+#         input_text = "lower newer"
+#         output_text = "lower newer"
+#         return input_text, output_text
 
-        # Testing tokenization
-        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
+#     # TODO: mostly modify this part
+#     def test_full_tokenizer(self):
+#         tokenizer = JukeboxTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+#         text = "lower newer"
+#         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
+#         tokens = tokenizer.tokenize(text, add_prefix_space=True)
+#         self.assertListEqual(tokens, bpe_tokens)
 
-        # Testing conversion to ids without special tokens
-        ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
+#         input_tokens = tokens + [tokenizer.unk_token]
+#         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
+#         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-        # Testing conversion to ids with special tokens
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-        ids = tokenizer.encode(sequence, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
+#     def test_rust_and_python_full_tokenizers(self):
+#         if not self.test_rust_tokenizer:
+#             return
 
-        # Testing the unknown token
-        input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+#         tokenizer = self.get_tokenizer()
+#         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
 
-    def test_pretokenized_inputs(self, *args, **kwargs):
-        # It's very difficult to mix/test pretokenization with byte-level
-        # And get both Jukebox and Roberta to work at the same time (mostly an issue of adding a space before the string)
-        pass
+#         sequence = "lower newer"
 
-    def test_padding(self, max_length=15):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+#         # Testing tokenization
+#         tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
+#         rust_tokens = rust_tokenizer.tokenize(sequence)
+#         self.assertListEqual(tokens, rust_tokens)
 
-                # Simple input
-                s = "This is a simple input"
-                s2 = ["This is a simple input 1", "This is a simple input 2"]
-                p = ("This is a simple input", "This is a pair")
-                p2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
+#         # Testing conversion to ids without special tokens
+#         ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
+#         rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+#         self.assertListEqual(ids, rust_ids)
 
-                # Simple input tests
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+#         # Testing conversion to ids with special tokens
+#         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
+#         ids = tokenizer.encode(sequence, add_prefix_space=True)
+#         rust_ids = rust_tokenizer.encode(sequence)
+#         self.assertListEqual(ids, rust_ids)
 
-                # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+#         # Testing the unknown token
+#         input_tokens = tokens + [rust_tokenizer.unk_token]
+#         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
+#         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    s2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+#     def test_pretokenized_inputs(self, *args, **kwargs):
+#         # It's very difficult to mix/test pretokenization with byte-level
+#         # And get both Jukebox and Roberta to work at the same time (mostly an issue of adding a space before the string)
+#         pass
 
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+#     def test_padding(self, max_length=15):
+#         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+#             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+#                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+#                 # Simple input
+#                 s = "This is a simple input"
+#                 s2 = ["This is a simple input 1", "This is a simple input 2"]
+#                 p = ("This is a simple input", "This is a pair")
+#                 p2 = [
+#                     ("This is a simple input 1", "This is a simple input 2"),
+#                     ("This is a simple pair 1", "This is a simple pair 2"),
+#                 ]
 
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    p2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+#                 # Simple input tests
+#                 self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
 
-    # tokenizer has no padding token
-    def test_padding_different_model_input_name(self):
-        pass
+#                 # Simple input
+#                 self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+
+#                 # Simple input
+#                 self.assertRaises(
+#                     ValueError,
+#                     tokenizer_r.batch_encode_plus,
+#                     s2,
+#                     max_length=max_length,
+#                     padding="max_length",
+#                 )
+
+#                 # Pair input
+#                 self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+
+#                 # Pair input
+#                 self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+
+#                 # Pair input
+#                 self.assertRaises(
+#                     ValueError,
+#                     tokenizer_r.batch_encode_plus,
+#                     p2,
+#                     max_length=max_length,
+#                     padding="max_length",
+#                 )
+
+#     # tokenizer has no padding token
+#     def test_padding_different_model_input_name(self):
+#         pass
