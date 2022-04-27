@@ -66,6 +66,29 @@ MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
+def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.json", metric_key_prefix: str = "eval"):
+    """
+    Save results while prefixing metric names.
+
+    Args:
+        results: (:obj:`dict`):
+            A dictionary of results.
+        output_dir: (:obj:`str`):
+            An output directory.
+        file_name: (:obj:`str`, `optional`, defaults to :obj:`all_results.json`):
+            An output file name.
+        metric_key_prefix: (:obj:`str`, `optional`, defaults to :obj:`eval`):
+            A metric name prefix.
+    """
+    # Prefix all keys with metric_key_prefix + '_'
+    for key in list(results.keys()):
+        if not key.startswith(f"{metric_key_prefix}_"):
+            results[f"{metric_key_prefix}_{key}"] = results.pop(key)
+
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        json.dump(results, f, indent=4)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a Question Answering task")
     parser.add_argument(
@@ -194,8 +217,7 @@ def parse_args():
     )
     parser.add_argument(
         "--version_2_with_negative",
-        type=bool,
-        default=False,
+        action="store_true",
         help="If true, some of the examples do not have an answer.",
     )
     parser.add_argument(
@@ -824,6 +846,9 @@ def main():
 
     all_start_logits = []
     all_end_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -860,6 +885,9 @@ def main():
 
         all_start_logits = []
         all_end_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
@@ -907,8 +935,9 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_f1": eval_metric["f1"], "eval_exact": eval_metric["exact"]}, f)
+
+            logger.info(json.dumps(eval_metric, indent=4))
+            save_prefixed_metrics(eval_metric, args.output_dir)
 
 
 if __name__ == "__main__":
