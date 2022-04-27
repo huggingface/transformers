@@ -222,10 +222,12 @@ class TFLogitsProcessorTest(unittest.TestCase):
         batch_size = 2
         cur_len = 4
 
-        input_ids = tf.constant([[1, 1, 2, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        # input_ids = tf.constant([[1, 1, 2, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        input_ids = tf.constant([[0, 1, 0, 1]], dtype=tf.int32)
         self.assertEqual(cur_len, input_ids.shape[1])
 
-        scores = self._get_uniform_logits(batch_size, vocab_size)
+        # scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = self._get_uniform_logits(1, vocab_size)
 
         no_repeat_proc_2_gram = TFNoRepeatNGramLogitsProcessor(2)
         no_repeat_proc_3_gram = TFNoRepeatNGramLogitsProcessor(3)
@@ -238,12 +240,14 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # 2-gram would forbid 2nd and 3rd token (1,2) at 1st batch and 1st token (0) at 2nd batch
         self.assertListEqual(
-            tf.math.is_inf(filtered_scores_2_gram).numpy().tolist(), [[False, True, True], [True, False, False]]
+            # tf.math.is_inf(filtered_scores_2_gram).numpy().tolist(), [[False, True, True], [True, False, False]]
+            tf.math.is_inf(filtered_scores_2_gram).numpy().tolist(), [[True, False, False]]
         )
 
         # 3-gram would forbid no token at 1st batch and 1st token (0) at 2nd batch
         self.assertListEqual(
-            tf.math.is_inf(filtered_scores_3_gram).numpy().tolist(), [[False, False, False], [True, False, False]]
+            # tf.math.is_inf(filtered_scores_3_gram).numpy().tolist(), [[False, False, False], [True, False, False]]
+            tf.math.is_inf(filtered_scores_3_gram).numpy().tolist(), [[True, False, False]]
         )
 
     @parameterized.expand([(False,), (True,)])

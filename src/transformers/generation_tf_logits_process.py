@@ -404,23 +404,26 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             all_ngrams = tf.map_fn(
                 lambda x: row_input_ids[x:x + self.ngram_size],
                 tf.range(ngram_start_idx),
-                fn_output_signature=tf.int32
+                fn_output_signature=tf.int32,
             )
-            ngrams_mask = tf.map_fn(
-                lambda ngram: tf.math.reduce_all(tf.math.equal(latest_tokens, ngram[:-1])),
-                all_ngrams,
-                fn_output_signature=tf.bool
+            ngrams_mask = tf.math.reduce_all(
+                tf.math.equal(
+                    tf.tile(tf.expand_dims(latest_tokens, 0), [all_ngrams.shape[0], 1]),
+                    all_ngrams[:, :-1]
+                ),
+                axis=-1
             )
             matching_ngrams = tf.boolean_mask(all_ngrams, ngrams_mask, axis=0)
             banned_tokens = matching_ngrams[:, -1]
             return banned_tokens
 
         banned_tokens = tf.cond(
+            # if no ngrams can be generated, no banned tokens
             tf.math.less(row_input_ids.shape[0] + 1, self.ngram_size),
             lambda: tf.constant([], dtype=tf.int32),
             _get_banned_tokens_from_ngrams
         )
-        return tf.convert_to_tensor(banned_tokens, dtype=tf.int32)
+        return banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
