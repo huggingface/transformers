@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    scformer,
     albert,
     auto,
     bart,
@@ -103,6 +102,7 @@ from . import (
     retribert,
     roberta,
     roformer,
+    scformer,
     segformer,
     sew,
     sew_d,

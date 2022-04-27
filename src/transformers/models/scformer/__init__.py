@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -33,8 +32,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_scformer"] = [
         "SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ScFormerForMaskedLM",
         "ScFormerForCausalLM",
+        "ScFormerForMaskedLM",
         "ScFormerForMultipleChoice",
         "ScFormerForQuestionAnswering",
         "ScFormerForSequenceClassification",
@@ -44,8 +43,6 @@ if is_torch_available():
         "ScFormerPreTrainedModel",
         "load_tf_weights_in_scformer",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -58,8 +55,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_scformer import (
             SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ScFormerForMaskedLM,
             ScFormerForCausalLM,
+            ScFormerForMaskedLM,
             ScFormerForMultipleChoice,
             ScFormerForQuestionAnswering,
             ScFormerForSequenceClassification,
@@ -69,7 +66,6 @@ if TYPE_CHECKING:
             ScFormerPreTrainedModel,
             load_tf_weights_in_scformer,
         )
-
 
 
 else:

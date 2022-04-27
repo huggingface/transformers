@@ -117,7 +117,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.scformer": ["SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ScFormerConfig", "ScFormerTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -255,6 +254,7 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.scformer": ["SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ScFormerConfig", "ScFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -447,7 +447,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.scformer"].append("ScFormerTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -488,6 +487,7 @@ if is_tokenizers_available():
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
+    _import_structure["models.scformer"].append("ScFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
@@ -651,21 +651,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.scformer"].extend(
-        [
-            "SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ScFormerForMaskedLM",
-            "ScFormerForCausalLM",
-            "ScFormerForMultipleChoice",
-            "ScFormerForQuestionAnswering",
-            "ScFormerForSequenceClassification",
-            "ScFormerForTokenClassification",
-            "ScFormerLayer",
-            "ScFormerModel",
-            "ScFormerPreTrainedModel",
-            "load_tf_weights_in_scformer",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1434,6 +1419,21 @@ if is_torch_available():
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.scformer"].extend(
+        [
+            "SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ScFormerForCausalLM",
+            "ScFormerForMaskedLM",
+            "ScFormerForMultipleChoice",
+            "ScFormerForQuestionAnswering",
+            "ScFormerForSequenceClassification",
+            "ScFormerForTokenClassification",
+            "ScFormerLayer",
+            "ScFormerModel",
+            "ScFormerPreTrainedModel",
+            "load_tf_weights_in_scformer",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -2539,7 +2539,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.scformer import SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ScFormerConfig, ScFormerTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2665,6 +2664,7 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.scformer import SCFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ScFormerConfig, ScFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
@@ -2838,7 +2838,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.scformer import ScFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2877,6 +2876,7 @@ if TYPE_CHECKING:
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
+        from .models.scformer import ScFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
@@ -2951,19 +2951,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.scformer import (
-            SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ScFormerForMaskedLM,
-            ScFormerForCausalLM,
-            ScFormerForMultipleChoice,
-            ScFormerForQuestionAnswering,
-            ScFormerForSequenceClassification,
-            ScFormerForTokenClassification,
-            ScFormerLayer,
-            ScFormerModel,
-            ScFormerPreTrainedModel,
-            load_tf_weights_in_scformer,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3656,6 +3643,19 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.scformer import (
+            SCFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ScFormerForCausalLM,
+            ScFormerForMaskedLM,
+            ScFormerForMultipleChoice,
+            ScFormerForQuestionAnswering,
+            ScFormerForSequenceClassification,
+            ScFormerForTokenClassification,
+            ScFormerLayer,
+            ScFormerModel,
+            ScFormerPreTrainedModel,
+            load_tf_weights_in_scformer,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
