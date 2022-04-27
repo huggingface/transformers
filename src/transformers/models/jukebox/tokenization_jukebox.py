@@ -21,7 +21,7 @@ from json.encoder import INFINITY
 from typing import Any, Dict, List, Optional, Tuple
 
 import regex as re
-from unidecode import unidecode
+from tokenizers import normalizers
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -244,7 +244,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artist = self._normalize(artist)
         genres = self._normalize(genres).split("_")  # split is for the full dictionnary with combined genres
 
-        lyrics = unidecode(lyrics)
+        lyrics = normalizers.BertNormalizer().normalize_str(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = self.out_of_vocab.sub("", lyrics)
         return artist, genres, lyrics, kwargs
