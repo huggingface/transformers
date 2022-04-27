@@ -415,12 +415,12 @@ class DeformableDetrConvModel(nn.Module):
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = mask.size()
+    batch_size, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, tgt_len, src_len).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -648,8 +648,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -663,7 +663,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        batch_size, tgt_len, embed_dim = hidden_states.size()
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
             hidden_states_original = hidden_states
@@ -671,11 +671,11 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states_original), -1, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
+        value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -683,23 +683,23 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (batch_size * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
             )
 
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+            if attention_mask.size() != (batch_size, 1, tgt_len, src_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(batch_size, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(batch_size * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -708,8 +708,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, tgt_len, src_len)
         else:
             attn_weights_reshaped = None
 
@@ -717,14 +717,14 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+        if attn_output.size() != (batch_size * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.view(batch_size, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        attn_output = attn_output.reshape(batch_size, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -1051,16 +1051,16 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_reference_points, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for lvl, (H_, W_) in enumerate(spatial_shapes):
+        for lvl, (height, width) in enumerate(spatial_shapes):
 
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
-                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
             )
             ref_y = ref_y.reshape(-1)[None] / (
-                valid_ratios[:, None, lvl, 1] * H_
+                valid_ratios[:, None, lvl, 1] * height
             )  # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
         reference_points = torch.cat(reference_points_list, 1)
@@ -1463,26 +1463,26 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 - output_proposals (Tensor[batch_size, num_reference_points, 4]): Normalized proposals, after an
                   inverse sigmoid.
         """
-        N_, S_, C_ = memory.shape
+        batch_size = memory.shape[0]
         proposals = []
         _cur = 0
-        for lvl, (H_, W_) in enumerate(spatial_shapes):
-            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(N_, H_, W_, 1)
+        for lvl, (height, width) in enumerate(spatial_shapes):
+            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + height * width)].view(batch_size, height, width, 1)
             valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = torch.meshgrid(
-                torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
-                torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device),
+                torch.linspace(0, height - 1, height, dtype=torch.float32, device=memory.device),
+                torch.linspace(0, width - 1, width, dtype=torch.float32, device=memory.device),
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
-            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 2)
-            grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
+            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+            grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
             wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
-            proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
+            proposal = torch.cat((grid, wh), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
-            _cur += H_ * W_
+            _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
         output_proposals = torch.log(output_proposals / (1 - output_proposals))
@@ -1622,7 +1622,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             )
 
         # Fifth, prepare decoder inputs
-        bs, _, c = encoder_outputs[0].shape
+        batch_size, _, num_channels = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_unact = None
         if self.config.two_stage:
@@ -1643,11 +1643,11 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             reference_points = topk_coords_unact.sigmoid()
             init_reference_points = reference_points
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
-            query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
+            query_embed, tgt = torch.split(pos_trans_out, num_channels, dim=2)
         else:
-            query_embed, tgt = torch.split(query_embeds, c, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            query_embed, tgt = torch.split(query_embeds, num_channels, dim=1)
+            query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)
+            tgt = tgt.unsqueeze(0).expand(batch_size, -1, -1)
             reference_points = self.reference_points(query_embed).sigmoid()
             init_reference_points = reference_points
 
@@ -2205,7 +2205,7 @@ class DeformableDetrHungarianMatcher(nn.Module):
                 - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        bs, num_queries = outputs["logits"].shape[:2]
+        batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
         out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
@@ -2228,7 +2228,7 @@ class DeformableDetrHungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
