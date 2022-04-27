@@ -697,9 +697,9 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict)
 
-    # def test_torch_fx_output_loss(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
+    def test_torch_fx_output_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:

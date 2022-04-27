@@ -496,7 +496,6 @@ class HFTracer(Tracer):
                 elif model.config.problem_type == "multi_label_classification":
                     labels_shape = (batch_size, model.config.num_labels)
                     labels_dtype = torch.float32
-                    pass
                 else:
                     raise ValueError(
                         'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
