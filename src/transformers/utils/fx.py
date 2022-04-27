@@ -214,9 +214,6 @@ def torch_add_override(input, other, *, alpha=1, out=None):
 
 
 def torch_mul_override(input, other, *, out=None):
-    import pdb
-
-    pdb.set_trace()
     return torch_add_override(input, other, out=out)
 
 
@@ -267,6 +264,16 @@ def torch_tensor_repeat_override(self, *sizes):
     return torch.empty(shape, device="meta")
 
 
+def torch_index_select(input, dim, index, *, out=None):
+    shape = list(input.shape)
+    shape[dim] = len(index)
+    return torch.empty(*shape, device="meta")
+
+
+def torch_tensor_index_select(self, dim, index):
+    return torch_tensor_index_select(self, dim, index)
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -308,6 +315,9 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.mul: torch_tensor_mul_override,
     torch.matmul: torch_matmul_override,
     torch.Tensor.repeat: torch_tensor_repeat_override,
+    # TODO: those might not be needed.
+    # torch.index_select: torch_index_select,
+    # torch.Tensor.index_select: torch_tensor_index_select,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
