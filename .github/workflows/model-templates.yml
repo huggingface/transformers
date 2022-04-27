@@ -53,7 +53,7 @@ jobs:
               exit 1
           fi
 
-      - name: Create model files
+      - name: Create model files 2
         run: |
           . ~/venv/bin/activate
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
