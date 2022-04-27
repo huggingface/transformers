@@ -16,8 +16,9 @@
 
 
 import json
+from json.encoder import INFINITY
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import regex as re
 from unidecode import unidecode
@@ -63,7 +64,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     >>> from transformers import JukeboxTokenizer
     >>> tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
     >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
-    [6785],[546], [0, ...,   41,       38,       30,
+    [[6785],[546], [0, ...,   41,       38,       30,
                     77,       46,       41,       49,       40,
                     77,       44,       41,       27,       30] ]
     >>> tokenizer("Alan Jackson", "Country Rock")['input_ids']
@@ -166,6 +167,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
         return tokens, indices
 
+    
     def _convert_token_to_id(self, artist, genre, lyrics, total_length, offset, duration):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
         The total_length, offset and duration have to be provided in order to select relevant lyrics and add padding to
@@ -187,12 +189,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artist_id = self.artist_encoder.get(artist)
         genre_id = self.genre_encoder.get(genre)
-        lyrics
         lyric_ids = [self.genre_encoder.get(character) for character in lyrics]
         lyric_ids = self.get_relevant_lyric_tokens(lyric_ids, total_length, offset, duration)
         return artist_id, genre_id, lyric_ids
-
-    def _tokenize(self, lyrics, **kwargs):
+        
+        
+    def _tokenize(self, lyrics):
         """
         Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
         vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
@@ -202,7 +204,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         # only lyrics are not tokenized, but character based is easily handled
         return [character for character in lyrics]
 
-    def tokenize(self, artist, genre, lyrics, total_length, offset, duration):
+    def tokenize(self, artist, genre, lyrics, **kwargs):
         """
         Converts three strings in a 3 sequence of tokens using the tokenizer
 
@@ -213,17 +215,45 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
             lyrics (`_type_`):
                 _description_
-            total_length (`_type_`):
-                _description_
-            offset (`_type_`):
-                _description_
-            duration (`_type_`):
-                _description_
         """
         artist, genre, lyrics, kwargs = self.prepare_for_tokenization(artist, genre, lyrics, **kwargs)
         # TODO deal with the kwargs here
-        lyrics = self._tokenize(lyrics, **kwargs)
+        lyrics = self._tokenize(lyrics)
         return artist, genre, lyrics
+
+    def prepare_for_tokenization(
+        self, artist: str, genres: str, lyrics: str, is_split_into_words: bool = False, **kwargs
+    ) -> Tuple[str, str, str, Dict[str, Any]]:
+        """
+        Performs any necessary transformations before tokenization.
+
+        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
+        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
+
+        Args:
+            artist (`str`):
+                The artist name to prepare. This will mostly lower the string
+            genres (`str`):
+                The gnere name to prepare. This will mostly lower the string.
+            lyrics (`str`):
+                The lyrics to prepare.
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
+                tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
+                which it will tokenize. This is useful for NER or token classification.
+            kwargs:
+                Keyword arguments to use for the tokenization. #TODO v3 could be handled here
+
+        Returns:
+            `Tuple[str, str, str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+        """
+        artist = self._normalize(artist)
+        genres = self._normalize(genres).split("_") # split is for the full dictionnary with combined genres
+
+        lyrics = unidecode(lyrics)
+        lyrics = lyrics.replace("\\", "\n")
+        lyrics = self.out_of_vocab.sub("", lyrics)
+        return (artist, genres, lyrics, kwargs)
 
     def _normalize(self, text: str) -> str:
         """Normalizes the input text. This process is for the genres and the artit
@@ -244,41 +274,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         text = "".join([c if c in accepted else "_" for c in text.lower()])
         text = rex.sub("_", text).strip("_")
         return text
-
-    def prepare_for_tokenization(
-        self, artist: str, genre: str, lyrics: str, is_split_into_words: bool = False, **kwargs
-    ) -> Tuple[str, Dict[str, Any]]:
-        """
-        Performs any necessary transformations before tokenization.
-
-        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
-        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
-
-        Args:
-            artist (`str`):
-                The artist name to prepare. This will mostly lower the string
-            genre (`str`):
-                The gnere name to prepare. This will mostly lower the string.
-            lyrics (`str`):
-                The lyrics to prepare.
-            is_split_into_words (`bool`, *optional*, defaults to `False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
-                tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
-                which it will tokenize. This is useful for NER or token classification.
-            kwargs:
-                Keyword arguments to use for the tokenization.
-
-        Returns:
-            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
-        """
-        artist = self._normalize(artist)
-        genre = self._normalize(genre)
-
-        lyrics = unidecode(lyrics)
-        lyrics = lyrics.replace("\\", "\n")
-        lyrics = self.out_of_vocab.sub("", lyrics)
-        return (artist, genre, lyrics, kwargs)
-
+    
     def _convert_id_to_token(self, artist_index, genre_index, lyric_index):
         """Converts an index (integer) in a token (str) using the vocab.
         Args:
@@ -294,9 +290,19 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         lyrics = [self.genre_decoder.get(character) for character in lyric_index]
         return artist, genre, lyrics
 
+    def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
+        return " ".join(lyrics)
+    
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist') ?
     # TODO : is a call function required ?
+
+    def __call__(self, artist, genre, lyrics, total_length, offset, duration):
+        input_ids = [total_length, offset, duration]
+        artist_tokens, genre_tokens, lyrics_tokens = self.tokenize(artist, genre, lyrics)
+        input_ids.append(self._convert_token_to_id(artist_tokens, genre_tokens, lyrics_tokens, total_length, offset, duration))
+        attention_masks = [-INFINITY]*[self.max_n_lyric_tokens - len(lyrics_tokens)] + [0]*len(lyrics_tokens)
+        return {"input_ids":input_ids,"attention_masks":attention_masks}
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """Saves the tokenizer's vocabulary dictionnary to the provided save_directory.
