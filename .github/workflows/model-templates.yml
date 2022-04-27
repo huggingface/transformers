@@ -43,7 +43,7 @@ jobs:
           pip install -e .[dev]
 
       - name: Check transformers location
-        # make `transformers` available as package (required since we use `-e` flag) and check it indeeds from the repo.
+        # make `transformers` available as package (required since we use `-e` flag) and check it's indeed from the repo.
         run: |
           . ~/venv/bin/activate
           python setup.py build install
