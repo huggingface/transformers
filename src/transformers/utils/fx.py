@@ -19,6 +19,7 @@ import inspect
 import math
 import random
 import warnings
+from copy import deepcopy
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
@@ -387,7 +388,7 @@ class MetaDeviceAttribute(HFAttribute):
 
 
 def _proxies_to_metas(v):
-    """Returns the underlying metadata for HFProxies, and behaves like identity for the others."""
+    """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
     if isinstance(v, MetaDeviceAttribute):
         return "meta"
     if isinstance(v, torch.fx.Proxy):
@@ -747,11 +748,12 @@ def symbolic_trace(
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
+    # Copy all the original attributes to the traced GraphModule.
     regular_module_attributes = dir(nn.Module())
     for name in dir(model):
         attr = getattr(model, name)
         if name.startswith("_") or name in regular_module_attributes:
             continue
-        setattr(traced, name, attr)
+        setattr(traced, name, deepcopy(attr))
 
     return traced
