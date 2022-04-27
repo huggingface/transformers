@@ -133,6 +133,7 @@ class HubertModelTester:
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
+            do_stable_layer_norm=self.do_stable_layer_norm,
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
