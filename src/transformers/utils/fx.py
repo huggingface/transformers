@@ -143,7 +143,8 @@ def torch_nn_relu_override(self, x):
 
 
 def torch_nn_functional_relu_override(x, inplace=False):
-    assert not inplace, "Don't support in-place functional.relu for MetaTensor analysis"
+    if not inplace:
+        raise ValueError("Don't support in-place functional.relu for MetaTensor analysis")
     return x
 
 
@@ -154,7 +155,8 @@ def torch_where_override(condition, x, y):
 
 
 def torch_abs_override(input, *, out=None):
-    assert out is None, "Don't support in-place abs for MetaTensor analysis"
+    if out is None:
+        raise ValueError("Don't support in-place abs for MetaTensor analysis")
     return input
 
 
@@ -556,7 +558,8 @@ class HFTracer(Tracer):
                 meta_target = _MANUAL_META_OVERRIDES.get(method, method)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
             elif kind == "call_module":
-                assert hasattr(self, "orig_forward")
+                if not hasattr(self, "orig_forward"):
+                    raise AttributeError(f"{self} does not have an attribute called orig_forward")
                 self._disable_module_getattr = True
                 try:
                     mod = self.root.get_submodule(target)
@@ -583,7 +586,8 @@ class HFTracer(Tracer):
             else:
                 return rv
 
-            assert isinstance(rv, Proxy), "Dont support composite output yet"
+            if not isinstance(rv, Proxy):
+                raise ValueError("Don't support composite output yet")
             rv.install_metadata(meta_out)
         except Exception as e:
             warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
