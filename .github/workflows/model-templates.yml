@@ -40,7 +40,7 @@ jobs:
         run: |
           python -m venv ~/venv && . ~/venv/bin/activate
           pip install --upgrade pip!=21.3
-          pip install .[dev]
+          pip install -e .[dev]
 
       - name: Create model files
         run: |
