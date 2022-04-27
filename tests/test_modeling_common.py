@@ -738,8 +738,7 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids"]
-                    input_ids = inputs["input_ids"]
+                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
 
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)
@@ -755,12 +754,6 @@ class ModelTesterMixin:
                     input_names = filtered_inputs.keys()
 
                     model_output = model(**filtered_inputs)
-
-                    rank = len(input_ids.shape)
-                    if rank not in [2, 3]:
-                        raise NotImplementedError(
-                            f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
-                        )
 
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
