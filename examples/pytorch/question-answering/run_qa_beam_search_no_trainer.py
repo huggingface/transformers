@@ -19,6 +19,7 @@ Fine-tuning XLNet for question answering with beam search using 🤗 Accelerate.
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -58,6 +59,29 @@ check_min_version("4.19.0.dev0")
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
+
+
+def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.json", metric_key_prefix: str = "eval"):
+    """
+    Save results while prefixing metric names.
+
+    Args:
+        results: (:obj:`dict`):
+            A dictionary of results.
+        output_dir: (:obj:`str`):
+            An output directory.
+        file_name: (:obj:`str`, `optional`, defaults to :obj:`all_results.json`):
+            An output file name.
+        metric_key_prefix: (:obj:`str`, `optional`, defaults to :obj:`eval`):
+            A metric name prefix.
+    """
+    # Prefix all keys with metric_key_prefix + '_'
+    for key in list(results.keys()):
+        if not key.startswith(f"{metric_key_prefix}_"):
+            results[f"{metric_key_prefix}_{key}"] = results.pop(key)
+
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        json.dump(results, f, indent=4)
 
 
 def parse_args():
@@ -171,8 +195,7 @@ def parse_args():
     )
     parser.add_argument(
         "--version_2_with_negative",
-        type=bool,
-        default=False,
+        action="store_true",
         help="If true, some of the examples do not have an answer.",
     )
     parser.add_argument(
@@ -807,6 +830,9 @@ def main():
     all_end_top_log_probs = []
     all_end_top_index = []
     all_cls_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -864,6 +890,9 @@ def main():
         all_end_top_log_probs = []
         all_end_top_index = []
         all_cls_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
@@ -937,6 +966,9 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+            logger.info(json.dumps(eval_metric, indent=4))
+            save_prefixed_metrics(eval_metric, args.output_dir)
 
 
 if __name__ == "__main__":
