@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import inspect
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -363,9 +363,8 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         # To remain simple and XLA-compatible, we work on a per-row fashion.
         # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
         # a frequent choke point. (make `cur_len` a tensor?)
-        def _get_row_updated_score(cur_row: tf.Tensor) -> tf.Tensor:
-            row_score = scores[cur_row, :]
-            row_input_ids = input_ids[cur_row, :]
+        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
+            row_input_ids, row_score = row_inputs
             banned_tokens = self._calc_row_banned_bad_tokens(row_input_ids[:cur_len])
             banned_tokens_mask = tf.scatter_nd(
                 indices=tf.expand_dims(banned_tokens, axis=-1),
@@ -375,7 +374,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
             row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
             return row_score
 
-        scores = tf.map_fn(_get_row_updated_score, tf.range(scores.shape[0]), fn_output_signature=tf.float32)
+        scores = tf.map_fn(_get_row_updated_score, (input_ids, scores), fn_output_signature=tf.float32)
         return scores
 
 
@@ -400,21 +399,38 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             # get the tokens that may trigger previously seen ngrams
             ngram_start_idx = row_input_ids.shape[0] + 1 - self.ngram_size
             latest_tokens = row_input_ids[ngram_start_idx:]
-            # get all possible ngrams so far and compare with tokens above
-            all_ngrams = tf.map_fn(
-                lambda x: row_input_ids[x:x + self.ngram_size],
-                tf.range(ngram_start_idx),
-                fn_output_signature=tf.int32,
+            # alias for convenience: the start idx is also the number of ngrams we'll see
+            n_ngrams = ngram_start_idx
+
+            # Set up a tf.while_loop to retrieve a pair of tensors:
+            #   1. a mask of whether the ngram is at risk of occuring
+            #   2. the associated token (that must be banned when the mask is true)
+            # Getting this pair of tensors (as opposed to the tokens to be banned directly) allow us to avoid
+            # variable-size tensors, which are not allowed with XLA
+            ngram_mask = tf.TensorArray(
+                dtype=tf.bool,
+                size=n_ngrams,
+                dynamic_size=False,
             )
-            ngrams_mask = tf.math.reduce_all(
-                tf.math.equal(
-                    tf.tile(tf.expand_dims(latest_tokens, 0), [all_ngrams.shape[0], 1]),
-                    all_ngrams[:, :-1]
-                ),
-                axis=-1
+            ngram_token = tf.TensorArray(
+                dtype=tf.int32,
+                size=n_ngrams,
+                dynamic_size=False,
             )
-            matching_ngrams = tf.boolean_mask(all_ngrams, ngrams_mask, axis=0)
-            banned_tokens = matching_ngrams[:, -1]
+
+            def cond(ngram_idx, latest_tokens, row_input_ids, ngram_mask, ngram_token):
+                return tf.less(ngram_idx, n_ngrams)
+
+            def body(ngram_idx, latest_tokens, row_input_ids, ngram_mask, ngram_token):
+                ngram = row_input_ids[ngram_idx:ngram_idx + self.ngram_size]
+                ngram_token = ngram_token.write(ngram_idx, ngram[-1])
+                ngram_mask = ngram_mask.write(ngram_idx, tf.math.reduce_all(tf.math.equal(latest_tokens, ngram[:-1])))
+                return ngram_idx + 1, latest_tokens, row_input_ids, ngram_mask, ngram_token
+
+            _, _, _, ngram_mask, ngram_token = tf.while_loop(
+                cond, body, (0, latest_tokens, row_input_ids, ngram_mask, ngram_token)
+            )
+            banned_tokens = tf.boolean_mask(ngram_token.stack(), ngram_mask.stack())
             return banned_tokens
 
         banned_tokens = tf.cond(
@@ -431,9 +447,8 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         # To remain simple and XLA-compatible, we work on a per-row fashion.
         # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
         # a frequent choke point. (make `cur_len` a tensor?)
-        def _get_row_updated_score(cur_row: tf.Tensor) -> tf.Tensor:
-            row_score = scores[cur_row, :]
-            row_input_ids = input_ids[cur_row, :]
+        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
+            row_input_ids, row_score = row_inputs
             banned_tokens = self._calc_row_banned_ngram_tokens(row_input_ids[:cur_len])
             banned_tokens_mask = tf.scatter_nd(
                 indices=tf.expand_dims(banned_tokens, axis=-1),
@@ -443,7 +458,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
             return row_score
 
-        scores = tf.map_fn(_get_row_updated_score, tf.range(scores.shape[0]), fn_output_signature=tf.float32)
+        scores = tf.map_fn(_get_row_updated_score, (input_ids, scores), fn_output_signature=tf.float32)
         return scores
 
 
