@@ -275,12 +275,14 @@ class BertSelfAttention(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
                 self.hashed_weight = single_robez_array
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
 
-            self.query = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
-            self.key = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+2)
-            self.value = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+3)
+            self.query = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor = init_factor)
+            self.key = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+2, init_factor = init_factor)
+            self.value = RzLinear(config.hidden_size, self.all_head_size, config.robez_chunk_size, self.hashed_weight, seed=seed+3, init_factor = init_factor)
             assert(seed_offset > 3)
         else:
             self.query = nn.Linear(config.hidden_size, self.all_head_size)
@@ -410,9 +412,12 @@ class BertSelfOutput(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
                 self.hashed_weight = single_robez_array
-            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
+
+            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor = init_factor)
             assert(seed_offset > 1)
         else:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -490,9 +495,11 @@ class BertIntermediate(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0 
             else:
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
                 self.hashed_weight = single_robez_array
-            self.dense = RzLinear(config.hidden_size, config.intermediate_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
+            self.dense = RzLinear(config.hidden_size, config.intermediate_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor= init_factor)
             assert(seed_offset > 1)
         else:
             self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -522,9 +529,11 @@ class BertOutput(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
+                init_factor = np.sqrt(1 / config.intermediate_size) / np.sqrt(1/10000)
                 self.hashed_weight  = single_robez_array
-            self.dense = RzLinear(config.intermediate_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
+            self.dense = RzLinear(config.intermediate_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor=init_factor)
             assert(seed_offset > 1)
         else:
             self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -736,9 +745,12 @@ class BertPooler(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
                 self.hashed_weight = single_robez_array
-            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
+
+            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor=init_factor)
             assert(seed_offset > 1)
         else:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -768,9 +780,12 @@ class BertPredictionHeadTransform(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
                 self.hashed_weight = single_robez_array
-            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
+
+            self.dense = RzLinear(config.hidden_size, config.hidden_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1, init_factor=init_factor)
             assert(seed_offset > 1)
         else:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -805,8 +820,11 @@ class BertLMPredictionHead(nn.Module):
                 self.hashed_weight = nn.Parameter(torch.from_numpy(np.random.uniform(
                                         low=-np.sqrt(1 / config.hidden_size), high=np.sqrt(1 / config.hidden_size), size=((num_weight_params,))
                                         ).astype(np.float32)))
+                init_factor = 1.0
             else:
                 self.hashed_weight = single_robez_array
+                init_factor = np.sqrt(1 / config.hidden_size) / np.sqrt(1/10000)
+
             self.decoder = RzLinear(config.hidden_size, config.vocab_size, config.robez_chunk_size, self.hashed_weight, seed=seed+1)
             assert(seed_offset > 1)
         else:
