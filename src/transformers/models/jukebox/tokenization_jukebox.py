@@ -35,7 +35,7 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "jukebox": "https://huggingface.co/jukebox/resolve/main/vocab.json",
+        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/vocab.json",
     },
     "vocab_file": {
         "jukebox-1b": "https://huggingface.co/jukebox/resolve/main/vocab-1b.json",
@@ -305,7 +305,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         return {"input_ids":input_ids,"attention_masks":attention_masks}
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        """Saves the tokenizer's vocabulary dictionnary to the provided save_directory.
+        """
+        Saves the tokenizer's vocabulary dictionnary to the provided save_directory.
 
         Args:
             save_directory (`str`):
