@@ -44,6 +44,7 @@ jobs:
 
       - name: Check transformers location
         run: |
+          . ~/venv/bin/activate
           transformer_loc=$(pip show transformers | grep "Location: " | cut -c11-)
           transformer_repo_loc=$(pwd .)
           if [ "$transformer_loc" == "$transformer_repo_loc/src" ]; then
