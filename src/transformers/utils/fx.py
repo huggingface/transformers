@@ -143,7 +143,7 @@ def torch_nn_relu_override(self, x):
 
 
 def torch_nn_functional_relu_override(x, inplace=False):
-    assert not inplace, "dont support inplace functional.relu for metatensor analysis"
+    assert not inplace, "Don't support in-place functional.relu for MetaTensor analysis"
     return x
 
 
@@ -154,7 +154,7 @@ def torch_where_override(condition, x, y):
 
 
 def torch_abs_override(input, *, out=None):
-    assert out is None, "Dont support in-place abs for MetaTensor analysis"
+    assert out is None, "Don't support in-place abs for MetaTensor analysis"
     return input
 
 
