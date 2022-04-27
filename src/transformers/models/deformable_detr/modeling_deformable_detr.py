@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torch.nn.init import constant_, xavier_uniform_, normal_
+from torch.nn.init import constant_, normal_, xavier_uniform_
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -543,21 +543,25 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        constant_(self.sampling_offsets.weight.data, 0.)
+        constant_(self.sampling_offsets.weight.data, 0.0)
         thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (grid_init / grid_init.abs().max(-1, keepdim=True)[0]).view(self.n_heads, 1, 1, 2).repeat(1, self.n_levels, self.n_points, 1)
+        grid_init = (
+            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+            .view(self.n_heads, 1, 1, 2)
+            .repeat(1, self.n_levels, self.n_points, 1)
+        )
         for i in range(self.n_points):
             grid_init[:, :, i, :] *= i + 1
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        constant_(self.attention_weights.weight.data, 0.)
-        constant_(self.attention_weights.bias.data, 0.)
+        constant_(self.attention_weights.weight.data, 0.0)
+        constant_(self.attention_weights.bias.data, 0.0)
         xavier_uniform_(self.value_proj.weight.data)
-        constant_(self.value_proj.bias.data, 0.)
+        constant_(self.value_proj.bias.data, 0.0)
         xavier_uniform_(self.output_proj.weight.data)
-        constant_(self.output_proj.bias.data, 0.)
-    
+        constant_(self.output_proj.bias.data, 0.0)
+
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -1044,7 +1048,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
     def get_reference_points(spatial_shapes, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
-        
+
         Args:
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of each feature map.
@@ -1407,9 +1411,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         # Initialize weights and apply final processing
         if not config.two_stage:
             xavier_uniform_(self.reference_points.weight.data, gain=1.0)
-            constant_(self.reference_points.bias.data, 0.)
+            constant_(self.reference_points.bias.data, 0.0)
         normal_(self.level_embed)
-        
+
         self.post_init()
 
     def get_encoder(self):
@@ -1456,12 +1460,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded memory.
-        
+
         Args:
             memory (Tensor[batch_size, num_reference_points, d_model]): Output of the encoder.
             memory_padding_mask (Tensor[batch_size, num_reference_points]): Padding mask for memory.
             spatial_shapes (Tensor[num_feature_levels, 2]): Spatial shapes of the feature maps.
-        
+
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
                 - output_memory (Tensor[batch_size, num_feature_levels, d_model]): The input of the decoder.
@@ -1557,7 +1561,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
-        
+
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
@@ -2188,7 +2192,8 @@ class DeformableDetrHungarianMatcher(nn.Module):
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        assert class_cost != 0 or bbox_cost != 0 or giou_cost != 0, "All costs of the Matcher can't be 0"
+        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
     def forward(self, outputs, targets):

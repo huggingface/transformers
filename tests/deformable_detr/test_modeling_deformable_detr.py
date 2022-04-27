@@ -507,7 +507,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "level_embed" in name or "sampling_offsets.bias" in name or "value_proj" in name or "output_proj" in name:
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                    ):
                         continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
