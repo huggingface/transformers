@@ -606,33 +606,39 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
+    starting_epoch = 0
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
             accelerator.load_state(args.resume_from_checkpoint)
-            resume_step = None
-            path = args.resume_from_checkpoint
+            path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-        if "epoch" in path:
-            args.num_train_epochs -= int(path.replace("epoch_", ""))
-        else:
-            resume_step = int(path.replace("step_", ""))
-            args.num_train_epochs -= resume_step // len(train_dataloader)
-            resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
+        # Extract `epoch_{i}` or `step_{i}`
+        training_difference = os.path.splitext(path)[0]
 
-    for epoch in range(args.num_train_epochs):
+        if "epoch" in training_difference:
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
+            resume_step = None
+        else:
+            resume_step = int(training_difference.replace("step_", ""))
+            starting_epoch = resume_step // len(train_dataloader)
+            resume_step -= starting_epoch * len(train_dataloader)
+
+    for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
-                continue
+            if args.resume_from_checkpoint and epoch == starting_epoch:
+                if resume_step is not None and step < resume_step:
+                    completed_steps += 1
+                    continue
             outputs = model(**batch)
             loss = outputs.loss
             # We keep track of the loss at each epoch
@@ -649,7 +655,7 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps}"
+                    output_dir = f"step_{completed_steps }"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
