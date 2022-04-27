@@ -2173,7 +2173,7 @@ class Trainer:
             if isinstance(unwrap_model(self.model), PreTrainedModel):
                 unwrap_model(self.model).save_pretrained(
                     output_dir,
-                    save_config=self.args.should_save,
+                    is_main_process=self.args.should_save,
                     state_dict=self.model.state_dict(),
                     save_function=xm.save,
                 )
@@ -2182,7 +2182,7 @@ class Trainer:
                 state_dict = self.model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, save_config=self.args.should_save, save_function=xm.save)
+            self.model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 

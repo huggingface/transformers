@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import tempfile
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -1347,7 +1348,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        save_config: bool = True,
+        is_main_process: bool = True,
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
@@ -1361,10 +1362,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Arguments:
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
-            save_config (`bool`, *optional*, defaults to `True`):
-                Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
-                to call this function on all processes. In this case, set `save_config=True` only on the main process
-                to avoid race conditions.
+            is_main_process (`bool`, *optional*, defaults to `True`):
+                Whether the process calling this is the main process or not. Useful when in distributed training like
+                TPUs and need to call this function on all processes. In this case, set `is_main_process=True` only on
+                the main process to avoid race conditions.
             state_dict (nested dictionary of `torch.Tensor`):
                 The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
                 save parts of the model or if special precautions need to be taken when recovering the state dictionary
@@ -1397,6 +1398,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        if "save_config" in kwargs:
+            warnings.warn(
+                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
+            )
+            is_main_process = kwargs.pop("save_config")
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -1424,7 +1431,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if save_config:
+        if is_main_process:
             model_to_save.config.save_pretrained(save_directory)
 
         # Save the model
@@ -1443,7 +1450,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            if (
+                filename.startswith(WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+                and is_main_process
+            ):
                 os.remove(full_filename)
 
         # Save the model
