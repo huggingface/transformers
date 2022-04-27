@@ -393,9 +393,9 @@ def check_all_models_are_tested():
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
             test_file = test_file[0]
-        new_failures = check_models_are_tested(module, test_file)
-        if new_failures is not None:
-            failures += new_failures
+            new_failures = check_models_are_tested(module, test_file)
+            if new_failures is not None:
+                failures += new_failures
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
