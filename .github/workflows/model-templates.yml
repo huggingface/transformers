@@ -45,7 +45,6 @@ jobs:
       - name: Check transformers location
         # make `transformers` available as package (required since we use `-e` flag) and check it's indeed from the repo.
         run: |
-          pip install -e .[dev]
           . ~/venv/bin/activate
           python setup.py develop
           transformer_loc=$(pip show transformers | grep "Location: " | cut -c11-)
