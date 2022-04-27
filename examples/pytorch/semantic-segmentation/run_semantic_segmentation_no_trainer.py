@@ -56,10 +56,10 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 def pad_if_smaller(img, size, fill=0):
     min_size = min(img.size)
     if min_size < size:
-        ow, oh = img.size
-        padh = size - oh if oh < size else 0
-        padw = size - ow if ow < size else 0
-        img = functional.pad(img, (0, 0, padw, padh), fill=fill)
+        original_width, original_height = img.size
+        pad_height = size - original_height if original_height < size else 0
+        pad_width = size - original_width if original_width < size else 0
+        img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
     return img
 
 
