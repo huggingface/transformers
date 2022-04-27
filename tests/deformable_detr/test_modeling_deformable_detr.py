@@ -507,14 +507,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # if "level_embed" in name:
-                    #     print(param.data.mean())
-                    #     self.assertLess(
-                    #         100000,
-                    #         abs(param.data.max().item()),
-                    #         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    #     )
-                    # else:
+                    if "level_embed" in name or "sampling_offsets.bias" in name or "value_proj" in name or "output_proj" in name:
+                        continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
