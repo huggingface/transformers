@@ -45,6 +45,7 @@ jobs:
       - name: Check transformers location
         run: |
           . ~/venv/bin/activate
+          python setup.py build install
           transformer_loc=$(pip show transformers | grep "Location: " | cut -c11-)
           transformer_repo_loc=$(pwd .)
           if [ "$transformer_loc" != "$transformer_repo_loc/src" ]; then
