@@ -774,8 +774,8 @@ def main():
             # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
-                   overall_step += 1
-                   continue
+                    completed_steps += 1
+                    continue
             outputs = model(**batch)
             loss = outputs.loss
             # We keep track of the loss at each epoch
