@@ -251,5 +251,3 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         replace_in_files(f"{directory}/to_replace_{lowercase_model_name}.py")
         os.rmdir(directory)
-
-        print("well done!")
