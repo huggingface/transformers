@@ -627,7 +627,9 @@ def main():
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
                 repo.push_to_hub(
@@ -643,7 +645,9 @@ def main():
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        unwrapped_model.save_pretrained(
+            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+        )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
