@@ -457,6 +457,106 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, dim, base=10000, precision=torch.half):
+        """Rotary positional embedding
+        Reference : https://blog.eleuther.ai/rotary-embeddings/
+        Paper: https://arxiv.org/pdf/2104.09864.pdf
+        Args:
+            dim: Dimension of embedding
+            base: Base value for exponential
+            precision: precision to use for numerical values
+        """
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.seq_len_cached = None
+        self.cos_cached = None
+        self.sin_cached = None
+        self.precision = precision
+
+    def forward(self, x, seq_len=None):
+        """
+        Args:
+            x: Input x with T X B X C
+            seq_len: Sequence length of input x
+        """
+        if seq_len != self.seq_len_cached:
+            self.seq_len_cached = seq_len
+            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            self.cos_cached = emb.cos()[:, None, None, :]
+            self.sin_cached = emb.sin()[:, None, None, :]
+        return self.cos_cached, self.sin_cached
+
+
+class RelPositionalEmbedding(nn.Module):
+    """Relative positional encoding module (new implementation).
+
+    Args:
+        d_model: Embedding dimension.
+        dropout_rate: Dropout rate.
+        max_len: Maximum input length.
+    """
+
+    def __init__(self, max_len, d_model):
+        """Construct an PositionalEncoding object."""
+        super().__init__()
+        self.d_model = d_model
+        self.pe = None
+        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+
+    def extend_pe(self, x):
+        """Reset the positional encodings."""
+        if self.pe is not None:
+            # self.pe contains both positive and negative parts
+            # the length of self.pe is 2 * input_len - 1
+            if self.pe.size(1) >= x.size(1) * 2 - 1:
+                if self.pe.dtype != x.dtype or self.pe.device != x.device:
+                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
+                return
+        # Suppose `i` means to the position of query vecotr and `j` means the
+        # position of key vector. We use position relative positions when keys
+        # are to the left (i>j) and negative relative positions otherwise (i<j).
+        pe_positive = torch.zeros(x.size(1), self.d_model)
+        pe_negative = torch.zeros(x.size(1), self.d_model)
+        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, self.d_model, 2, dtype=torch.float32)
+            * -(math.log(10000.0) / self.d_model)
+        )
+        pe_positive[:, 0::2] = torch.sin(position * div_term)
+        pe_positive[:, 1::2] = torch.cos(position * div_term)
+        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
+        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
+
+        # Reserve the order of positive indices and concat both positive and
+        # negative indices. This is used to support the shifting trick
+        # as in https://arxiv.org/abs/1901.02860
+        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
+        pe_negative = pe_negative[1:].unsqueeze(0)
+        pe = torch.cat([pe_positive, pe_negative], dim=1)
+        self.pe = pe.to(device=x.device, dtype=x.dtype)
+
+    def forward(self, x: torch.Tensor):
+        """Add positional encoding.
+        Args:
+            x : Input tensor T X B X C.
+        Returns:
+            torch.Tensor: Encoded tensor T X B X C.
+
+        """
+        x = x.transpose(0, 1)  # Change TBC to BTC
+        self.extend_pe(x)
+        pos_emb = self.pe[
+            :,
+            self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
+        ]
+        pos_emb = pos_emb.transpose(0, 1)  # change to TBC
+        return pos_emb
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
@@ -703,6 +803,7 @@ class Wav2Vec2ConformerFeedForward(nn.Module):
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+#        config.hidden_act = "swish"
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -721,123 +822,83 @@ class Wav2Vec2ConformerFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Wav2Vec2Conformer
-class A_Wav2Vec2ConformerEncoderLayer(nn.Module):
+class Wav2Vec2ConformerConvolutionModule(nn.Module):
+    """Convolution block used in the conformer block"""
+
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2ConformerAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
+        assert (
+            config.conv_depthwise_kernel_size - 1
+        ) % 2 == 0, "kernel_size should be a odd number for 'SAME' padding"
+
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+        self.pointwise_conv1 = torch.nn.Conv1d(
+            config.hidden_size,
+            2 * config.hidden_size,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
         )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Wav2Vec2ConformerFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        self.glu = torch.nn.GLU(dim=1)
+        self.depthwise_conv = torch.nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            config.conv_depthwise_kernel_size,
+            stride=1,
+            padding=(config.conv_depthwise_kernel_size - 1) // 2,
+            groups=config.hidden_size,
+            bias=False,
         )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states + self.feed_forward(hidden_states)
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class FeedForwardModule(torch.nn.Module):
-    """Positionwise feed forward layer used in conformer"""
-
-    def __init__(
-        self,
-        input_feat,
-        hidden_units,
-        dropout1,
-        dropout2,
-        activation_fn="swish",
-        bias=True,
-    ):
-        """
-        Args:
-            input_feat: Input feature dimension
-            hidden_units: Hidden unit dimension
-            dropout1: dropout value for layer1
-            dropout2: dropout value for layer2
-            activation_fn: Name of activation function
-            bias: If linear layers should have bias
-        """
-        super().__init__()
-
-        self.layer_norm = nn.LayerNorm(input_feat)
-        self.w_1 = torch.nn.Linear(input_feat, hidden_units, bias=bias)
-        self.w_2 = torch.nn.Linear(hidden_units, input_feat, bias=bias)
-        self.dropout1 = torch.nn.Dropout(dropout1)
-        self.dropout2 = torch.nn.Dropout(dropout2)
-#        self.activation = get_activation_fn(activation_fn)(hidden_units)
-        self.activation = ACT2FN[activation_fn]
+        self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
+        self.activation = ACT2FN[config.hidden_act]
+        self.pointwise_conv2 = torch.nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
+        )
+        # TODO(PVP) - change dropout to conv dropout
+        self.dropout = torch.nn.Dropout(config.attention_dropout)
 
     def forward(self, x):
         """
         Args:
-            x: Input Tensor of shape  T X B X C
+            x: Input of shape B X T X C
         Returns:
-            Tensor of shape T X B X C
+          Tensor of shape B X T X C
         """
         x = self.layer_norm(x)
-        x = self.w_1(x)
+        # exchange the temporal dimension and the feature dimension
+        x = x.transpose(1, 2)
+
+        # GLU mechanism
+        x = self.pointwise_conv1(x)  # (batch, 2*channel, dim)
+        x = self.glu(x)  # (batch, channel, dim)
+
+        # 1D Depthwise Conv
+        x = self.depthwise_conv(x)
+        x = self.batch_norm(x)
         x = self.activation(x)
-        x = self.dropout1(x)
-        x = self.w_2(x)
-        return self.dropout2(x)
+
+        x = self.pointwise_conv2(x)
+        x = self.dropout(x)
+        return x.transpose(1, 2)
 
 
-class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
+class Wav2Vec2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100. We currently don't support relative positional encoding in MHA"""
 
-    def __init__(
-        self,
-        config,
-        depthwise_conv_kernel_size=31,
-        activation_fn="swish",
-        attn_type=None,
-        pos_enc_type="abs",
-    ):
-        """
-        Args:
-            embed_dim: Input embedding dimension
-            ffn_embed_dim: FFN layer dimension
-            attention_heads: Number of attention heads in MHA
-            dropout: dropout value
-            depthwise_conv_kernel_size: Size of kernel in depthwise conv layer in convolution module
-            activation_fn: Activation function name to use in convulation block and feed forward block
-            attn_type: MHA implementation from ESPNET vs fairseq
-            pos_enc_type: Positional encoding type - abs, rope, rel_pos
-        """
+    def __init__(self, config):
         super().__init__()
-
-        self.pos_enc_type = pos_enc_type
         embed_dim = config.hidden_size
         attention_heads = config.num_attention_heads
         dropout = config.attention_dropout
-        ffn_embed_dim = config.intermediate_size
 
-        self.ffn1 = FeedForwardModule(
-            embed_dim,
-            ffn_embed_dim,
-            dropout,
-            dropout,
-        )
+        self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn1 = Wav2Vec2ConformerFeedForward(config)
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
         self.self_attn_dropout = torch.nn.Dropout(dropout)
 
@@ -852,21 +913,10 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         else:
             raise ValueError(f"`config.position_embeddings_type` should be one of ['relative', 'rotary'], but is {config.position_embeddings_type}")
 
-        self.conv_module = ConvolutionModule(
-            embed_dim=embed_dim,
-            channels=embed_dim,
-            depthwise_kernel_size=depthwise_conv_kernel_size,
-            dropout=dropout,
-            activation_fn=activation_fn,
-        )
+        self.conv_module = Wav2Vec2ConformerConvolutionModule(config)
 
-        self.ffn2 = FeedForwardModule(
-            embed_dim,
-            ffn_embed_dim,
-            dropout,
-            dropout,
-            activation_fn=activation_fn,
-        )
+        self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn2 = Wav2Vec2ConformerFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(
@@ -887,11 +937,11 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
             Tensor of shape T X B X C
         """
         residual = x
+        x = self.ffn1_layer_norm(x)
         x = self.ffn1(x)
         x = x * 0.5 + residual
         residual = x
         x = self.self_attn_layer_norm(x)
-#        if self.pos_enc_type == "rel_pos":
         x, attn = self.self_attn(
             query=x,
             key=x,
@@ -900,14 +950,6 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
             pos_emb=position_embeddings,
             need_weights=False,
         )
-#        else:
-#            x, attn = self.self_attn(
-#                query=x,
-#                key=x,
-#                value=x,
-#                key_padding_mask=encoder_padding_mask,
-#                need_weights=False,
-#            )
         x = self.self_attn_dropout(x)
         x = x + residual
 
@@ -920,6 +962,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         x = residual + x
 
         residual = x
+        x = self.ffn2_layer_norm(x)
         x = self.ffn2(x)
 
         layer_result = x
@@ -930,104 +973,7 @@ class Wav2Vec2ConformerEncoderLayer(torch.nn.Module):
         return x, (attn, layer_result)
 
 
-class ESPNETMultiHeadedAttention(nn.Module):
-    """Multi-Head Attention layer.
-    Args:
-        n_head: The number of heads.
-        n_feat: The number of features.
-        dropout: Dropout rate.
-    """
-
-    def __init__(self, n_feat, n_head, dropout):
-        """Construct an MultiHeadedAttention object."""
-        super(ESPNETMultiHeadedAttention, self).__init__()
-        assert n_feat % n_head == 0
-        # We assume d_v always equals d_k
-        self.d_k = n_feat // n_head
-        self.h = n_head
-        self.linear_q = nn.Linear(n_feat, n_feat)
-        self.linear_k = nn.Linear(n_feat, n_feat)
-        self.linear_v = nn.Linear(n_feat, n_feat)
-        self.linear_out = nn.Linear(n_feat, n_feat)
-        self.attn = None
-        self.dropout = nn.Dropout(p=dropout)
-
-    def forward_qkv(self, query, key, value, **kwargs):
-        """Transform query, key and value.
-        Args:
-            query: Query tensor  B X T1 X C
-            key: Key tensor B X T2 X C
-            value: Value tensor  B X T2 X C
-        Returns:
-            torch.Tensor: Transformed query tensor  B X n_head X T1 X d_k
-            torch.Tensor: Transformed key tensor B X n_head X T2 X d_k
-            torch.Tensor: Transformed value tensor  B X n_head X T2 X d_k
-        """
-        n_batch = query.size(0)
-        q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
-        k = self.linear_k(key).view(n_batch, -1, self.h, self.d_k)
-        v = self.linear_v(value).view(n_batch, -1, self.h, self.d_k)
-        q = q.transpose(1, 2)  # (batch, head, time1, d_k)
-        k = k.transpose(1, 2)  # (batch, head, time2, d_k)
-        v = v.transpose(1, 2)  # (batch, head, time2, d_k)
-        return q, k, v
-
-    def forward_attention(self, value, scores, mask):
-        """Compute attention context vector.
-        Args:
-            value: Transformed value B X n_head X T2 X d_k.
-            scores: Attention score  B X n_head X T1 X T2
-            mask: Mask  T2 X B
-        Returns:
-            torch.Tensor: Transformed value  B X T1 X d_model
-                weighted by the attention score  B X T1 X T2
-        """
-        # TODO(PVP) - remove after
-        if mask is not None:
-            mask = mask > 1.0
-        else:
-            mask = torch.zeros_like(scores, dtype=torch.long).bool()
-
-        n_batch = value.size(0)
-        if mask is not None:
-            scores = scores.masked_fill(
-                mask,
-                float("-inf"),  # (batch, head, time1, time2)
-            )
-            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
-
-        else:
-            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
-        p_attn = self.dropout(self.attn)
-        x = torch.matmul(p_attn, value)  # (batch, head, time1, d_k)
-        x = (
-            x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
-        )  # (batch, time1, d_model)
-
-        return self.linear_out(x)  # (batch, time1, d_model)
-
-    def forward(self, query, key, value, key_padding_mask=None, **kwargs):
-        """Compute scaled dot product attention.
-        Args:
-            query (torch.Tensor): Query tensor T X B X C
-            key (torch.Tensor): Key tensor T X B X C
-            value (torch.Tensor): Value tensor T X B X C
-            mask (torch.Tensor): Mask tensor T X B
-        Returns:
-            torch.Tensor: Output tensor T X B X D.
-        """
-        query = query.transpose(0, 1)
-        key = key.transpose(0, 1)
-        value = value.transpose(0, 1)
-
-        q, k, v = self.forward_qkv(query, key, value)
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        scores = self.forward_attention(v, scores, key_padding_mask)
-        scores = scores.transpose(0, 1)
-        return scores, None
-
-
-class RelPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
+class RelPositionMultiHeadedAttention(nn.Module):
     """Multi-Head Attention layer with relative position encoding.
     Paper: https://arxiv.org/abs/1901.02860
     Args:
@@ -1039,7 +985,17 @@ class RelPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
 
     def __init__(self, n_feat, n_head, dropout, zero_triu=False):
         """Construct an RelPositionMultiHeadedAttention object."""
-        super().__init__(n_feat, n_head, dropout)
+        super().__init__()
+        assert n_feat % n_head == 0
+        # We assume d_v always equals d_k
+        self.d_k = n_feat // n_head
+        self.h = n_head
+        self.linear_q = nn.Linear(n_feat, n_feat)
+        self.linear_k = nn.Linear(n_feat, n_feat)
+        self.linear_v = nn.Linear(n_feat, n_feat)
+        self.linear_out = nn.Linear(n_feat, n_feat)
+        self.attn = None
+        self.dropout = nn.Dropout(p=dropout)
         self.zero_triu = zero_triu
         # linear transformation for positional encoding
         self.linear_pos = nn.Linear(n_feat, n_feat, bias=False)
@@ -1116,138 +1072,83 @@ class RelPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
         scores = scores.transpose(0, 1)
         return scores, None
 
-
-class ConvolutionModule(torch.nn.Module):
-    """Convolution block used in the conformer block"""
-
-    def __init__(
-        self,
-        embed_dim,
-        channels,
-        depthwise_kernel_size,
-        dropout,
-        activation_fn="swish",
-        bias=False,
-        export=False,
-    ):
-        """
+    def forward_attention(self, value, scores, mask):
+        """Compute attention context vector.
         Args:
-            embed_dim: Embedding dimension
-            channels: Number of channels in depthwise conv layers
-            depthwise_kernel_size: Depthwise conv layer kernel size
-            dropout: dropout value
-            activation_fn: Activation function to use after depthwise convolution kernel
-            bias: If bias should be added to conv layers
-            export: If layernorm should be exported to jit
-        """
-        super(ConvolutionModule, self).__init__()
-        assert (
-            depthwise_kernel_size - 1
-        ) % 2 == 0, "kernel_size should be a odd number for 'SAME' padding"
-        self.layer_norm = nn.LayerNorm(embed_dim)
-        self.pointwise_conv1 = torch.nn.Conv1d(
-            embed_dim,
-            2 * channels,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=bias,
-        )
-        self.glu = torch.nn.GLU(dim=1)
-        self.depthwise_conv = torch.nn.Conv1d(
-            channels,
-            channels,
-            depthwise_kernel_size,
-            stride=1,
-            padding=(depthwise_kernel_size - 1) // 2,
-            groups=channels,
-            bias=bias,
-        )
-        self.batch_norm = torch.nn.BatchNorm1d(channels)
-        self.activation = ACT2FN[activation_fn]
-        self.pointwise_conv2 = torch.nn.Conv1d(
-            channels,
-            embed_dim,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=bias,
-        )
-        self.dropout = torch.nn.Dropout(dropout)
-
-    def forward(self, x):
-        """
-        Args:
-            x: Input of shape B X T X C
+            value: Transformed value B X n_head X T2 X d_k.
+            scores: Attention score  B X n_head X T1 X T2
+            mask: Mask  T2 X B
         Returns:
-          Tensor of shape B X T X C
+            torch.Tensor: Transformed value  B X T1 X d_model
+                weighted by the attention score  B X T1 X T2
         """
-        x = self.layer_norm(x)
-        # exchange the temporal dimension and the feature dimension
-        x = x.transpose(1, 2)
+        # TODO(PVP) - remove after
+        if mask is not None:
+            mask = mask > 1.0
+        else:
+            mask = torch.zeros_like(scores, dtype=torch.long).bool()
 
-        # GLU mechanism
-        x = self.pointwise_conv1(x)  # (batch, 2*channel, dim)
-        x = self.glu(x)  # (batch, channel, dim)
+        n_batch = value.size(0)
+        if mask is not None:
+            scores = scores.masked_fill(
+                mask,
+                float("-inf"),  # (batch, head, time1, time2)
+            )
+            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
 
-        # 1D Depthwise Conv
-        x = self.depthwise_conv(x)
-        x = self.batch_norm(x)
-        x = self.activation(x)
+        else:
+            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
+        p_attn = self.dropout(self.attn)
+        x = torch.matmul(p_attn, value)  # (batch, head, time1, d_k)
+        x = (
+            x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
+        )  # (batch, time1, d_model)
 
-        x = self.pointwise_conv2(x)
-        x = self.dropout(x)
-        return x.transpose(1, 2)
+        return self.linear_out(x)  # (batch, time1, d_model)
 
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = Wav2Vec2ConformerAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Wav2Vec2ConformerFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+    def forward_qkv(self, query, key, value, **kwargs):
+        """Transform query, key and value.
+        Args:
+            query: Query tensor  B X T1 X C
+            key: Key tensor B X T2 X C
+            value: Value tensor  B X T2 X C
+        Returns:
+            torch.Tensor: Transformed query tensor  B X n_head X T1 X d_k
+            torch.Tensor: Transformed key tensor B X n_head X T2 X d_k
+            torch.Tensor: Transformed value tensor  B X n_head X T2 X d_k
+        """
+        n_batch = query.size(0)
+        q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
+        k = self.linear_k(key).view(n_batch, -1, self.h, self.d_k)
+        v = self.linear_v(value).view(n_batch, -1, self.h, self.d_k)
+        q = q.transpose(1, 2)  # (batch, head, time1, d_k)
+        k = k.transpose(1, 2)  # (batch, head, time2, d_k)
+        v = v.transpose(1, 2)  # (batch, head, time2, d_k)
+        return q, k, v
 
 
-class RotaryPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
+class RotaryPositionMultiHeadedAttention(nn.Module):
     def __init__(
         self,
         n_feat,
         n_head,
         dropout,
-#        precision,
         rotary_emd_base=10000,
     ):
         """Construct an RotaryPositionMultiHeadedAttention object."""
-        super().__init__(n_feat, n_head, dropout)
+        super().__init__()
+        assert n_feat % n_head == 0
+        # We assume d_v always equals d_k
+        self.d_k = n_feat // n_head
+        self.h = n_head
+        self.linear_q = nn.Linear(n_feat, n_feat)
+        self.linear_k = nn.Linear(n_feat, n_feat)
+        self.linear_v = nn.Linear(n_feat, n_feat)
+        self.linear_out = nn.Linear(n_feat, n_feat)
+        self.attn = None
+        self.dropout = nn.Dropout(p=dropout)
         precision = torch.float
         self.rotary_ndims = self.d_k  # also try self.d_k//2
-#        if precision == "fp16":
-#            precision = torch.half
 
         self.rotary_emb = RotaryPositionalEmbedding(
             self.rotary_ndims, base=rotary_emd_base, precision=precision
@@ -1271,7 +1172,7 @@ class RotaryPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
         key = key.view(T, B, self.h, self.d_k)
         value = value.view(T, B, self.h, self.d_k)
         cos, sin = self.rotary_emb(value, seq_len=T)
-        query, key = apply_rotary_pos_emb(
+        query, key = self.apply_rotary_pos_emb(
             query, key, cos, sin, offset=0
         )  # offset is based on layer_past
 
@@ -1290,121 +1191,71 @@ class RotaryPositionMultiHeadedAttention(ESPNETMultiHeadedAttention):
         scores = scores.transpose(0, 1)
         return scores, None
 
-
-class RotaryPositionalEmbedding(torch.nn.Module):
-    def __init__(self, dim, base=10000, precision=torch.half):
-        """Rotary positional embedding
-        Reference : https://blog.eleuther.ai/rotary-embeddings/
-        Paper: https://arxiv.org/pdf/2104.09864.pdf
+    def forward_qkv(self, query, key, value, **kwargs):
+        """Transform query, key and value.
         Args:
-            dim: Dimension of embedding
-            base: Base value for exponential
-            precision: precision to use for numerical values
-        """
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        self.seq_len_cached = None
-        self.cos_cached = None
-        self.sin_cached = None
-        self.precision = precision
-
-    def forward(self, x, seq_len=None):
-        """
-        Args:
-            x: Input x with T X B X C
-            seq_len: Sequence length of input x
-        """
-        if seq_len != self.seq_len_cached:
-            self.seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[:, None, None, :]
-            self.sin_cached = emb.sin()[:, None, None, :]
-        return self.cos_cached, self.sin_cached
-
-
-# rotary pos emb helpers:
-def rotate_half(x):
-    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
-    return torch.cat(
-        (-x2, x1), dim=x1.ndim - 1
-    )  # dim=-1 triggers a bug in earlier torch versions
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos, sin = (
-        cos[offset : q.shape[0] + offset, ...],
-        sin[offset : q.shape[0] + offset, ...],
-    )
-    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
-
-
-class RelPositionalEncoding(nn.Module):
-    """Relative positional encoding module (new implementation).
-
-    Args:
-        d_model: Embedding dimension.
-        dropout_rate: Dropout rate.
-        max_len: Maximum input length.
-    """
-
-    def __init__(self, max_len, d_model):
-        """Construct an PositionalEncoding object."""
-        super().__init__()
-        self.d_model = d_model
-        self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
-
-    def extend_pe(self, x):
-        """Reset the positional encodings."""
-        if self.pe is not None:
-            # self.pe contains both positive and negative parts
-            # the length of self.pe is 2 * input_len - 1
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
-                if self.pe.dtype != x.dtype or self.pe.device != x.device:
-                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
-                return
-        # Suppose `i` means to the position of query vecotr and `j` means the
-        # position of key vector. We use position relative positions when keys
-        # are to the left (i>j) and negative relative positions otherwise (i<j).
-        pe_positive = torch.zeros(x.size(1), self.d_model)
-        pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32)
-            * -(math.log(10000.0) / self.d_model)
-        )
-        pe_positive[:, 0::2] = torch.sin(position * div_term)
-        pe_positive[:, 1::2] = torch.cos(position * div_term)
-        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
-        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
-
-        # Reserve the order of positive indices and concat both positive and
-        # negative indices. This is used to support the shifting trick
-        # as in https://arxiv.org/abs/1901.02860
-        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
-        pe_negative = pe_negative[1:].unsqueeze(0)
-        pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
-
-    def forward(self, x: torch.Tensor):
-        """Add positional encoding.
-        Args:
-            x : Input tensor T X B X C.
+            query: Query tensor  B X T1 X C
+            key: Key tensor B X T2 X C
+            value: Value tensor  B X T2 X C
         Returns:
-            torch.Tensor: Encoded tensor T X B X C.
-
+            torch.Tensor: Transformed query tensor  B X n_head X T1 X d_k
+            torch.Tensor: Transformed key tensor B X n_head X T2 X d_k
+            torch.Tensor: Transformed value tensor  B X n_head X T2 X d_k
         """
-        x = x.transpose(0, 1)  # Change TBC to BTC
-        self.extend_pe(x)
-        pos_emb = self.pe[
-            :,
-            self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
-        ]
-        pos_emb = pos_emb.transpose(0, 1)  # change to TBC
-        return pos_emb
+        n_batch = query.size(0)
+        q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
+        k = self.linear_k(key).view(n_batch, -1, self.h, self.d_k)
+        v = self.linear_v(value).view(n_batch, -1, self.h, self.d_k)
+        q = q.transpose(1, 2)  # (batch, head, time1, d_k)
+        k = k.transpose(1, 2)  # (batch, head, time2, d_k)
+        v = v.transpose(1, 2)  # (batch, head, time2, d_k)
+        return q, k, v
+
+    def forward_attention(self, value, scores, mask):
+        """Compute attention context vector.
+        Args:
+            value: Transformed value B X n_head X T2 X d_k.
+            scores: Attention score  B X n_head X T1 X T2
+            mask: Mask  T2 X B
+        Returns:
+            torch.Tensor: Transformed value  B X T1 X d_model
+                weighted by the attention score  B X T1 X T2
+        """
+        # TODO(PVP) - remove after
+        if mask is not None:
+            mask = mask > 1.0
+        else:
+            mask = torch.zeros_like(scores, dtype=torch.long).bool()
+
+        n_batch = value.size(0)
+        if mask is not None:
+            scores = scores.masked_fill(
+                mask,
+                float("-inf"),  # (batch, head, time1, time2)
+            )
+            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
+
+        else:
+            self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
+        p_attn = self.dropout(self.attn)
+        x = torch.matmul(p_attn, value)  # (batch, head, time1, d_k)
+        x = (
+            x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
+        )  # (batch, time1, d_model)
+
+        return self.linear_out(x)  # (batch, time1, d_model)
+
+    @staticmethod
+    def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+        def rotate_half(x):
+            x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+            return torch.cat((-x2, x1), dim=x1.ndim - 1)
+
+        cos, sin = (
+            cos[offset : q.shape[0] + offset, ...],
+            sin[offset : q.shape[0] + offset, ...],
+        )
+        return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Wav2Vec2Conformer
@@ -1414,7 +1265,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         self.config = config
 
         if config.position_embeddings_type == "relative":
-            self.embed_positions = RelPositionalEncoding(config.max_source_positions, config.hidden_size)
+            self.embed_positions = RelPositionalEmbedding(config.max_source_positions, config.hidden_size)
         elif config.position_embeddings_type == "rotary":
             self.embed_positions = None
         else:
@@ -1490,103 +1341,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-            if i == 1:
-                break
-
         # TODO(PVP) - remove after
         hidden_states = hidden_states.transpose(0, 1)
 
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerEncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList(
-            [Wav2Vec2ConformerEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
-        )
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        if attention_mask is not None:
-            # make sure padded tokens are not attended to
-            hidden_states[~attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.dropout(hidden_states)
-
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
-        for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
-
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1820,7 +1578,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2ConformerEncoder, Wav2Vec2ConformerEncoderStableLayerNorm, Wav2Vec2ConformerFeatureEncoder)):
+        if isinstance(module, (Wav2Vec2ConformerEncoder, Wav2Vec2ConformerFeatureEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -1832,7 +1590,7 @@ WAV2VEC2_CONFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
@@ -1897,9 +1655,6 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
             self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
-#        if config.do_stable_layer_norm:
-#            self.encoder = Wav2Vec2ConformerEncoderStableLayerNorm(config)
-#        else:
         self.encoder = Wav2Vec2ConformerEncoder(config)
 
         self.adapter = Wav2Vec2ConformerAdapter(config) if config.add_adapter else None

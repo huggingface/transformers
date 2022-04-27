@@ -252,8 +252,11 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
+
+        # TODO(PVP) - give docstring
         max_source_positions=5000,
         position_embeddings_type="relative",
+        conv_depthwise_kernel_size=31,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -283,9 +286,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
 
-        # NEW
+        # TODO(PVP) - give docstring
         self.max_source_positions = max_source_positions
         self.position_embeddings_type = position_embeddings_type
+        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)

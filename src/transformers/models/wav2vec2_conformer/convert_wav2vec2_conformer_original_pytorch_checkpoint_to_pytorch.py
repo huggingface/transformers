@@ -54,12 +54,14 @@ MAPPING = {
     "conv_module.depthwise_conv": "encoder.layers.*.conv_module.depthwise_conv",
     "conv_module.batch_norm": "encoder.layers.*.conv_module.batch_norm",
     "conv_module.layer_norm": "encoder.layers.*.conv_module.layer_norm",
-    "ffn1.w_1": "encoder.layers.*.ffn1.w_1",
-    "ffn1.w_2": "encoder.layers.*.ffn1.w_2",
-    "ffn1.layer_norm": "encoder.layers.*.ffn1.layer_norm",
-    "ffn2.w_1": "encoder.layers.*.ffn2.w_1",
-    "ffn2.w_2": "encoder.layers.*.ffn2.w_2",
-    "ffn2.layer_norm": "encoder.layers.*.ffn2.layer_norm",
+#    "ffn1.w_1": "encoder.layers.*.ffn1.w_1",
+#    "ffn1.w_2": "encoder.layers.*.ffn1.w_2",
+    "ffn1.w_1": "encoder.layers.*.ffn1.intermediate_dense",
+    "ffn1.w_2": "encoder.layers.*.ffn1.output_dense",
+    "ffn1.layer_norm": "encoder.layers.*.ffn1_layer_norm",
+    "ffn2.w_1": "encoder.layers.*.ffn2.intermediate_dense",
+    "ffn2.w_2": "encoder.layers.*.ffn2.output_dense",
+    "ffn2.layer_norm": "encoder.layers.*.ffn2_layer_norm",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
@@ -222,11 +224,12 @@ def convert_wav2vec2_conformer_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = Wav2Vec2ConformerConfig.from_pretrained(config_path)
+        config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
     else:
         config = Wav2Vec2ConformerConfig()
 
-    config.position_embeddings_type = "rotary"
+    if "rope" in checkpoint_path:
+        config.position_embeddings_type = "rotary"
 
     if is_finetuned:
         if dict_path:
