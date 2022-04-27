@@ -291,8 +291,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# BELOW: utilities copied from
-# https://github.com/facebookresearch/detr/blob/master/backbone.py
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->DeformableDetr
 class DeformableDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -332,6 +331,7 @@ class DeformableDetrFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
 def replace_batch_norm(m, name=""):
     for attr_str in dir(m):
         target_attr = getattr(m, attr_str)
@@ -351,7 +351,7 @@ class DeformableDetrTimmConvEncoder(nn.Module):
     """
     Convolutional encoder (backbone) from the timm library.
 
-    nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by DeformableDetrFrozenBatchNorm2d as defined above.
 
     """
 
@@ -392,6 +392,7 @@ class DeformableDetrTimmConvEncoder(nn.Module):
         return out
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DeformableDetr
 class DeformableDetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -413,14 +414,15 @@ class DeformableDetrConvModel(nn.Module):
         return out, pos
 
 
+# Copied from transformers.models.detr.modeling_detr._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    batch_size, src_len = mask.size()
+    bsz, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -464,6 +466,7 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
         return pos
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
 class DeformableDetrLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -487,6 +490,7 @@ class DeformableDetrLearnedPositionEmbedding(nn.Module):
         return pos
 
 
+# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->DeformableDetr
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -913,6 +917,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
 class DeformableDetrClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1802,7 +1807,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # TODO add support for return_dict = False
         hs = outputs.intermediate_hidden_states if return_dict else outputs[2]
         init_reference = outputs.init_reference_points if return_dict else outputs[0]
         inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
@@ -1905,6 +1909,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         return dict_outputs
 
 
+# Copied from transformers.models.detr.modeling_detr.dice_loss
 def dice_loss(inputs, targets, num_boxes):
     """
     Compute the DICE loss, similar to generalized IOU for masks
@@ -1924,6 +1929,7 @@ def dice_loss(inputs, targets, num_boxes):
     return loss.sum() / num_boxes
 
 
+# Copied from transformers.models.detr.modeling_detr.sigmoid_focal_loss
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
@@ -2133,7 +2139,7 @@ class DeformableDetrLoss(nn.Module):
         return losses
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
 class DeformableDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -2155,7 +2161,7 @@ class DeformableDetrMLPPredictionHead(nn.Module):
         return x
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/matcher.py
+# Copied from transformers.models.detr.modeling_detr.DetrHungarianMatcher
 class DeformableDetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
@@ -2205,7 +2211,7 @@ class DeformableDetrHungarianMatcher(nn.Module):
                 - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        batch_size, num_queries = outputs["logits"].shape[:2]
+        bs, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
         out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
@@ -2228,16 +2234,14 @@ class DeformableDetrHungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
+        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-# below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-
-
+# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
@@ -2246,6 +2250,7 @@ def _upcast(t: Tensor) -> Tensor:
         return t if t.dtype in (torch.int32, torch.int64) else t.int()
 
 
+# Copied from transformers.models.detr.modeling_detr.box_area
 def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
@@ -2261,7 +2266,7 @@ def box_area(boxes: Tensor) -> Tensor:
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
-# modified from torchvision to also return the union
+# Copied from transformers.models.detr.modeling_detr.box_iou
 def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
@@ -2278,6 +2283,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+# Copied from transformers.models.detr.modeling_detr.generalized_box_iou
 def generalized_box_iou(boxes1, boxes2):
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
@@ -2300,9 +2306,7 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
-
-
+# Copied from transformers.models.detr.modeling_detr._max_by_axis
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]
@@ -2312,6 +2316,7 @@ def _max_by_axis(the_list):
     return maxes
 
 
+# Copied from transformers.models.detr.modeling_detr.NestedTensor
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
@@ -2334,6 +2339,7 @@ class NestedTensor(object):
         return str(self.tensors)
 
 
+# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
