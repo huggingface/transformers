@@ -69,8 +69,7 @@ class JukeBoxIntegrationTest(unittest.TestCase):
         ]
 
         self.assertTrue(inputs == EXPECTED_OUTPUT)
-        INFINITY = float("inf")
-        EXPECTED_MASK_OUTPUT = [-INFINITY] * 7 + [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        EXPECTED_MASK_OUTPUT = [-float("inf")] * 7 + [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.assertTrue(attention_masks == EXPECTED_MASK_OUTPUT)
 
 
