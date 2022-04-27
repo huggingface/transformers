@@ -164,6 +164,13 @@ class HerbertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class JukeboxTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class LayoutLMTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
