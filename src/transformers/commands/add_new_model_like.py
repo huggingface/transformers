@@ -517,7 +517,7 @@ def filter_framework_files(
         else:
             framework_to_file["pt"] = f
 
-    return [framework_to_file[f] for f in frameworks] + others
+    return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
 
 
 def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
