@@ -1032,6 +1032,19 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
+        """
+        Get reference points for each feature map. Used in decoder.
+        
+        Args:
+            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of each feature map.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+                Valid ratios of each feature map.
+            device (`torch.device`):
+                Device on which to create the tensors.
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_reference_points, num_feature_levels, 2)`
+        """
         reference_points_list = []
         for lvl, (H_, W_) in enumerate(spatial_shapes):
 
@@ -1039,7 +1052,9 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
                 torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
                 torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
             )
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_y = ref_y.reshape(-1)[None] / (
+                valid_ratios[:, None, lvl, 1] * H_
+            )  # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
@@ -1186,13 +1201,17 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
 
-            reference_points
+            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
 
-            spatial_shapes
+            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of the feature maps.
 
-            level_start_index
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+                Indexes for the start of each feature level. In range `[0, encoder_sequence_length]`.
 
-            valid_ratios
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+                Ratio of valid area in each feature level.
 
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1393,6 +1412,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             param.requires_grad_(True)
 
     def get_valid_ratio(self, mask):
+        """Get the valid ratio of all feature maps."""
+
         _, H, W = mask.shape
         valid_H = torch.sum(~mask[:, :, 0], 1)
         valid_W = torch.sum(~mask[:, 0, :], 1)
@@ -1402,6 +1423,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         return valid_ratio
 
     def get_proposal_pos_embed(self, proposals):
+        """Get the position embedding of the proposals."""
+
         num_pos_feats = 128
         temperature = 10000
         scale = 2 * math.pi
@@ -1417,6 +1440,19 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         return pos
 
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
+        """Generate the encoder output proposals from encoded memory.
+        
+        Args:
+            memory (Tensor[batch_size, num_reference_points, d_model]): Output of the encoder.
+            memory_padding_mask (Tensor[batch_size, num_reference_points]): Padding mask for memory.
+            spatial_shapes (Tensor[num_feature_levels, 2]): Spatial shapes of the feature maps.
+        
+        Returns:
+            `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
+                - output_memory (Tensor[batch_size, num_feature_levels, d_model]): The input of the decoder.
+                - output_proposals (Tensor[batch_size, num_reference_points, 4]): Normalized proposals, after an
+                  inverse sigmoid.
+        """
         N_, S_, C_ = memory.shape
         proposals = []
         _cur = 0
@@ -1494,18 +1530,20 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
+        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
-        # print("Shape of pixel values:", pixel_values.shape)
-
+        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
+        
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
             for l in range(_len_srcs, self.config.num_feature_levels):
