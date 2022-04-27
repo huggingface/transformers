@@ -30,7 +30,7 @@ jobs:
           key: v3-tests_model_like-${{ hashFiles('setup.py') }}
 
       - name: Create virtual environment on cache miss
-        if: steps.cache.outputs.cache-hit != 'false'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           python -m venv ~/venv && . ~/venv/bin/activate
           pip install --upgrade pip!=21.3
