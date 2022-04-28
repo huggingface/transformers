@@ -38,7 +38,9 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         scores (`tf.Tensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
-            search or log softmax for each vocabulary token when using beam search
+            search or log softmax for each vocabulary token when using beam search.
+        cur_len (`int`):
+            The current length of valid input sequence tokens.
         kwargs:
             Additional logits processor specific kwargs.
 
@@ -77,18 +79,18 @@ class TFLogitsProcessorList(list):
     """
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, **kwargs) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int, **kwargs) -> tf.Tensor:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 2:
+            if len(function_args) > 3:
                 if not all(arg in kwargs for arg in list(function_args.keys())[2:]):
                     raise ValueError(
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
                         f"{processor.__class__} are passed to the logits processor."
                     )
-                scores = processor(input_ids, scores, **kwargs)
+                scores = processor(input_ids, scores, cur_len, **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                scores = processor(input_ids, scores, cur_len)
         return scores
 
 
@@ -107,7 +109,7 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         scores = scores / self.temperature
         return scores
 
@@ -133,7 +135,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
@@ -163,7 +165,7 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         topk_scores, topk_indices = tf.math.top_k(scores, scores.shape[-1])
 
         mask_scores = tf.fill(scores.shape, self.filter_value)
@@ -317,7 +319,6 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         self.seq_forbidden_tokens = tf.convert_to_tensor([bad_words[-1] for bad_words in bad_words_ids])
 
     def _calc_row_banned_bad_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
-
         def _tokens_match(bad_word_seq_number):
             def _len_one():
                 # If the bad sequence only has one token, always mask it
@@ -380,10 +381,9 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
+    Args:
     [`TFLogitsProcessor`] that enforces no repetition of n-grams. See
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
-
-    Args:
         ngram_size (`int`):
             All ngrams of size `ngram_size` can only occur once.
     """
@@ -393,72 +393,49 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def _calc_row_banned_ngram_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
+    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
+        # Copied from fairseq for no_repeat_ngram in beam_search
+        if cur_len + 1 < self.ngram_size:
+            # return no banned tokens if we haven't generated ngram_size tokens yet
+            return [[] for _ in range(num_hypos)]
+        generated_ngrams = [{} for _ in range(num_hypos)]
+        prev_input_ids = input_ids[:, :cur_len]
+        for idx in range(num_hypos):
+            gen_tokens = prev_input_ids[idx].numpy().tolist()
+            generated_ngram = generated_ngrams[idx]
+            for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
+                prev_ngram_tuple = tuple(ngram[:-1])
+                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
 
-        def _get_banned_tokens_from_ngrams():
-            # get the tokens that may trigger previously seen ngrams
-            ngram_start_idx = row_input_ids.shape[0] + 1 - self.ngram_size
-            latest_tokens = row_input_ids[ngram_start_idx:]
-            # alias for convenience: the start idx is also the number of ngrams we'll see
-            n_ngrams = ngram_start_idx
+        def _get_generated_ngrams(hypo_idx):
+            # Before decoding the next token, prevent decoding of ngrams that have already appeared
+            start_idx = cur_len + 1 - self.ngram_size
+            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
+            return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
-            # Set up a tf.while_loop to retrieve a pair of tensors:
-            #   1. a mask of whether the ngram is at risk of occuring
-            #   2. the associated token (that must be banned when the mask is true)
-            # Getting this pair of tensors (as opposed to the tokens to be banned directly) allow us to avoid
-            # variable-size tensors, which are not allowed with XLA
-            ngram_mask = tf.TensorArray(
-                dtype=tf.bool,
-                size=n_ngrams,
-                dynamic_size=False,
-            )
-            ngram_token = tf.TensorArray(
-                dtype=tf.int32,
-                size=n_ngrams,
-                dynamic_size=False,
-            )
+        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
 
-            def cond(ngram_idx, latest_tokens, row_input_ids, ngram_mask, ngram_token):
-                return tf.less(ngram_idx, n_ngrams)
-
-            def body(ngram_idx, latest_tokens, row_input_ids, ngram_mask, ngram_token):
-                ngram = row_input_ids[ngram_idx:ngram_idx + self.ngram_size]
-                ngram_token = ngram_token.write(ngram_idx, ngram[-1])
-                ngram_mask = ngram_mask.write(ngram_idx, tf.math.reduce_all(tf.math.equal(latest_tokens, ngram[:-1])))
-                return ngram_idx + 1, latest_tokens, row_input_ids, ngram_mask, ngram_token
-
-            _, _, _, ngram_mask, ngram_token = tf.while_loop(
-                cond, body, (0, latest_tokens, row_input_ids, ngram_mask, ngram_token)
-            )
-            banned_tokens = tf.boolean_mask(ngram_token.stack(), ngram_mask.stack())
-            return banned_tokens
-
-        banned_tokens = tf.cond(
-            # if no ngrams can be generated, no banned tokens
-            tf.math.less(row_input_ids.shape[0] + 1, self.ngram_size),
-            lambda: tf.constant([], dtype=tf.int32),
-            _get_banned_tokens_from_ngrams
-        )
         return banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
-        # `input_ids`, they may have a different length for each row, and they may even be empty for some rows.
-        # To remain simple and XLA-compatible, we work on a per-row fashion.
-        # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
-        # a frequent choke point. (make `cur_len` a tensor?)
-        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
-            row_input_ids, row_score = row_inputs
-            banned_tokens = self._calc_row_banned_ngram_tokens(row_input_ids[:cur_len])
-            banned_tokens_mask = tf.scatter_nd(
-                indices=tf.expand_dims(banned_tokens, axis=-1),
-                updates=tf.ones_like(banned_tokens, dtype=tf.bool),
-                shape=row_score.shape,
-            )
-            row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
-            return row_score
 
-        scores = tf.map_fn(_get_row_updated_score, (input_ids, scores), fn_output_signature=tf.float32)
+        # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
+        # https://github.com/huggingface/transformers/pull/16974
+        if not tf.executing_eagerly():
+            raise NotImplementedError("TFNoRepeatNGramLogitsProcessor is only implemented for eager execution.")
+
+        batch_size, vocab_size = scores.shape
+        banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
+
+        # create banned_tokens boolean mask
+        banned_tokens_indices_mask = []
+        for banned_tokens_slice in banned_tokens:
+            banned_tokens_indices_mask.append(
+                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+            )
+
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
+
         return scores
 
 
