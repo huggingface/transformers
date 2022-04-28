@@ -309,7 +309,6 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_tf
     @require_vision
-    @require_rjieba
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
