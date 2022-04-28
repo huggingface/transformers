@@ -833,6 +833,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states = torch.matmul(probs, value)
 
         # => (batch, time1, hidden_size)
+#        hidden_states = hidden_states.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.h * self.d_k)
         hidden_states = self.linear_out(hidden_states)
 
