@@ -274,6 +274,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTForMaskedImageModeling"),
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
+        ("beit", "BeitForMaskedImageModeling"),
     ]
 )
 
