@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_torch_available
+from ...utils import _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -35,6 +35,14 @@ if is_torch_available():
         "SwinPreTrainedModel",
     ]
 
+if is_tf_available():
+    _import_structure["modeling_tf_swin"] = [
+        "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFSwinForImageClassification",
+        "TFSwinForMaskedImageModeling",
+        "TFSwinModel",
+        "TFSwinPreTrainedModel"
+    ]
 
 if TYPE_CHECKING:
     from .configuration_swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
@@ -47,6 +55,16 @@ if TYPE_CHECKING:
             SwinModel,
             SwinPreTrainedModel,
         )
+
+    if is_tf_available():
+        from .modeling_tf_swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel
+        )
+
 
 
 else:

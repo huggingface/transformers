@@ -2121,6 +2121,15 @@ if is_tf_available():
             "TFSpeech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.swin"].extend(
+        [
+            "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwinForImageClassification",
+            "TFSwinForMaskedImageModeling",
+            "TFSwinModel",
+            "TFSwinPreTrainedModel"
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4197,6 +4206,13 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,

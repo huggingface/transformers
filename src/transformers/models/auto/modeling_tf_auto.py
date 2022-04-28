@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("swin", "TFSwinModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("clip", "TFCLIPModel"),
         ("deberta-v2", "TFDebertaV2Model"),
@@ -158,11 +159,18 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    [
+        ("swin", "TFSwinForMaskedImageModeling"),
+    ]
+)
+
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("vit", "TFViTForImageClassification"),
         ("convnext", "TFConvNextForImageClassification"),
+        ("swin", "TFSwinForImageClassification")
     ]
 )
 
@@ -347,6 +355,9 @@ TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 TF_MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES)
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
+)
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
@@ -405,6 +416,13 @@ class TFAutoModelForCausalLM(_BaseAutoModelClass):
 
 
 TFAutoModelForCausalLM = auto_class_update(TFAutoModelForCausalLM, head_doc="causal language modeling")
+
+
+class TFAutoModelForMaskedImageModeling(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
+
+
+TFAutoModelForMaskedImageModeling = auto_class_update(TFAutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
 class TFAutoModelForImageClassification(_BaseAutoModelClass):
