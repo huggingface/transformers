@@ -231,12 +231,10 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
 
-        # We need to order the input in the way they appears in the forward()
         ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
 
         # Need to add the past_keys
@@ -248,22 +246,22 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
 
                 batch, seqlen = common_inputs["input_ids"].shape
                 # Not using the same length for past_key_values
-                past_key_values_length = seqlen + 2
+                past_key_values_length = 1
                 past_shape = (
+                    2,  # Key AND Values
                     batch,
                     self.num_attention_heads,
                     past_key_values_length,
                     self._config.hidden_size // self.num_attention_heads,
                 )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
+                    torch.zeros(past_shape, dtype=torch.float32) for _ in range(self.num_layers)
                 ]
 
-        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
-        if self.use_past:
-            ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
-            )
+            if self.use_past:
+                ordered_inputs["attention_mask"] = torch.ones(batch, seqlen + past_key_values_length, dtype=torch.int64)
+        else:
+            ordered_inputs["attention_mask"] = common_inputs["attention_mask"].long()
 
         return ordered_inputs
 

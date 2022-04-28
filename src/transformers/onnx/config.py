@@ -101,10 +101,7 @@ class OnnxConfig(ABC):
 
         self._patching_specs = []
         for spec in patching_specs if patching_specs is not None else []:
-            final_spec = spec
-            if spec.orig_op is None:
-                final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
-            self._patching_specs.append(final_spec)
+            self.install_patching_spec(spec)
 
     @classmethod
     def from_model_config(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfig":
@@ -245,6 +242,17 @@ class OnnxConfig(ABC):
             data = np.random.rand(image_height, image_width, num_channels) * 255
             images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
         return images
+
+    def install_patching_spec(self, spec: PatchingSpec):
+        """
+        Append a patching spec after initialization of the configuration
+        :param spec:
+        :return:
+        """
+        if spec.orig_op is None:
+            spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
+
+        self._patching_specs.append(spec)
 
     def generate_dummy_inputs(
         self,

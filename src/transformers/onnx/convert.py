@@ -29,8 +29,7 @@ from ..utils import (
     is_torch_onnx_dict_inputs_support_available,
     logging,
 )
-from .config import OnnxConfig
-
+from .config import OnnxConfig, OnnxConfigWithPast
 
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
@@ -125,6 +124,11 @@ def export_pytorch(
         with torch.no_grad():
             model.config.return_dict = True
             model.eval()
+
+            if isinstance(config, OnnxConfigWithPast):
+                from transformers.onnx.utils import ort_compatible_forward_with_past_key_values_output
+
+                model.forward = ort_compatible_forward_with_past_key_values_output(model.forward, config.num_layers)
 
             # Check if we need to override certain configuration item
             if config.values_override is not None:
@@ -370,7 +374,11 @@ def validate_model_outputs(
     for name, value in reference_model_inputs.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
-            onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
+            onnx_inputs.update({
+                tensor_name: np.stack([t.numpy() for t in pt_tensor])
+                if isinstance(pt_tensor, tuple) else pt_tensor.numpy()
+                for tensor_name, pt_tensor in value.items()
+            })
         else:
             onnx_inputs[name] = value.numpy()
 

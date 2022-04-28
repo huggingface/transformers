@@ -251,7 +251,7 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
                 # Not using the same length for past_key_values
                 past_key_values_length = 1
                 past_shape = (
-                    2,
+                    2,  # Key AND Values
                     batch,
                     self.num_attention_heads,
                     past_key_values_length,

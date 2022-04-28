@@ -14,6 +14,9 @@
 
 from ctypes import c_float, sizeof
 from enum import Enum
+from typing import Iterable
+
+from transformers import is_torch_available
 
 
 class ParameterFormat(Enum):
@@ -61,3 +64,37 @@ def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterForm
         Size (in byte) taken to save all the parameters
     """
     return num_parameters * dtype.size
+
+
+if is_torch_available():
+    import torch
+
+    def ort_compatible_forward_with_past_key_values_output(forward, num_layers):
+        import functools
+
+        if isinstance(num_layers, Iterable):
+            num_layers = sum(num_layers)
+
+        @functools.wraps(forward)
+        def compatible_forward(*args, **kwargs):
+            result = forward(*args, **kwargs)
+
+            if "past_key_values" in result:
+                if isinstance(result["past_key_values"][0], tuple) or isinstance(result["past_key_values"][0], list):
+                    assert len(result["past_key_values"]) == num_layers and len(result["past_key_values"][0]) == 2
+                present = []
+                for i in range(num_layers):
+                    # Since transformers v4.*, past key and values are separated outputs.
+                    # Here we concatenate them into one tensor to be compatible with Attention operator.
+                    present.append(
+                        torch.cat((
+                            result["past_key_values"][i][0].unsqueeze(0),
+                            result["past_key_values"][i][1].unsqueeze(0)
+                        ), dim=0)
+                    )
+                return {"logits": result["logits"], "past_key_values": tuple(present)}
+            else:
+                return result
+
+        return compatible_forward
+
