@@ -17,7 +17,7 @@ from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
 
-from huggingface_hub.hf_api import HfFolder, create_repo, list_repos_objs, login, logout, whoami
+from huggingface_hub.hf_api import HfFolder, create_repo, login, logout, whoami
 from requests.exceptions import HTTPError
 
 from . import BaseTransformersCLICommand
@@ -35,55 +35,15 @@ class UserCommands(BaseTransformersCLICommand):
         whoami_parser.set_defaults(func=lambda args: WhoamiCommand(args))
         logout_parser = parser.add_parser("logout", help="Log out")
         logout_parser.set_defaults(func=lambda args: LogoutCommand(args))
-        # s3_datasets (s3-based system)
-        s3_parser = parser.add_parser(
-            "s3_datasets", help="{ls, rm} Commands to interact with the files you upload on S3."
-        )
-        s3_subparsers = s3_parser.add_subparsers(help="s3 related commands")
-        ls_parser = s3_subparsers.add_parser("ls")
-        ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
-        ls_parser.set_defaults(func=lambda args: ListObjsCommand(args))
-        rm_parser = s3_subparsers.add_parser("rm")
-        rm_parser.add_argument(
-            "filename",
-            type=str,
-            help="Deprecated: use `huggingface-cli` instead. individual object filename to delete from huggingface.co.",
-        )
-        rm_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
-        rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
-        upload_parser = s3_subparsers.add_parser("upload", help="Upload a file to S3.")
-        upload_parser.add_argument("path", type=str, help="Local path of the folder or individual file to upload.")
-        upload_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
-        upload_parser.add_argument(
-            "--filename", type=str, default=None, help="Optional: override individual object filename on S3."
-        )
-        upload_parser.add_argument("-y", "--yes", action="store_true", help="Optional: answer Yes to the prompt")
-        upload_parser.set_defaults(func=lambda args: UploadCommand(args))
-        # deprecated model upload
-        upload_parser = parser.add_parser(
-            "upload",
-            help=(
-                "Deprecated: used to be the way to upload a model to S3."
-                " We now use a git-based system for storing models and other artifacts."
-                " Use the `repo create` command instead."
-            ),
-        )
-        upload_parser.set_defaults(func=lambda args: DeprecatedUploadCommand(args))
 
         # new system: git-based repo system
         repo_parser = parser.add_parser(
             "repo",
-            help="Deprecated: use `huggingface-cli` instead. "
-            "{create, ls-files} Commands to interact with your huggingface.co repos.",
+            help="Deprecated: use `huggingface-cli` instead. " "Commands to interact with your huggingface.co repos.",
         )
         repo_subparsers = repo_parser.add_subparsers(
             help="Deprecated: use `huggingface-cli` instead. huggingface.co repos related commands"
         )
-        ls_parser = repo_subparsers.add_parser(
-            "ls-files", help="Deprecated: use `huggingface-cli` instead. List all your files on huggingface.co"
-        )
-        ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
-        ls_parser.set_defaults(func=lambda args: ListReposObjsCommand(args))
         repo_create_parser = repo_subparsers.add_parser(
             "create", help="Deprecated: use `huggingface-cli` instead. Create a new repo on huggingface.co"
         )
@@ -215,55 +175,6 @@ class LogoutCommand(BaseUserCommand):
         print("Successfully logged out.")
 
 
-class ListObjsCommand(BaseUserCommand):
-    def run(self):
-        print(
-            ANSI.red(
-                "Command removed: it used to be the way to delete an object on S3."
-                " We now use a git-based system for storing models and other artifacts."
-                " Use list-repo-objs instead"
-            )
-        )
-        exit(1)
-
-
-class DeleteObjCommand(BaseUserCommand):
-    def run(self):
-        print(
-            ANSI.red(
-                "Command removed: it used to be the way to delete an object on S3."
-                " We now use a git-based system for storing models and other artifacts."
-                " Use delete-repo instead"
-            )
-        )
-        exit(1)
-
-
-class ListReposObjsCommand(BaseUserCommand):
-    def run(self):
-        print(
-            ANSI.red(
-                "WARNING! Managing repositories through transformers-cli is deprecated. "
-                "Please use `huggingface-cli` instead."
-            )
-        )
-        token = HfFolder.get_token()
-        if token is None:
-            print("Not logged in")
-            exit(1)
-        try:
-            objs = list_repos_objs(token, organization=self.args.organization)
-        except HTTPError as e:
-            print(e)
-            print(ANSI.red(e.response.text))
-            exit(1)
-        if len(objs) == 0:
-            print("No shared file yet")
-            exit()
-        rows = [[obj.filename, obj.lastModified, obj.commit, obj.size] for obj in objs]
-        print(tabulate(rows, headers=["Filename", "LastModified", "Commit-Sha", "Size"]))
-
-
 class RepoCreateCommand(BaseUserCommand):
     def run(self):
         print(
@@ -316,27 +227,3 @@ class RepoCreateCommand(BaseUserCommand):
         print("\nYou can clone it locally with the command below," " and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")
-
-
-class DeprecatedUploadCommand(BaseUserCommand):
-    def run(self):
-        print(
-            ANSI.red(
-                "Deprecated: used to be the way to upload a model to S3."
-                " We now use a git-based system for storing models and other artifacts."
-                " Use the `repo create` command instead."
-            )
-        )
-        exit(1)
-
-
-class UploadCommand(BaseUserCommand):
-    def run(self):
-        print(
-            ANSI.red(
-                "Deprecated: used to be the way to upload a model to S3."
-                " We now use a git-based system for storing models and other artifacts."
-                " Use the `repo create` command instead."
-            )
-        )
-        exit(1)

@@ -20,16 +20,8 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .file_utils import (
-    PaddingStrategy,
-    TensorType,
-    _is_tensorflow,
-    _is_torch,
-    is_tf_available,
-    is_torch_available,
-    to_numpy,
-)
-from .utils import logging
+from .utils import PaddingStrategy, TensorType, is_tf_available, is_torch_available, logging, to_numpy
+from .utils.generic import _is_tensorflow, _is_torch
 
 
 logger = logging.get_logger(__name__)
@@ -98,7 +90,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
                 Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -122,7 +114,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 to the specific feature_extractor's default.
 
                 [What are attention masks?](../glossary#attention-mask)
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

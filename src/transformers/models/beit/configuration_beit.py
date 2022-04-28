@@ -13,15 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BEiT model configuration"""
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-in22k": "https://huggingface.co/microsoft/beit-base-patch16-224-in22k/resolve/main/config.json",
+    "microsoft/beit-base-patch16-224-pt22k": "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json",
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }
 
@@ -31,7 +36,7 @@ class BeitConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the BEiT
-    [microsoft/beit-base-patch16-224-in22k](https://huggingface.co/microsoft/beit-base-patch16-224-in22k) architecture.
+    [microsoft/beit-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit-base-patch16-224-pt22k) architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):
@@ -93,20 +98,16 @@ class BeitConfig(PretrainedConfig):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        legacy_output (`bool`, *optional*, defaults to `False`):
-            Whether to return the legacy outputs or not (with logits of shape `height / 4 , width / 4`)
-
-            This argument is only present for backward compatibility reasons and will be removed in v5 of Transformers.
 
     Example:
 
     ```python
     >>> from transformers import BeitModel, BeitConfig
 
-    >>> # Initializing a BEiT beit-base-patch16-224-in22k style configuration
+    >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
     >>> configuration = BeitConfig()
 
-    >>> # Initializing a model from the beit-base-patch16-224-in22k style configuration
+    >>> # Initializing a model from the beit-base-patch16-224-pt22k style configuration
     >>> model = BeitModel(configuration)
 
     >>> # Accessing the model configuration
@@ -145,7 +146,6 @@ class BeitConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        legacy_output=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -181,4 +181,21 @@ class BeitConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        self.legacy_output = legacy_output
+
+
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+class BeitOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

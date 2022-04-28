@@ -21,10 +21,10 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxMaskedLMOutput,
@@ -34,7 +34,7 @@ from ...modeling_flax_outputs import (
     FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -90,7 +90,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -261,10 +261,7 @@ class FlaxFFN(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
-        assert self.config.activation in [
-            "relu",
-            "gelu",
-        ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
+
         self.activation = ACT2FN[self.config.activation]
 
     def __call__(self, hidden_states, deterministic: bool = True):
@@ -432,12 +429,13 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
@@ -445,7 +443,17 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
+        random_params = self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -576,7 +584,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
         hidden_states = dlbrt_output[0]
         prediction_logits = self.vocab_transform(hidden_states)
-        prediction_logits = ACT2FN["gelu"](prediction_logits)
+        prediction_logits = ACT2FN[self.config.activation](prediction_logits)
         prediction_logits = self.vocab_layer_norm(prediction_logits)
 
         if self.config.tie_word_embeddings:

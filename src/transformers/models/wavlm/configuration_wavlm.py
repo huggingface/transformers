@@ -14,6 +14,9 @@
 # limitations under the License.
 """ WavLM model configuration"""
 
+import functools
+import operator
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -21,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wavlm-base-960h": "https://huggingface.co/facebook/wavlm-base-960h/resolve/main/config.json",
+    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
     # See all WavLM models at https://huggingface.co/models?filter=wavlm
 }
 
@@ -31,7 +34,7 @@ class WavLMConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to instantiate an WavLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the WavLM
-    [facebook/wavlm-base-960h](https://huggingface.co/facebook/wavlm-base-960h) architecture.
+    [microsoft/wavlm-base](https://huggingface.co/microsoft/wavlm-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -330,3 +333,7 @@ class WavLMConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return functools.reduce(operator.mul, self.conv_stride, 1)

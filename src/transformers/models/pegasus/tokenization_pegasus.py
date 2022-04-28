@@ -117,9 +117,10 @@ class PegasusTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
-            assert isinstance(
-                additional_special_tokens, list
-            ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+            if not isinstance(additional_special_tokens, list):
+                raise TypeError(
+                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                )
 
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)

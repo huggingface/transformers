@@ -19,8 +19,8 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
-from .file_utils import add_start_docstrings
-from .tf_utils import set_tensor_by_indices_to_value
+from .tf_utils import stable_softmax
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
@@ -58,6 +58,17 @@ class TFLogitsProcessor:
         )
 
 
+class TFLogitsWarper:
+    """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
+
+    @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        """TF method for warping logits."""
+        raise NotImplementedError(
+            f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
+        )
+
+
 class TFLogitsProcessorList(list):
     """
     This class can be used to create a list of [`TFLogitsProcessor`] to subsequently process a `scores` input tensor.
@@ -81,6 +92,109 @@ class TFLogitsProcessorList(list):
         return scores
 
 
+class TFTemperatureLogitsWarper(TFLogitsWarper):
+    r"""
+    [`TFLogitsWarper`] for temperature (exponential scaling output probability distribution).
+
+    Args:
+        temperature (`float`):
+            The value used to module the logits distribution.
+    """
+
+    def __init__(self, temperature: float):
+        if not isinstance(temperature, float) or not (temperature > 0):
+            raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
+
+        self.temperature = temperature
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        scores = scores / self.temperature
+        return scores
+
+
+class TFTopKLogitsWarper(TFLogitsWarper):
+    r"""
+    [`TFLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
+
+    Args:
+        top_k (`int`):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(top_k, int) or top_k <= 0:
+            raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
+
+        self.top_k = top_k
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        # Boolean mask containing all tokens with a probability less than the last token of the top-k
+        indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
+        next_scores = tf.where(indices_to_remove, self.filter_value, scores)
+        return next_scores
+
+
+class TFTopPLogitsWarper(TFLogitsWarper):
+    """
+    [`TFLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to <= prob_cut_off.
+
+    Args:
+        top_p (`float`):
+            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are kept
+            for generation.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
+            raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+
+        self.top_p = top_p
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        topk_scores, topk_indices = tf.math.top_k(scores, scores.shape[-1])
+
+        mask_scores = tf.fill(scores.shape, self.filter_value)
+        cumulative_probs = tf.math.cumsum(stable_softmax(topk_scores, axis=-1), axis=-1)
+        score_mask = cumulative_probs < self.top_p
+
+        # Also include the token that is higher than top_p (the first false = shift and insert a True on the left)
+        score_mask = tf.concat((tf.ones([score_mask.shape[0], 1], dtype=tf.bool), score_mask[:, :-1]), axis=-1)
+
+        # Ensure min tokens to keep
+        score_mask = tf.concat(
+            (
+                tf.ones([score_mask.shape[0], self.min_tokens_to_keep], dtype=tf.bool),
+                score_mask[:, self.min_tokens_to_keep :],
+            ),
+            axis=-1,
+        )
+
+        # Mask the values that do not fit the criteria
+        topk_next_scores = tf.where(score_mask, topk_scores, mask_scores)
+
+        # Undo the topk sorting: converts the 2D matrix of per-row original indices of shape (batch_size, vocab_size)
+        # to a 3D tensor of shape (batch_size, vocab_size, 2) containing the original score coordinate, from which we
+        # can scatter (i.e. `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`)
+        scatter_rows = tf.tile(tf.expand_dims(tf.range(topk_indices.shape[0]), axis=-1), [1, topk_indices.shape[-1]])
+        scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
+        next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=topk_next_scores.shape)
+
+        return next_scores
+
+
 class TFMinLengthLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
@@ -102,17 +216,18 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        # create boolean flag to decide if min length penalty should be applied
-        cur_len = input_ids.shape[-1]
-        apply_penalty = 1 - tf.clip_by_value(cur_len - self.min_length, 0, 1)
+    def _apply_eos_token_mask(self, scores: tf.Tensor) -> tf.Tensor:
+        eos_token_id_mask = tf.range(scores.shape[-1]) == self.eos_token_id
+        scores = tf.where(eos_token_id_mask, float("-inf"), scores)
+        return scores
 
-        # TODO(Matt) - this if statement has to be rewritten for XLA. Leaving it now though since
-        # generate is not XLA - compileable anyways
-        if apply_penalty:
-            eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
-            scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
-
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        # applies eos token masking if the first argument is true
+        scores = tf.cond(
+            tf.less(cur_len, self.min_length),
+            lambda: self._apply_eos_token_mask(scores),
+            lambda: tf.identity(scores),
+        )
         return scores
 
 
@@ -132,22 +247,32 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         self.penalty = penalty
 
-    def _create_score_penalties(self, input_ids, logits):
-        # create logit penalties for already seen input_ids
-        token_penalties = np.ones(logits.shape)
-        prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
-        for i, prev_input_id in enumerate(prev_input_ids):
-            logit_penalized = logits[i].numpy()[prev_input_id]
-            logit_penalties = np.zeros(logit_penalized.shape)
-            # if previous logit score is < 0 then multiply repetition penalty else divide
-            logit_penalties[logit_penalized < 0] = self.penalty
-            logit_penalties[logit_penalized > 0] = 1 / self.penalty
-            np.put(token_penalties[i], prev_input_id, logit_penalties)
-        return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
+    def _create_score_penalties(self, input_ids: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        # We want to populate the penalties in the positions of `input_ids`. Since XLA can't handle shapes unknown
+        # before runtime, `tf.unique` can't be used. Therefore, we may have redundant updates, when a given row has
+        # the same token multiple times.
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        # Gathers the penalties to apply
+        logit_penalties = tf.gather(logits, input_ids, axis=1, batch_dims=1)
+        logit_penalties = tf.where(logit_penalties > 0, 1 / self.penalty, logit_penalties)
+        logit_penalties = tf.where(logit_penalties < 0, self.penalty, logit_penalties)
 
-        score_penalties = self._create_score_penalties(input_ids, scores)
+        # Scatters the penalties
+        token_penalties = tf.ones(logits.shape)
+        indexable_prev_input_ids = tf.concat(
+            (
+                tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
+                tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
+            ),
+            axis=1,
+        )
+        token_penalties = tf.tensor_scatter_nd_update(
+            token_penalties, indices=indexable_prev_input_ids, updates=tf.reshape(logit_penalties, [-1])
+        )
+        return token_penalties
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        score_penalties = self._create_score_penalties(input_ids[:, :cur_len], scores)
 
         scores = tf.math.multiply(scores, score_penalties)
 
@@ -217,12 +342,12 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
 
         vocab_size = scores.shape[-1]
 
         # calculate a list of banned tokens according to bad words
-        banned_tokens = self.calc_banned_bad_words_ids(input_ids)
+        banned_tokens = self.calc_banned_bad_words_ids(input_ids[:, :cur_len])
 
         banned_tokens_indices_mask = []
         for banned_tokens_slice in banned_tokens:
@@ -230,9 +355,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
         return scores
 
@@ -252,12 +375,13 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def calc_banned_ngram_tokens(self, prev_input_ids, num_hypos, cur_len):
+    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
         # Copied from fairseq for no_repeat_ngram in beam_search
         if cur_len + 1 < self.ngram_size:
             # return no banned tokens if we haven't generated ngram_size tokens yet
             return [[] for _ in range(num_hypos)]
         generated_ngrams = [{} for _ in range(num_hypos)]
+        prev_input_ids = input_ids[:, :cur_len]
         for idx in range(num_hypos):
             gen_tokens = prev_input_ids[idx].numpy().tolist()
             generated_ngram = generated_ngrams[idx]
@@ -275,10 +399,9 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
 
         batch_size, vocab_size = scores.shape
-        cur_len = input_ids.shape[-1]
         banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
 
         # create banned_tokens boolean mask
@@ -288,8 +411,69 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
+        return scores
+
+
+class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        if bos_token_id < 0:
+            raise ValueError(f"The forced bos token id  must be a non-negative integer, got {bos_token_id}")
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the bos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.bos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.bos_token_id)), scores), axis=-1)
+            if self.bos_token_id < (num_tokens - 1):
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.bos_token_id))),
+                    axis=-1,
+                )
+        return scores
+
+
+class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
+
+    Args:
+        max_length (`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        if eos_token_id < 0:
+            raise ValueError(f"The forced eos token id must be a non-negative integer, got {eos_token_id}")
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == self.max_length - 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the eos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.eos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.eos_token_id)), scores), axis=-1)
+            if self.eos_token_id < (num_tokens - 1):
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))),
+                    axis=-1,
+                )
         return scores

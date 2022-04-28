@@ -25,7 +25,6 @@ import numpy as np
 
 import sentencepiece as spm
 
-from ...file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -41,7 +40,7 @@ from ...tokenization_utils_base import (
     _is_torch,
     to_py_obj,
 )
-from ...utils import logging
+from ...utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -1222,7 +1221,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function. Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or
                 TensorFlow tensors), see the note above for the return type.
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
@@ -1243,7 +1242,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are attention
                 masks?](../glossary#attention-mask)
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

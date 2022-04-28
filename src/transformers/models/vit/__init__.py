@@ -17,11 +17,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"],
 }
 
 if is_vision_available():
@@ -51,7 +51,7 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTOnnxConfig
 
     if is_vision_available():
         from .feature_extraction_vit import ViTFeatureExtractor

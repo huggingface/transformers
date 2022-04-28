@@ -94,6 +94,7 @@ class SwinConfig(PretrainedConfig):
 
     attribute_map = {
         "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
     }
 
     def __init__(
@@ -141,4 +142,4 @@ class SwinConfig(PretrainedConfig):
         self.encoder_stride = encoder_stride
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = embed_dim * 8
+        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

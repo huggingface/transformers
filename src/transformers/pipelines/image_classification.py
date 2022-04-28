@@ -1,13 +1,13 @@
 from typing import List, Union
 
-from ..file_utils import (
+from ..utils import (
     add_end_docstrings,
     is_tf_available,
     is_torch_available,
     is_vision_available,
+    logging,
     requires_backends,
 )
-from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -20,6 +20,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    from ..tf_utils import stable_softmax
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
@@ -103,7 +104,7 @@ class ImageClassificationPipeline(Pipeline):
             probs = model_outputs.logits.softmax(-1)[0]
             scores, ids = probs.topk(top_k)
         elif self.framework == "tf":
-            probs = tf.nn.softmax(model_outputs.logits, axis=-1)[0]
+            probs = stable_softmax(model_outputs.logits, axis=-1)[0]
             topk = tf.math.top_k(probs, k=top_k)
             scores, ids = topk.values.numpy(), topk.indices.numpy()
         else:
