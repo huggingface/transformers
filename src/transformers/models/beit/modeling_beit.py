@@ -733,7 +733,7 @@ class BeitPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT predict RGB pixel values. The [`AutoModelForMaskedImageModeling`] class supports pixel-based image modeling, so you will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.",
+    "Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT predict RGB pixel values. The [`AutoModelForMaskedImageModeling`] class only supports pixel-based image modeling, so you will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.",
     BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
