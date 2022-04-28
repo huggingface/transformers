@@ -59,6 +59,12 @@ Tips:
   `use_relative_position_bias` attribute of [`BeitConfig`] to `True` in order to add
   position embeddings.
 
+<Tip warning={true}>
+
+BEiT does masked image modeling by predicting visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT predict RGB pixel values. The [`AutoModelForMaskedImageModeling`] class supports pixel-based image modeling, so you will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.
+
+</Tip>
+
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The JAX/FLAX version of this model was
 contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
 
