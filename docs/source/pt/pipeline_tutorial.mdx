@@ -14,8 +14,8 @@ specific language governing permissions and limitations under the License.
 
 Um [pipeline] simplifica o uso dos modelos no [Model Hub](https://huggingface.co/models) para a inferência de uma diversidade de tarefas,
 como a geração de texto, a segmentação de imagens e a classificação de áudio.
-Inclusive, se não tens experiência com alguma modalidade específica ou não compreende o código que forma os modelos,
-pode usar eles mesmo assim com o [pipeline! Este tutorial te ensinará a:
+Inclusive, se não tem experiência com alguma modalidade específica ou não compreende o código que forma os modelos,
+pode usar eles mesmo assim com o [pipeline]! Este tutorial te ensinará a:
 
 * Utilizar um [`pipeline`] para inferência.
 * Utilizar um tokenizador ou model específico.
@@ -60,7 +60,7 @@ Se tiver mais de uma entrada, passe-a como uma lista:
 ... )
 ```
 
-Qualquer parâmetro adicional para sua tarefa também pode ser incluído no [`pipeline`]. A tarefa `text-generation` tem um método
+Qualquer parâmetro adicional para a sua tarefa também pode ser incluído no [`pipeline`]. A tarefa `text-generation` tem um método
 [`~generation_utils.GenerationMixin.generate`] com vários parâmetros para controlar a saída.
 Por exemplo, se quiser gerar mais de uma saída, defina-a no parâmetro `num_return_sequences`:
 
@@ -74,7 +74,7 @@ Por exemplo, se quiser gerar mais de uma saída, defina-a no parâmetro `num_ret
 ### Selecionando um modelo e um tokenizador
 
 O [`pipeline`] aceita qualquer modelo do [Model Hub](https://huggingface.co/models). Há rótulos adicionais no Model Hub
-que te permitem filtrar pelo modelo que você gostaria de usar para sua tarefa. Uma vez que tiver escolhido o modelo apropriado,
+que te permitem filtrar pelo modelo que gostaria de usar para sua tarefa. Uma vez que tiver escolhido o modelo apropriado,
 carregue-o com as classes `AutoModelFor` e [`AutoTokenizer'] correspondentes. Por exemplo, carregue a classe [`AutoModelForCausalLM`]
 para uma tarefa de modelagem de linguagem causal:
 
@@ -85,7 +85,7 @@ para uma tarefa de modelagem de linguagem causal:
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 ```
 
-Crie uma [`pipeline`] para sua tarefa e especifíque o modelo e o tokenizador que foram carregados:
+Crie uma [`pipeline`] para a sua tarefa e especifíque o modelo e o tokenizador que foram carregados:
 
 ```py
 >>> from transformers import pipeline
@@ -131,7 +131,7 @@ Passe o arquivo de áudio ao [`pipeline`]:
 ## Pipeline de visão computacional
 
 Finalmente, utilizar um [`pipeline`] para tarefas de visão é praticamente a mesma coisa.
-Especifique sua tarefa de visão e passe sua imagem ao classificador.
+Especifique a sua tarefa de visão e passe a sua imagem ao classificador.
 A imagem pode ser um link ou uma rota local à imagem. Por exemplo, que espécie de gato está presente na imagem?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
