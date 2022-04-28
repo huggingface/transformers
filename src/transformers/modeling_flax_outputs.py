@@ -105,6 +105,7 @@ class FlaxBaseModelOutputWithPooling(ModelOutput):
     hidden_states: Optional[Tuple[jnp.ndarray]] = None
     attentions: Optional[Tuple[jnp.ndarray]] = None
 
+
 @flax.struct.dataclass
 class FlaxBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     """
@@ -152,6 +153,7 @@ class FlaxBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[jnp.ndarray]]] = None
     attentions: Optional[Tuple[jnp.ndarray]] = None
     cross_attentions: Optional[Tuple[jnp.ndarray]] = None
+
 
 @flax.struct.dataclass
 class FlaxBaseModelOutputWithPastAndCrossAttentions(ModelOutput):

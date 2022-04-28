@@ -22,21 +22,22 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
-from flax.linen.attention import dot_product_attention_weights
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_outputs import (
-    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxBaseModelOutputWithPooling,
+    FlaxBaseModelOutputWithPoolingAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
     FlaxNextSentencePredictorOutput,
     FlaxQuestionAnsweringModelOutput,
     FlaxSequenceClassifierOutput,
-    FlaxTokenClassifierOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxBaseModelOutputWithPoolingAndCrossAttentions,
+    FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -601,7 +602,10 @@ class FlaxBertLayerCollection(nn.Module):
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions, cross_attentions=all_cross_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -779,8 +783,8 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             )
         else:
             module_init_outputs = self.module.init(
-            rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
-        )
+                rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+            )
 
         random_params = module_init_outputs["params"]
 
@@ -1509,6 +1513,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
+
 class FlaxBertForCausalLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
@@ -1518,19 +1523,19 @@ class FlaxBertForCausalLMModule(nn.Module):
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
-            self,
-            input_ids,
-            attention_mask,
-            position_ids,
-            token_type_ids: Optional[jnp.ndarray] = None,
-            head_mask: Optional[jnp.ndarray] = None,
-            encoder_hidden_states: Optional[jnp.ndarray] = None,
-            encoder_attention_mask: Optional[jnp.ndarray] = None,
-            init_cache: bool = False,
-            deterministic: bool = True,
-            output_attentions: bool = False,
-            output_hidden_states: bool = False,
-            return_dict: bool = True,
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        token_type_ids: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
         outputs = self.bert(
@@ -1566,6 +1571,7 @@ class FlaxBertForCausalLMModule(nn.Module):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
 
 @add_start_docstrings(
     """
