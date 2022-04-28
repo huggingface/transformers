@@ -300,6 +300,12 @@ class TFVisionEncoderDecoderMixin:
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
 
+        # Generate until max length
+        if hasattr(enc_dec_model.config, "eos_token_id"):
+            enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
+
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             pixel_values, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id

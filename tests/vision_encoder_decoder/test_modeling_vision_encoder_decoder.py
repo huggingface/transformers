@@ -269,6 +269,12 @@ class EncoderDecoderMixin:
     def check_encoder_decoder_model_generate(self, config, decoder_config, pixel_values=None, **kwargs):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+
+        # Generate until max length
+        if hasattr(enc_dec_model.config, "eos_token_id"):
+            enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
