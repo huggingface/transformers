@@ -381,9 +381,10 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
-    Args:
     [`TFLogitsProcessor`] that enforces no repetition of n-grams. See
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
+
+    Args:
         ngram_size (`int`):
             All ngrams of size `ngram_size` can only occur once.
     """

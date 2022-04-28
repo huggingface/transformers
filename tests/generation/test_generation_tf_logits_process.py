@@ -330,7 +330,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
     @parameterized.expand([(False,), (True,)])
     def test_processor_list(self, use_xla):
-        # TODO: reintroduce TFNoRepeatNGramLogitsProcessor when gets compatible with XLA
+        # TODO (Joao): reintroduce TFNoRepeatNGramLogitsProcessor when it gets compatible with XLA
         batch_size = 4
         cur_len = 10
         vocab_size = 15
