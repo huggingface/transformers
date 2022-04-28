@@ -257,6 +257,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         position_embeddings_type="relative",
         conv_depthwise_kernel_size=31,
+        rotary_embedding_base=10000,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -290,6 +291,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.position_embeddings_type = position_embeddings_type
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
+        self.rotary_embedding_base = rotary_embedding_base
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
