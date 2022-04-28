@@ -285,6 +285,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "rjieba"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
