@@ -8,10 +8,10 @@
   - local: pipeline_tutorial
     title: Pipelines para inferência
   - local: training
-    title: Fine-tuning um modelo pré-treinado
+    title: Fine-tuning de um modelo pré-treinado
   - local: accelerate
     title: Treinamento distribuído com 🤗 Accelerate
   title: Tutorials
 - sections:
   - local: multilingual
-    title: Modelos multilíngues para inferência
+    title: Modelos multilinguísticos para inferência
