@@ -2301,6 +2301,7 @@ if is_flax_available():
     )
     _import_structure["models.bert"].extend(
         [
+            "FlaxBertForCausalLM",
             "FlaxBertForMaskedLM",
             "FlaxBertForMultipleChoice",
             "FlaxBertForNextSentencePrediction",
@@ -4340,6 +4341,7 @@ if TYPE_CHECKING:
             FlaxBeitPreTrainedModel,
         )
         from .models.bert import (
+            FlaxBertForCausalLM,
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
             FlaxBertForNextSentencePrediction,

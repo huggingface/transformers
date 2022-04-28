@@ -24,6 +24,7 @@ from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random
 
 if is_flax_available():
     from transformers.models.bert.modeling_flax_bert import (
+        FlaxBertForCausalLM,
         FlaxBertForMaskedLM,
         FlaxBertForMultipleChoice,
         FlaxBertForNextSentencePrediction,
@@ -124,6 +125,7 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
         (
             FlaxBertModel,
             FlaxBertForPreTraining,
+            FlaxBertForCausalLM,
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
             FlaxBertForQuestionAnswering,
