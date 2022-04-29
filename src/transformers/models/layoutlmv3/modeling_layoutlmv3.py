@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch LayoutLMv3 model."""
 
+import collections
 import math
 
 import torch
@@ -22,7 +23,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from timm.models.layers import to_2tuple
 from transformers import apply_chunking_to_forward
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -39,6 +39,13 @@ from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
 
 
 class LayoutLMv3PatchEmbeddings(nn.Module):
