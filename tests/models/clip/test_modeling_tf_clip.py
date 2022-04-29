@@ -282,6 +282,9 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                     self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
                 )
 
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+
 
 class TFCLIPTextModelTester:
     def __init__(
