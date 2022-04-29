@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 GLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -90,30 +89,29 @@ class GLMConfig(PretrainedConfig):
     attribute_map = {
         "num_hidden_layers": "num_layers"
     }
-    
 
     def __init__(
-        self,
-        num_layers=24,
-        vocab_size=30592,
-        hidden_size=1024,
-        num_attention_heads=16,
-        embedding_dropout_prob=0.1,
-        attention_dropout_prob=0.1,
-        output_dropout_prob=0.1,
-        max_sequence_length=512,
-        max_memory_length=0,
-        checkpoint_activations=False,
-        checkpoint_num_layers=1,
-        parallel_output=True,
-        relative_encoding=False,
-        block_position_encoding=True,
-        output_predict=False,
-        spell_length=None,
-        spell_func="lstm",
-        attention_scale=1.0,
-        initializer_range=0.02,
-        **kwargs
+            self,
+            num_layers=24,
+            vocab_size=30592,
+            hidden_size=1024,
+            num_attention_heads=16,
+            embedding_dropout_prob=0.1,
+            attention_dropout_prob=0.1,
+            output_dropout_prob=0.1,
+            max_sequence_length=512,
+            max_memory_length=0,
+            checkpoint_activations=False,
+            checkpoint_num_layers=1,
+            parallel_output=True,
+            relative_encoding=False,
+            block_position_encoding=True,
+            output_predict=False,
+            spell_length=None,
+            spell_func="lstm",
+            attention_scale=1.0,
+            initializer_range=0.02,
+            **kwargs
     ):
         self.num_layers = num_layers
         self.vocab_size = vocab_size
@@ -137,4 +135,3 @@ class GLMConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    

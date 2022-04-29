@@ -15,36 +15,31 @@
 """Tokenization classes for GLM."""
 import json
 import sys
+import unicodedata
 from typing import List, Optional
 import os
+import collections
 
-from tokenizers import ByteLevelBPETokenizer
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_punctuation
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from functools import lru_cache
-import regex as re
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
+    "vocab_file": "vocab.txt"
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM-base-cased/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM-base-cased/resolve/main/merges.txt"
+        "shunxing1234/GLM": "https://huggingface.co/shunxing1234/GLM/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "shunxing1234/GLM-base-cased": 1024,
+    "shunxing1234/GLM": 1024,
 }
 
 
@@ -85,6 +80,50 @@ def get_pairs(word):
     return pairs
 
 
+def load_vocab(vocab_file):
+    """Loads a vocabulary file into a dictionary."""
+    vocab = collections.OrderedDict()
+    with open(vocab_file, "r", encoding="utf-8") as reader:
+        tokens = reader.readlines()
+    for index, token in enumerate(tokens):
+        token = token.rstrip("\n")
+        vocab[token] = index
+    return vocab
+
+
+def whitespace_tokenize(text):
+    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    text = text.strip()
+    if not text:
+        return []
+    tokens = text.split()
+    return tokens
+
+
+def _is_control(char):
+    """Checks whether `chars` is a control character."""
+    # These are technically control characters but we count them as whitespace
+    # characters.
+    if char == "\t" or char == "\n" or char == "\r":
+        return False
+    cat = unicodedata.category(char)
+    if cat.startswith("C"):
+        return True
+    return False
+
+
+def _is_whitespace(char):
+    """Checks whether `chars` is a whitespace character."""
+    # \t, \n, and \r are technically contorl characters but we treat them
+    # as whitespace since they are generally considered as such.
+    if char == " " or char == "\t" or char == "\n" or char == "\r":
+        return True
+    cat = unicodedata.category(char)
+    if cat == "Zs":
+        return True
+    return False
+
+
 class GLMTokenizer(PreTrainedTokenizer):
     """
     Construct a GLM tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -102,150 +141,403 @@ class GLMTokenizer(PreTrainedTokenizer):
     def __init__(
             self,
             vocab_file,
-            merges_file,
-            errors='replace',
-            unk_token="[UNK]",
-            ENC_token="[CLS]",
-            eos_token="<|endoftext|>",
+            do_lower_case=True,
+            do_basic_tokenize=True,
+            max_len=None,
+            never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"),
+            pad_token='[PAD]',
+            eos_token='[PAD]',
+            sep_token='[SEP]',
+            ENC_token='[CLS]',
+            unk_token='[UNK]',
+            MASK_token='[MASK]',
             sop_token='<|startofpiece|>',
             eop_token='<|endofpiece|>',
             gMASK_token='[gMASK]',
             sMASK_token='[sMASK]',
-            add_prefix_space=False,
             **kwargs
     ):
-        ENC_token = AddedToken(ENC_token, lstrip=False, rstrip=False) if isinstance(ENC_token, str) else ENC_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        sop_token = AddedToken(sop_token, lstrip=False, rstrip=False) if isinstance(sop_token, str) else sop_token
-        eop_token = AddedToken(eop_token, lstrip=False, rstrip=False) if isinstance(eop_token, str) else eop_token
-        gMASK_token = AddedToken(gMASK_token, lstrip=False, rstrip=False) if isinstance(gMASK_token, str) else gMASK_token
-        sMASK_token = AddedToken(sMASK_token, lstrip=False, rstrip=False) if isinstance(sMASK_token, str) else sMASK_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        super().__init__(ENC_token=ENC_token, eos_token=eos_token,
-                         unk_token=unk_token, sop_token=sop_token, eop_token=eop_token,
-                         gMASK_token=gMASK_token, sMASK_token=sMASK_token, add_prefix_space=add_prefix_space, **kwargs)
+        super().__init__(do_lower_case=do_lower_case, do_basic_tokenize=do_basic_tokenize,
+                         pad_token=pad_token, eos_token=eos_token, max_len=max_len,
+                         sep_token=sep_token, ENC_token=ENC_token, unk_token=unk_token,
+                         MASK_token=MASK_token, sop_token=sop_token, eop_token=eop_token,
+                         gMASK_token=gMASK_token, sMASK_token=sMASK_token, **kwargs)
 
         "Initialisation"
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
-        self.decoder = {v: k for k, v in self.encoder.items()}
-        self.errors = errors  # how to handle errors in decoding
-        self.byte_encoder = bytes_to_unicode()
-        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        self.cache = {}
-        self.add_prefix_space = add_prefix_space
 
-        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.vocab = load_vocab(vocab_file)
+        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.do_basic_tokenize = do_basic_tokenize
+        if do_basic_tokenize:
+            self.basic_tokenizer = BasicTokenizer(
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+            )
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
+        self.max_len = max_len if max_len is not None else int(1e12)
+
+    @property
+    def do_lower_case(self):
+        return self.basic_tokenizer.do_lower_case
 
     @property
     def vocab_size(self):
-        "Returns vocab size done"
-        return len(self.encoder)
+        return len(self.vocab)
 
     def get_vocab(self):
-        "Returns vocab as a dict done"
-        return dict(self.encoder, **self.added_tokens_encoder)
+        return dict(self.vocab, **self.added_tokens_encoder)
 
-    def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
-        word = tuple(token)
-        pairs = get_pairs(word)
+    def  tokenize(self, text):
+        if self.do_basic_tokenize:
+            split_tokens = []
+            for token in self.basic_tokenizer.tokenize(text):
+                for sub_token in self.wordpiece_tokenizer.tokenize(token):
+                    split_tokens.append(sub_token)
+        else:
+            split_tokens = self.wordpiece_tokenizer.tokenize(text)
+        return split_tokens
 
-        if not pairs:
-            return token
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-        while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
-            if bigram not in self.bpe_ranks:
-                break
-            first, second = bigram
-            new_word = []
-            i = 0
-            while i < len(word):
-                try:
-                    j = word.index(first, i)
-                    new_word.extend(word[i:j])
-                    i = j
-                except:
-                    new_word.extend(word[i:])
-                    break
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.ids_to_tokens.get(index, self.unk_token)
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
-                    new_word.append(first+second)
-                    i += 2
-                else:
-                    new_word.append(word[i])
-                    i += 1
-            new_word = tuple(new_word)
-            word = new_word
-            if len(word) == 1:
-                break
-            else:
-                pairs = get_pairs(word)
-        word = ' '.join(word)
-        self.cache[token] = word
-        return word
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        out_string = " ".join(tokens).replace(" ##", "").strip()
 
-    def _tokenize(self, text, process_fn = None):
-        """ Tokenize a string.  done"""
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A BERT sequence has the following format:
+
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return token_ids_0 + [self.sep_token_id]
+        sep = [self.sep_token_id]
+        return token_ids_0 + sep + token_ids_1 + sep
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    def _encode(self, text):
+        tokens = self.text_tokenizer.tokenize(text)
+        ids = self.text_tokenizer.convert_tokens_to_ids(tokens)
+        return ids
+
+    def EncodeAsTokens(self, text, process_fn=None):
+        """convert wordpiece token to Id"""
         processed_text = text
         if process_fn is not None:
             processed_text = process_fn(processed_text)
-        tokens = []
-        for token in re.findall(self.pat, processed_text):
-            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-            tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+        tokens = self.text_tokenizer.tokenize(processed_text)
         return tokens
 
-    def _convert_token_to_id(self, token):
-        """ Converts a sequence of tokens into ids using the vocab. done"""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
 
-    def _convert_id_to_token(self, index):
-        """Converts a sequence of ids in BPE tokens using the vocab. done"""
-        return self.decoder.get(index)
+class BasicTokenizer(object):
+    """
+    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
-    def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. done"""
-        text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        return text
+    Args:
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
+        never_split (`Iterable`, *optional*):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
+            `do_basic_tokenize=True`
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
+            Whether or not to tokenize Chinese characters.
 
-    def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary and merge files to a directory. done"""
-        if not os.path.isdir(vocab_path):
-            logger.error("Vocabulary path ({}) should be a directory".format(vocab_path))
-            return
-        vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
-        merge_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["merges_file"])
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents: (`bool`, *optional*):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for `lowercase` (as in the original BERT).
+    """
 
-        with open(vocab_file, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+        if never_split is None:
+            never_split = []
+        self.do_lower_case = do_lower_case
+        self.never_split = set(never_split)
+        self.tokenize_chinese_chars = tokenize_chinese_chars
+        self.strip_accents = strip_accents
 
-        index = 0
-        with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write(u'#version: 0.2\n')
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning("Saving vocabulary to {}: BPE merge indices are not consecutive."
-                                   " Please check that the tokenizer is not corrupted!".format(merge_file))
-                    index = token_index
-                writer.write(' '.join(bpe_tokens) + u'\n')
-                index += 1
+    def tokenize(self, text, never_split=None):
+        """
+        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
+        WordPieceTokenizer.
 
-        return vocab_file, merge_file
+        Args:
+            never_split (`List[str]`, *optional*)
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
+        """
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        text = self._clean_text(text)
 
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
-            text = " " + text
-        return (text, kwargs)
+        # This was added on November 1st, 2018 for the multilingual and Chinese
+        # models. This is also applied to the English models now, but it doesn't
+        # matter since the English models were not trained on any Chinese data
+        # and generally don't have any Chinese data in them (there are Chinese
+        # characters in the vocabulary because Wikipedia does have some Chinese
+        # words in the English Wikipedia.).
+        if self.tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
+        orig_tokens = whitespace_tokenize(text)
+        split_tokens = []
+        for token in orig_tokens:
+            if token not in never_split:
+                if self.do_lower_case:
+                    token = token.lower()
+                    if self.strip_accents is not False:
+                        token = self._run_strip_accents(token)
+                elif self.strip_accents:
+                    token = self._run_strip_accents(token)
+            split_tokens.extend(self._run_split_on_punc(token, never_split))
 
+        output_tokens = whitespace_tokenize(" ".join(split_tokens))
+        return output_tokens
+
+    def _run_strip_accents(self, text):
+        """Strips accents from a piece of text."""
+        text = unicodedata.normalize("NFD", text)
+        output = []
+        for char in text:
+            cat = unicodedata.category(char)
+            if cat == "Mn":
+                continue
+            output.append(char)
+        return "".join(output)
+
+    def _run_split_on_punc(self, text, never_split=None):
+        """Splits punctuation on a piece of text."""
+        if never_split is not None and text in never_split:
+            return [text]
+        chars = list(text)
+        i = 0
+        start_new_word = True
+        output = []
+        while i < len(chars):
+            char = chars[i]
+            if _is_punctuation(char):
+                output.append([char])
+                start_new_word = True
+            else:
+                if start_new_word:
+                    output.append([])
+                start_new_word = False
+                output[-1].append(char)
+            i += 1
+
+        return ["".join(x) for x in output]
+
+    def _tokenize_chinese_chars(self, text):
+        """Adds whitespace around any CJK character."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if self._is_chinese_char(cp):
+                output.append(" ")
+                output.append(char)
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+    def _is_chinese_char(self, cp):
+        """Checks whether CP is the codepoint of a CJK character."""
+        # This defines a "chinese character" as anything in the CJK Unicode block:
+        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
+        #
+        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+        ):  #
+            return True
+
+        return False
+
+    def _clean_text(self, text):
+        """Performs invalid character removal and whitespace cleanup on text."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if cp == 0 or cp == 0xFFFD or _is_control(char):
+                continue
+            if _is_whitespace(char):
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+
+class WordpieceTokenizer(object):
+    """Runs WordPiece tokenization."""
+
+    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
+        self.vocab = vocab
+        self.unk_token = unk_token
+        self.max_input_chars_per_word = max_input_chars_per_word
+
+    def tokenize(self, text):
+        """
+        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
+        tokenization using the given vocabulary.
+
+        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+
+        Args:
+            text: A single token or whitespace separated tokens. This should have
+                already been passed through *BasicTokenizer*.
+
+        Returns:
+            A list of wordpiece tokens.
+        """
+
+        output_tokens = []
+        for token in whitespace_tokenize(text):
+            chars = list(token)
+            if len(chars) > self.max_input_chars_per_word:
+                output_tokens.append(self.unk_token)
+                continue
+
+            is_bad = False
+            start = 0
+            sub_tokens = []
+            while start < len(chars):
+                end = len(chars)
+                cur_substr = None
+                while start < end:
+                    substr = "".join(chars[start:end])
+                    if start > 0:
+                        substr = "##" + substr
+                    if substr in self.vocab:
+                        cur_substr = substr
+                        break
+                    end -= 1
+                if cur_substr is None:
+                    is_bad = True
+                    break
+                sub_tokens.append(cur_substr)
+                start = end
+
+            if is_bad:
+                output_tokens.append(self.unk_token)
+            else:
+                output_tokens.extend(sub_tokens)
+        return output_tokens
+
+
+class WordpieceTokenizer(object):
+    """Runs WordPiece tokenization."""
+
+    def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=100):
+        self.vocab = vocab
+        self.unk_token = unk_token
+        self.max_input_chars_per_word = max_input_chars_per_word
+
+    def tokenize(self, text):
+        """Tokenizes a piece of text into its word pieces.
+        This uses a greedy longest-match-first algorithm to perform tokenization
+        using the given vocabulary.
+        For example:
+          input = "unaffable"
+          output = ["un", "##aff", "##able"]
+        Args:
+          text: A single token or whitespace separated tokens. This should have
+            already been passed through `BasicTokenizer`.
+        Returns:
+          A list of wordpiece tokens.
+        """
+
+        output_tokens = []
+        for token in whitespace_tokenize(text):
+            chars = list(token)
+            if len(chars) > self.max_input_chars_per_word:
+                output_tokens.append(self.unk_token)
+                continue
+
+            is_bad = False
+            start = 0
+            sub_tokens = []
+            while start < len(chars):
+                end = len(chars)
+                cur_substr = None
+                while start < end:
+                    substr = "".join(chars[start:end])
+                    if start > 0:
+                        substr = "##" + substr
+                    if substr in self.vocab:
+                        cur_substr = substr
+                        break
+                    end -= 1
+                if cur_substr is None:
+                    is_bad = True
+                    break
+                sub_tokens.append(cur_substr)
+                start = end
+
+            if is_bad:
+                output_tokens.append(self.unk_token)
+            else:
+                output_tokens.extend(sub_tokens)
+        return output_tokens

@@ -16,7 +16,7 @@
 import json
 from typing import List, Optional
 
-from tokenizers import pre_tokenizers
+from tokenizers import normalizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -24,26 +24,23 @@ from ...utils import logging
 from .tokenization_glm import GLMTokenizer
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM/resolve/main/merges.txt",
+        "shunxing1234/GLM": "https://huggingface.co/shunxing1234/GLM/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM/resolve/main/tokenizer.json",
+        "shunxing1234/GLM": "https://huggingface.co/shunxing1234/GLM/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "shunxing1234/GLM-base-cased": 1024,
+    "shunxing1234/GLM": 1024,
 }
+
 
 class GLMTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -61,64 +58,102 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = GLMTokenizer
 
     def __init__(
-        self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        add_prefix_space=False,
-        **kwargs
+            self,
+            vocab_file=None,
+            do_lower_case=True,
+            max_len=None,
+            never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"),
+            pad_token='[PAD]',
+            eos_token='[PAD]',
+            sep_token='[SEP]',
+            ENC_token='[CLS]',
+            unk_token='[UNK]',
+            MASK_token='[MASK]',
+            sop_token='<|startofpiece|>',
+            eop_token='<|endofpiece|>',
+            gMASK_token='[gMASK]',
+            sMASK_token='[sMASK]',
+            **kwargs
     ):
         super().__init__(
             vocab_file,
-            merges_file,
-            tokenizer_file=tokenizer_file,
-            unk_token=unk_token,
-            bos_token=bos_token,
+            do_lower_case=do_lower_case,
+            max_len=max_len,
+            never_split=never_split,
+            pad_token=pad_token,
             eos_token=eos_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
+            sep_token=sep_token,
+            ENC_token=ENC_token,
+            unk_token=unk_token,
+            MASK_token=MASK_token,
+            sop_token=sop_token,
+            eop_token=eop_token,
+            gMASK_token=gMASK_token,
+            sMASK_token=sMASK_token,
+            **kwargs
         )
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+        normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        if (normalizer_state.get("lowercase", do_lower_case) != do_lower_case):
+            normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+            normalizer_state["lowercase"] = do_lower_case
+            self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.add_prefix_space = add_prefix_space
+        self.do_lower_case = do_lower_case
 
-    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
-        assert self.add_prefix_space or not is_split_into_words, (
-            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs."
-        )
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A BERT sequence has the following format:
 
-        return super()._batch_encode_plus(*args, **kwargs)
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
-    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
 
-        assert self.add_prefix_space or not is_split_into_words, (
-            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs."
-        )
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
-        return super()._encode_plus(*args, **kwargs)
+        if token_ids_1:
+            output += token_ids_1 + [self.sep_token_id]
+
+        return output
+
+    def create_token_type_ids_from_sequences(
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
-
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids

@@ -54,12 +54,12 @@ from torch.nn.parameter import Parameter
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "shunxing1234/GLM-base-cased"
+_CHECKPOINT_FOR_DOC = "shunxing1234/GLM"
 _CONFIG_FOR_DOC = "GLMConfig"
 _TOKENIZER_FOR_DOC = "GLMTokenizer"
 
 GLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shunxing1234/GLM-base-cased",
+    "shunxing1234/GLM",
     # See all GLM models at https://huggingface.co/models?filter=glm
 ]
 
@@ -183,6 +183,7 @@ class VocabEmbedding(torch.nn.Module):
         embedding_dim: size of hidden state.
         init_method: method to initialize weights.
     """
+
     def __init__(self, config):
         super(VocabEmbedding, self).__init__()
         # Keep the input dimensions.
@@ -196,7 +197,7 @@ class VocabEmbedding(torch.nn.Module):
         self.sparse = False
         self._weight = None
 
-        self.vocab_start_index=0
+        self.vocab_start_index = 0
         self.vocab_end_index = self.num_embeddings
 
         # Allocate weights.
@@ -209,9 +210,9 @@ class VocabEmbedding(torch.nn.Module):
     def forward(self, input_):
         # Get the embeddings.
         output = F.embedding(input_, self.weight,
-                                      self.padding_idx, self.max_norm,
-                                      self.norm_type, self.scale_grad_by_freq,
-                                      self.sparse)
+                             self.padding_idx, self.max_norm,
+                             self.norm_type, self.scale_grad_by_freq,
+                             self.sparse)
         return output
 
 
@@ -291,7 +292,7 @@ class SelfAttention(torch.nn.Module):
 
         # Output.
         self.dense = Linear(hidden_size,
-                                       hidden_size)
+                            hidden_size)
         self.output_dropout = torch.nn.Dropout(output_dropout_prob)
 
     def _transpose_for_scores(self, tensor):
@@ -362,8 +363,8 @@ class SelfAttention(torch.nn.Module):
             if self.attention_scale > 1.0:
                 # Raw attention scores. [b, np, s, s]
                 attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_scale),
-                                            key_layer.transpose(-1, -2) / math.sqrt(
-                                                self.hidden_size_per_attention_head * self.attention_scale))
+                                                key_layer.transpose(-1, -2) / math.sqrt(
+                                                    self.hidden_size_per_attention_head * self.attention_scale))
             else:
                 attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2) / math.sqrt(
                     self.hidden_size_per_attention_head))
@@ -616,7 +617,7 @@ class Transformer(torch.nn.Module):
 
     def forward(self, hidden_states, position_ids, attention_mask, memory_states=None, encoder_states=None,
                 return_memory=False, detach_memory=True):
-        
+
         batch_size, query_length = hidden_states.size()[:2]
         memory_length = 0
 
@@ -850,18 +851,18 @@ class GLMModel(GLMPreTrainedModel):
 
         # Transformer
         self.transformer = Transformer(config.num_layers,
-                                                  config.hidden_size,
-                                                  config.num_attention_heads,
-                                                  config.max_sequence_length,
-                                                  config.max_memory_length,
-                                                  config.embedding_dropout_prob,
-                                                  config.attention_dropout_prob,
-                                                  config.output_dropout_prob,
-                                                  config.checkpoint_activations,
-                                                  config.checkpoint_num_layers,
-                                                  attention_scale=config.attention_scale,
-                                                  relative_encoding=config.relative_encoding,
-                                                  block_position_encoding=config.block_position_encoding)
+                                       config.hidden_size,
+                                       config.num_attention_heads,
+                                       config.max_sequence_length,
+                                       config.max_memory_length,
+                                       config.embedding_dropout_prob,
+                                       config.attention_dropout_prob,
+                                       config.output_dropout_prob,
+                                       config.checkpoint_activations,
+                                       config.checkpoint_num_layers,
+                                       attention_scale=config.attention_scale,
+                                       relative_encoding=config.relative_encoding,
+                                       block_position_encoding=config.block_position_encoding)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -905,7 +906,7 @@ class GLMModel(GLMPreTrainedModel):
             prompt_embeds = self.prompt_spell()
             batch_index = torch.arange(batch_size, device=input_ids.device).unsqueeze(1)
             embeddings[batch_index, prompt_pos] = prompt_embeds
-        
+
         if position_ids is None:
             position_ids = torch.arange(0, input_shape[-1], dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
