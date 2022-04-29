@@ -605,7 +605,9 @@ class FlaxData2VecVisionPreTrainedModel(FlaxPreTrainedModel):
     main_input_name = "pixel_values"
     module_class: nn.Module = None
 
-    def __init__(self, config: Data2VecVisionConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self, config: Data2VecVisionConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
             input_shape = (1, config.image_size, config.image_size, 3)
@@ -765,7 +767,9 @@ FLAX_DATA2VEC_VISION_MODEL_DOCSTRING = """
 """
 
 overwrite_call_docstring(FlaxData2VecVisionModel, FLAX_DATA2VEC_VISION_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxData2VecVisionModel, output_type=FlaxData2VecVisionModelOutputWithPooling, config_class=Data2VecVisionConfig)
+append_replace_return_docstrings(
+    FlaxData2VecVisionModel, output_type=FlaxData2VecVisionModelOutputWithPooling, config_class=Data2VecVisionConfig
+)
 
 
 # Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitForMaskedImageModelingModule with Beit->Data2VecVision,beit->data2vec_vision
@@ -907,8 +911,8 @@ class FlaxData2VecVisionForImageClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of the final
-    hidden states of the patch tokens) e.g. for ImageNet.
+    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of
+    the final hidden states of the patch tokens) e.g. for ImageNet.
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
@@ -944,5 +948,7 @@ FLAX_DATA2VEC_VISION_CLASSIF_DOCSTRING = """
 
 overwrite_call_docstring(FlaxData2VecVisionForImageClassification, FLAX_DATA2VEC_VISION_CLASSIF_DOCSTRING)
 append_replace_return_docstrings(
-    FlaxData2VecVisionForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=Data2VecVisionConfig
+    FlaxData2VecVisionForImageClassification,
+    output_type=FlaxSequenceClassifierOutput,
+    config_class=Data2VecVisionConfig,
 )

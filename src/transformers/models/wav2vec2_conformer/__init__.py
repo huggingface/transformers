@@ -21,7 +21,10 @@ from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_wav2vec2_conformer": ["WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2ConformerConfig"],
+    "configuration_wav2vec2_conformer": [
+        "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2ConformerConfig",
+    ],
 }
 
 
@@ -39,7 +42,10 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_wav2vec2_conformer import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2ConformerConfig
+    from .configuration_wav2vec2_conformer import (
+        WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2ConformerConfig,
+    )
 
     if is_torch_available():
         from .modeling_wav2vec2_conformer import (

@@ -30,18 +30,18 @@ DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Data2VecVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate an Data2VecVision
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Data2VecVision
-    [microsoft/data2vec_vision-base-patch16-224-in22k](https://huggingface.co/microsoft/data2vec_vision-base-patch16-224-in22k) architecture.
+    This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
+    an Data2VecVision model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Data2VecVision
+    [microsoft/data2vec_vision-base-patch16-224-in22k](https://huggingface.co/microsoft/data2vec_vision-base-patch16-224-in22k)
+    architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):
-            Vocabulary size of the Data2VecVision model. Defines the number of different image tokens that can be used during
-            pre-training.
+            Vocabulary size of the Data2VecVision model. Defines the number of different image tokens that can be used
+            during pre-training.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):

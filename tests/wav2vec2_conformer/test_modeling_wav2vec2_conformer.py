@@ -47,7 +47,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2FeatureExtractor,
         Wav2Vec2ConformerForAudioFrameClassification,
         Wav2Vec2ConformerForCTC,
         Wav2Vec2ConformerForMaskedLM,
@@ -55,6 +54,7 @@ if is_torch_available():
         Wav2Vec2ConformerForSequenceClassification,
         Wav2Vec2ConformerForXVector,
         Wav2Vec2ConformerModel,
+        Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
@@ -407,7 +407,13 @@ class Wav2Vec2ConformerModelTester:
 @require_torch
 class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ConformerForCTC, Wav2Vec2ConformerModel, Wav2Vec2ConformerForMaskedLM, Wav2Vec2ConformerForSequenceClassification, Wav2Vec2ConformerForPreTraining)
+        (
+            Wav2Vec2ConformerForCTC,
+            Wav2Vec2ConformerModel,
+            Wav2Vec2ConformerForMaskedLM,
+            Wav2Vec2ConformerForSequenceClassification,
+            Wav2Vec2ConformerForPreTraining,
+        )
         if is_torch_available()
         else ()
     )
@@ -1160,8 +1166,12 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_robust_batched(self):
-        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2_conformer-large-960h-lv60-self").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2_conformer-large-960h-lv60-self", do_lower_case=True)
+        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2_conformer-large-960h-lv60-self").to(
+            torch_device
+        )
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2_conformer-large-960h-lv60-self", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(4)
 
@@ -1354,7 +1364,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
 
     def test_inference_keyword_spotting(self):
-        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained("superb/wav2vec2_conformer-base-superb-ks").to(torch_device)
+        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained(
+            "superb/wav2vec2_conformer-base-superb-ks"
+        ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2_conformer-base-superb-ks")
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
@@ -1373,7 +1385,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained("superb/wav2vec2_conformer-base-superb-ic").to(torch_device)
+        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained(
+            "superb/wav2vec2_conformer-base-superb-ic"
+        ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2_conformer-base-superb-ic")
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
@@ -1403,7 +1417,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
 
     def test_inference_speaker_identification(self):
-        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained("superb/wav2vec2_conformer-base-superb-sid").to(torch_device)
+        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained(
+            "superb/wav2vec2_conformer-base-superb-sid"
+        ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2_conformer-base-superb-sid")
         input_data = self._load_superb("si", 4)
 
@@ -1424,7 +1440,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_emotion_recognition(self):
-        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained("superb/wav2vec2_conformer-base-superb-er").to(torch_device)
+        model = Wav2Vec2ConformerForSequenceClassification.from_pretrained(
+            "superb/wav2vec2_conformer-base-superb-er"
+        ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2_conformer-base-superb-er")
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
@@ -1443,7 +1461,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_phoneme_recognition(self):
-        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2_conformer-lv-60-espeak-cv-ft").to(torch_device)
+        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2_conformer-lv-60-espeak-cv-ft").to(
+            torch_device
+        )
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2_conformer-lv-60-espeak-cv-ft")
 
         input_speech = self._load_datasamples(4)
@@ -1484,10 +1504,12 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
         ).numpy()
 
-        model = Wav2Vec2ConformerForCTC.from_pretrained("patrickvonplaten/wav2vec2_conformer-large-xlsr-53-spanish-with-lm").to(
-            torch_device
+        model = Wav2Vec2ConformerForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2_conformer-large-xlsr-53-spanish-with-lm"
+        ).to(torch_device)
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2_conformer-large-xlsr-53-spanish-with-lm"
         )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2_conformer-large-xlsr-53-spanish-with-lm")
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values
 
@@ -1499,7 +1521,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
     def test_inference_diarization(self):
-        model = Wav2Vec2ConformerForAudioFrameClassification.from_pretrained("anton-l/wav2vec2_conformer-base-superb-sd").to(torch_device)
+        model = Wav2Vec2ConformerForAudioFrameClassification.from_pretrained(
+            "anton-l/wav2vec2_conformer-base-superb-sd"
+        ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2_conformer-base-superb-sd")
         input_data = self._load_superb("sd", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
@@ -1527,7 +1551,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
 
     def test_inference_speaker_verification(self):
-        model = Wav2Vec2ConformerForXVector.from_pretrained("anton-l/wav2vec2_conformer-base-superb-sv").to(torch_device)
+        model = Wav2Vec2ConformerForXVector.from_pretrained("anton-l/wav2vec2_conformer-base-superb-sv").to(
+            torch_device
+        )
         processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2_conformer-base-superb-sv")
         input_data = self._load_superb("si", 4)
 

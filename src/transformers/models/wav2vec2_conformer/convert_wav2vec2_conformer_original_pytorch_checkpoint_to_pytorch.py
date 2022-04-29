@@ -25,10 +25,10 @@ from fairseq.data import Dictionary
 
 from transformers import (
     Wav2Vec2ConformerConfig,
-    Wav2Vec2CTCTokenizer,
-    Wav2Vec2FeatureExtractor,
     Wav2Vec2ConformerForCTC,
     Wav2Vec2ConformerForPreTraining,
+    Wav2Vec2CTCTokenizer,
+    Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
     logging,
 )
@@ -47,15 +47,13 @@ MAPPING = {
     "self_attn.pos_bias_v": "encoder.layers.*.self_attn.pos_bias_v",
     "self_attn.linear_out": "encoder.layers.*.self_attn.linear_out",
     "self_attn.linear_pos": "encoder.layers.*.self_attn.linear_pos",
-    "self_attn.rotary_emb": "encoder.layers.*.self_attn.rotary_emb",
+    "self_attn.rotary_emb": "encoder.embed_positions",
     "self_attn_layer_norm": "encoder.layers.*.self_attn_layer_norm",
     "conv_module.pointwise_conv1": "encoder.layers.*.conv_module.pointwise_conv1",
     "conv_module.pointwise_conv2": "encoder.layers.*.conv_module.pointwise_conv2",
     "conv_module.depthwise_conv": "encoder.layers.*.conv_module.depthwise_conv",
     "conv_module.batch_norm": "encoder.layers.*.conv_module.batch_norm",
     "conv_module.layer_norm": "encoder.layers.*.conv_module.layer_norm",
-#    "ffn1.w_1": "encoder.layers.*.ffn1.w_1",
-#    "ffn1.w_2": "encoder.layers.*.ffn1.w_2",
     "ffn1.w_1": "encoder.layers.*.ffn1.intermediate_dense",
     "ffn1.w_2": "encoder.layers.*.ffn1.output_dense",
     "ffn1.layer_norm": "encoder.layers.*.ffn1_layer_norm",
@@ -120,9 +118,6 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
-
-#    if len(hf_model.state_dict()) != len(fairseq_dict):
-#        raise ValueError(f"Fsq dict has {len(fairseq_dict)} weights, but hf dict has {len(hf_model.state_dict())} weights.")
 
     feature_extractor = hf_model.wav2vec2_conformer.feature_extractor
 

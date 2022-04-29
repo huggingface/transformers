@@ -26,8 +26,8 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
-    Data2VecVisionConfig,
     BeitFeatureExtractor,
+    Data2VecVisionConfig,
     Data2VecVisionForImageClassification,
     Data2VecVisionForMaskedImageModeling,
     Data2VecVisionForSemanticSegmentation,
@@ -46,20 +46,39 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.weight", f"data2vec_vision.encoder.layer.{i}.attention.output.dense.weight")
+            (f"{prefix}blocks.{i}.norm1.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_before.weight")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.norm1.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_before.bias")
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.attn.proj.weight",
+                f"data2vec_vision.encoder.layer.{i}.attention.output.dense.weight",
+            )
         )
         rename_keys.append(
             (f"{prefix}blocks.{i}.attn.proj.bias", f"data2vec_vision.encoder.layer.{i}.attention.output.dense.bias")
         )
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.weight", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.bias", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.weight", f"data2vec_vision.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.bias", f"data2vec_vision.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.norm2.weight", f"data2vec_vision.encoder.layer.{i}.layernorm_after.weight")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.norm2.bias", f"data2vec_vision.encoder.layer.{i}.layernorm_after.bias")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.mlp.fc1.weight", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.weight")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.mlp.fc1.bias", f"data2vec_vision.encoder.layer.{i}.intermediate.dense.bias")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.mlp.fc2.weight", f"data2vec_vision.encoder.layer.{i}.output.dense.weight")
+        )
+        rename_keys.append(
+            (f"{prefix}blocks.{i}.mlp.fc2.bias", f"data2vec_vision.encoder.layer.{i}.output.dense.bias")
+        )
 
     # projection layer + position embeddings
     rename_keys.extend(
@@ -222,21 +241,21 @@ def convert_data2vec_vision_checkpoint(checkpoint_url, pytorch_dump_folder_path)
         is_semantic = True
     else:
         pass
-#        raise ValueError("Checkpoint not supported, URL should either end with 'pt22k', 'ft22k', 'to1k' or 'ade20k'")
+    #        raise ValueError("Checkpoint not supported, URL should either end with 'pt22k', 'ft22k', 'to1k' or 'ade20k'")
 
     # size of the architecture
     if "base" in checkpoint_url:
         pass
-#    elif "large" in checkpoint_url:
-#        config.hidden_size = 1024
-#        config.intermediate_size = 4096
-#        config.num_hidden_layers = 24
-#        config.num_attention_heads = 16
-#        if "ade20k" in checkpoint_url:
-#            config.image_size = 640
-#            config.out_indices = [7, 11, 15, 23]
-#    else:
-#        raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
+    #    elif "large" in checkpoint_url:
+    #        config.hidden_size = 1024
+    #        config.intermediate_size = 4096
+    #        config.num_hidden_layers = 24
+    #        config.num_attention_heads = 16
+    #        if "ade20k" in checkpoint_url:
+    #            config.image_size = 640
+    #            config.out_indices = [7, 11, 15, 23]
+    #    else:
+    #        raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)

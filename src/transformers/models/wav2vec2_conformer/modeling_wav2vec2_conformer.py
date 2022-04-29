@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,12 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
@@ -456,58 +451,50 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-class RotaryPositionalEmbedding(nn.Module):
-    def __init__(self, dim, base=10000, precision=torch.half):
-        """Rotary positional embedding
-        Reference : https://blog.eleuther.ai/rotary-embeddings/
-        Paper: https://arxiv.org/pdf/2104.09864.pdf
-        Args:
-            dim: Dimension of embedding
-            base: Base value for exponential
-            precision: precision to use for numerical values
-        """
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        self.seq_len_cached = None
-        self.cos_cached = None
-        self.sin_cached = None
-        self.precision = precision
-
-    def forward(self, x, seq_len=None):
-        """
-        Args:
-            x: Input x with T X B X C
-            seq_len: Sequence length of input x
-        """
-        if seq_len != self.seq_len_cached:
-            self.seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[:, None, None, :]
-            self.sin_cached = emb.sin()[:, None, None, :]
-        return self.cos_cached, self.sin_cached
-
-
-class RelPositionalEmbedding(nn.Module):
-    """Relative positional encoding module (new implementation).
-
-    Args:
-        d_model: Embedding dimension.
-        dropout_rate: Dropout rate.
-        max_len: Maximum input length.
+class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
+    """Rotary positional embedding
+    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
     """
 
-    def __init__(self, max_len, d_model):
-        """Construct an PositionalEncoding object."""
+    def __init__(self, config):
         super().__init__()
-        self.d_model = d_model
+        dim = config.hidden_size // config.num_attention_heads
+        base = config.rotary_embedding_base
+
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.cached_sequence_length = None
+        self.cached_rotary_positional_embedding = None
+
+    def forward(self, hidden_states):
+        sequence_length = hidden_states.shape[1]
+
+        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
+            return self.cached_rotary_positional_embedding
+
+        self.cached_sequence_length = sequence_length
+        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
+        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
+        embeddings = torch.cat((freqs, freqs), dim=-1)
+
+        cos_embeddings = embeddings.cos()[:, None, None, :]
+        sin_embeddings = embeddings.sin()[:, None, None, :]
+        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings])
+        return self.cached_rotary_positional_embedding
+
+
+class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
+    """Relative positional encoding module."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.max_len = config.max_source_positions
+        self.d_model = config.hidden_size
         self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
 
     def extend_pe(self, x):
-        """Reset the positional encodings."""
+        # Reset the positional encodings
         if self.pe is not None:
             # self.pe contains both positive and negative parts
             # the length of self.pe is 2 * input_len - 1
@@ -522,8 +509,7 @@ class RelPositionalEmbedding(nn.Module):
         pe_negative = torch.zeros(x.size(1), self.d_model)
         position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32)
-            * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
         )
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
@@ -538,21 +524,12 @@ class RelPositionalEmbedding(nn.Module):
         pe = torch.cat([pe_positive, pe_negative], dim=1)
         self.pe = pe.to(device=x.device, dtype=x.dtype)
 
-    def forward(self, x: torch.Tensor):
-        """Add positional encoding.
-        Args:
-            x : Input tensor T X B X C.
-        Returns:
-            torch.Tensor: Encoded tensor T X B X C.
-
-        """
-#        x = x.transpose(0, 1)  # Change TBC to BTC
-        self.extend_pe(x)
+    def forward(self, hidden_states: torch.Tensor):
+        self.extend_pe(hidden_states)
         relative_position_embeddings = self.pe[
             :,
-            self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
+            self.pe.size(1) // 2 - hidden_states.size(1) + 1 : self.pe.size(1) // 2 + hidden_states.size(1),
         ]
-#        relative_position_embeddings = relative_position_embeddings.transpose(0, 1)  # change to TBC
         return relative_position_embeddings
 
 
@@ -577,7 +554,8 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [Wav2Vec2ConformerGroupNormConvLayer(config, layer_id=0)] + [
-                Wav2Vec2ConformerNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+                Wav2Vec2ConformerNoLayerNormConvLayer(config, layer_id=i + 1)
+                for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [
@@ -657,7 +635,6 @@ class Wav2Vec2ConformerFeedForward(nn.Module):
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
-#        config.hidden_act = "swish"
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -681,10 +658,8 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        assert (
-            config.conv_depthwise_kernel_size - 1
-        ) % 2 == 0, "kernel_size should be a odd number for 'SAME' padding"
-
+        if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
+            raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.pointwise_conv1 = torch.nn.Conv1d(
             config.hidden_size,
@@ -714,87 +689,58 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        # TODO(PVP) - change dropout to conv dropout
-        self.dropout = torch.nn.Dropout(config.attention_dropout)
+        self.dropout = torch.nn.Dropout(config.conformer_conv_dropout)
 
-    def forward(self, x):
-        """
-        Args:
-            x: Input of shape B X T X C
-        Returns:
-          Tensor of shape B X T X C
-        """
-        x = self.layer_norm(x)
+    def forward(self, hidden_states):
+        hidden_states = self.layer_norm(hidden_states)
         # exchange the temporal dimension and the feature dimension
-        x = x.transpose(1, 2)
+        hidden_states = hidden_states.transpose(1, 2)
 
         # GLU mechanism
-        x = self.pointwise_conv1(x)  # (batch, 2*channel, dim)
-        x = self.glu(x)  # (batch, channel, dim)
+        # => (batch, 2*channel, dim)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        # => (batch, channel, dim)
+        hidden_states = self.glu(hidden_states)
 
         # 1D Depthwise Conv
-        x = self.depthwise_conv(x)
-        x = self.batch_norm(x)
-        x = self.activation(x)
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
 
-        x = self.pointwise_conv2(x)
-        x = self.dropout(x)
-        return x.transpose(1, 2)
+        hidden_states = self.pointwise_conv2(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
 
 
 class Wav2Vec2ConformerSelfAttention(nn.Module):
     """Construct an Wav2Vec2ConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
+
     def __init__(self, config):
         super().__init__()
 
-        n_feat = config.hidden_size
-        n_head = config.num_attention_heads
-        dropout = config.attention_dropout
-
-        assert n_feat % n_head == 0
-        # We assume d_v always equals d_k
-        self.d_k = n_feat // n_head
-        self.h = n_head
-        self.linear_q = nn.Linear(n_feat, n_feat)
-        self.linear_k = nn.Linear(n_feat, n_feat)
-        self.linear_v = nn.Linear(n_feat, n_feat)
-        self.linear_out = nn.Linear(n_feat, n_feat)
-        self.attn = None
-        self.dropout = nn.Dropout(p=dropout)
-
+        self.head_size = config.hidden_size // config.num_attention_heads
+        self.num_heads = config.num_attention_heads
         self.position_embeddings_type = config.position_embeddings_type
+
+        self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
+        self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
+        self.linear_v = nn.Linear(config.hidden_size, config.hidden_size)
+        self.linear_out = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.dropout = nn.Dropout(p=config.attention_dropout)
+
         if self.position_embeddings_type == "relative":
             # linear transformation for positional encoding
-            self.linear_pos = nn.Linear(n_feat, n_feat, bias=False)
+            self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-            self.pos_bias_u = nn.Parameter(torch.Tensor(self.h, self.d_k))
-            self.pos_bias_v = nn.Parameter(torch.Tensor(self.h, self.d_k))
-            torch.nn.init.xavier_uniform_(self.pos_bias_u)
-            torch.nn.init.xavier_uniform_(self.pos_bias_v)
-        elif self.position_embeddings_type == "rotary":
-            precision = torch.float
-            self.rotary_ndims = self.d_k  # also try self.d_k//2
+            self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
+            self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
 
-            self.rotary_emb = RotaryPositionalEmbedding(
-                self.rotary_ndims, base=config.rotary_embedding_base, precision=precision
-            )
-
-#    def forward(self, hidden_states, key_padding_mask=None, relative_position_embeddings=None):
     def forward(self, hidden_states, attention_mask=None, relative_position_embeddings=None):
-        """Compute rotary position attention.
-        Args:
-            query: Query tensor T X B X C
-            key: Key tensor T X B X C
-            value: Value tensor T X B X C
-            key_padding_mask: Mask tensor T X B
-        Returns:
-            torch.Tensor: Output tensor T X B X D.
-        Notes:
-            Assumes self attn
-        """
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
         # make sure query/key states can be != value states
@@ -802,24 +748,34 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         value_states = hidden_states
 
         if self.position_embeddings_type == "rotary":
-            query_key_states = self.apply_rotary_embedding(query_key_states)
+            if relative_position_embeddings is None:
+                raise ValueError(
+                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
+                )
+            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
 
         # project query_key_states and value_states
-        query = self.linear_q(query_key_states).view(batch_size, -1, self.h, self.d_k)
-        key = self.linear_k(query_key_states).view(batch_size, -1, self.h, self.d_k)
-        value = self.linear_v(value_states).view(batch_size, -1, self.h, self.d_k)
+        query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
+        key = self.linear_k(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
+        value = self.linear_v(value_states).view(batch_size, -1, self.num_heads, self.head_size)
 
-        # (batch, head, time1, d_k)
+        # => (batch, head, time1, d_k)
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        if self.position_embeddings_type == "relative" and relative_position_embeddings is not None:
+        if self.position_embeddings_type == "relative":
+            if relative_position_embeddings is None:
+                raise ValueError(
+                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'"
+                )
             # apply relative_position_embeddings to qk scores
             # as proposed in Transformer_XL: https://arxiv.org/abs/1901.02860
-            scores = self._apply_relative_embeddings(query=query, key=key, relative_position_embeddings=relative_position_embeddings)
+            scores = self._apply_relative_embeddings(
+                query=query, key=key, relative_position_embeddings=relative_position_embeddings
+            )
         else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_k)
+            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
         # apply attention_mask if necessary
         if attention_mask is not None:
@@ -833,29 +789,27 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states = torch.matmul(probs, value)
 
         # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.h * self.d_k)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, None
 
-    def apply_rotary_embedding(self, hidden_states):
+    def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()
-        hidden_states = hidden_states.view(batch_size, sequence_length, self.h, self.d_k)
+        hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads, self.head_size)
 
-        cos, sin = self.rotary_emb(hidden_states, seq_len=sequence_length)
-        cos = cos[:sequence_length, ...]
-        sin = sin[:sequence_length, ...]
+        cos = relative_position_embeddings[0, :sequence_length, ...]
+        sin = relative_position_embeddings[1, :sequence_length, ...]
 
         # rotate hidden_states with rotary embeddings
-        # TODO(PVP) - pass rotary embeddings and remove weird module
         hidden_states = hidden_states.transpose(0, 1)
-        rotated_states_begin = hidden_states[..., : self.d_k // 2]
-        rotated_states_end = hidden_states[..., self.d_k // 2 :]
+        rotated_states_begin = hidden_states[..., : self.head_size // 2]
+        rotated_states_end = hidden_states[..., self.head_size // 2 :]
         rotated_states = torch.cat((-rotated_states_end, rotated_states_begin), dim=rotated_states_begin.ndim - 1)
         hidden_states = (hidden_states * cos) + (rotated_states * sin)
         hidden_states = hidden_states.transpose(0, 1)
 
-        hidden_states = hidden_states.view(batch_size, sequence_length, self.h * self.d_k)
+        hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads * self.head_size)
 
         return hidden_states
 
@@ -863,13 +817,15 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         # 1. project positional embeddings
         # => (batch, head, 2*time1-1, d_k)
         proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.view(relative_position_embeddings.size(0), -1, self.h, self.d_k)
+        proj_relative_position_embeddings = proj_relative_position_embeddings.view(
+            relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
+        )
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
 
         # 2. Add bias to query
         # => (batch, head, time1, d_k)
-        query = query.transpose(1, 2)  # (batch, time1, head, d_k)
+        query = query.transpose(1, 2)
         q_with_bias_u = (query + self.pos_bias_u).transpose(1, 2)
         q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
 
@@ -885,7 +841,6 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         # 5. shift matrix b and matrix d
         zero_pad = torch.zeros((*scores_bd.size()[:3], 1), device=scores_bd.device, dtype=scores_bd.dtype)
         scores_bd_padded = torch.cat([zero_pad, scores_bd], dim=-1)
-#        scores_bd_padded = scores_bd_padded.view(*scores_bd.size()[:2], scores_bd.size(3) + 1, scores_bd.size(2))
         scores_bd_padded_shape = scores_bd.size()[:2] + (scores_bd.shape[3] + 1, scores_bd.shape[2])
         scores_bd_padded = scores_bd_padded.view(*scores_bd_padded_shape)
         scores_bd = scores_bd_padded[:, :, 1:].view_as(scores_bd)
@@ -893,13 +848,13 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
 
         # 6. sum matrices
         # => (batch, head, time1, time2)
-        scores = (scores_ac + scores_bd) / math.sqrt(self.d_k)
+        scores = (scores_ac + scores_bd) / math.sqrt(self.head_size)
 
         return scores
 
 
 class Wav2Vec2ConformerEncoderLayer(nn.Module):
-    """Conformer block based on https://arxiv.org/abs/2005.08100. We currently don't support relative positional encoding in MHA"""
+    """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
     def __init__(self, config):
         super().__init__()
@@ -930,48 +885,39 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
-        """
-        Args:
-            x: Tensor of shape T X B X C
-            encoder_padding_mask: Optional mask tensor
-            positions:
-        Returns:
-            Tensor of shape T X B X C
-        """
-        x = hidden_states
-#        encoder_padding_mask = 1 - attention_mask if attention_mask is not None else None
+        hidden_states = hidden_states
 
         # 1. Feed-Forward 1 layer
-        residual = x
-        x = self.ffn1_layer_norm(x)
-        x = self.ffn1(x)
-        x = x * 0.5 + residual
-        residual = x
+        residual = hidden_states
+        hidden_states = self.ffn1_layer_norm(hidden_states)
+        hidden_states = self.ffn1(hidden_states)
+        hidden_states = hidden_states * 0.5 + residual
+        residual = hidden_states
 
         # 2. Self-Attention layer
-        x = self.self_attn_layer_norm(x)
-        x, attn = self.self_attn(
-            hidden_states=x,
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, attn = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
         )
-        x = self.self_attn_dropout(x)
-        x = x + residual
+        hidden_states = self.self_attn_dropout(hidden_states)
+        hidden_states = hidden_states + residual
 
         # 3. Convolutional Layer
-        residual = x
-        x = self.conv_module(x)
-        x = residual + x
+        residual = hidden_states
+        hidden_states = self.conv_module(hidden_states)
+        hidden_states = residual + hidden_states
 
         # 4. Feed-Forward 2 Layer
-        residual = x
-        x = self.ffn2_layer_norm(x)
-        x = self.ffn2(x)
-        layer_result = x
-        x = x * 0.5 + residual
-        x = self.final_layer_norm(x)
+        residual = hidden_states
+        hidden_states = self.ffn2_layer_norm(hidden_states)
+        hidden_states = self.ffn2(hidden_states)
+        layer_result = hidden_states
+        hidden_states = hidden_states * 0.5 + residual
+        hidden_states = self.final_layer_norm(hidden_states)
 
-        return x, (attn, layer_result)
+        return hidden_states, (attn, layer_result)
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Wav2Vec2Conformer
@@ -981,8 +927,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         self.config = config
 
         if config.position_embeddings_type == "relative":
-            self.embed_positions = RelPositionalEmbedding(config.max_source_positions, config.hidden_size)
+            self.embed_positions = Wav2Vec2ConformerRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
+            self.embed_positions = Wav2Vec2ConformerRotaryPositionalEmbedding(config)
+        else:
             self.embed_positions = None
 
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
@@ -1014,7 +962,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
 
         hidden_states = self.dropout(hidden_states)
 
-        relative_position_embeddings = self.embed_positions(hidden_states) if self.embed_positions is not None else hidden_states
+        if self.embed_positions is not None:
+            relative_position_embeddings = self.embed_positions(hidden_states)
+        else:
+            relative_position_embeddings = None
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -1044,7 +995,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, relative_position_embeddings=relative_position_embeddings, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        relative_position_embeddings=relative_position_embeddings,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1300,9 +1254,8 @@ WAV2VEC2_CONFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#nn.Module) sub-class. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
         config ([`Wav2Vec2ConformerConfig`]): Model configuration class with all the parameters of the model.
@@ -1331,10 +1284,11 @@ WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
 
             `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [wav2vec2_conformer-base](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos), `attention_mask` should **not** be
-            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
-            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
-            different results depending on whether `input_values` is padded or not.
+            [wav2vec2_conformer-base](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos),
+            `attention_mask` should **not** be passed to avoid degraded performance when doing batched inference. For
+            such models `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware
+            that these models also yield slightly different results depending on whether `input_values` is padded or
+            not.
 
             </Tip>
 
@@ -1499,7 +1453,9 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.""", WAV2VEC2_CONFORMER_START_DOCSTRING)
+@add_start_docstrings(
+    """Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.""", WAV2VEC2_CONFORMER_START_DOCSTRING
+)
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config: Wav2Vec2ConformerConfig):
@@ -1842,8 +1798,8 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Wav2Vec2Conformer Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    Wav2Vec2Conformer Model with a sequence classification head on top (a linear layer over the pooled output) for
+    tasks like SUPERB Keyword Spotting.
     """,
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
@@ -2072,6 +2028,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         )
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.AMSoftmaxLoss
 class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super(AMSoftmaxLoss, self).__init__()
@@ -2095,6 +2052,7 @@ class AMSoftmaxLoss(nn.Module):
         return loss
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.TDNNLayer
 class TDNNLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()

@@ -305,9 +305,6 @@ _import_structure = {
     "models.wav2vec2_conformer": [
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2ConformerConfig",
-       
-       
-       
         "Wav2Vec2ConformerTokenizer",
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
@@ -2445,7 +2442,12 @@ if is_flax_available():
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
     _import_structure["models.wav2vec2_conformer"].extend(
-        ["FlaxWav2Vec2ConformerForCTC", "FlaxWav2Vec2ConformerForPreTraining", "FlaxWav2Vec2ConformerModel", "FlaxWav2Vec2ConformerPreTrainedModel"]
+        [
+            "FlaxWav2Vec2ConformerForCTC",
+            "FlaxWav2Vec2ConformerForPreTraining",
+            "FlaxWav2Vec2ConformerModel",
+            "FlaxWav2Vec2ConformerPreTrainedModel",
+        ]
     )
     _import_structure["models.xglm"].extend(
         [
@@ -2704,9 +2706,6 @@ if TYPE_CHECKING:
     from .models.wav2vec2_conformer import (
         WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2ConformerConfig,
-       
-       
-       
         Wav2Vec2ConformerTokenizer,
     )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer

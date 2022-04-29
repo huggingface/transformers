@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,21 +30,22 @@ WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Wav2Vec2ConformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to instantiate an
-    Wav2Vec2Conformer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Wav2Vec2Conformer
-    [facebook/wav2vec2-conformer-large-rel-pos](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos) architecture.
+    This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to
+    instantiate an Wav2Vec2Conformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2Conformer
+    [facebook/wav2vec2-conformer-large-rel-pos](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32):
-            Vocabulary size of the Wav2Vec2Conformer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Wav2Vec2ConformerModel`] or [`TFWav2Vec2ConformerModel`]. Vocabulary size of the
-            model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`Wav2Vec2ConformerModel`].
+        vocab_size (`int`, *optional*):
+            Vocabulary size of the Wav2Vec2Conformer model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`Wav2Vec2ConformerModel`] or
+            [`TFWav2Vec2ConformerModel`]. Vocabulary size of the model. Defines the different tokens that can be
+            represented by the *inputs_ids* passed to the forward method of [`Wav2Vec2ConformerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -167,8 +168,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
         add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the Wav2Vec2Conformer Encoder. Can be very useful for
-            warm-starting Wav2Vec2Conformer for SpeechEncoderDecoder models.
+            Whether a convolutional network should be stacked on top of the Wav2Vec2Conformer Encoder. Can be very
+            useful for warm-starting Wav2Vec2Conformer for SpeechEncoderDecoder models.
         adapter_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):
@@ -179,6 +180,17 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
+        position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
+            Can be specified to `relative` or `rotary` for relative or rotary position embeddings respectively. If left
+            `None` no relative position embedding is applied.
+        rotary_embedding_base (`int`, *optional*, defaults to 10000):
+            If `"rotary"` position embeddings are used, defines the size of the embedding base.
+        max_source_positions (`int`, *optional*, defaults to 5000):
+            if `"relative"` position embeddings are used, defines the maximum source input positions.
+        conv_depthwise_kernel_size (`int`, defaults to 31):
+            Kernel size of convolutional depthwise 1D layer in Conformer blocks.
+        conformer_conv_dropout (`float`, defaults to 0.1):
+            The dropout probability for all convolutional layers in Conformer blocks.
 
     Example:
 
@@ -198,7 +210,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32,
+        vocab_size=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -252,12 +264,11 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
-
-        # TODO(PVP) - give docstring
-        max_source_positions=5000,
         position_embeddings_type="relative",
-        conv_depthwise_kernel_size=31,
         rotary_embedding_base=10000,
+        max_source_positions=5000,
+        conv_depthwise_kernel_size=31,
+        conformer_conv_dropout=0.1,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -286,11 +297,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
-
-        # TODO(PVP) - give docstring
         self.max_source_positions = max_source_positions
         self.position_embeddings_type = position_embeddings_type
-        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.rotary_embedding_base = rotary_embedding_base
 
         if (
@@ -304,6 +312,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
                 f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
+
+        # Conformer-block related
+        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
+        self.conformer_conv_dropout = conformer_conv_dropout
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
         self.apply_spec_augment = apply_spec_augment
