@@ -39,6 +39,17 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 _re_checkpoint = re.compile("(\[.+?\])(\(https://huggingface\.co/.+?\))")
 
 
+CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
+    "CLIPConfig",
+    "DecisionTransformerConfig",
+    "EncoderDecoderConfig",
+    "RagConfig",
+    "SpeechEncoderDecoderConfig",
+    "VisionEncoderDecoderConfig",
+    "VisionTextDualEncoderConfig",
+}
+
+
 def check_config_docstrings_have_checkpoints():
     configs_without_checkpoint = []
 
@@ -63,8 +74,9 @@ def check_config_docstrings_have_checkpoints():
                 checkpoint_found = True
                 break
 
-        if not checkpoint_found:
-            configs_without_checkpoint.append(config_class.__name__)
+        name = config_class.__name__
+        if not checkpoint_found and name not in CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK:
+            configs_without_checkpoint.append(name)
 
     if len(configs_without_checkpoint) > 0:
         message = "\n".join(configs_without_checkpoint)
