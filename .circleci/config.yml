@@ -881,6 +881,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_config_docstrings.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
 

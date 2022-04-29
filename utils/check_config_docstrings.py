@@ -20,7 +20,7 @@ import re
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
-# python utils/check_repo.py
+# python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 
 
