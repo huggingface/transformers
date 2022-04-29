@@ -19,15 +19,24 @@ import os
 import unittest
 
 from transformers import GLMTokenizer, GLMTokenizerFast
-from transformers.models.glm.tokenization_glm import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+
+from transformers.models.glm.tokenization_glm import (
+    VOCAB_FILES_NAMES,
+    WordpieceTokenizer,
+    BasicTokenizer,
+    GLMTokenizer,
+    WordpieceTokenizer,
+    _is_control,
+    _is_punctuation,
+    _is_whitespace, )
+
+from transformers.testing_utils import require_tokenizers, slow
 
 from ..test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 class GLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = GLMTokenizer
     rust_tokenizer_class = GLMTokenizerFast
     test_rust_tokenizer = True
@@ -38,135 +47,129 @@ class GLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "<unk>",
-            "<|endoftext|>",
+        vocab_tokens = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "[PAD]",
+            "[MASK]",
+            "want",
+            "##want",
+            "##ed",
+            "wa",
+            "un",
+            "runn",
+            "##ing",
+            ",",
+            "low",
+            "lowest",
         ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return GLMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        print(self.tmpdirname)
-        return GLMTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
+        input_text = "UNwant\u00E9d,running"
+        output_text = "unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = GLMTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower newer"
-        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
-        self.assertListEqual(tokens, bpe_tokens)
+        tokenizer = self.tokenizer_class(self.vocab_file)
 
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
 
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
+        rust_tokenizer = self.get_rust_tokenizer()
 
-        sequence = "lower newer"
+        sequence = "UNwant\u00E9d,running"
 
-        # Testing tokenization
-        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
+        tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
         self.assertListEqual(tokens, rust_tokens)
 
-        # Testing conversion to ids without special tokens
-        ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
         rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
         self.assertListEqual(ids, rust_ids)
 
-        # Testing conversion to ids with special tokens
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-        ids = tokenizer.encode(sequence, add_prefix_space=True)
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
 
-        # Testing the unknown token
-        input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        # With lower casing
+        tokenizer = self.get_tokenizer(do_lower_case=True)
+        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
 
-    def test_padding(self, max_length=15):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        sequence = "UNwant\u00E9d,running"
 
-                # Simple input
-                s = "This is a simple input"
-                s2 = ["This is a simple input 1", "This is a simple input 2"]
-                p = ("This is a simple input", "This is a pair")
-                p2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
 
-                # Simple input tests
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
 
-                # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    s2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+    def test_wordpiece_tokenizer(self):
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+        vocab = {}
+        for (i, token) in enumerate(vocab_tokens):
+            vocab[token] = i
+        tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+        self.assertListEqual(tokenizer.tokenize(""), [])
 
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    p2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
+
+        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+
+    def test_is_whitespace(self):
+        self.assertTrue(_is_whitespace(" "))
+        self.assertTrue(_is_whitespace("\t"))
+        self.assertTrue(_is_whitespace("\r"))
+        self.assertTrue(_is_whitespace("\n"))
+        self.assertTrue(_is_whitespace("\u00A0"))
+
+        self.assertFalse(_is_whitespace("A"))
+        self.assertFalse(_is_whitespace("-"))
+
+    def test_is_control(self):
+        self.assertTrue(_is_control("\u0005"))
+
+        self.assertFalse(_is_control("A"))
+        self.assertFalse(_is_control(" "))
+        self.assertFalse(_is_control("\t"))
+        self.assertFalse(_is_control("\r"))
+
+    def test_is_punctuation(self):
+        self.assertTrue(_is_punctuation("-"))
+        self.assertTrue(_is_punctuation("$"))
+        self.assertTrue(_is_punctuation("`"))
+        self.assertTrue(_is_punctuation("."))
+
+        self.assertFalse(_is_punctuation("A"))
+        self.assertFalse(_is_punctuation(" "))
+
+    @slow
+    def test_sequence_builders(self):
+        tokenizer = GLMTokenizer.from_pretrained("shunxing1234/GLM")
+
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
+        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
+        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
+
+        assert encoded_sentence == text + [102]
+        assert encoded_pair == text + [102] + text_2 + [102]

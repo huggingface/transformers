@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch GLM model. """
 
-
 import unittest
 
 from ..test_modeling_common import floats_tensor
@@ -24,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers import GLMConfig
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-
 
 if is_torch_available():
     import torch
@@ -100,7 +98,7 @@ class GLMModelTester:
         token_type_ids = None
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-        
+
         position_ids = None
         if self.use_position_ids:
             position_ids = torch.arange(0, self.seq_length, dtype=torch.long, device=input_ids.device)
@@ -163,7 +161,8 @@ class GLMModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, positon_ids
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
+            positon_ids
     ):
         model = GLMModel(config=config)
         model.to(torch_device)
@@ -174,7 +173,8 @@ class GLMModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, position_ids
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
+            position_ids
     ):
         config.num_labels = self.num_labels
         model = GLMForSequenceClassification(config, 'cls', num_class=self.num_labels)
@@ -200,7 +200,6 @@ class GLMModelTester:
 
 @require_torch
 class GLMModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             GLMModel,
@@ -230,7 +229,7 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-    
+
     @slow
     def test_GLM_sample(self):
         tokenizer = GLMTokenizer.from_pretrained("glm")
@@ -259,8 +258,19 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
         )  # token_type_ids should change output
 
-    @slow
+    # @slow
     def test_model_from_pretrained(self):
         for model_name in GLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GLMModel.from_pretrained(model_name)
+            # model.load_weights('/mnt/projects/Sailing/checkpoints/glm_large_en/pytorch_model.bin')
+            input_ids = [101, 7592, 2088, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            position_ids = [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            attention_mask = 4
+            input_ids = torch.LongTensor([input_ids])
+            position_ids = torch.LongTensor([position_ids])
+            attention_mask = torch.LongTensor([attention_mask])
+            print(model(input_ids=input_ids,
+                        position_ids=position_ids,
+                        attention_mask=attention_mask))
+
             self.assertIsNotNone(model)
