@@ -25,7 +25,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from functools import lru_cache
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -55,13 +54,13 @@ def bytes_to_unicode():
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
     _chr = chr if sys.version_info[0] == 2 else chr
-    bs = list(range(ord("!"), ord("~")+1))+list(range(ord("¡"), ord("¬")+1))+list(range(ord("®"), ord("ÿ")+1))
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     cs = bs[:]
     n = 0
-    for b in range(2**8):
+    for b in range(2 ** 8):
         if b not in bs:
             bs.append(b)
-            cs.append(2**8+n)
+            cs.append(2 ** 8 + n)
             n += 1
     cs = [_chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -148,7 +147,7 @@ class GLMTokenizer(PreTrainedTokenizer):
             pad_token='[PAD]',
             eos_token='[PAD]',
             sep_token='[SEP]',
-            ENC_token='[CLS]',
+            cls_token='[CLS]',
             unk_token='[UNK]',
             MASK_token='[MASK]',
             sop_token='<|startofpiece|>',
@@ -159,7 +158,7 @@ class GLMTokenizer(PreTrainedTokenizer):
     ):
         super().__init__(do_lower_case=do_lower_case, do_basic_tokenize=do_basic_tokenize,
                          pad_token=pad_token, eos_token=eos_token, max_len=max_len,
-                         sep_token=sep_token, ENC_token=ENC_token, unk_token=unk_token,
+                         sep_token=sep_token, cls_token=cls_token, unk_token=unk_token,
                          MASK_token=MASK_token, sop_token=sop_token, eop_token=eop_token,
                          gMASK_token=gMASK_token, sMASK_token=sMASK_token, **kwargs)
 
@@ -192,7 +191,7 @@ class GLMTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
-    def  tokenize(self, text):
+    def tokenize(self, text):
         if self.do_basic_tokenize:
             split_tokens = []
             for token in self.basic_tokenizer.tokenize(text):
@@ -215,7 +214,7 @@ class GLMTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -239,7 +238,7 @@ class GLMTokenizer(PreTrainedTokenizer):
         return token_ids_0 + sep + token_ids_1 + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
@@ -268,17 +267,119 @@ class GLMTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def _encode(self, text):
-        tokens = self.text_tokenizer.tokenize(text)
-        ids = self.text_tokenizer.convert_tokens_to_ids(tokens)
+        tokens = self.tokenize(text)
+        ids = self.convert_tokens_to_ids(tokens)
         return ids
 
-    def EncodeAsTokens(self, text, process_fn=None):
-        """convert wordpiece token to Id"""
-        processed_text = text
-        if process_fn is not None:
-            processed_text = process_fn(processed_text)
-        tokens = self.text_tokenizer.tokenize(processed_text)
-        return tokens
+    def tokenize(self, text):
+        if self.do_basic_tokenize:
+            split_tokens = []
+            for token in self.basic_tokenizer.tokenize(text):
+                for sub_token in self.wordpiece_tokenizer.tokenize(token):
+                    split_tokens.append(sub_token)
+        else:
+            split_tokens = self.wordpiece_tokenizer.tokenize(text)
+        return split_tokens
+
+    def build_input_from_ids(
+            self,
+            text_a_ids=None,
+            text_b_ids=None,
+            answer_ids=None,
+            max_seq_length=16,
+            tokenizer=None,
+            args=None,
+            add_cls=True,
+            add_sep=False,
+            add_piece=False,
+            add_eos=True,
+            mask_id=None,
+            masked_lm=False):
+        if mask_id is None:
+            mask_id = self.mask_token_id
+        eos_id = self.eos_token_id
+        cls_id = self.cls_token_id
+        sep_id = self.sep_token_id
+        ids = []
+        types = []
+        paddings = []
+        # CLS
+        if add_cls:
+            ids.append(cls_id)
+            types.append(0)
+            paddings.append(1)
+        # A
+        len_text_a = len(text_a_ids)
+        ids.extend(text_a_ids)
+        types.extend([0] * len_text_a)
+        paddings.extend([1] * len_text_a)
+        # B
+        if text_b_ids is not None:
+            # SEP
+            if add_sep:
+                ids.append(sep_id)
+                types.append(0)
+                paddings.append(1)
+            len_text_b = len(text_b_ids)
+            ids.extend(text_b_ids)
+            types.extend([1] * len_text_b)
+            paddings.extend([1] * len_text_b)
+        eos_length = 1 if add_eos else 0
+        # Cap the size.
+        if len(ids) >= max_seq_length - eos_length:
+            max_seq_length_m1 = max_seq_length - 1
+            ids = ids[0:max_seq_length_m1]
+            types = types[0:max_seq_length_m1]
+            paddings = paddings[0:max_seq_length_m1]
+        end_type = 0 if text_b_ids is None else 1
+        if add_eos:
+            ids.append(eos_id)
+            types.append(end_type)
+            paddings.append(1)
+        sep = len(ids)
+        target_ids = [0] * len(ids)
+        loss_masks = [0] * len(ids)
+        position_ids = list(range(len(ids)))
+        block_position_ids = [0] * len(ids)
+        # Piece
+        if add_piece or answer_ids is not None:
+            sop_id = tokenizer.get_command('sop').Id
+            mask_position = ids.index(
+                mask_id
+            ) if not args.sentinel_token else args.max_position_embeddings
+            ids.append(sop_id)
+            types.append(end_type)
+            paddings.append(1)
+            position_ids.append(mask_position)
+            block_position_ids.append(1)
+            if answer_ids is not None:
+                len_answer = len(answer_ids)
+                ids.extend(answer_ids[:-1])
+                types.extend([end_type] * (len_answer - 1))
+                paddings.extend([1] * (len_answer - 1))
+                position_ids.extend([mask_position] * (len_answer - 1))
+                if not args.no_block_position:
+                    block_position_ids.extend(range(2, len(answer_ids) + 1))
+                else:
+                    block_position_ids.extend([1] * (len(answer_ids) - 1))
+                target_ids.extend(answer_ids)
+                loss_masks.extend([1] * len(answer_ids))
+            else:
+                target_ids.append(0)
+                loss_masks.append(1)
+        # Padding.
+        padding_length = max_seq_length - len(ids)
+        if padding_length > 0:
+            ids.extend([eos_id] * padding_length)
+            types.extend([eos_id] * padding_length)
+            paddings.extend([0] * padding_length)
+            position_ids.extend([0] * padding_length)
+            block_position_ids.extend([0] * padding_length)
+            target_ids.extend([0] * padding_length)
+            loss_masks.extend([0] * padding_length)
+        if masked_lm:
+            position_ids = [position_ids]
+        return ids, types, paddings, position_ids, sep, target_ids, loss_masks
 
 
 class BasicTokenizer(object):
@@ -403,14 +504,14 @@ class BasicTokenizer(object):
         # space-separated words, so they are not treated specially and handled
         # like the all of the other languages.
         if (
-            (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-            or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+                (cp >= 0x4E00 and cp <= 0x9FFF)
+                or (cp >= 0x3400 and cp <= 0x4DBF)  #
+                or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+                or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+                or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+                or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+                or (cp >= 0xF900 and cp <= 0xFAFF)
+                or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
         ):  #
             return True
 

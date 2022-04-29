@@ -258,14 +258,22 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
         )  # token_type_ids should change output
 
-    # @slow
+    @slow
     def test_model_from_pretrained(self):
         for model_name in GLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GLMModel.from_pretrained(model_name)
+            tokenizer = GLMTokenizer.from_pretrained("shunxing1234/GLM")
+            tokens = tokenizer._encode("hello world")
+            print(tokens)
+            input_ids, _, _, position_ids, attention_mask, _, _ = tokenizer.build_input_from_ids(
+                text_a_ids=tokens, tokenizer=tokenizer)
             # model.load_weights('/mnt/projects/Sailing/checkpoints/glm_large_en/pytorch_model.bin')
-            input_ids = [101, 7592, 2088, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            position_ids = [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            attention_mask = 4
+            print('input_ids', input_ids)
+            print('position_ids', position_ids)
+            print('attention_mask', attention_mask)
+            # input_ids = [101, 7592, 2088, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            # position_ids = [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            # attention_mask = 4
             input_ids = torch.LongTensor([input_ids])
             position_ids = torch.LongTensor([position_ids])
             attention_mask = torch.LongTensor([attention_mask])
