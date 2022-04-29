@@ -212,7 +212,7 @@ class FlaxModelTesterMixin:
                 f"`fx_outputs` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fx_outputs)} instead."
             )
 
-    # is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         # It might be better to put this inside the for loop below (because we modify the config there).
         # But logically, it is fine.
