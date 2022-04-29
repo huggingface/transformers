@@ -351,7 +351,7 @@ class FlaxBertSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -518,13 +518,15 @@ class FlaxBertLayer(nn.Module):
 
         # Cross-Attention Block
         if encoder_hidden_states is not None:
-            attention_outputs = self.crossattention(
+            cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=layer_head_mask,
                 key_value_states=encoder_hidden_states,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
-            attention_output = attention_outputs[0]
+            attention_output = cross_attention_outputs[0]
 
         hidden_states = self.intermediate(attention_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
@@ -533,6 +535,8 @@ class FlaxBertLayer(nn.Module):
 
         if output_attentions:
             outputs += (attention_outputs[1],)
+            if encoder_hidden_states is not None:
+                outputs += (cross_attention_outputs[1],)
         return outputs
 
 
@@ -861,40 +865,56 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
-        # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
-        # changed by FlaxBertAttention module
-        if past_key_values:
-            inputs["cache"] = past_key_values
-            mutable = ["cache"]
+        if self.config.add_cross_attention:
+            # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
+            # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
+            # changed by FlaxBertAttention module
+            if past_key_values:
+                inputs["cache"] = past_key_values
+                mutable = ["cache"]
+            else:
+                mutable = False
+
+            outputs = self.module.apply(
+                inputs,
+                jnp.array(input_ids, dtype="i4"),
+                jnp.array(attention_mask, dtype="i4"),
+                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                position_ids=jnp.array(position_ids, dtype="i4"),
+                head_mask=jnp.array(head_mask, dtype="i4"),
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                deterministic=not train,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                rngs=rngs,
+                mutable=mutable,
+            )
+
+            # add updated cache to model output
+            if past_key_values is not None and return_dict:
+                outputs, past_key_values = outputs
+                outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+                return outputs
+            elif past_key_values is not None and not return_dict:
+                outputs, past_key_values = outputs
+                outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+
         else:
-            mutable = False
-
-        outputs = self.module.apply(
-            inputs,
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
-            jnp.array(token_type_ids, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
-            jnp.array(head_mask, dtype="i4"),
-            encoder_hidden_states,
-            encoder_attention_mask,
-            not train,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            rngs=rngs,
-            mutable=mutable,
-        )
-
-        # add updated cache to model output
-        if past_key_values is not None and return_dict:
-            outputs, past_key_values = outputs
-            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
-            return outputs
-        elif past_key_values is not None and not return_dict:
-            outputs, past_key_values = outputs
-            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+            outputs = self.module.apply(
+                inputs,
+                jnp.array(input_ids, dtype="i4"),
+                jnp.array(attention_mask, dtype="i4"),
+                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                position_ids=jnp.array(position_ids, dtype="i4"),
+                head_mask=jnp.array(head_mask, dtype="i4"),
+                deterministic=not train,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                rngs=rngs,
+            )
 
         return outputs
 
