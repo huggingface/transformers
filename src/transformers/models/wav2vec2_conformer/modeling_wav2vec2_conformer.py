@@ -740,7 +740,14 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
 
-    def forward(self, hidden_states, attention_mask=None, relative_position_embeddings=None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        relative_position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # self-attention mechanism
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
         # make sure query/key states can be != value states
@@ -792,7 +799,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
         hidden_states = self.linear_out(hidden_states)
 
-        return hidden_states, None
+        return hidden_states, probs
 
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()
@@ -896,10 +903,11 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
 
         # 2. Self-Attention layer
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn = self.self_attn(
+        hidden_states, attn_weigts = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
+            output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -913,14 +921,12 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.ffn2_layer_norm(hidden_states)
         hidden_states = self.ffn2(hidden_states)
-        layer_result = hidden_states
         hidden_states = hidden_states * 0.5 + residual
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, (attn, layer_result)
+        return hidden_states, attn_weigts
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1172,6 +1178,11 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
+        elif isinstance(module, Wav2Vec2ConformerSelfAttention):
+            if hasattr(module, "pos_bias_u"):
+                nn.init.xavier_uniform_(module.pos_bias_u)
+            if hasattr(module, "pos_bias_v"):
+                nn.init.xavier_uniform_(module.pos_bias_v)
         elif isinstance(module, Wav2Vec2ConformerPositionalConvEmbedding):
             nn.init.normal_(
                 module.conv.weight,
