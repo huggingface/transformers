@@ -76,6 +76,11 @@ class BigScience176BConfig(PretrainedConfig):
             transformer blocks
         skip_bias_add (*bool*, *optional*, defaults to *True*):
             If set to `True`, it will skip bias add for each linear layer in the transformer blocks
+        skip_bias_add_qkv (*bool*, *optional*, defaults to *False*):
+            If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
+        attention_softmax_in_fp32 (*bool*, *optional*, defaults to *True*):
+            If set to `True` and the `dtype` is set to `float16` it will scale the input of the Softmax function to
+            `fp32`
         hidden_dropout (*float*, *optional*, defaults to 0.1):
             Dropout rate of the dropout function in *bias_dropout_fusion*
         attention_dropout (*float*, *optional*, defaults to 0.1):
@@ -116,23 +121,25 @@ class BigScience176BConfig(PretrainedConfig):
         self,
         vocab_size=250880,
         seq_length=20,  # 2048,
-        hidden_size=64,  # 14336,
-        n_layer=2,  # 70,
-        n_head=8,  # 122,
+        hidden_size=64,  # 1024,
+        n_layer=2,  # 24,
+        n_head=8,  # 16,
         n_inner=None,
         masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,  # TODO
         initializer_range=0.02,  # TODO
         use_cache=False,  # TODO
-        bos_token_id=0,  # 50256,  # TODO
-        eos_token_id=0,  # =50256,  # TODO
+        bos_token_id=50256,  # TODO
+        eos_token_id=50256,  # TODO
         apply_residual_connection_post_layernorm=False,
         bias_dropout_fusion=True,
         skip_bias_add=True,
-        hidden_dropout=0.1,
-        attention_dropout=0.1,
-        pretraining_tp=2,  # TODO
-        pretraining_pp=2,  # TODO
+        skip_bias_add_qkv=False,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+        attention_softmax_in_fp32=True,
+        pretraining_tp=1,  # TODO
+        pretraining_pp=1,  # TODO
         dtype="bfloat16",
         **kwargs,
     ):
@@ -152,7 +159,9 @@ class BigScience176BConfig(PretrainedConfig):
         self.bias_dropout_fusion = bias_dropout_fusion
         self.hidden_dropout = hidden_dropout
         self.skip_bias_add = skip_bias_add
+        self.skip_bias_add_qkv = skip_bias_add_qkv
         self.attention_dropout = attention_dropout
+        self.attention_softmax_in_fp32 = attention_softmax_in_fp32
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

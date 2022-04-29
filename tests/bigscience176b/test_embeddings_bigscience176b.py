@@ -44,6 +44,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # pass
 
     @torch.no_grad()
+    # @unittest.skip("demonstrating skipping")
     def test_embeddings(self):
         model = AutoModel.from_pretrained(self.path_bigscience_model)
         model.eval()
@@ -271,7 +272,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # position_ids = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]])
 
         embeddings = model.word_embeddings(tensor_ids)
-        embeddings_ln = model.word_embeddings_layernorm(embeddings)
+        embeddings_ln = model.word_embeddings_layernorm(embeddings)  #
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -299,8 +300,8 @@ class BigScienceEmbeddingTest(unittest.TestCase):
     # @unittest.skip("demonstrating skipping")
     def test_hidden_states_transformers(self):
         # TODO ifelse device
-        cuda_available = torch.cuda.is_available()
-        # cuda_available = False
+        # cuda_available = torch.cuda.is_available()
+        cuda_available = False
         device = torch.device("cuda:0" if cuda_available else "cpu")
         model = AutoModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
@@ -351,7 +352,8 @@ class BigScienceEmbeddingTest(unittest.TestCase):
     @torch.no_grad()
     # @unittest.skip("demonstrating skipping")
     def test_logits(self):
-        cuda_available = torch.cuda.is_available()
+        # cuda_available = torch.cuda.is_available()
+        cuda_available = False
         device = torch.device("cuda:0" if cuda_available else "cpu")
         model = BigScience176BLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
