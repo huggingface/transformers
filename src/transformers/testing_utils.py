@@ -22,6 +22,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
@@ -1459,13 +1460,11 @@ def nested_simplify(obj, decimals=3):
     """
     import numpy as np
 
-    from transformers.tokenization_utils import BatchEncoding
-
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
     elif isinstance(obj, np.ndarray):
         return nested_simplify(obj.tolist())
-    elif isinstance(obj, (dict, BatchEncoding)):
+    elif isinstance(obj, Mapping):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
     elif isinstance(obj, (str, int, np.int64)):
         return obj
