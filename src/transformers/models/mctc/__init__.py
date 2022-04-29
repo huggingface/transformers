@@ -23,7 +23,7 @@ from ...file_utils import _LazyModule, is_speech_available, is_tokenizers_availa
 
 _import_structure = {
     "configuration_mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig"],
-    "processor_mctc": ["MCTCProcessor"],
+    "processing_mctc": ["MCTCProcessor"],
     "tokenization_mctc": ["MCTCTokenizer"],
 }
 

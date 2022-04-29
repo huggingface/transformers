@@ -73,6 +73,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         win_function="hamming_window",
         normalize_means=True,
         normalize_vars=True,
+        return_attention_mask=False,
         **kwargs
     ):
         """
@@ -86,6 +87,10 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         #     raise ValueError("`num_mel_bins` must be the same as `feature_size`")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
+        # found this logic deep in the original code
+        hop_length = hop_length * sampling_rate // 1000
+        win_length = win_length * sampling_rate // 1000
+
         self.feature_size = feature_size
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
@@ -94,7 +99,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
         self.win_function = win_function
-        self.return_attention_mask = True
+        self.return_attention_mask = return_attention_mask
 
     @staticmethod
     def _normalize_one(
@@ -142,11 +147,13 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             hop_length=self.hop_length,
             n_mels=self.feature_size,
             window_fn=getattr(torch, self.win_function),
+            mel_scale='htk',
             normalized=False,
         )
 
         waveform = torch.from_numpy(waveform)
         mel_specgram = mel_transform(waveform)  # (n_mels, time)
+        print("mel_specgram", mel_specgram.shape)
         return mel_specgram.numpy().transpose((1, 0))  # (time, n_mels)
 
     def __call__(

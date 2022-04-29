@@ -93,8 +93,8 @@ class MCTCConfig(PretrainedConfig):
         num_attention_heads=4,
         attention_head_dim=384,
         position_embedding_type="relative_key",
-        max_position_embeddings=512,
-        layer_norm_eps=1e-12,
+        max_position_embeddings=920,
+        layer_norm_eps=1e-5,
         layerdrop=0.3,
         hidden_act="relu",
         initializer_range=0.02,
@@ -105,7 +105,7 @@ class MCTCConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        conv_glu_dim=2,
+        conv_glu_dim=1,
         conv_dropout=0.3,
         num_conv_layers=1,
         conv_kernel=[7],
@@ -124,6 +124,8 @@ class MCTCConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
+        self.position_embedding_type = position_embedding_type
+        self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.layerdrop = layerdrop
         self.hidden_act = hidden_act
