@@ -107,8 +107,8 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
         FutureWarning,
     )
     HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
-HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
+HF_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
+HF_ENDPOINT_PREFIX = HF_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 
 def is_remote_url(url_or_filename):
@@ -149,7 +149,7 @@ def hf_bucket_url(
 
     if revision is None:
         revision = "main"
-    return HUGGINGFACE_CO_PREFIX.format(model_id=model_id, revision=revision, filename=filename)
+    return HF_ENDPOINT_PREFIX.format(model_id=model_id, revision=revision, filename=filename)
 
 
 def url_to_filename(url: str, etag: Optional[str] = None) -> str:
