@@ -457,7 +457,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "bert-base-uncased", "bert-base-uncased"
-        >>> )  # initialize Bert2Bert from pre-trained checkpoints
+        ... )  # initialize Bert2Bert from pre-trained checkpoints
 
         >>> # training
         >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
