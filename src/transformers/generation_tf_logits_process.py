@@ -326,7 +326,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 return tf.cond(
                     tf.math.equal(self.bad_word_seqs_len[bad_word_seq_number], 1),
                     lambda: tf.ones((), dtype=tf.bool),
-                    _len_greater_then_cur_len,
+                    _len_greater_than_cur_len,
                 )
 
             def _len_greater_than_cur_len():
