@@ -529,3 +529,53 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         outputs = (layer_output,) + outputs
 
         return outputs
+
+
+# Taken and modified from here:
+# https://github.com/leondgarse/keras_cv_attention_models/blob/main/keras_cv_attention_models/beit/beit.py#L28
+class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
+    def __init__(self, config: Data2VecVisionConfig, window_size: tuple, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.config = config
+
+        self.window_size = window_size
+        # +3 for `cls_token_pos_len`
+        # `window_size` can be something like (14, 14)
+        self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+
+    def build(self, input_shape):
+        self.relative_position_bias_table = self.add_weight(
+            shape=(self.config.num_attention_heads, self.num_relative_distance),
+            initializer="zeros",
+            trainable=True,
+            name="relative_position_bias_table",
+        )  # nH, 2*Wh-1 * 2*Ww-1
+        # cls to token & token 2 cls & cls to cls
+
+        # get pair-wise relative position index for each token inside the window
+        xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[0]))
+        coords = tf.stack([yy, xx], axis=-1)  # [Wh, Ww, 2]
+        coords_flatten = tf.reshape(coords, [-1, 2])  # [Wh*Ww, 2]
+        relative_coords = coords_flatten[:, None, :] - coords_flatten[None, :, :]  # [Wh*Ww, Wh*Ww, 2]
+        xx = (relative_coords[:, :, 0] + self.window_size[1] - 1) * (2 * self.window_size[0] - 1)
+        yy = relative_coords[:, :, 1] + self.window_size[0] - 1
+        relative_coords = tf.stack([xx, yy], axis=-1)
+        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Wh*Ww, Wh*Ww]
+
+        top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
+            self.num_relative_distance - 3
+        )
+        left = tf.ones((relative_position_index.shape[0], 1), dtype=relative_position_index.dtype) * (
+            self.num_relative_distance - 2
+        )
+        corner = tf.ones((1, 1), dtype=relative_position_index.dtype) * (self.num_relative_distance - 1)
+
+        left_corner = tf.concat([corner, left], axis=0)
+        relative_position_index = tf.concat([top, relative_position_index], axis=0)
+        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Wh*Ww + 1, Wh*Ww + 1]
+
+        self.relative_position_index = relative_position_index
+
+    def call(self, inputs=None) -> tf.Tensor:
+        relative_position_bias = tf.gather(self.relative_position_bias_table, self.relative_position_index, axis=1)
+        return relative_position_bias
