@@ -212,7 +212,7 @@ class FlaxModelTesterMixin:
                 f"`fx_outputs` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fx_outputs)} instead."
             )
 
-    @is_pt_flax_cross_test
+    # is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         # It might be better to put this inside the for loop below (because we modify the config there).
         # But logically, it is fine.
@@ -231,7 +231,16 @@ class FlaxModelTesterMixin:
 
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
+                try:
+                    pt_model_class = getattr(transformers, pt_model_class_name)
+                except AttributeError:
+                    # Check if Flax "ForCausalLM" needs to be converted to (deprecated) PyTorch "LMHeadModel"
+                    pt_lmheadmodel_class_name = pt_model_class_name[:-11] + "LMHeadModel"
+                    if getattr(transformers, pt_lmheadmodel_class_name):
+                        pt_model_class = getattr(transformers, pt_lmheadmodel_class_name)
+                    else:
+                        # Return the AttributeError if "LMHeadModel" does not exist
+                        pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.

@@ -2400,6 +2400,7 @@ if is_flax_available():
     )
     _import_structure["models.roberta"].extend(
         [
+            "FlaxRobertaForCausalLM",
             "FlaxRobertaForMaskedLM",
             "FlaxRobertaForMultipleChoice",
             "FlaxRobertaForQuestionAnswering",
@@ -4414,6 +4415,7 @@ if TYPE_CHECKING:
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
+            FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
             FlaxRobertaForQuestionAnswering,

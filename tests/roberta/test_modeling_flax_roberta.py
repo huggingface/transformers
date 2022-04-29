@@ -24,6 +24,7 @@ from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random
 
 if is_flax_available():
     from transformers.models.roberta.modeling_flax_roberta import (
+        FlaxRobertaForCausalLM,
         FlaxRobertaForMaskedLM,
         FlaxRobertaForMultipleChoice,
         FlaxRobertaForQuestionAnswering,
@@ -121,6 +122,7 @@ class FlaxRobertaModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaxRobertaModel,
+            FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
             FlaxRobertaForSequenceClassification,
             FlaxRobertaForTokenClassification,
