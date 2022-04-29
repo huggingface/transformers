@@ -40,7 +40,8 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search.
         cur_len (`int`):
-            The current length of valid input sequence tokens.
+            The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
+            is the maximum length generate can produce, and we need to know which of its tokens are valid.
         kwargs:
             Additional logits processor specific kwargs.
 
@@ -53,7 +54,7 @@ class TFLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for processing logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
@@ -64,7 +65,7 @@ class TFLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for warping logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
