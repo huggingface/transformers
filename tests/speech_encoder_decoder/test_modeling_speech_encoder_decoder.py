@@ -425,7 +425,7 @@ class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-base-960h", "bert-base-cased"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.encoder.config.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -489,7 +489,7 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "facebook/s2t-small-librispeech-asr", "bert-base-cased"
         )
         batch_size = 13
-        input_features = floats_tensor([batch_size, 7, 80], model.encoder.config.vocab_size)
+        input_features = floats_tensor([batch_size, 7, 80], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 7])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
