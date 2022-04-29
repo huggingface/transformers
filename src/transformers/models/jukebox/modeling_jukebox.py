@@ -934,11 +934,26 @@ def average_metrics(_metrics):
     return {key: sum(vals)/len(vals) for key, vals in metrics.items()}
 
 class VQVAE(nn.Module):
-    def __init__(self, input_shape, levels, downs_t, strides_t,
-                 emb_width, l_bins, mu, commit, spectral, multispectral,
-                 multipliers=None, use_bottleneck=True, **block_kwargs):
+    def __init__(self, input_shape, config):
         super().__init__()
 
+        block_kwargs = dict(width=config.vq_vae_width, depth=config.vq_vae_depth, m_conv=config.vq_vae_m_conv,
+                        dilation_growth_rate=config.vq_vae_dilation_growth_rate,
+                        dilation_cycle=config.vq_vae_dilation_cycle,
+                        reverse_decoder_dilation=config.vq_vae_vqvae_reverse_decoder_dilation)
+        
+        multipliers = config.vq_vae_multipliers
+        emb_width   = config.emb_width
+        self.width = config.vqvae_width
+        self.depth = config.vqvae_depth
+        
+        self.downs_t = downs_t = config.vq_vae_downsampling
+        self.strides_t = strides_t = config.vq_vae_strides
+        self.l_bins = l_bins = config.vq_vae_lbins
+        self.commit  = config.vq_vae_commit
+        self.spectral  = config.vq_vae_strides
+        self.multispectral  = config.vq_vae_strides
+        
         self.sample_length = input_shape[0]
         x_shape, x_channels = input_shape[:-1], input_shape[-1]
         self.x_shape = x_shape
@@ -946,7 +961,7 @@ class VQVAE(nn.Module):
         self.downsamples = calculate_strides(strides_t, downs_t)
         self.hop_lengths = np.cumprod(self.downsamples)
         self.z_shapes = z_shapes = [(x_shape[0] // self.hop_lengths[level],) for level in range(levels)]
-        self.levels = levels
+        self.levels = levels = config.vq_vae_levels
 
         if multipliers is None:
             self.multipliers = [1] * levels
@@ -969,15 +984,8 @@ class VQVAE(nn.Module):
             self.encoders.append(encoder(level))
             self.decoders.append(decoder(level))
 
-        self.bottleneck = Bottleneck(l_bins, emb_width, mu, levels)
-
-
-        self.downs_t = downs_t
-        self.strides_t = strides_t
-        self.l_bins = l_bins
-        self.commit = commit
-        self.spectral = spectral
-        self.multispectral = multispectral
+        self.bottleneck = Bottleneck(l_bins, emb_width, config.vq_vae_lmu, levels)
+        
 
     def preprocess(self, x):
         # x: NTC [-1,1] -> NCT [-1,1]
@@ -1120,7 +1128,31 @@ class VQVAE(nn.Module):
 
         return x_out, loss, metrics
     
-    
+
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+
+
 class JukeboxBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
