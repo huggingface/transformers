@@ -25,7 +25,8 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+import torch.nn.functional as F
+import numpy as np
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -353,7 +354,773 @@ class JukeboxMLP(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+####################################################################
 
+
+class ResConvBlock(nn.Module):
+    def __init__(self, n_in, n_state):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.ReLU(),
+            nn.Conv2d(n_in, n_state, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(n_state, n_in, 1, 1, 0),
+        )
+
+    def forward(self, x):
+        return x + self.model(x)
+
+class Resnet(nn.Module):
+    def __init__(self, n_in, n_depth, m_conv=1.0):
+        super().__init__()
+        self.model = nn.Sequential(*[ResConvBlock(n_in, int(m_conv * n_in)) for _ in range(n_depth)])
+
+    def forward(self, x):
+        return self.model(x)
+
+class ResConv1DBlock(nn.Module):
+    def __init__(self, n_in, n_state, dilation=1, zero_out=False, res_scale=1.0):
+        super().__init__()
+        padding = dilation
+        self.model = nn.Sequential(
+            nn.ReLU(),
+            nn.Conv1d(n_in, n_state, 3, 1, padding, dilation),
+            nn.ReLU(),
+            nn.Conv1d(n_state, n_in, 1, 1, 0),
+        )
+        if zero_out:
+            out = self.model[-1]
+            nn.init.zeros_(out.weight)
+            nn.init.zeros_(out.bias)
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        return x + self.res_scale * self.model(x)
+
+
+# def checkpoint(func, inputs, params, flag):
+#     """
+#     Wrapper to checkpoint results of a forward path during training. 
+#     This should only be used to reproduce results as it messes
+#     with RNG. see https://pytorch.org/docs/stable/checkpoint.html for more details
+
+#     Args:
+#         func (`_type_`):
+#             _description_
+#         inputs (`_type_`):
+#             _description_
+#         params (`_type_`):
+#             _description_
+#         flag (`_type_`):
+#             _description_
+#     """    
+#     if flag:
+#         args = inputs + tuple(params)
+#         return CheckpointFunction.apply(func, len(inputs), *args)
+#     else:
+#         return func(*inputs)
+
+# # TODO: I have no Idea what that function does
+# class CheckpointFunction (torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, run_function, length, *args):
+#         ctx.run_function = run_function
+#         ctx.input_tensors = list(args[:length])
+#         ctx.input_params = list(args[length:])
+#         with torch.no_grad():
+#             output_tensors = ctx.run_function(*ctx.input_tensors)
+#         return output_tensors
+
+#     @staticmethod
+#     def backward(ctx, *output_grads):
+#         for i in range(len(ctx.input_tensors)):
+#             temp = ctx.input_tensors[i]
+#             ctx.input_tensors[i] = temp.detach()
+#             ctx.input_tensors[i].requires_grad = temp.requires_grad
+#         with torch.enable_grad():
+#             output_tensors = ctx.run_function(*ctx.input_tensors)
+#         input_grads = torch.autograd.grad(output_tensors, ctx.input_tensors + ctx.input_params, output_grads, allow_unused=True)
+#         del ctx.input_tensors
+#         del output_tensors
+#         return (None, None) + input_grads
+class Resnet1D(nn.Module):
+    def __init__(self, n_in, n_depth, m_conv=1.0, dilation_growth_rate=1, dilation_cycle=None, zero_out=False, res_scale=False, reverse_dilation=False, checkpoint_res=False):
+        super().__init__()
+        def _get_depth(depth):
+            if dilation_cycle is None:
+                return depth
+            else:
+                return depth % dilation_cycle
+        blocks = [ResConv1DBlock(n_in, int(m_conv * n_in),
+                                 dilation=dilation_growth_rate ** _get_depth(depth),
+                                 zero_out=zero_out,
+                                 res_scale=1.0 if not res_scale else 1.0 / math.sqrt(n_depth))
+                  for depth in range(n_depth)]
+        if reverse_dilation:
+            blocks = blocks[::-1]
+        self.checkpoint_res = checkpoint_res        
+        # if self.checkpoint_res == 1:
+        #     # if dist.get_rank() == 0:
+        #     #     print("Checkpointing convs")
+        #     self.blocks = nn.ModuleList(blocks)
+        # else:
+        #    self.model = nn.Sequential(*blocks)
+        self.model = nn.Sequential(*blocks)
+        
+
+    def forward(self, x):
+        # if self.checkpoint_res == 1:
+        #     for block in self.blocks:
+        #         x = checkpoint(block, (x, ), block.parameters(), True)
+        #     return x
+        # else:
+        #     return self.model(x)
+        return self.model(x)
+
+
+
+class EncoderConvBlock(nn.Module):
+    def __init__(self, input_emb_width, output_emb_width, down_t,
+                 stride_t, width, depth, m_conv,
+                 dilation_growth_rate=1, dilation_cycle=None, zero_out=False,
+                 res_scale=False):
+        super().__init__()
+        blocks = []
+        filter_t, pad_t = stride_t * 2, stride_t // 2
+        if down_t > 0:
+            for i in range(down_t):
+                block = nn.Sequential(
+                    nn.Conv1d(input_emb_width if i == 0 else width, width, filter_t, stride_t, pad_t),
+                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out, res_scale),
+                )
+                blocks.append(block)
+            block = nn.Conv1d(width, output_emb_width, 3, 1, 1)
+            blocks.append(block)
+        self.model = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        return self.model(x)
+
+class DecoderConvBock(nn.Module):
+    def __init__(self, input_emb_width, output_emb_width, down_t,
+                 stride_t, width, depth, m_conv, dilation_growth_rate=1, dilation_cycle=None, zero_out=False, res_scale=False, reverse_decoder_dilation=False, checkpoint_res=False):
+        super().__init__()
+        blocks = []
+        if down_t > 0:
+            filter_t, pad_t = stride_t * 2, stride_t // 2
+            block = nn.Conv1d(output_emb_width, width, 3, 1, 1)
+            blocks.append(block)
+            for i in range(down_t):
+                block = nn.Sequential(
+                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out=zero_out, res_scale=res_scale, reverse_dilation=reverse_decoder_dilation, checkpoint_res=checkpoint_res),
+                    nn.ConvTranspose1d(width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t)
+                )
+                blocks.append(block)
+        self.model = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        return self.model(x)
+
+class Encoder(nn.Module):
+    def __init__(self, input_emb_width, output_emb_width, levels, downs_t,
+                 strides_t, **block_kwargs):
+        super().__init__()
+        self.input_emb_width = input_emb_width
+        self.output_emb_width = output_emb_width
+        self.levels = levels
+        self.downs_t = downs_t
+        self.strides_t = strides_t
+
+        block_kwargs_copy = dict(**block_kwargs)
+        if 'reverse_decoder_dilation' in block_kwargs_copy:
+            del block_kwargs_copy['reverse_decoder_dilation']
+        level_block = lambda level, down_t, stride_t: EncoderConvBlock(input_emb_width if level == 0 else output_emb_width,
+                                                           output_emb_width,
+                                                           down_t, stride_t,
+                                                           **block_kwargs_copy)
+        self.level_blocks = nn.ModuleList()
+        iterator = zip(list(range(self.levels)), downs_t, strides_t)
+        for level, down_t, stride_t in iterator:
+            self.level_blocks.append(level_block(level, down_t, stride_t))
+
+    def forward(self, x):
+        N, T = x.shape[0], x.shape[-1]
+        emb = self.input_emb_width
+        xs = []
+
+        # 64, 32, ...
+        iterator = zip(list(range(self.levels)), self.downs_t, self.strides_t)
+        for level, down_t, stride_t in iterator:
+            level_block = self.level_blocks[level]
+            x = level_block(x)
+            emb, T = self.output_emb_width, T // (stride_t ** down_t)
+            # assert_shape(x, (N, emb, T))
+            xs.append(x)
+
+        return xs
+
+class Decoder(nn.Module):
+    def __init__(self, input_emb_width, output_emb_width, levels, downs_t,
+                 strides_t, **block_kwargs):
+        super().__init__()
+        self.input_emb_width = input_emb_width
+        self.output_emb_width = output_emb_width
+        self.levels = levels
+
+        self.downs_t = downs_t
+
+        self.strides_t = strides_t
+
+        level_block = lambda level, down_t, stride_t: DecoderConvBock(output_emb_width,
+                                                          output_emb_width,
+                                                          down_t, stride_t,
+                                                          **block_kwargs)
+        self.level_blocks = nn.ModuleList()
+        iterator = zip(list(range(self.levels)), downs_t, strides_t)
+        for level, down_t, stride_t in iterator:
+            self.level_blocks.append(level_block(level, down_t, stride_t))
+
+        self.out = nn.Conv1d(output_emb_width, input_emb_width, 3, 1, 1)
+
+    def forward(self, xs, all_levels=True):
+        if all_levels:
+            assert len(xs) == self.levels
+        else:
+            assert len(xs) == 1
+        x = xs[-1]
+        N, T = x.shape[0], x.shape[-1]
+        emb = self.output_emb_width
+        # assert_shape(x, (N, emb, T))
+
+        # 32, 64 ...
+        iterator = reversed(list(zip(list(range(self.levels)), self.downs_t, self.strides_t)))
+        for level, down_t, stride_t in iterator:
+            level_block = self.level_blocks[level]
+            x = level_block(x)
+            emb, T = self.output_emb_width, T * (stride_t ** down_t)
+            # assert_shape(x, (N, emb, T))
+            if level != 0 and all_levels:
+                x = x + xs[level - 1]
+
+        x = self.out(x)
+        return x
+
+
+def dont_update(params):
+    for param in params:
+        param.requires_grad = False
+
+def update(params):
+    for param in params:
+        param.requires_grad = True
+
+def calculate_strides(strides, downs):
+    return [stride ** down for stride, down in zip(strides, downs)]
+
+def _loss_fn(loss_fn, x_target, x_pred, hps):
+    if loss_fn == 'l1':
+        return torch.mean (torch.abs(x_pred - x_target)) / hps.bandwidth['l1']
+    elif loss_fn == 'l2':
+        return torch.mean((x_pred - x_target) ** 2) / hps.bandwidth['l2']
+    elif loss_fn == 'linf':
+        residual = ((x_pred - x_target) ** 2).reshape(x_target.shape[0], -1)
+        values, _ = torch.topk(residual, hps.linf_k, dim=1)
+        return torch.mean(values) / hps.bandwidth['l2']
+    elif loss_fn == 'lmix':
+        loss = 0.0
+        if hps.lmix_l1:
+            loss += hps.lmix_l1 * _loss_fn('l1', x_target, x_pred, hps)
+        if hps.lmix_l2:
+            loss += hps.lmix_l2 * _loss_fn('l2', x_target, x_pred, hps)
+        if hps.lmix_linf:
+            loss += hps.lmix_linf * _loss_fn('linf', x_target, x_pred, hps)
+        return loss
+    else:
+        assert False, f"Unknown loss_fn {loss_fn}"
+        
+        
+        
+class BottleneckBlock(nn.Module):
+    def __init__(self, k_bins, emb_width, mu):
+        super().__init__()
+        self.k_bins = k_bins
+        self.emb_width = emb_width
+        self.mu = mu
+        self.reset_k()
+        self.threshold = 1.0
+
+    def reset_k(self):
+        self.init = False
+        self.k_sum = None
+        self.k_elem = None
+        # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
+        self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width))
+
+    def _tile(self, x):
+        d, ew = x.shape
+        if d < self.k_bins:
+            n_repeats = (self.k_bins + d - 1) // d
+            std = 0.01 / np.sqrt(ew)
+            x = x.repeat(n_repeats, 1)
+            x = x +  torch.randn_like(x) * std
+        return x
+
+    def init_k(self, x):
+        mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
+        self.init = True
+        # init k_w using random vectors from x
+        y = self._tile(x)
+        _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
+        # dist.broadcast(_k_rand, 0)
+        self.k = _k_rand
+        assert self.k.shape == (k_bins, emb_width)
+        self.k_sum = self.k
+        self.k_elem =  torch.ones(k_bins, device=self.k.device)
+
+    def restore_k(self, num_tokens=None, threshold=1.0):
+        mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
+        self.init = True
+        assert self.k.shape == (k_bins, emb_width)
+        self.k_sum = self.k.clone()
+        self.k_elem =  torch.ones(k_bins, device=self.k.device)
+        if num_tokens is not None:
+            expected_usage = num_tokens / k_bins
+            self.k_elem.data.mul_(expected_usage)
+            self.k_sum.data.mul_(expected_usage)
+        self.threshold = threshold
+
+    def update_k(self, x, x_l):
+        mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
+        with  torch.no_grad():
+            # Calculate new centres
+            x_l_onehot =  torch.zeros(k_bins, x.shape[0], device=x.device)  # k_bins, N * L
+            x_l_onehot.scatter_(0, x_l.view(1, x.shape[0]), 1)
+
+            _k_sum =  torch.matmul(x_l_onehot, x)  # k_bins, w
+            _k_elem = x_l_onehot.sum(dim=-1)  # k_bins
+            y = self._tile(x)
+            _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
+
+            # dist.broadcast(_k_rand, 0)
+            # dist.all_reduce(_k_sum)
+            # dist.all_reduce(_k_elem)
+
+            # Update centres
+            old_k = self.k
+            self.k_sum = mu * self.k_sum + (1. - mu) * _k_sum  # w, k_bins
+            self.k_elem = mu * self.k_elem + (1. - mu) * _k_elem  # k_bins
+            usage = (self.k_elem.view(k_bins, 1) >= self.threshold).float()
+            self.k = usage * (self.k_sum.view(k_bins, emb_width) / self.k_elem.view(k_bins, 1)) \
+                     + (1 - usage) * _k_rand
+            _k_prob = _k_elem /  torch.sum(_k_elem)  # x_l_onehot.mean(dim=-1)  # prob of each bin
+            entropy = -torch.sum(_k_prob *  torch.log(_k_prob + 1e-8))  # entropy ie how diverse
+            used_curr = (_k_elem >= self.threshold).sum()
+            usage =  torch.sum(usage)
+            dk =  torch.norm(self.k - old_k) / np.sqrt(np.prod(old_k.shape))
+        return dict(entropy=entropy,
+                    used_curr=used_curr,
+                    usage=usage,
+                    dk=dk)
+
+    def preprocess(self, x):
+        # NCT -> NTC -> [NT, C]
+        x = x.permute(0, 2, 1).contiguous()
+        x = x.view(-1, x.shape[-1])  # x_en = (N * L, w), k_j = (w, k_bins)
+
+        if x.shape[-1] == self.emb_width:
+            prenorm =  torch.norm(x -  torch.mean(x)) / np.sqrt(np.prod(x.shape))
+        elif x.shape[-1] == 2 * self.emb_width:
+            x1, x2 = x[...,:self.emb_width], x[...,self.emb_width:]
+            prenorm = (torch.norm(x1 -  torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (torch.norm(x2 -  torch.mean(x2)) / np.sqrt(np.prod(x2.shape)))
+
+            # Normalise
+            x = x1 + x2
+        else:
+            assert False, f"Expected {x.shape[-1]} to be (1 or 2) * {self.emb_width}"
+        return x, prenorm
+
+    def postprocess(self, x_l, x_d, x_shape):
+        # [NT, C] -> NTC -> NCT
+        N, T = x_shape
+        x_d = x_d.view(N, T, -1).permute(0, 2, 1).contiguous()
+        x_l = x_l.view(N, T)
+        return x_l, x_d
+
+    def quantise(self, x):
+        # Calculate latent code x_l
+        k_w = self.k.t()
+        distance =  torch.sum(x ** 2, dim=-1, keepdim=True) - 2 *  torch.matmul(x, k_w) +  torch.sum(k_w ** 2, dim=0,
+                                                                                            keepdim=True)  # (N * L, b)
+        min_distance, x_l =  torch.min(distance, dim=-1)
+        fit =  torch.mean(min_distance)
+        return x_l, fit
+
+    def dequantise(self, x_l):
+        x = F.embedding(x_l, self.k)
+        return x
+
+    def encode(self, x):
+        N, width, T = x.shape
+
+        # Preprocess.
+        x, prenorm = self.preprocess(x)
+
+        # Quantise
+        x_l, fit = self.quantise(x)
+
+        # Postprocess.
+        x_l = x_l.view(N, T)
+        return x_l
+
+    def decode(self, x_l):
+        N, T = x_l.shape
+        width = self.emb_width
+
+        # Dequantise
+        x_d = self.dequantise(x_l)
+
+        # Postprocess
+        x_d = x_d.view(N, T, width).permute(0, 2, 1).contiguous()
+        return x_d
+
+    def forward(self, x, update_k=True):
+        N, width, T = x.shape
+
+        # Preprocess
+        x, prenorm = self.preprocess(x)
+
+        # Init k if not inited
+        if update_k and not self.init:
+            self.init_k(x)
+
+        # Quantise and dequantise through bottleneck
+        x_l, fit = self.quantise(x)
+        x_d = self.dequantise(x_l)
+
+        # Update embeddings
+        if update_k:
+            update_metrics = self.update_k(x, x_l)
+        else:
+            update_metrics = {}
+
+        # Loss
+        commit_loss =  torch.norm(x_d.detach() - x) ** 2 / np.prod(x.shape)
+
+        # Passthrough
+        x_d = x + (x_d - x).detach()
+
+        # Postprocess
+        x_l, x_d = self.postprocess(x_l, x_d, (N,T))
+        return x_l, x_d, commit_loss, dict(fit=fit,
+                                           pn=prenorm,
+                                           **update_metrics)
+
+
+class Bottleneck(nn.Module):
+    def __init__(self, l_bins, emb_width, mu, levels):
+        super().__init__()
+        self.levels = levels
+        level_block = lambda level: BottleneckBlock(l_bins, emb_width, mu)
+        self.level_blocks = nn.ModuleList()
+        for level in range(self.levels):
+            self.level_blocks.append(level_block(level))
+
+    def encode(self, xs):
+        zs = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
+        return zs
+
+    def decode(self, zs, start_level=0, end_level=None):
+        if end_level is None:
+            end_level = self.levels
+        xs_quantised = [level_block.decode(z) for (level_block, z) in zip(self.level_blocks[start_level:end_level], zs)]
+        return xs_quantised
+
+    def forward(self, xs):
+        zs, xs_quantised, commit_losses, metrics = [], [], [], []
+        for level in range(self.levels):
+            level_block = self.level_blocks[level]
+            x = xs[level]
+            z, x_quantised, commit_loss, metric = level_block(x, update_k=self.training)
+            zs.append(z)
+            if not self.training:
+                # Be extra paranoid and make sure the encoder weights can't
+                # change from straight-through estimator
+                x_quantised = x_quantised.detach()
+            xs_quantised.append(x_quantised)
+            commit_losses.append(commit_loss)
+            if self.training:
+                metrics.append(metric)
+        return zs, xs_quantised, commit_losses, metrics
+
+
+
+def stft(sig, hps):
+    return torch.stft(sig, hps.n_fft, hps.hop_length, win_length=hps.window_size, window=torch.hann_window(hps.window_size, device=sig.device))
+
+def spec(x, hps):
+    return torch.norm(stft(x, hps), p=2, dim=-1)
+
+class DefaultSTFTValues:
+    def __init__(self, hps):
+        self.sr = hps.sr
+        self.n_fft = 2048
+        self.hop_length = 256
+        self.window_size = 6 * self.hop_length
+
+def norm(x):
+    return (x.view(x.shape[0], -1) ** 2).sum(dim=-1).sqrt()
+
+def squeeze(x):
+    if len(x.shape) == 3:
+        assert x.shape[-1] in [1,2]
+        x = torch.mean(x, -1)
+    if len(x.shape) != 2:
+        raise ValueError(f'Unknown input shape {x.shape}')
+    return x
+
+def spectral_loss(x_in, x_out, hps):
+    hps = DefaultSTFTValues(hps)
+    spec_in = spec(squeeze(x_in.float()), hps)
+    spec_out = spec(squeeze(x_out.float()), hps)
+    return norm(spec_in - spec_out)
+
+
+def spectral_convergence(x_in, x_out, hps, epsilon=2e-3):
+    hps = DefaultSTFTValues(hps)
+    spec_in = spec(squeeze(x_in.float()), hps)
+    spec_out = spec(squeeze(x_out.float()), hps)
+
+    gt_norm = norm(spec_in)
+    residual_norm = norm(spec_in - spec_out)
+    mask = (gt_norm > epsilon).float()
+    return (residual_norm * mask) / torch.clamp(gt_norm, min=epsilon)
+
+class STFTValues:
+    def __init__(self, hps, n_fft, hop_length, window_size):
+        self.sr = hps.sr
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.window_size = window_size
+
+
+def multispectral_loss(x_in, x_out, hps):
+    losses = []
+    assert len(hps.multispec_loss_n_fft) == len(hps.multispec_loss_hop_length) == len(hps.multispec_loss_window_size)
+    args = [hps.multispec_loss_n_fft,
+            hps.multispec_loss_hop_length,
+            hps.multispec_loss_window_size]
+    for n_fft, hop_length, window_size in zip(*args):
+        hps = STFTValues(hps, n_fft, hop_length, window_size)
+        spec_in = spec(squeeze(x_in.float()), hps)
+        spec_out = spec(squeeze(x_out.float()), hps)
+        losses.append(norm(spec_in - spec_out))
+    return sum(losses) / len(losses)
+
+
+def average_metrics(_metrics):
+    metrics = {}
+    for _metric in _metrics:
+        for key, val in _metric.items():
+            if key not in metrics:
+                metrics[key] = []
+            metrics[key].append(val)
+    return {key: sum(vals)/len(vals) for key, vals in metrics.items()}
+
+class VQVAE(nn.Module):
+    def __init__(self, input_shape, levels, downs_t, strides_t,
+                 emb_width, l_bins, mu, commit, spectral, multispectral,
+                 multipliers=None, use_bottleneck=True, **block_kwargs):
+        super().__init__()
+
+        self.sample_length = input_shape[0]
+        x_shape, x_channels = input_shape[:-1], input_shape[-1]
+        self.x_shape = x_shape
+
+        self.downsamples = calculate_strides(strides_t, downs_t)
+        self.hop_lengths = np.cumprod(self.downsamples)
+        self.z_shapes = z_shapes = [(x_shape[0] // self.hop_lengths[level],) for level in range(levels)]
+        self.levels = levels
+
+        if multipliers is None:
+            self.multipliers = [1] * levels
+        else:
+            assert len(multipliers) == levels, "Invalid number of multipliers"
+            self.multipliers = multipliers
+        def _block_kwargs(level):
+            this_block_kwargs = dict(block_kwargs)
+            this_block_kwargs["width"] *= self.multipliers[level]
+            this_block_kwargs["depth"] *= self.multipliers[level]
+            return this_block_kwargs
+
+        encoder = lambda level: Encoder(x_channels, emb_width, level + 1,
+                                        downs_t[:level+1], strides_t[:level+1], **_block_kwargs(level))
+        decoder = lambda level: Decoder(x_channels, emb_width, level + 1,
+                                        downs_t[:level+1], strides_t[:level+1], **_block_kwargs(level))
+        self.encoders = nn.ModuleList()
+        self.decoders = nn.ModuleList()
+        for level in range(levels):
+            self.encoders.append(encoder(level))
+            self.decoders.append(decoder(level))
+
+        self.bottleneck = Bottleneck(l_bins, emb_width, mu, levels)
+
+
+        self.downs_t = downs_t
+        self.strides_t = strides_t
+        self.l_bins = l_bins
+        self.commit = commit
+        self.spectral = spectral
+        self.multispectral = multispectral
+
+    def preprocess(self, x):
+        # x: NTC [-1,1] -> NCT [-1,1]
+        assert len(x.shape) == 3
+        x = x.permute(0,2,1).float()
+        return x
+
+    def postprocess(self, x):
+        # x: NTC [-1,1] <- NCT [-1,1]
+        x = x.permute(0,2,1)
+        return x
+
+    def _decode(self, zs, start_level=0, end_level=None):
+        # Decode
+        if end_level is None:
+            end_level = self.levels
+        assert len(zs) == end_level - start_level
+        xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
+        assert len(xs_quantised) == end_level - start_level
+
+        # Use only lowest level
+        decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
+        x_out = decoder(x_quantised, all_levels=False)
+        x_out = self.postprocess(x_out)
+        return x_out
+
+    def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
+        z_chunks =  [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+        x_outs = []
+        for i in range(bs_chunks):
+            zs_i = [z_chunk[i] for z_chunk in z_chunks]
+            x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
+            x_outs.append(x_out)
+        return torch.cat(x_outs, dim=0)
+
+    def _encode(self, x, start_level=0, end_level=None):
+        # Encode
+        if end_level is None:
+            end_level = self.levels
+        x_in = self.preprocess(x)
+        xs = []
+        for level in range(self.levels):
+            encoder = self.encoders[level]
+            x_out = encoder(x_in)
+            xs.append(x_out[-1])
+        zs = self.bottleneck.encode(xs)
+        return zs[start_level:end_level]
+
+    def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
+        x_chunks = torch.chunk(x, bs_chunks, dim=0)
+        zs_list = []
+        for x_i in x_chunks:
+            zs_i = self._encode(x_i, start_level=start_level, end_level=end_level)
+            zs_list.append(zs_i)
+        zs =  [torch.cat(zs_level_list, dim=0) for zs_level_list in zip(*zs_list)]
+        return zs
+
+    def sample(self, n_samples):
+        zs =  [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device='cuda') for z_shape in self.z_shapes]
+        return self.decode(zs)
+
+    def forward(self, x, hps, loss_fn='l1'):
+        metrics = {}
+
+        N = x.shape[0]
+
+        # Encode/Decode
+        x_in = self.preprocess(x)
+        xs = []
+        for level in range(self.levels):
+            encoder = self.encoders[level]
+            x_out = encoder(x_in)
+            xs.append(x_out[-1])
+
+        zs, xs_quantised, commit_losses, quantiser_metrics = self.bottleneck(xs)
+        x_outs = []
+        for level in range(self.levels):
+            decoder = self.decoders[level]
+            x_out = decoder(xs_quantised[level:level+1], all_levels=False)
+            # assert_shape(x_out, x_in.shape)
+            x_outs.append(x_out)
+
+        # Loss
+        def _spectral_loss(x_target, x_out, hps):
+            if hps.use_nonrelative_specloss:
+                sl = spectral_loss(x_target, x_out, hps) / hps.bandwidth['spec']
+            else:
+                sl = spectral_convergence(x_target, x_out, hps)
+            sl = torch.mean(sl)
+            return sl
+
+        def _multispectral_loss(x_target, x_out, hps):
+            sl = multispectral_loss(x_target, x_out, hps) / hps.bandwidth['spec']
+            sl = torch.mean(sl)
+            return sl
+
+        recons_loss = torch.zeros(()).to(x.device)
+        spec_loss = torch.zeros(()).to(x.device)
+        multispec_loss = torch.zeros(()).to(x.device)
+        # x_target = audio_postprocess(x.float(), hps)
+        x_target = x.float()
+
+        for level in reversed(range(self.levels)):
+            x_out = self.postprocess(x_outs[level])
+            # x_out = audio_postprocess(x_out, hps)
+            this_recons_loss = _loss_fn(loss_fn, x_target, x_out, hps)
+            this_spec_loss = _spectral_loss(x_target, x_out, hps)
+            this_multispec_loss = _multispectral_loss(x_target, x_out, hps)
+            metrics[f'recons_loss_l{level + 1}'] = this_recons_loss
+            metrics[f'spectral_loss_l{level + 1}'] = this_spec_loss
+            metrics[f'multispectral_loss_l{level + 1}'] = this_multispec_loss
+            recons_loss += this_recons_loss
+            spec_loss += this_spec_loss
+            multispec_loss += this_multispec_loss
+
+        commit_loss = sum(commit_losses)
+        loss = recons_loss + self.spectral * spec_loss + self.multispectral * multispec_loss + self.commit * commit_loss
+
+        with torch.no_grad():
+            sc = torch.mean(spectral_convergence(x_target, x_out, hps))
+            l2_loss = _loss_fn("l2", x_target, x_out, hps)
+            l1_loss = _loss_fn("l1", x_target, x_out, hps)
+            linf_loss = _loss_fn("linf", x_target, x_out, hps)
+
+        quantiser_metrics = average_metrics(quantiser_metrics)
+
+        metrics.update(dict(
+            recons_loss=recons_loss,
+            spectral_loss=spec_loss,
+            multispectral_loss=multispec_loss,
+            spectral_convergence=sc,
+            l2_loss=l2_loss,
+            l1_loss=l1_loss,
+            linf_loss=linf_loss,
+            commit_loss=commit_loss,
+            **quantiser_metrics))
+
+        for key, val in metrics.items():
+            metrics[key] = val.detach()
+
+        return x_out, loss, metrics
+    
+    
 class JukeboxBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -930,611 +1697,3 @@ class JukeboxModel(JukeboxPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-
-@add_start_docstrings(
-    """
-    The JUKEBOX Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
-    """,
-    JUKEBOX_START_DOCSTRING,
-)
-class JukeboxLMHeadModel(JukeboxPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = JukeboxModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-
-    @add_start_docstrings_to_model_forward(JUKEBOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
-            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = transformer_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
-
-        lm_logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return CausalLMOutputWithCrossAttentions(
-            loss=loss,
-            logits=lm_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-            cross_attentions=transformer_outputs.cross_attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
-        )
-
-
-@add_start_docstrings(
-    """
-The Jukebox Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-input embeddings, the classification head takes as input the input of a specified classification token index in the
-input sequence).
-""",
-    JUKEBOX_START_DOCSTRING,
-)
-class JukeboxDoubleHeadsModel(JukeboxPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        config.num_labels = 1
-        self.transformer = JukeboxModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.multiple_choice_head = SequenceSummary(config)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.multiple_choice_head = self.multiple_choice_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.multiple_choice_head = self.multiple_choice_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-
-    @add_start_docstrings_to_model_forward(JUKEBOX_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=JukeboxDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        mc_token_ids=None,
-        labels=None,
-        mc_labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ):
-        r"""
-        mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
-            Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
-            1[`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size - 1]` All labels set to
-            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`
-        mc_labels (`torch.LongTensor` of shape `(batch_size)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
-            where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
-
-        Return:
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import JukeboxTokenizer, JukeboxDoubleHeadsModel
-
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
-        >>> model = JukeboxDoubleHeadsModel.from_pretrained("jukebox")
-
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
-        >>> # Update the model embeddings with the new vocabulary size
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))
-
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
-        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
-
-        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
-
-        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_logits = outputs.logits
-        >>> mc_logits = outputs.mc_logits
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = transformer_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
-
-        lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
-
-        mc_loss = None
-        if mc_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
-        lm_loss = None
-        if labels is not None:
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits, mc_logits) + transformer_outputs[1:]
-            if mc_loss is not None:
-                output = (mc_loss,) + output
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return JukeboxDoubleHeadsModelOutput(
-            loss=lm_loss,
-            mc_loss=mc_loss,
-            logits=lm_logits,
-            mc_logits=mc_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
-        )
-
-
-@add_start_docstrings(
-    """
-    The JUKEBOX Model transformer with a sequence classification head on top (linear layer).
-
-    [`JukeboxForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-1) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    JUKEBOX_START_DOCSTRING,
-)
-class JukeboxForSequenceClassification(JukeboxPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.transformer = JukeboxModel(config)
-        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(JUKEBOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_0'",
-        expected_loss=5.28,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size, sequence_length = input_ids.shape[:2]
-        else:
-            batch_size, sequence_length = inputs_embeds.shape[:2]
-
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
-        else:
-            if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
-            else:
-                sequence_lengths = -1
-                logger.warning(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
-
-        pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    JUKEBOX Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    JUKEBOX_START_DOCSTRING,
-)
-class JukeboxForTokenClassification(JukeboxPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.transformer = JukeboxModel(config)
-        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
-            classifier_dropout = config.classifier_dropout
-        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
-            classifier_dropout = config.hidden_dropout
-        else:
-            classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(JUKEBOX_INPUTS_DOCSTRING)
-    # fmt: off
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="brad1141/jukebox-finetuned-comp2",
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
-    )
-    # fmt: on
-    def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = transformer_outputs[0]
-        hidden_states = self.dropout(hidden_states)
-        logits = self.classifier(hidden_states)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
