@@ -1387,7 +1387,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
 
         >>> input_features = processor(
         ...     ds["speech"][0], sampling_rate=16000, return_tensors="tf"
-        >>> ).input_features  # Batch size 1
+        ... ).input_features  # Batch size 1
         >>> generated_ids = model.generate(input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)

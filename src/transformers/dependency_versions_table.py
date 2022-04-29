@@ -18,7 +18,7 @@ deps = {
     "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
-    "hf-doc-builder": "hf-doc-builder>=0.2.0",
+    "hf-doc-builder": "hf-doc-builder>=0.3.0",
     "huggingface-hub": "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
