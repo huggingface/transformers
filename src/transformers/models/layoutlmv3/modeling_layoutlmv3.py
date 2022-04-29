@@ -949,7 +949,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -1030,7 +1030,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
+            output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
@@ -1112,7 +1112,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

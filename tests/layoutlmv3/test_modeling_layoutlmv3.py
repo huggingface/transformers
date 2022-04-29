@@ -310,6 +310,7 @@ def prepare_img():
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
+        # TODO use LayoutLMv3FeatureExtractor for this
         return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
