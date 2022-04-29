@@ -17,7 +17,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -34,6 +34,11 @@ if is_torch_available():
         LayoutLMv3Model,
     )
     from transformers.models.layoutlmv3.modeling_layoutlmv3 import LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import ViTFeatureExtractor
 
 
 class LayoutLMv3ModelTester:
@@ -295,42 +300,42 @@ class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_layoutlmv3_batch_inputs():
-    # Here we prepare a batch of 2 sequences to test a LayoutLMv3 forward pass on:
-    # fmt: off
-    input_ids = torch.tensor([[101,1019,1014,1016,1037,12849,4747,1004,14246,2278,5439,4524,5002,2930,2193,2930,4341,3208,1005,1055,2171,2848,11300,3531,102],[101,4070,4034,7020,1024,3058,1015,1013,2861,1013,6070,19274,2772,6205,27814,16147,16147,4343,2047,10283,10969,14389,1012,2338,102]])  # noqa: E231
-    bbox = torch.tensor([[[0,0,0,0],[423,237,440,251],[427,272,441,287],[419,115,437,129],[961,885,992,912],[256,38,330,58],[256,38,330,58],[336,42,353,57],[360,39,401,56],[360,39,401,56],[411,39,471,59],[479,41,528,59],[533,39,630,60],[67,113,134,131],[141,115,209,132],[68,149,133,166],[141,149,187,164],[195,148,287,165],[195,148,287,165],[195,148,287,165],[295,148,349,165],[441,149,492,166],[497,149,546,164],[64,201,125,218],[1000,1000,1000,1000]],[[0,0,0,0],[662,150,754,166],[665,199,742,211],[519,213,554,228],[519,213,554,228],[134,433,187,454],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[314,469,376,482],[504,684,582,706],[941,825,973,900],[941,825,973,900],[941,825,973,900],[941,825,973,900],[610,749,652,765],[130,659,168,672],[176,657,237,672],[238,657,312,672],[443,653,628,672],[443,653,628,672],[716,301,825,317],[1000,1000,1000,1000]]])  # noqa: E231
-    pixel_values = torch.randn((2,3,224,224))  # noqa: E231
-    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],])  # noqa: E231
-    token_type_ids = torch.tensor([[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]])  # noqa: E231
-    # fmt: on
-
-    return input_ids, bbox, pixel_values, attention_mask, token_type_ids
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
 
 
 @require_torch
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+
     @slow
     def test_inference_no_head(self):
         model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base").to(torch_device)
 
-        (
-            input_ids,
-            bbox,
-            pixel_values,
-            attention_mask,
-            token_type_ids,
-        ) = prepare_layoutlmv3_batch_inputs()
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        input_ids = torch.tensor([[1, 2]])
+        bbox = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]]).unsqueeze(0)
 
         # forward pass
         outputs = model(
             input_ids=input_ids.to(torch_device),
             bbox=bbox.to(torch_device),
             pixel_values=pixel_values.to(torch_device),
-            attention_mask=attention_mask.to(torch_device),
-            token_type_ids=token_type_ids.to(torch_device),
         )
 
-        print(outputs.keys())
+        # verify the logits
+        expected_shape = torch.Size((1, 199, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        raise NotImplementedError("To do")
+        expected_slice = torch.tensor(
+            [[-0.0529, 0.3618, 0.1632], [-0.1587, -0.1667, -0.0400], [-0.1557, -0.1671, -0.0505]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
