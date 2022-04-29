@@ -39,7 +39,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB)
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
@@ -57,7 +57,6 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
-
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "[PAD]")

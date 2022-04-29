@@ -143,7 +143,9 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
-        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
+        self._tokenizer = SPMTokenizer(
+            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+        )
 
     @property
     def vocab_size(self):
@@ -341,13 +343,23 @@ class SPMTokenizer:
         if raw_text is None:
             current_sub_tokens = []
             out_string = ""
+            prev_is_special = False
+            seen_unk = False
             for token in tokens:
                 # make sure that special tokens are not decoded using sentencepiece model
                 if token in self.special_tokens:
-                    out_string += self.spm.decode_pieces(current_sub_tokens) + token + " "
+                    if not prev_is_special and not seen_unk:
+                        out_string += " "
+                    if seen_unk:
+                        seen_unk = False
+                    out_string += self.spm.decode_pieces(current_sub_tokens) + token
+                    prev_is_special = True
                     current_sub_tokens = []
+                    if token == self.special_tokens[2]:  # if token == <unk>
+                        seen_unk = True
                 else:
                     current_sub_tokens.append(token)
+                    prev_is_special = False
             out_string += self.spm.decode_pieces(current_sub_tokens)
             return out_string.strip()
         else:
