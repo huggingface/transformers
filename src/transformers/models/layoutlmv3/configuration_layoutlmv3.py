@@ -83,16 +83,14 @@ class LayoutLMv3Config(PretrainedConfig):
             Dimension of the coordinate embeddings.
         shape_size (`int`, *optional*, defaults to 128):
             Dimension of the width and height embeddings.
-        has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
+        has_relative_attention_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use a relative attention bias in the self-attention mechanism.
-        has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
+        has_spatial_attention_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use a spatial attention bias in the self-attention mechanism.
         has_visual_segment_embedding (`bool`, *optional*, defaults to `False`):
             Whether or not to add visual segment embeddings.
-        detectron2_config_args (`dict`, *optional*):
-            Dictionary containing the configuration arguments of the Detectron2 visual backbone. Refer to [this
-            file](https://github.com/microsoft/unilm/blob/master/layoutlmft/layoutlmft/models/layoutlmv3/detectron2_config.py)
-            for details regarding default values.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
 
     Example:
 
@@ -137,11 +135,9 @@ class LayoutLMv3Config(PretrainedConfig):
         rel_2d_pos_bins=64,
         max_rel_2d_pos=256,
         visual_embed=True,
-        mim=False,
-        wpa_task=False,
-        discrete_vae_weight_path="",
-        discrete_vae_type="dall-e",
         input_size=224,
+        patch_size=16,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(
@@ -173,3 +169,5 @@ class LayoutLMv3Config(PretrainedConfig):
         self.max_rel_2d_pos = max_rel_2d_pos
         self.visual_embed = visual_embed
         self.input_size = input_size
+        self.patch_size = patch_size
+        self.classifier_dropout = classifier_dropout

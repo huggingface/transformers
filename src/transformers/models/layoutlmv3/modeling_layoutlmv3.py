@@ -26,7 +26,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from transformers import apply_chunking_to_forward
 from transformers.modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPooling,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -39,6 +38,12 @@ from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
 logger = logging.get_logger(__name__)
+
+LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "microsoft/layoutlmv3-base",
+    "microsoft/layoutlmv3-large",
+    # See all LayoutLMv3 models at https://huggingface.co/models?filter=layoutlmv3
+]
 
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
@@ -83,7 +88,7 @@ class LayoutLMv3PatchEmbeddings(nn.Module):
 
 class LayoutLMv3Embeddings(nn.Module):
     """
-    LayoutLMv3 text embeddings. Same as RobertaEmbeddings but with added spatial (layout) embeddings.
+    LayoutLMv3 text embeddings. Same as `RobertaEmbeddings` but with added spatial (layout) embeddings.
     """
 
     def __init__(self, config):
@@ -97,7 +102,6 @@ class LayoutLMv3Embeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-        # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -254,7 +258,7 @@ class LayoutLMv3SelfAttention(nn.Module):
 
     def cogview_attention(self, attention_scores, alpha=32):
         """
-        https://arxiv.org/pdf/2105.13290.pdf Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
+        https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
         (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
         will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
         cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
@@ -294,7 +298,8 @@ class LayoutLMv3SelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = self.cogview_attention(attention_scores)  # to stablize training
+        # Use the trick of the CogView paper to stablize training
+        attention_probs = self.cogview_attention(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -404,7 +409,7 @@ class LayoutLMv3Layer(nn.Module):
 
 
 class LayoutLMv3Encoder(nn.Module):
-    def __init__(self, config, detection=False, out_features=None):
+    def __init__(self, config, detection=False):
         super().__init__()
         self.config = config
         self.detection = detection
@@ -634,19 +639,21 @@ class LayoutLMv3Output(nn.Module):
 class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config, detection=False, out_features=None):
+    def __init__(self, config, detection=False):
         super().__init__(config)
         self.config = config
         self.detection = detection
 
         if not detection:
             self.embeddings = LayoutLMv3Embeddings(config)
-        self.encoder = LayoutLMv3Encoder(config, detection=detection, out_features=out_features)
+        self.encoder = LayoutLMv3Encoder(config, detection=detection)
 
         if config.visual_embed:
             # use the default pre-training parameters for fine-tuning (e.g., input_size)
-            # when the input_size is larger in fine-tuning, we will interpolate the position embedding in forward
-            self.patch_embed = LayoutLMv3PatchEmbeddings(embed_dim=config.hidden_size)
+            # when the input_size is larger in fine-tuning, we will interpolate the position embeddings in forward
+            self.patch_embed = LayoutLMv3PatchEmbeddings(
+                img_size=config.input_size, patch_size=config.patch_size, embed_dim=config.hidden_size
+            )
 
             patch_size = 16
             size = int(self.config.input_size / patch_size)
@@ -842,14 +849,12 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             return encoder_outputs
 
         sequence_output = encoder_outputs[0]
-        pooled_output = None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
