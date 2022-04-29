@@ -329,7 +329,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                     _len_greater_then_cur_len,
                 )
 
-            def _len_greater_then_cur_len():
+            def _len_greater_than_cur_len():
                 # Otherwise, if the bad sequence is longer than the current length they can't ever match
                 return tf.cond(
                     tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], row_input_ids.shape[0]),
