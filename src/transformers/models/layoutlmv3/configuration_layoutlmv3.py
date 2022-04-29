@@ -139,8 +139,8 @@ class LayoutLMv3Config(PretrainedConfig):
         visual_embed=True,
         mim=False,
         wpa_task=False,
-        discrete_vae_weight_path='',
-        discrete_vae_type='dall-e',
+        discrete_vae_weight_path="",
+        discrete_vae_type="dall-e",
         input_size=224,
         **kwargs
     ):
