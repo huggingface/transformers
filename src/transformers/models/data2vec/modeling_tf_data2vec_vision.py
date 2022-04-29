@@ -448,7 +448,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.attention = TFData2VecVisionAttention(config, name="attention")
+        self.attention = TFData2VecVisionAttention(config, window_size=window_size, name="attention")
         self.intermediate = TFData2VecVisionIntermediate(config, name="intermediate")
         self.vit_output = TFData2VecVisionOutput(config, name="output")
 
