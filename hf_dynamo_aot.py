@@ -39,8 +39,6 @@ benchmarks = [
 
 device = "cuda"
 
-USE_EVAL = False
-
 
 class NullContext:
     def __enter__(self):
@@ -58,7 +56,7 @@ def get_cur_memory():
     torch.cuda.empty_cache()
     stats = torch.cuda.memory_stats()
     peak_bytes_requirement = stats["allocated_bytes.all.current"]
-    print(f"Current memory requirement: {peak_bytes_requirement / 1024 ** 3:.2f} GB")
+    # print(f"Current memory requirement: {peak_bytes_requirement / 1024 ** 3:.2f} GB")
     return peak_bytes_requirement
 
 
@@ -79,8 +77,12 @@ def forward_and_backward_pass(mod, inputs, collect_outputs=True):
 
 
 @torchdynamo.skip
-def check_correctness(mod, train_inputs):
-    optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
+def check_correctness(args, mod, train_inputs):
+    if args.run_dynamo_eager:
+        optimize_ctx = torchdynamo.optimize("eager")
+    else:
+        optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
+
     torch.manual_seed(1337)
     correct_result = forward_and_backward_pass(copy.deepcopy(mod), train_inputs)
 
@@ -106,12 +108,15 @@ def check_correctness(mod, train_inputs):
 
 
 @torchdynamo.skip
-def bench_model(name, mod, train_inputs):
-    assert name in ("eager", "dynamo_aot")
+def bench_model(args, name, mod, train_inputs):
+    assert name in ("eager", "dynamo_aot", "dynamo_eager")
     if name == "eager":
         optimize_ctx = NullContext()
     else:
-        optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
+        if args.run_dynamo_eager:
+            optimize_ctx = torchdynamo.optimize("eager")
+        else:
+            optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
 
     with optimize_ctx:
         # Profile memory
@@ -132,7 +137,7 @@ def bench_model(name, mod, train_inputs):
         end = time.time()
         t = (end - begin) / iters
 
-    print(name, t)
+    print(name, t, m)
     return t, m
 
 
@@ -163,7 +168,7 @@ numerical_diffs = []
 results = []
 
 
-def run_all():
+def run_all(args):
     for config, model_type, input_size, not_supported_dtypes in benchmarks:
         for dtype in [torch.float, torch.half, torch.bfloat16]:
             if dtype in not_supported_dtypes:
@@ -175,7 +180,7 @@ def run_all():
                     )  # So we can check for correct gradients without eliminating the dropout computation
             model = model_type.from_config(config).to(device, dtype=dtype)
 
-            if USE_EVAL:
+            if args.use_eval_mode:
                 model.eval()
 
             model_name = type(model).__name__
@@ -186,16 +191,20 @@ def run_all():
             train_inputs = {"input_ids": input_ids, "labels": decoder_ids}
 
             # Correctness check
-            is_accurate = check_correctness(model, train_inputs)
+            is_accurate = check_correctness(args, model, train_inputs)
 
             # Profile eager
-            t, m = bench_model("eager", model, train_inputs)
+            t, m = bench_model(args, "eager", model, train_inputs)
             results.append(create_record(model_name, dtype, is_accurate, "eager", t, m))
 
             # Profile Dynamo nvfuser
+            dynamo_str = "dynamo_aot"
+            if args.run_dynamo_eager:
+                dynamo_str = "dynamo_eager"
+
             with torch.jit.fuser("fuser2"):
-                t, m = bench_model("dynamo_aot", model, train_inputs)
-            results.append(create_record(model_name, dtype, is_accurate, "dynamo_aot", t, m))
+                t, m = bench_model(args, dynamo_str, model, train_inputs)
+            results.append(create_record(model_name, dtype, is_accurate, dynamo_str, t, m))
 
             # calculate relative improvements
             base_r = results[-2]
@@ -215,13 +224,15 @@ def main():
         action="store_true",
         help="sets model.eval() to reduce randomness",
     )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--run-dynamo-eager",
+        action="store_true",
+        help="Use Dynamo eager",
+    )
 
     args = parser.parse_args()
-    if args.use_eval_mode:
-        global USE_EVAL
-        USE_EVAL = True
-
-    run_all()
+    run_all(args)
 
 
 if __name__ == "__main__":
