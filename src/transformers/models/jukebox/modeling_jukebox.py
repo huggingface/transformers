@@ -934,9 +934,14 @@ def average_metrics(_metrics):
     return {key: sum(vals)/len(vals) for key, vals in metrics.items()}
 
 class VQVAE(nn.Module):
-    def __init__(self, input_shape, config):
+    def __init__(self, config):
         super().__init__()
+        if not config.sample_length:
+            downsamples = calculate_strides(config.vq_vae_strides, config.vq_vae_downsampling)
+            top_raw_to_tokens = np.prod(downsamples)
+            config.sample_length = (config.sample_length_in_seconds * config.sr // top_raw_to_tokens) * top_raw_to_tokens
 
+        input_shape = (config.sample_length,1)
         block_kwargs = dict(width=config.vq_vae_width, depth=config.vq_vae_depth, m_conv=config.vq_vae_m_conv,
                         dilation_growth_rate=config.vq_vae_dilation_growth_rate,
                         dilation_cycle=config.vq_vae_dilation_cycle,
@@ -960,7 +965,7 @@ class VQVAE(nn.Module):
 
         self.downsamples = calculate_strides(strides_t, downs_t)
         self.hop_lengths = np.cumprod(self.downsamples)
-        self.z_shapes = z_shapes = [(x_shape[0] // self.hop_lengths[level],) for level in range(levels)]
+        self.z_shapes = [(x_shape[0] // self.hop_lengths[level],) for level in range(levels)]
         self.levels = levels = config.vq_vae_levels
 
         if multipliers is None:
