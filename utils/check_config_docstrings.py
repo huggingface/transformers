@@ -36,7 +36,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Regex pattern used to find the checkpoint mentioned in the docstring of `config_class`.
 # For example, `[bert-base-uncased](https://huggingface.co/bert-base-uncased)`
-_re_checkpoint = re.compile("(\[.+?\])(\(https://huggingface\.co/.+?\))")
+_re_checkpoint = re.compile("\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
@@ -61,12 +61,9 @@ def check_config_docstrings_have_checkpoints():
         checkpoints = _re_checkpoint.findall(config_source)
 
         for checkpoint in checkpoints:
-            # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link with enclosed in `()` and `[]`.
-            # post processing to:
-            #   - remove `[` and `]`
-            ckpt_name = checkpoint[0][1:-1]
-            #   - remove `(` and `)`
-            ckpt_link = checkpoint[1][1:-1]
+            # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+            # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+            ckpt_name, ckpt_link = checkpoint
 
             # verify the checkpoint name corresponds to the checkpoint link
             ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
@@ -79,7 +76,7 @@ def check_config_docstrings_have_checkpoints():
             configs_without_checkpoint.append(name)
 
     if len(configs_without_checkpoint) > 0:
-        message = "\n".join(configs_without_checkpoint)
+        message = "\n".join(sorted(configs_without_checkpoint))
         raise ValueError(f"The following configurations don't contain any valid checkpoint:\n{message}")
 
 
