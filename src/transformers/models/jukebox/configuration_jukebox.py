@@ -188,6 +188,36 @@ class JukeboxConfig(PretrainedConfig):
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
+"""
+Hyper parameters : 
+
+vq_vae_levels
+vq_vae_level_downsampling
+vq_vae_level_stride
+vq_vae_emmbedding_width
+vq_vae_codebook_dimension
+vq_vae_dilation_growth_rate
+vq_vae_l_mu                     # for the ema? 
+vq_vae_commit
+vq_vae_spectral
+vq_vae_multi_spectral
+vq_vae_use_bottleneck
+vq_vae_block_kwargs (width and depth) block_kwargs = dict(width=hps.width, depth=hps.depth, m_conv=hps.m_conv,
+                        dilation_growth_rate=hps.dilation_growth_rate,
+                        dilation_cycle=hps.dilation_cycle,
+                        reverse_decoder_dilation=hps.vqvae_reverse_decoder_dilation)
+vq_vae_loss_fn
+vq_vae_conv_block_depth
+vq_vae_conv_block_width (and at least 4 more)
+vq_vae_hvqvae_multipliers
+va_vae_sample_length
+
+
+
+
+
+
+"""
 
 class JukeboxOnnxConfig(OnnxConfigWithPast):
     def __init__(
