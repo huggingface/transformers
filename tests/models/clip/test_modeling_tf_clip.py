@@ -276,21 +276,11 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
-                if self.is_encoder_decoder:
-                    output_hidden_states = outputs["encoder_hidden_states"]
-                    output_attentions = outputs["encoder_attentions"]
-                else:
-                    output_hidden_states = outputs["hidden_states"]
-                    output_attentions = outputs["attentions"]
-
                 self.assertEqual(len(outputs), num_out)
 
                 expected_num_layers = getattr(
                     self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
                 )
-
-                self.assertEqual(len(output_hidden_states), expected_num_layers)
-                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
 
 class TFCLIPTextModelTester:
