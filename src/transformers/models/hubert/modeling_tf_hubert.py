@@ -15,7 +15,7 @@
 """ TensorFlow Hubert model."""
 import inspect
 import warnings
-from collections.abs import Mapping
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
