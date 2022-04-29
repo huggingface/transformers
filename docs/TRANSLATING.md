@@ -38,7 +38,11 @@ Here, `LANG-ID` should be one of the ISO 639-1 or ISO 639-2 language codes -- se
 
 The fun part comes - translating the text!
 
-The first thing we recommend is translating the part of the `_toctree.yml` file that corresponds to your doc chapter. This file is used to render the table of contents on the website. The fields you should add are `local` (with the name of the file containing the translation; e.g. `autoclass_tutorial`), and `title` (with the title of the doc in your language; e.g. `Load pretrained instances with an AutoClass`) -- as a reference, here is the `_toctree.yml` for [English](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml):
+The first thing we recommend is translating the part of the `_toctree.yml` file that corresponds to your doc chapter. This file is used to render the table of contents on the website. 
+
+> 🙋 If the `_toctree.yml` file doesn't yet exist for your language, you can create one by copy-pasting from the English version and deleting the sections unrelated to your chapter. Just make sure it exists in the `docs/source/LANG-ID/` directory!
+
+The fields you should add are `local` (with the name of the file containing the translation; e.g. `autoclass_tutorial`), and `title` (with the title of the doc in your language; e.g. `Load pretrained instances with an AutoClass`) -- as a reference, here is the `_toctree.yml` for [English](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml):
 
 ```yaml
 - sections:
@@ -49,9 +53,6 @@ The first thing we recommend is translating the part of the `_toctree.yml` file 
 ```
 
 Once you have translated the `_toctree.yml` file, you can start translating the [MDX](https://mdxjs.com/) files associated with your docs chapter.
-
-> 🙋 If the `_toctree.yml` file doesn't yet exist for your language, you can create one by copy-pasting from the English version and deleting the sections unrelated to your chapter. Just make sure it exists in the `docs/source/LANG-ID/` directory!
-
 
 > 🙋 If you'd like others to help you with the translation, you can either [open an issue](https://github.com/huggingface/transformers/issues) or tag @[espejelomar](https://twitter.com/espejelomar)
  on Twitter to gain some visibility.
