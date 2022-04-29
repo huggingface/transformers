@@ -31,7 +31,7 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -248,9 +248,9 @@ class LayoutLMv3SelfAttention(nn.Module):
     def cogview_attention(self, attention_scores, alpha=32):
         """
         https://arxiv.org/pdf/2105.13290.pdf Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores) Seems the new attention_probs
-        will result in a slower speed and a little bias Can use torch.allclose(standard_attention_probs,
-        cogview_attention_probs, atol=1e-08) for comparison The smaller atol (e.g., 1e-08), the better.
+        (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
+        will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
+        cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
         """
         scaled_attention_scores = attention_scores / alpha
         max_value = scaled_attention_scores.amax(dim=(-1)).unsqueeze(-1)
@@ -323,30 +323,12 @@ class LayoutLMv3SelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Attention with LayoutLMv2->LayoutLMv3
 class LayoutLMv3Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.self = LayoutLMv3SelfAttention(config)
         self.output = LayoutLMv3SelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyperparams and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -361,6 +343,7 @@ class LayoutLMv3Attention(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
+            output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
         )
@@ -369,14 +352,13 @@ class LayoutLMv3Attention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
 class LayoutLMv3Layer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = LayoutLMv3Attention(config)
-        if config.is_decoder or config.add_cross_attention:
-            raise ValueError("Using LayoutLMv3 as a decoder is not supported.")
         self.intermediate = LayoutLMv3Intermediate(config)
         self.output = LayoutLMv3Output(config)
 
@@ -985,7 +967,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         self.num_labels = config.num_labels
 
         self.layoutlmv3 = LayoutLMv3Model(config)
-        # self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
         self.qa_outputs = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
         self.init_weights()
@@ -1006,16 +987,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         bbox=None,
         pixel_values=None,
     ):
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv3(
@@ -1096,12 +1067,6 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         bbox=None,
         pixel_values=None,
     ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv3(
