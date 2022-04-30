@@ -118,7 +118,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 12000)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
@@ -139,7 +139,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_cepstral_mean_and_variance_normalization(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 12000)]
 
         paddings = ["longest", "max_length", "do_not_pad"]
         max_lengths = [None, 16, None]
@@ -161,7 +161,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_cepstral_mean_and_variance_normalization_np(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 12000)]
 
         paddings = ["longest", "max_length", "do_not_pad"]
         max_lengths = [None, 16, None]
@@ -186,7 +186,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_cepstral_mean_and_variance_normalization_trunc_max_length(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 2000)]
         inputs = feature_extractor(
             speech_inputs,
             padding="max_length",
@@ -205,7 +205,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_cepstral_mean_and_variance_normalization_trunc_longest(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 2000)]
         inputs = feature_extractor(
             speech_inputs,
             padding="longest",
@@ -225,7 +225,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # make sure that if max_length < longest -> then pad to max_length
         self.assertEqual(input_features.shape, (3, 4, 24))
 
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 2000)]
         inputs = feature_extractor(
             speech_inputs,
             padding="longest",
