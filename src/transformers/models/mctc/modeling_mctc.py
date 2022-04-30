@@ -311,12 +311,16 @@ class MCTCSelfAttention(nn.Module):
         return x.reshape(*reversed(shape)).permute(*reversed(range(len(shape))))
 
     def relativePositionEmbeddingRotate(self, data):
+        # NOTE: must re-evaluate whether this re-implementation was trly necessary
+        # or the reason why my complete re-haul worked was due to some other part
+        # of the code. Adding this and the reshape fortrain code seems very undesirable.
+
         data = data.permute(0, 2, 3, 1)
 
         b, d0, d1, d2 = data.shape
 
         # data = af::join(0, data, af::constant(0.0, d1, d1, d2, d3, data.type()));
-        data = torch.cat((data, torch.zeros((b, d1, d1, d2))), dim=1)
+        data = torch.cat((data, torch.zeros((b, d1, d1, d2), device=data.device)), dim=1)
 
         # data = af::moddims(data, af::dim4((d0 + d1) * d1, 1, d2, d3));
         # data = data.reshape()
@@ -408,11 +412,7 @@ class MCTCSelfAttention(nn.Module):
         # new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         # context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (
-            (context_layer, attention_scores, attention_probs, value_layer, save_dict)
-            if output_attentions
-            else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -714,12 +714,6 @@ class MCTCEncoder(MCTCPreTrainedModel):
     def __init__(self, config: MCTCConfig):
         super().__init__(config)
 
-        # self.num_conv_layers = config.num_conv_layers
-        # self.conv_kernel = config.conv_kernel
-        # self.conv_stride = config.conv_stride
-        # self.conv_dropout = config.conv_dropout
-        # self.conv_glu_dim = config.conv_glu_dim
-
         self.hidden_dropout_prob = config.hidden_dropout_prob
 
         # self.layer_norm = nn.LayerNorm(config.input_feat_per_channel)
@@ -781,6 +775,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
+
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
 
