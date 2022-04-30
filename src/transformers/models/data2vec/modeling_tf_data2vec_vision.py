@@ -534,44 +534,41 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
 # Taken and modified from here:
 # https://github.com/leondgarse/keras_cv_attention_models/blob/main/keras_cv_attention_models/beit/beit.py#L28
 class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
-    def __init__(self, config: Data2VecVisionConfig, window_size: tuple, **kwargs):
+    def __init__(self, config: Data2VecVisionConfig, window_size: tuple, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
 
         self.window_size = window_size
-        # +3 for `cls_token_pos_len`
-        # `window_size` can be something like (14, 14)
+        # +3 for cls_token_pos_len
+        # window_size can be something like (14, 14)
         self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+
+        self.relative_position_index = self.get_position_index()
 
     def build(self, input_shape):
         self.relative_position_bias_table = self.add_weight(
-            shape=(self.config.num_attention_heads, self.num_relative_distance),
+            shape=(self.num_relative_distance, self.config.num_attention_heads),
             initializer="zeros",
             trainable=True,
             name="relative_position_bias_table",
-        )  # nH, 2*Wh-1 * 2*Ww-1
+        )  # [2*Wh-1 * 2*Ww-1, nH]
         # cls to token & token 2 cls & cls to cls
 
-        self.relative_position_index = self.add_weight(
-            shape=(
-                self.window_size[0] * self.window_size[1] + 1,
-                self.window_size[0] * self.window_size[1] + 1,
-            ),  # [Wh*Ww + 1, Wh*Ww + 1]
-            initializer="ones",
-            trainable=False,
-            name="relative_position_index",
-        )
-        self.relative_position_index.assign(self.get_relative_position_index())
+        super().build(input_shape)
 
-    def get_relative_position_index(self) -> tf.Tensor:
+    def get_position_index(self):
         # get pair-wise relative position index for each token inside the window
-        xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[0]))
-        coords = tf.stack([yy, xx], axis=-1)  # [Wh, Ww, 2]
-        coords_flatten = tf.reshape(coords, [-1, 2])  # [Wh*Ww, 2]
-        relative_coords = coords_flatten[:, None, :] - coords_flatten[None, :, :]  # [Wh*Ww, Wh*Ww, 2]
-        xx = (relative_coords[:, :, 0] + self.window_size[1] - 1) * (2 * self.window_size[0] - 1)
-        yy = relative_coords[:, :, 1] + self.window_size[0] - 1
+        xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[1]))
+        coords = tf.stack([yy, xx], axis=0)  # [2, Wh, Ww]
+        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Wh*Ww]
+
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Wh*Ww, Wh*Ww]
+        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Wh*Ww, Wh*Ww, 2]
+
+        xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
+        yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
+
         relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Wh*Ww, Wh*Ww]
 
         top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
@@ -588,8 +585,8 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
-        relative_position_bias = tf.gather(self.relative_position_bias_table, self.relative_position_index, axis=1)
-        return relative_position_bias
+        relative_position_bias = tf.gather(self.relative_position_bias_table, self.relative_position_index, axis=0)
+        return tf.transpose(relative_position_bias, [2, 0, 1])
 
 
 class TFData2VecVisionEncoder(tf.keras.layers.Layer):
@@ -610,7 +607,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
                 config,
                 window_size=window_size if config.use_relative_position_bias else None,
                 drop_path_rate=dpr[i],
-                name=f"layer.{i}",
+                name=f"layer_._{i}",
             )
             for i in range(config.num_hidden_layers)
         ]
@@ -779,6 +776,7 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     config_class = Data2VecVisionConfig
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
+    _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -858,7 +856,12 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
             more detail.
         
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
+
+        training (`bool`, *optional*, defaults to `False``):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
