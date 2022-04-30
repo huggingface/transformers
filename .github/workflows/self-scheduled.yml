@@ -7,6 +7,9 @@ name: Self-hosted runner (scheduled)
 # `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
 
 on:
+  push:
+    branches:
+      - move_test_model_folders
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
