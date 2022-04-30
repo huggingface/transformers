@@ -15,3 +15,7 @@
 - sections:
   - local: multilingual
     title: Modelos multilingües para inferencia
+- sections:
+  - local: language_modeling
+    title: Modelado de lenguaje
+  title: Fine-tuning para tareas
