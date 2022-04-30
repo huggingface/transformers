@@ -108,8 +108,7 @@ class FeatureExtractionSavingTestMixin:
         with tempfile.TemporaryDirectory() as tmpdirname:
             feat_extract_first.save_pretrained(tmpdirname)
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
-        print("feat_extract_first.to_dict()", feat_extract_first.to_dict())
-        print("feat_extract_second.to_dict()", feat_extract_second.to_dict())
+
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())
 
     def test_init_without_params(self):

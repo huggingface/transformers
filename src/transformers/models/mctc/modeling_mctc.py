@@ -26,7 +26,6 @@ from packaging import version
 from torch import nn
 from torch.nn.parameter import Parameter
 
-
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -179,7 +178,7 @@ class Conv1dSubsampler(nn.Module):
         else:
             self.mid_channels = None
 
-        self.out_channels = config.hidden_size * 2 # considering GLU halving
+        self.out_channels = config.hidden_size * 2  # considering GLU halving
         self.kernel_size = config.conv_kernel
         self.stride = config.conv_stride
 
@@ -197,8 +196,8 @@ class Conv1dSubsampler(nn.Module):
     def forward(self, input_features):
         # input_features == B x T x Features
         # -> hidden_states == B x F (channels) x T
-        padding = sum([size//2 for size in self.kernel_size]) # (7, 7) -> (3, 3)
-        input_features = torch.nn.functional.pad(input_features, (0,0, padding, padding), "constant", 0)
+        padding = sum([size // 2 for size in self.kernel_size])  # (7, 7) -> (3, 3)
+        input_features = torch.nn.functional.pad(input_features, (0, 0, padding, padding), "constant", 0)
         hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x F x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
@@ -315,7 +314,7 @@ class MCTCSelfAttention(nn.Module):
         data = data.permute(0, 2, 3, 1)
 
         b, d0, d1, d2 = data.shape
-        
+
         # data = af::join(0, data, af::constant(0.0, d1, d1, d2, d3, data.type()));
         data = torch.cat((data, torch.zeros((b, d1, d1, d2))), dim=1)
 
@@ -324,15 +323,14 @@ class MCTCSelfAttention(nn.Module):
         data = self.reshape_fortran(data, [b, (d0 + d1) * d1, 1, d2])
         # data = data.numpy().reshape((d0 + d1) * d1, 1, d2,order='F')
 
-
         # data = data.rows(0, (d1 + d0 - 1) * d1 - 1);
-        data = data[:, :(d1 + d0 - 1) * d1]
+        data = data[:, : (d1 + d0 - 1) * d1]
 
         # data = af::moddims(data, af::dim4(d0 + d1 - 1, d1, d2, d3));
         data = self.reshape_fortran(data, [b, d0 + d1 - 1, d1, d2])
 
         n = d0 // 2
-        data = data[:, n:n+d1].transpose(1, 2)
+        data = data[:, n : n + d1].transpose(1, 2)
 
         return data.permute(0, 3, 1, 2)
 
@@ -348,7 +346,6 @@ class MCTCSelfAttention(nn.Module):
     ):
         mixed_query_layer = self.query(hidden_states)
         mixed_query_layer = mixed_query_layer / math.sqrt(self.attention_head_size)
-
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -375,7 +372,6 @@ class MCTCSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         save_dict = {}
@@ -383,7 +379,9 @@ class MCTCSelfAttention(nn.Module):
 
         if self.position_embedding_type == "relative_key":
             positional_embedding = self.distance_embedding.weight
-            relative_position_scores = torch.einsum('lh, bche -> bcle', positional_embedding, query_layer.transpose(2,3))
+            relative_position_scores = torch.einsum(
+                "lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3)
+            )
 
             relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
 
@@ -395,32 +393,39 @@ class MCTCSelfAttention(nn.Module):
 
         # Normalize the attention scores to probabilities.
         # ====> auto attn = dropout(softmax(scores, 1), pDropout);
-        
+
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
- 
+
         # ====> auto result = matmul(attn.as(v.type()), v);
         context_layer = torch.matmul(attention_probs, value_layer)
- 
+
         context_layer = context_layer.permute(0, 2, 1, 3).flatten(start_dim=-2)
         # new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         # context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_scores, attention_probs, value_layer, save_dict) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_scores, attention_probs, value_layer, save_dict)
+            if output_attentions
+            else (context_layer,)
+        )
 
         return outputs
+
 
 class MCTCLayerNorm(nn.Module):
     def __init__(self):
         super().__init__()
         self.singleton_weight = Parameter(torch.ones(1))
         self.singleton_bias = Parameter(torch.zeros(1))
+
     def forward(self, hidden_states):
         return (hidden_states * self.singleton_weight) + self.singleton_bias
+
 
 class MCTCSelfOutput(nn.Module):
     def __init__(self, config):
@@ -488,7 +493,7 @@ class MCTCAttention(nn.Module):
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         # outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        
+
         # attention_output = self.output(self_outputs[0])
         outputs = (attention_output,) + self_outputs[1:]  # add at
 
@@ -503,7 +508,7 @@ class MCTCIntermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        
+
         # self.LayerNorm = MCTCLayerNorm()
 
     def forward(self, hidden_states):
@@ -740,7 +745,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         input_features = self.layer_norm(input_features)
-        
+
         inputs_embeds = self.conv(input_features)
 
         # inputs_embeds = self.embed_scale * inputs_embeds

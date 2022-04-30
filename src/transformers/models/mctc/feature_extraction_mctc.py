@@ -18,9 +18,9 @@ Feature extractor class for MCTC
 
 from typing import List, Optional, Union
 
+import numpy as np
 import torch
 import torchaudio
-import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -36,10 +36,10 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
     Constructs a mCTC feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods. This code
-    has been adapted from Flashlight's C++ code. For more information about the implementation, one can refer to this
-    [notebook](https://colab.research.google.com/drive/1GLtINkkhzms-IsdcGy_-tVCkv0qNF-Gt#scrollTo=pMCRGMmUC_an) that takes the user
-    step-by-step in the implementation.
+    most of the main methods. Users should refer to this superclass for more information regarding those methods. This
+    code has been adapted from Flashlight's C++ code. For more information about the implementation, one can refer to
+    this [notebook](https://colab.research.google.com/drive/1GLtINkkhzms-IsdcGy_-tVCkv0qNF-Gt#scrollTo=pMCRGMmUC_an)
+    that takes the user step-by-step in the implementation.
 
     Args:
         feature_size (`int`, defaults to 80):
@@ -102,15 +102,10 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
 
-        
-        self.n_fft = 2**int(np.ceil(np.log2(self.sample_size))) 
+        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
         self.K = (self.n_fft // 2) + 1
-        
-       
 
-
-
-    @staticmethod  
+    @staticmethod
     def _num_frames_calc(in_size, frame_size, frame_stride):
         return int(1 + np.floor((in_size - frame_size) * 1 / frame_stride))
 
@@ -124,26 +119,30 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             ws = f * sample_stride
             we = f * sample_stride + window_length
             frames[s:e] = scale * one_waveform[ws:we]
-            
+
         return frames
 
     @staticmethod
     def _apply_preemphasis_inplace(frames, window_length, preemphasis_coeff):
         if frames.size % window_length != 0:
-            raise ValueError(f'`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}.')
-        
+            raise ValueError(
+                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}."
+            )
+
         n_frames = frames.size // window_length
         for n in range(n_frames, 0, -1):
-            s = (n - 1) * window_length # start of current frame
+            s = (n - 1) * window_length  # start of current frame
             e = n * window_length - 1  # end of current frame
-            frames[s+1:e+1] -= preemphasis_coeff * frames[s:e]
-            frames[s] *= (1 - preemphasis_coeff)
+            frames[s + 1 : e + 1] -= preemphasis_coeff * frames[s:e]
+            frames[s] *= 1 - preemphasis_coeff
 
-    @staticmethod    
+    @staticmethod
     def _windowing(frames, window_length, window):
         if frames.size % window_length != 0:
-            raise ValueError(f'`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}.')
-        
+            raise ValueError(
+                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}."
+            )
+
         shaped = frames.reshape(-1, window_length)
         shaped = window * shaped
         return shaped
@@ -155,8 +154,8 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         for f in range(n_frames):
             begin = f * n_samples
 
-            inwards_buffer = frames[begin:begin+n_samples]
-            inwards_buffer = np.pad(inwards_buffer, (0, n_fft-n_samples), 'constant')
+            inwards_buffer = frames[begin : begin + n_samples]
+            inwards_buffer = np.pad(inwards_buffer, (0, n_fft - n_samples), "constant")
             out = np.fft.rfft(inwards_buffer)
 
             dft[f] = np.abs(out[:K])
@@ -167,31 +166,29 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         self,
         one_waveform: np.array,
     ) -> np.ndarray:
-        '''
+        """
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
-        '''
+        """
         if self.win_function == "hamming_window":
             window = torch.hamming_window(
-                window_length=self.sample_size,
-                periodic=False,
-                alpha=0.54,
-                beta=0.46
+                window_length=self.sample_size, periodic=False, alpha=0.54, beta=0.46
             ).numpy()
         else:
             window = getattr(torch, self.win_function)().numpy()
 
         fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.K, 
-            f_min=0.0, # change this to zero 
-            f_max=self.sampling_rate / 2.0, 
-            n_mels=self.feature_size, 
-            sample_rate=self.sampling_rate, 
+            n_freqs=self.K,
+            f_min=0.0,  # change this to zero
+            f_max=self.sampling_rate / 2.0,
+            n_mels=self.feature_size,
+            sample_rate=self.sampling_rate,
         ).numpy()
-
 
         n_frames = self._num_frames_calc(one_waveform.size, self.sample_size, self.sample_stride)
 
-        frames = self._frame_signal(one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride)
+        frames = self._frame_signal(
+            one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride
+        )
 
         self._apply_preemphasis_inplace(frames, self.sample_size, self.preemphasis_coeff)
 
@@ -210,7 +207,6 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
 
         return msfc_features
 
-    
     def _normalize_one(self, x, input_length, padding_value):
         # make sure we normalize float32 arrays
         if self.normalize_means:
@@ -232,11 +228,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
     ) -> List[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
-        return [
-            self._normalize_one(x, n, self.padding_value)
-            for x, n in zip(input_features, lengths)
-        ]
-
+        return [self._normalize_one(x, n, self.padding_value) for x, n in zip(input_features, lengths)]
 
     def __call__(
         self,
@@ -255,8 +247,8 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
 
         Args:
             raw_speech (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[torch.Tensor]`, `List[np.ndarray]`, `List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a tensor, a numpy array, a list of float values, 
-                a list of tensors, a list of numpy arrays or a list of list of float values.
+                The sequence or batch of sequences to be padded. Each sequence can be a tensor, a numpy array, a list
+                of float values, a list of tensors, a list of numpy arrays or a list of list of float values.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -322,14 +314,9 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-
         # extract fbank features
         features = [self._extract_mfsc_features(one_waveform) for one_waveform in raw_speech]
 
-        print("is_batched", is_batched)
-        print("features", len(features))
-        print("raw_speech", len(raw_speech))
-        
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 
@@ -348,7 +335,6 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
-
 
         if self.normalize_means or self.normalize_vars:
             attention_mask = (

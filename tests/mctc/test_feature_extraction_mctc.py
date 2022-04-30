@@ -111,9 +111,6 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.feat_extract_tester = MCTCFeatureExtractionTester(self)
 
     def _check_zero_mean_unit_variance(self, input_vector):
-        print(input_vector.shape)
-        print(np.mean(input_vector))
-        print(np.abs(np.var(input_vector)))
         self.assertTrue(np.all(np.mean(input_vector) < 1e-3))
         self.assertTrue(np.all(np.abs(np.var(input_vector) - 1) < 1e-3))
 
@@ -147,7 +144,6 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         paddings = ["longest", "max_length", "do_not_pad"]
         max_lengths = [None, 16, None]
         for max_length, padding in zip(max_lengths, paddings):
-            print("speech_inputs", len(speech_inputs))
             inputs = feature_extractor(
                 speech_inputs,
                 padding=padding,
