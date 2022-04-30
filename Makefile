@@ -39,6 +39,7 @@ repo-consistency:
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/check_config_docstrings.py
 	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
