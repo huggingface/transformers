@@ -22,8 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .file_utils import is_datasets_available
-from .utils import logging
+from .utils import is_datasets_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -44,9 +43,9 @@ if _has_comet:
     except (ImportError, ValueError):
         _has_comet = False
 
-from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
+from .utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 
 
 # Integration functions:

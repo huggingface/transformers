@@ -21,7 +21,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -39,8 +38,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
 
@@ -98,7 +97,7 @@ class TFDebertaV2XSoftmax(tf.keras.layers.Layer):
 
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
         output = tf.where(rmask, float("-inf"), inputs)
-        output = tf.nn.softmax(output, self.axis)
+        output = stable_softmax(output, self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
 
@@ -604,14 +603,14 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             self.pos_dropout = TFDebertaV2StableDropout(config.hidden_dropout_prob, name="pos_dropout")
 
             if not self.share_att_key:
-                if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+                if "c2p" in self.pos_att_type:
                     self.pos_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
                         name="pos_proj",
                         use_bias=True,
                     )
-                if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+                if "p2c" in self.pos_att_type:
                     self.pos_q_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
@@ -678,8 +677,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         if "c2p" in self.pos_att_type:
             scale_factor += 1
         if "p2c" in self.pos_att_type:
-            scale_factor += 1
-        if "p2p" in self.pos_att_type:
             scale_factor += 1
         scale = tf.math.sqrt(tf.cast(shape_list(query_layer)[-1] * scale_factor, tf.float32))
         attention_scores = tf.matmul(query_layer, tf.transpose(key_layer, [0, 2, 1])) / scale
@@ -749,12 +746,12 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                 [shape_list(query_layer)[0] // self.num_attention_heads, 1, 1],
             )
         else:
-            if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "c2p" in self.pos_att_type:
                 pos_key_layer = tf.tile(
                     self.transpose_for_scores(self.pos_key_proj(rel_embeddings), self.num_attention_heads),
                     [shape_list(query_layer)[0] // self.num_attention_heads, 1, 1],
                 )  # .split(self.all_head_size, dim=-1)
-            if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "p2c" in self.pos_att_type:
                 pos_query_layer = tf.tile(
                     self.transpose_for_scores(self.pos_query_proj(rel_embeddings), self.num_attention_heads),
                     [shape_list(query_layer)[0] // self.num_attention_heads, 1, 1],
@@ -777,7 +774,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             score += c2p_att / scale
 
         # position->content
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+        if "p2c" in self.pos_att_type:
             scale = tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, tf.float32))
             if shape_list(key_layer)[-2] != shape_list(query_layer)[-2]:
                 r_pos = build_relative_position(
@@ -792,7 +789,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
 
             p2c_pos = tf.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
 
-        if "p2c" in self.pos_att_type:
             p2c_att = tf.matmul(key_layer, tf.transpose(pos_query_layer, [0, 2, 1]))
             p2c_att = tf.transpose(
                 take_along_axis(
@@ -806,26 +802,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                 [0, 2, 1],
             )
             score += p2c_att / scale
-
-        # position->position
-        if "p2p" in self.pos_att_type:
-            pos_query = pos_query_layer[:, :, att_span:, :]
-            p2p_att = tf.matmul(pos_query, tf.transpose(pos_key_layer, [0, 2, 1]))
-            p2p_att = tf.broadcast_to(shape_list(query_layer)[:2] + shape_list(p2p_att)[2:])
-            p2p_att = take_along_axis(
-                p2p_att,
-                tf.broadcast_to(
-                    c2p_pos,
-                    [
-                        shape_list(query_layer)[0],
-                        shape_list(query_layer)[1],
-                        shape_list(query_layer)[2],
-                        shape_list(relative_pos)[-1],
-                    ],
-                ),
-                -1,
-            )
-            score += p2p_att
 
         return score
 
@@ -1052,7 +1028,6 @@ class TFDebertaV2MainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1188,7 +1163,7 @@ DEBERTA_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~transformers.file_utils.ModelOutput``] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput``] instead of a plain tuple.
 """
 
 
@@ -1222,7 +1197,6 @@ class TFDebertaV2Model(TFDebertaV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         outputs = self.deberta(
             input_ids=input_ids,
@@ -1283,7 +1257,6 @@ class TFDebertaV2ForMaskedLM(TFDebertaV2PreTrainedModel, TFMaskedLanguageModelin
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1370,7 +1343,6 @@ class TFDebertaV2ForSequenceClassification(TFDebertaV2PreTrainedModel, TFSequenc
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1454,7 +1426,6 @@ class TFDebertaV2ForTokenClassification(TFDebertaV2PreTrainedModel, TFTokenClass
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1534,7 +1505,6 @@ class TFDebertaV2ForQuestionAnswering(TFDebertaV2PreTrainedModel, TFQuestionAnsw
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):

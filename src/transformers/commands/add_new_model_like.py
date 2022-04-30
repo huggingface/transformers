@@ -25,8 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
 
-from ..file_utils import is_flax_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
 
@@ -518,7 +517,7 @@ def filter_framework_files(
         else:
             framework_to_file["pt"] = f
 
-    return [framework_to_file[f] for f in frameworks] + others
+    return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
 
 
 def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
@@ -542,7 +541,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
 
-    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.mdx"
 
     # Basic pattern for test files
     test_files = [
@@ -785,7 +784,7 @@ def clean_frameworks_in_init(
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
-        # Remove the import from file_utils
+        # Remove the import from utils
         elif re_is_xxx_available.search(lines[idx]) is not None:
             line = lines[idx]
             for framework in to_remove:
@@ -1257,7 +1256,7 @@ def create_new_model_like(
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
     # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
 
     # 6. Warn the user for duplicate patterns

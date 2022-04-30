@@ -48,13 +48,12 @@ from transformers import (
     TrainingArguments,
     is_tensorboard_available,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.18.0.dev0")
+check_min_version("4.19.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -338,7 +337,11 @@ def main():
     # download the dataset.
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset("glue", data_args.task_name)
+        raw_datasets = load_dataset(
+            "glue",
+            data_args.task_name,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         # Loading the dataset from local csv or json file.
         data_files = {}
@@ -347,7 +350,11 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
         extension = (data_args.train_file if data_args.train_file is not None else data_args.valid_file).split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -373,12 +380,21 @@ def main():
 
     # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, num_labels=num_labels, finetuning_task=data_args.task_name
+        model_args.model_name_or_path,
+        num_labels=num_labels,
+        finetuning_task=data_args.task_name,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, use_fast=not model_args.use_slow_tokenizer
+        model_args.model_name_or_path,
+        use_fast=not model_args.use_slow_tokenizer,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
-    model = FlaxAutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, config=config)
+    model = FlaxAutoModelForSequenceClassification.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
 
     # Preprocessing the datasets
     if data_args.task_name is not None:
@@ -576,7 +592,6 @@ def main():
 
             if (cur_step % training_args.eval_steps == 0 or cur_step % steps_per_epoch == 0) and cur_step > 0:
 
-                eval_metrics = {}
                 # evaluate
                 eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(
@@ -607,7 +622,7 @@ def main():
                 logger.info(f"Step... ({cur_step}/{total_steps} | Eval metrics: {eval_metric})")
 
                 if has_tensorboard and jax.process_index() == 0:
-                    write_eval_metric(summary_writer, eval_metrics, cur_step)
+                    write_eval_metric(summary_writer, eval_metric, cur_step)
 
             if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
                 # save checkpoint after each epoch and push checkpoint to the hub

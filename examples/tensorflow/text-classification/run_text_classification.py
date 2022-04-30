@@ -37,7 +37,7 @@ from transformers import (
     TFTrainingArguments,
     set_seed,
 )
-from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
+from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
@@ -236,7 +236,12 @@ def main():
 
     if data_args.input_file_extension == "csv":
         # Loading a dataset from local csv files
-        datasets = load_dataset("csv", data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            "csv",
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         # Loading a dataset from local json files
         datasets = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)

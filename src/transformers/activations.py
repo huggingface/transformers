@@ -152,19 +152,19 @@ class LinearActivation(nn.Module):
 
 
 ACT2FN = {
+    "gelu": GELUActivation(),
+    "gelu_10": ClippedGELUActivation(-10, 10),
+    "gelu_fast": FastGELUActivation(),
+    "gelu_new": NewGELUActivation(),
+    "gelu_python": GELUActivation(use_gelu_python=True),
+    "linear": LinearActivation(),
+    "mish": MishActivation(),
+    "quick_gelu": QuickGELUActivation(),
     "relu": nn.ReLU(),
+    "sigmoid": nn.Sigmoid(),
     "silu": SiLUActivation(),
     "swish": SiLUActivation(),
-    "gelu": GELUActivation(),
     "tanh": nn.Tanh(),
-    "gelu_python": GELUActivation(use_gelu_python=True),
-    "gelu_new": NewGELUActivation(),
-    "gelu_fast": FastGELUActivation(),
-    "quick_gelu": QuickGELUActivation(),
-    "gelu_10": ClippedGELUActivation(-10, 10),
-    "mish": MishActivation(),
-    "linear": LinearActivation(),
-    "sigmoid": nn.Sigmoid(),
 }
 
 

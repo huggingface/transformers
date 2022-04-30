@@ -19,7 +19,7 @@ from transformers import is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -75,7 +75,7 @@ class TFFlaubertModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2, dtype=tf.float32)
+        input_mask = random_attention_mask([self.batch_size, self.seq_length], dtype=tf.float32)
 
         input_lengths = None
         if self.use_input_lengths:

@@ -25,10 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_trocr import TrOCRConfig
 
 
@@ -598,8 +597,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -610,7 +609,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -885,20 +884,56 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import VisionEncoderDecoderModel, TrOCRForCausalLM, ViTModel, TrOCRConfig, ViTConfig
+        >>> from transformers import (
+        ...     TrOCRConfig,
+        ...     TrOCRProcessor,
+        ...     TrOCRForCausalLM,
+        ...     ViTConfig,
+        ...     ViTModel,
+        ...     VisionEncoderDecoderModel,
+        ... )
+        >>> import requests
+        >>> from PIL import Image
 
+        >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel
+        >>> # init vision2text model with random weights
         >>> encoder = ViTModel(ViTConfig())
         >>> decoder = TrOCRForCausalLM(TrOCRConfig())
-        # init vision2text model
-
         >>> model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+        >>> # If you want to start from the pretrained model, load the checkpoint with `VisionEncoderDecoderModel`
+        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+
+        >>> # load image from the IAM dataset
+        >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
+
+        >>> # training
+        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
+        >>> model.config.vocab_size = model.config.decoder.vocab_size
+
+        >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
+        >>> outputs = model(pixel_values, labels=labels)
+        >>> loss = outputs.loss
+        >>> round(loss.item(), 2)
+        5.30
+
+        >>> # inference
+        >>> generated_ids = model.generate(pixel_values)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> generated_text
+        'industry, " Mr. Brown commented icily. " Let us have a'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

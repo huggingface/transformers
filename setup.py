@@ -13,12 +13,15 @@
 # limitations under the License.
 
 """
-Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
+Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
 To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
+   
+   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
@@ -26,10 +29,10 @@ To create the package for pypi.
 
 4. Commit these changes with the message: "Release: <VERSION>" and push.
 
-5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
+5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin master
+   Push the tag to git: git push --tags origin main
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -60,7 +63,7 @@ To create the package for pypi.
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
-    you need to go back to master before executing this.
+    you need to go back to main before executing this.
 """
 
 import os
@@ -95,7 +98,7 @@ _deps = [
     "Pillow",
     "black~=22.0",
     "codecarbon==1.2.0",
-    "cookiecutter==1.7.2",
+    "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.0",
@@ -108,12 +111,13 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
+    "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8,!=0.3.2",
-    "jaxlib>=0.1.65",
+    "jax>=0.2.8,!=0.3.2,<=0.3.6",
+    "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "nltk",
     "numpy>=1.17",
@@ -150,7 +154,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3",
+    "tokenizers>=0.11.1,!=0.11.3,<0.13",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -283,12 +287,15 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
+
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -304,7 +311,7 @@ extras["all"] = (
 )
 
 # Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = []
+extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
@@ -383,7 +390,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

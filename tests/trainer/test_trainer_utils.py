@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
@@ -97,9 +97,9 @@ class TrainerUtilsTest(unittest.TestCase):
             gatherer.add_arrays([predictions[indices], [predictions[indices], predictions[indices]]])
         result = gatherer.finalize()
         self.assertTrue(isinstance(result, list))
-        self.assertTrue(len(result), 2)
+        self.assertEqual(len(result), 2)
         self.assertTrue(isinstance(result[1], list))
-        self.assertTrue(len(result[1]), 2)
+        self.assertEqual(len(result[1]), 2)
         self.assertTrue(np.array_equal(result[0], predictions))
         self.assertTrue(np.array_equal(result[1][0], predictions))
         self.assertTrue(np.array_equal(result[1][1], predictions))
