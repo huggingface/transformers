@@ -41,6 +41,7 @@ class RetriBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = RetriBertTokenizerFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
+    from_pretrained_filter = filter_non_english
 
     def setUp(self):
         super().setUp()
