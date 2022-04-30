@@ -334,7 +334,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=Data2VecTextOnnxConfig,
         ),
-         "xlnet": supported_features_mapping(
+        "xlnet": supported_features_mapping(
             "default",
             "masked-lm",
             "sequence-classification",
@@ -343,7 +343,6 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=XLNetOnnxConfig,
         ),
-        
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
