@@ -15,8 +15,11 @@
 # limitations under the License.
 """ XLNet configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
 import warnings
 
+from ...onnx import OnnxConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -239,3 +242,22 @@ class XLNetConfig(PretrainedConfig):
         raise NotImplementedError(
             f"The model {self.model_type} is one of the few models that has no sequence length limit."
         )
+
+class XLNetOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis)
+            ]
+        )
+    
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-3

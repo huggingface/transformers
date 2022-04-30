@@ -28,7 +28,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig", "XLNetOnnxConfig"],
 }
 
 if is_sentencepiece_available():
@@ -66,7 +66,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig, XLNetOnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_xlnet import XLNetTokenizer

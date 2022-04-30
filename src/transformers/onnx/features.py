@@ -28,6 +28,7 @@ from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..models.xlnet import XLNetOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
@@ -333,6 +334,16 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=Data2VecTextOnnxConfig,
         ),
+         "xlnet": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=XLNetOnnxConfig,
+        ),
+        
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))

@@ -185,6 +185,7 @@ PYTORCH_EXPORT_MODELS = {
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
+    ("xlnet", "xlnet-base-cased"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
