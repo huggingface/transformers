@@ -34,7 +34,7 @@ from ..test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class RetriBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    """ This is a duplicate of BertTokenizationTest, since RetriBertTokenizer is identical to BertTokenizer. """
+    """This is a duplicate of BertTokenizationTest, since RetriBertTokenizer is identical to BertTokenizer."""
 
     tokenizer_class = RetriBertTokenizer
     test_slow_tokenizer = True
