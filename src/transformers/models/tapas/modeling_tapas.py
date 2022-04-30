@@ -1068,7 +1068,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         ... )
         >>> labels = tokenizer(
         ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="pt"
-        >>> )["input_ids"]
+        ... )["input_ids"]
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
