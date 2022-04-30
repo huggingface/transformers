@@ -515,7 +515,7 @@ def main():
         model.eval()
         samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
-            with torch.no_grad(): 
+            with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
             predictions, references = accelerator.gather((predictions, batch["labels"]))
