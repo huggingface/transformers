@@ -108,6 +108,11 @@ Make sure to put your new file under the proper section. It's unlikely to go in 
 depending on the intended targets (beginners, more advanced users or researchers) it should go in section two, three or
 four.
 
+### Translating
+
+When translating, refer to the guide at [./TRANSLATING.md](https://github.com/huggingface/transformers/blob/main/docs/TRANSLATING.md).
+
+
 ### Adding a new model
 
 When adding a new model:
