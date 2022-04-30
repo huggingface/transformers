@@ -26,9 +26,9 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import PerceiverConfig
-from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -82,6 +82,8 @@ class PerceiverModelTester:
         num_self_attends_per_block=2,
         num_self_attention_heads=1,
         num_cross_attention_heads=1,
+        self_attention_widening_factor=4,
+        cross_attention_widening_factor=4,
         is_training=True,
         use_input_mask=True,
         use_labels=True,
@@ -109,6 +111,8 @@ class PerceiverModelTester:
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
         self.num_cross_attention_heads = num_cross_attention_heads
+        self.self_attention_widening_factor = self_attention_widening_factor
+        self.cross_attention_widening_factor = cross_attention_widening_factor
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
@@ -139,7 +143,7 @@ class PerceiverModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
         if model_class is None or model_class.__name__ == "PerceiverModel":
-            inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], self.vocab_size)
+            inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], scale=1.0)
             return config, inputs, input_mask, sequence_labels, token_labels
         elif model_class.__name__ in ["PerceiverForMaskedLM", "PerceiverForSequenceClassification"]:
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -174,10 +178,14 @@ class PerceiverModelTester:
         return PerceiverConfig(
             num_latents=self.num_latents,
             d_latents=self.d_latents,
+            qk_channels=self.d_latents,
+            v_channels=self.d_latents,
             num_blocks=self.num_blocks,
             num_self_attends_per_block=self.num_self_attends_per_block,
             num_self_attention_heads=self.num_self_attention_heads,
             num_cross_attention_heads=self.num_cross_attention_heads,
+            self_attention_widening_factor=self.self_attention_widening_factor,
+            cross_attention_widening_factor=self.cross_attention_widening_factor,
             vocab_size=self.vocab_size,
             hidden_act=self.hidden_act,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,

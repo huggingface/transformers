@@ -4,18 +4,28 @@ from typing import Callable, Dict, Optional, Tuple, Type, Union
 from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
+from ..models.beit import BeitOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.big_bird import BigBirdOnnxConfig
+from ..models.blenderbot import BlenderbotOnnxConfig
+from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
+from ..models.convbert import ConvBertOnnxConfig
+from ..models.data2vec import Data2VecTextOnnxConfig
+from ..models.deit import DeiTOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
+from ..models.flaubert import FlaubertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.gptj import GPTJOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
+from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
@@ -30,6 +40,7 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
@@ -95,6 +106,7 @@ class FeaturesManager:
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -114,7 +126,7 @@ class FeaturesManager:
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=AlbertOnnxConfig,
@@ -146,16 +158,26 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=BertOnnxConfig,
+        ),
+        "big-bird": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=BigBirdOnnxConfig,
         ),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=IBertOnnxConfig,
@@ -165,19 +187,38 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
+        ),
+        "convbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ConvBertOnnxConfig,
         ),
         "distilbert": supported_features_mapping(
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
+        ),
+        "flaubert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=FlaubertOnnxConfig,
         ),
         "marian": supported_features_mapping(
             "default",
@@ -196,7 +237,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=RobertaOnnxConfig,
@@ -209,7 +250,7 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=XLMRobertaOnnxConfig,
@@ -222,6 +263,15 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
+        ),
+        "gptj": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "question-answering",
+            "sequence-classification",
+            onnx_config_cls=GPTJOnnxConfig,
         ),
         "gpt-neo": supported_features_mapping(
             "default",
@@ -243,11 +293,58 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
-        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
+        "vit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
+        ),
+        "beit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=BeitOnnxConfig
+        ),
+        "deit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=DeiTOnnxConfig
+        ),
+        "blenderbot": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotOnnxConfig,
+        ),
+        "blenderbot-small": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
+        "data2vec-text": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=Data2VecTextOnnxConfig,
+        ),
+        "roformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "multiple-choice",
+            "question-answering",
+            "token-classification",
+            onnx_config_cls=RoFormerOnnxConfig,
+        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
@@ -324,8 +421,9 @@ class FeaturesManager:
             )
         return task_to_automodel[task]
 
+    @staticmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = "pt"
+        feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -344,12 +442,12 @@ class FeaturesManager:
         """
         model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
         try:
-            model = model_class.from_pretrained(model)
+            model = model_class.from_pretrained(model, cache_dir=cache_dir)
         except OSError:
             if framework == "pt":
-                model = model_class.from_pretrained(model, from_tf=True)
+                model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
             else:
-                model = model_class.from_pretrained(model, from_pt=True)
+                model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir)
         return model
 
     @staticmethod

@@ -23,15 +23,15 @@ from difflib import get_close_matches
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
-from transformers.file_utils import ENV_VARS_TRUE_VALUES
 from transformers.models.auto import get_values
+from transformers.utils import ENV_VARS_TRUE_VALUES
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source"
+PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
@@ -45,6 +45,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "PLBartEncoder",  # Building part of bigger (tested) model.
     "PLBartDecoder",  # Building part of bigger (tested) model.
@@ -96,6 +97,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
+    "decision_transformer/test_modeling_decision_transformer.py",
     "camembert/test_modeling_camembert.py",
     "mt5/test_modeling_flax_mt5.py",
     "mbart/test_modeling_mbart.py",
@@ -109,12 +111,16 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "xlm_roberta/test_modeling_xlm_roberta.py",
     "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
+    "decision_transformer/test_modeling_decision_transformer.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "DPTForDepthEstimation",
+    "DecisionTransformerGPT2Model",
+    "GLPNForDepthEstimation",
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
@@ -181,6 +187,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     [
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
+        ("data2vec-vision", "data2vec"),
     ]
 )
 
@@ -355,7 +362,7 @@ def check_models_are_tested(module, test_file):
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
     if tested_models is None:
-        if test_file in TEST_FILES_WITH_NO_COMMON_TESTS:
+        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
             f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
@@ -387,9 +394,9 @@ def check_all_models_are_tested():
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
             test_file = test_file[0]
-        new_failures = check_models_are_tested(module, test_file)
-        if new_failures is not None:
-            failures += new_failures
+            new_failures = check_models_are_tested(module, test_file)
+            if new_failures is not None:
+                failures += new_failures
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 

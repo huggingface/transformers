@@ -20,7 +20,7 @@ from transformers import is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -79,7 +79,7 @@ class TFLongformerModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -413,7 +413,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertTrue(shape_list(hidden_states), [1, 8, 4])
+        self.assertEqual(shape_list(hidden_states), [1, 4, 8])
 
         # pad along seq length dim
         paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
@@ -486,7 +486,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
             [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.dtypes.float32
         )
 
-        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
+        self.assertEqual(output_hidden_states.shape, (1, 4, 8))
         tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
 
     def test_layer_global_attn(self):
@@ -523,7 +523,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
             ]
         )[0]
 
-        self.assertTrue(output_hidden_states.shape, (2, 4, 8))
+        self.assertEqual(output_hidden_states.shape, (2, 4, 8))
         expected_slice_0 = tf.convert_to_tensor(
             [-0.06508, -0.039306, 0.030934, -0.03417, -0.00656, -0.01553, -0.02088, -0.04938], dtype=tf.dtypes.float32
         )

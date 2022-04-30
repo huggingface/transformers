@@ -70,7 +70,7 @@ class BigBirdModelTester:
         attention_type="block_sparse",
         use_bias=True,
         rescale_embeddings=False,
-        block_size=16,
+        block_size=8,
         num_rand_blocks=3,
         position_embedding_type="absolute",
         scope=None,
@@ -581,7 +581,7 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(
                 torch.allclose(
                     hidden_states[0, 0, :5],
-                    torch.tensor([1.4943, 0.0928, 0.8254, -0.2816, -0.9788], device=torch_device),
+                    torch.tensor([1.4825, 0.0774, 0.8226, -0.2962, -0.9593], device=torch_device),
                     atol=1e-3,
                 )
             )
@@ -595,6 +595,15 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.seq_length = 9
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
+
+    # overwrite from common in order to skip the check on `attentions`
+    def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
+        # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
+        # an effort was done to return `attention_probs` (yet to be verified).
+        if type(names) == str and names.startswith("attentions"):
+            return
+        else:
+            super().check_outputs(fx_outputs, pt_outputs, model_class, names)
 
 
 @require_torch

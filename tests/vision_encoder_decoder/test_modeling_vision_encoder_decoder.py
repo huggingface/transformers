@@ -20,8 +20,8 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..bert.test_modeling_bert import BertModelTester
@@ -269,6 +269,12 @@ class EncoderDecoderMixin:
     def check_encoder_decoder_model_generate(self, config, decoder_config, pixel_values=None, **kwargs):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+
+        # Generate until max length
+        if hasattr(enc_dec_model.config, "eos_token_id"):
+            enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values

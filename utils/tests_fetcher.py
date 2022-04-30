@@ -86,21 +86,21 @@ def get_modified_python_files(diff_with_last_commit=False):
     """
     Return a list of python files that have been modified between:
 
-    - the current head and the master branch if `diff_with_last_commit=False` (default)
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
     - the current head and its parent commit otherwise.
     """
     repo = Repo(PATH_TO_TRANFORMERS)
 
     if not diff_with_last_commit:
-        print(f"Master is at {repo.refs.master.commit}")
+        print(f"main is at {repo.refs.main.commit}")
         print(f"Current head is at {repo.head.commit}")
 
-        branching_commits = repo.merge_base(repo.refs.master, repo.head)
+        branching_commits = repo.merge_base(repo.refs.main, repo.head)
         for commit in branching_commits:
             print(f"Branching commit: {commit}")
         return get_diff(repo, repo.head.commit, branching_commits)
     else:
-        print(f"Master is at {repo.head.commit}")
+        print(f"main is at {repo.head.commit}")
         parent_commits = repo.head.commit.parents
         for commit in parent_commits:
             print(f"Parent commit: {commit}")
@@ -268,6 +268,8 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "utils/hub.py": "utils/test_file_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
@@ -463,9 +465,10 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
                 test_files_to_run.append(f)
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
-                test_files_to_run.append("examples/pytorch/test_examples.py")
+                test_files_to_run.append("examples/pytorch/test_pytorch_examples.py")
+                test_files_to_run.append("examples/pytorch/test_accelerate_examples.py")
             elif f.startswith("examples/flax"):
-                test_files_to_run.append("examples/flax/test_examples.py")
+                test_files_to_run.append("examples/flax/test_flax_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:
@@ -517,8 +520,8 @@ if __name__ == "__main__":
         repo = Repo(PATH_TO_TRANFORMERS)
 
         diff_with_last_commit = args.diff_with_last_commit
-        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.master:
-            print("Master branch detected, fetching tests against last commit.")
+        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
+            print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
         try:

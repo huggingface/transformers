@@ -205,7 +205,6 @@ class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_pruning = False
-    test_torchscript = True
     test_resize_embeddings = True
 
     def setUp(self):

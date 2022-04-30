@@ -16,7 +16,7 @@ limitations under the License.
 
 # Question Answering examples
 
-Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/master/examples/flax/question-answering/run_qa.py).
+Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/main/examples/flax/question-answering/run_qa.py).
 
 **Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
 uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in

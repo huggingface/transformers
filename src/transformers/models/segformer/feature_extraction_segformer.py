@@ -20,7 +20,6 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -28,7 +27,7 @@ from ...image_utils import (
     ImageInput,
     is_torch_tensor,
 )
-from ...utils import logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -113,7 +112,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 Optionally, the corresponding semantic segmentation maps with the pixel-wise annotations.
 
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.

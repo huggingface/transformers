@@ -117,7 +117,7 @@ class FlaxWav2Vec2ModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = Wav2Vec2Config(
@@ -254,18 +254,23 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 outputs.projected_states, outputs.projected_quantized_states, epsilon=epsilon
             )
             loss = cosine_sim.sum()
-            return loss
+            return loss, outputs.to_tuple()
 
         # transform the loss function to get the gradients
-        grad_fn = jax.value_and_grad(compute_loss)
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
-        # compute loss and gradients for unfrozen model
-        loss, grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
+        # compute loss, outputs and gradients for unfrozen model
+        (loss, outputs), grads = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=False)
 
-        # compare to loss and gradients for frozen model
-        loss_frozen, grads_frozen = grad_fn(params, input_values, attention_mask, freeze_feature_encoder=True)
+        # compare to loss, outputs and gradients for frozen model
+        (loss_frozen, outputs_frozen), grads_frozen = grad_fn(
+            params, input_values, attention_mask, freeze_feature_encoder=True
+        )
 
-        self.assert_almost_equals(loss, loss_frozen, 1e-5)
+        # ensure that the outputs and losses remain precisely equal
+        for output, output_frozen in zip(outputs, outputs_frozen):
+            self.assertTrue((output == output_frozen).all())
+        self.assertEqual(loss, loss_frozen)
 
         grads = flatten_dict(grads)
         grads_frozen = flatten_dict(grads_frozen)
@@ -273,7 +278,7 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         # ensure that the dicts of gradients contain the same keys
         self.assertEqual(grads.keys(), grads_frozen.keys())
 
-        # ensure that the gradients of the frozen layers are precisely zero and that they differ to the gradients of the unfrozen layers
+        # ensure that the gradients of the feature extractor layers are precisely zero when frozen and contain non-zero entries when unfrozen
         feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
         feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
 
@@ -281,22 +286,14 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             feature_extractor_grads, feature_extractor_grads_frozen
         ):
             self.assertTrue((feature_extractor_grad_frozen == 0.0).all())
-            self.assert_difference(feature_extractor_grad, feature_extractor_grad_frozen, 1e-7)
+            self.assertTrue((feature_extractor_grad > 0.0).any())
 
         # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
         grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
         grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
 
         for grad, grad_frozen in zip(grads, grads_frozen):
-            self.assert_almost_equals(grad, grad_frozen, 1e-7)
-
-    def assert_difference(self, a, b, tol: float):
-        diff = jnp.abs((a - b)).min()
-        self.assertGreaterEqual(diff, tol, f"Difference between arrays is {diff} (<= {tol}).")
-
-    def assert_almost_equals(self, a, b, tol: float):
-        diff = jnp.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between arrays is {diff} (>= {tol}).")
+            self.assertTrue((grad == grad_frozen).all())
 
     @slow
     def test_model_from_pretrained(self):
@@ -389,7 +386,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         # make sure that full vectors are sampled and not values of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
     def test_sample_negatives_with_attn_mask(self):
         batch_size = 2
@@ -431,7 +428,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         # make sure that full vectors are sampled and not just slices of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 
 @require_flax

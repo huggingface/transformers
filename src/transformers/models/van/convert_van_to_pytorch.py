@@ -29,7 +29,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import cached_download, hf_hub_download
 from transformers import AutoFeatureExtractor, VanConfig, VanForImageClassification
 from transformers.models.van.modeling_van import VanLayerScaling
 from transformers.utils import logging
@@ -139,7 +139,8 @@ def convert_weight_and_push(
         module_transfer(x)
         our_model = copy_parameters(from_model, our_model)
 
-    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+    if not torch.allclose(from_model(x), our_model(x).logits):
+        raise ValueError("The model logits don't match the original one.")
 
     checkpoint_name = name
     print(checkpoint_name)
@@ -168,7 +169,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

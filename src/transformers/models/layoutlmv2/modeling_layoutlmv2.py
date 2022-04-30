@@ -24,13 +24,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_detectron2_available,
-    replace_return_docstrings,
-    requires_backends,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -38,8 +31,16 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...utils import logging
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, torch_int_div
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_detectron2_available,
+    logging,
+    replace_return_docstrings,
+    requires_backends,
+)
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
@@ -249,7 +250,7 @@ class LayoutLMv2Intermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -263,7 +264,7 @@ class LayoutLMv2Output(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -682,7 +683,7 @@ LAYOUTLMV2_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -769,25 +770,25 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return embeddings
 
     def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
-        visual_bbox_x = (
+        visual_bbox_x = torch_int_div(
             torch.arange(
                 0,
                 1000 * (image_feature_pool_shape[1] + 1),
                 1000,
                 device=device,
                 dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[1]
+            ),
+            self.config.image_feature_pool_shape[1],
         )
-        visual_bbox_y = (
+        visual_bbox_y = torch_int_div(
             torch.arange(
                 0,
                 1000 * (self.config.image_feature_pool_shape[0] + 1),
                 1000,
                 device=device,
                 dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[0]
+            ),
+            self.config.image_feature_pool_shape[0],
         )
         visual_bbox = torch.stack(
             [

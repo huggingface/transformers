@@ -416,11 +416,11 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertTrue(hidden_states.shape, (1, 8, 4))
+        self.assertEqual(hidden_states.shape, (1, 4, 8))
         padding = (0, 0, 0, 1)
 
         padded_hidden_states = LongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, padding)
-        self.assertTrue(padded_hidden_states.shape, (1, 8, 5))
+        self.assertEqual(padded_hidden_states.shape, (1, 8, 5))
 
         expected_added_dim = torch.zeros((5,), device=torch_device, dtype=torch.float32)
         self.assertTrue(torch.allclose(expected_added_dim, padded_hidden_states[0, -1, :], atol=1e-6))
@@ -445,7 +445,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, atol=1e-3))
         self.assertTrue(torch.allclose(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, atol=1e-3))
-        self.assertTrue(chunked_hidden_states.shape, (1, 3, 4, 4))
+        self.assertEqual(chunked_hidden_states.shape, (1, 3, 4, 4))
 
     def test_mask_invalid_locations(self):
         hidden_states = self._get_hidden_states()
@@ -493,7 +493,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             is_global_attn=is_global_attn,
         )[0]
 
-        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
+        self.assertEqual(output_hidden_states.shape, (1, 4, 8))
         self.assertTrue(
             torch.allclose(
                 output_hidden_states[0, 1],
@@ -531,7 +531,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             is_global_attn=is_global_attn,
         )[0]
 
-        self.assertTrue(output_hidden_states.shape, (2, 4, 8))
+        self.assertEqual(output_hidden_states.shape, (2, 4, 8))
 
         self.assertTrue(
             torch.allclose(

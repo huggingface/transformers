@@ -19,8 +19,8 @@ import unittest
 from typing import List, Tuple
 
 from transformers import ConvNextConfig
-from transformers.file_utils import cached_property, is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -141,6 +141,13 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
+    def test_keras_fit(self):
         pass
 
     @unittest.skip(reason="ConvNext does not support input and output embeddings")

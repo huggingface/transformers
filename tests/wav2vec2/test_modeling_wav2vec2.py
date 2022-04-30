@@ -150,7 +150,7 @@ class Wav2Vec2ModelTester:
         self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
@@ -413,7 +413,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -652,7 +651,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
@@ -1063,7 +1061,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
     def test_sample_negatives_with_mask(self):
         batch_size = 2
@@ -1100,7 +1098,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 
 @require_torch

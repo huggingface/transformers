@@ -18,8 +18,8 @@ import inspect
 import unittest
 
 from transformers import Speech2TextConfig
-from transformers.file_utils import cached_property, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property, is_tf_available
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -508,7 +508,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 # if bos token id is not defined model needs input_ids, num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_features, do_sample=True, num_beams=2))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating more sequences than having beams leads is not possible
                 model.generate(input_features, do_sample=False, num_return_sequences=3, num_beams=2)
 

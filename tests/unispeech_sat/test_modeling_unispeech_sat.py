@@ -121,7 +121,7 @@ class UniSpeechSatModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
@@ -306,7 +306,7 @@ class UniSpeechSatModelTester:
         model.freeze_base_model()
 
         # use a longer sequence length to account for TDNN temporal downsampling
-        input_values = floats_tensor([self.batch_size, self.seq_length * 2], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length * 2], scale=1.0)
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))

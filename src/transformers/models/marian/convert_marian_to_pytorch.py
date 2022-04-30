@@ -482,6 +482,7 @@ class OpusState:
         self.state_dict = dict(self.state_dict)
         if cfg["tied-embeddings-all"]:
             cfg["tied-embeddings-src"] = True
+            cfg["tied-embeddings"] = True
         self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
 
         # create the tokenizer here because we need to know the eos_token_id
@@ -536,7 +537,7 @@ class OpusState:
             decoder_ffn_dim=cfg["transformer-dim-ffn"],
             encoder_ffn_dim=cfg["transformer-dim-ffn"],
             d_model=cfg["dim-emb"],
-            activation_function=cfg["transformer-aan-activation"],
+            activation_function=cfg["transformer-ffn-activation"],
             pad_token_id=self.pad_token_id,
             eos_token_id=eos_token_id,
             forced_eos_token_id=eos_token_id,

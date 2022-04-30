@@ -22,13 +22,13 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.18.0.dev0"
+__version__ = "4.19.0.dev0"
 
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
-from .file_utils import (
+from .utils import (
     _LazyModule,
     is_flax_available,
     is_scatter_available,
@@ -39,8 +39,8 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -94,39 +94,7 @@ _import_structure = {
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
-    "file_utils": [
-        "CONFIG_NAME",
-        "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
-        "SPIECE_UNDERLINE",
-        "TF2_WEIGHTS_NAME",
-        "TF_WEIGHTS_NAME",
-        "TRANSFORMERS_CACHE",
-        "WEIGHTS_NAME",
-        "TensorType",
-        "add_end_docstrings",
-        "add_start_docstrings",
-        "cached_path",
-        "is_apex_available",
-        "is_datasets_available",
-        "is_faiss_available",
-        "is_flax_available",
-        "is_phonemizer_available",
-        "is_psutil_available",
-        "is_py3nvml_available",
-        "is_pyctcdecode_available",
-        "is_scipy_available",
-        "is_sentencepiece_available",
-        "is_sklearn_available",
-        "is_speech_available",
-        "is_tf_available",
-        "is_timm_available",
-        "is_tokenizers_available",
-        "is_torch_available",
-        "is_torch_tpu_available",
-        "is_vision_available",
-    ],
+    "file_utils": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_comet_available",
@@ -147,8 +115,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    # Models
     "models": [],
+    # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -202,9 +170,16 @@ _import_structure = {
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
-    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
+    "models.data2vec": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecAudioConfig",
+        "Data2VecTextConfig",
+        "Data2VecVisionConfig",
+    ],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -218,12 +193,14 @@ _import_structure = {
         "DPRReaderOutput",
         "DPRReaderTokenizer",
     ],
+    "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -272,6 +249,7 @@ _import_structure = {
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
+    "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
@@ -296,6 +274,7 @@ _import_structure = {
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
+    "models.tapex": ["TapexTokenizer"],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -396,7 +375,40 @@ _import_structure = {
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
-    "utils": ["logging"],
+    "utils": [
+        "CONFIG_NAME",
+        "MODEL_CARD_NAME",
+        "PYTORCH_PRETRAINED_BERT_CACHE",
+        "PYTORCH_TRANSFORMERS_CACHE",
+        "SPIECE_UNDERLINE",
+        "TF2_WEIGHTS_NAME",
+        "TF_WEIGHTS_NAME",
+        "TRANSFORMERS_CACHE",
+        "WEIGHTS_NAME",
+        "TensorType",
+        "add_end_docstrings",
+        "add_start_docstrings",
+        "cached_path",
+        "is_apex_available",
+        "is_datasets_available",
+        "is_faiss_available",
+        "is_flax_available",
+        "is_phonemizer_available",
+        "is_psutil_available",
+        "is_py3nvml_available",
+        "is_pyctcdecode_available",
+        "is_scipy_available",
+        "is_sentencepiece_available",
+        "is_sklearn_available",
+        "is_speech_available",
+        "is_tf_available",
+        "is_timm_available",
+        "is_tokenizers_available",
+        "is_torch_available",
+        "is_torch_tpu_available",
+        "is_vision_available",
+        "logging",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -435,26 +447,24 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.realm"].append("RealmTokenizerFast")
-    _import_structure["models.xglm"].append("XGLMTokenizerFast")
-    _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
-    _import_structure["models.clip"].append("CLIPTokenizerFast")
-    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
-    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
+    _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
+    _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
     )
     _import_structure["models.electra"].append("ElectraTokenizerFast")
+    _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -471,13 +481,16 @@ if is_tokenizers_available():
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
+    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
@@ -527,6 +540,8 @@ if is_vision_available():
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
@@ -632,7 +647,7 @@ if is_torch_available():
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
 
@@ -863,6 +878,7 @@ if is_torch_available():
         [
             "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Data2VecAudioForAudioFrameClassification",
             "Data2VecAudioForCTC",
             "Data2VecAudioForSequenceClassification",
@@ -877,6 +893,10 @@ if is_torch_available():
             "Data2VecTextForTokenClassification",
             "Data2VecTextModel",
             "Data2VecTextPreTrainedModel",
+            "Data2VecVisionForImageClassification",
+            "Data2VecVisionForSemanticSegmentation",
+            "Data2VecVisionModel",
+            "Data2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -899,6 +919,15 @@ if is_torch_available():
             "DebertaV2ForTokenClassification",
             "DebertaV2Model",
             "DebertaV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.decision_transformer"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerGPT2Model",
+            "DecisionTransformerGPT2PreTrainedModel",
+            "DecisionTransformerModel",
+            "DecisionTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -935,6 +964,15 @@ if is_torch_available():
             "DPRPretrainedReader",
             "DPRQuestionEncoder",
             "DPRReader",
+        ]
+    )
+    _import_structure["models.dpt"].extend(
+        [
+            "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DPTForDepthEstimation",
+            "DPTForSemanticSegmentation",
+            "DPTModel",
+            "DPTPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -994,6 +1032,14 @@ if is_torch_available():
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.glpn"].extend(
+        [
+            "GLPN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GLPNForDepthEstimation",
+            "GLPNModel",
+            "GLPNPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -1320,6 +1366,14 @@ if is_torch_available():
             "ReformerModel",
             "ReformerModelWithLMHead",
             "ReformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.regnet"].extend(
+        [
+            "REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RegNetForImageClassification",
+            "RegNetModel",
+            "RegNetPreTrainedModel",
         ]
     )
     _import_structure["models.rembert"].extend(
@@ -1663,7 +1717,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
-    _import_structure["pytorch_utils"] = []
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
     _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -1679,6 +1733,8 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_logits_process"] = [
+        "TFForcedBOSTokenLogitsProcessor",
+        "TFForcedEOSTokenLogitsProcessor",
         "TFLogitsProcessor",
         "TFLogitsProcessorList",
         "TFLogitsWarper",
@@ -1920,6 +1976,15 @@ if is_tf_available():
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.gptj"].extend(
+        [
+            "TFGPTJForCausalLM",
+            "TFGPTJForQuestionAnswering",
+            "TFGPTJForSequenceClassification",
+            "TFGPTJModel",
+            "TFGPTJPreTrainedModel",
+        ]
+    )
     _import_structure["models.hubert"].extend(
         [
             "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2104,6 +2169,13 @@ if is_tf_available():
             "TFViTForImageClassification",
             "TFViTModel",
             "TFViTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vit_mae"].extend(
+        [
+            "TFViTMAEForPreTraining",
+            "TFViTMAEModel",
+            "TFViTMAEPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -2434,41 +2506,6 @@ if TYPE_CHECKING:
 
     # Feature Extractor
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-
-    # Files and general utilities
-    from .file_utils import (
-        CONFIG_NAME,
-        MODEL_CARD_NAME,
-        PYTORCH_PRETRAINED_BERT_CACHE,
-        PYTORCH_TRANSFORMERS_CACHE,
-        SPIECE_UNDERLINE,
-        TF2_WEIGHTS_NAME,
-        TF_WEIGHTS_NAME,
-        TRANSFORMERS_CACHE,
-        WEIGHTS_NAME,
-        TensorType,
-        add_end_docstrings,
-        add_start_docstrings,
-        cached_path,
-        is_apex_available,
-        is_datasets_available,
-        is_faiss_available,
-        is_flax_available,
-        is_phonemizer_available,
-        is_psutil_available,
-        is_py3nvml_available,
-        is_pyctcdecode_available,
-        is_scipy_available,
-        is_sentencepiece_available,
-        is_sklearn_available,
-        is_speech_available,
-        is_tf_available,
-        is_timm_available,
-        is_tokenizers_available,
-        is_torch_available,
-        is_torch_tpu_available,
-        is_vision_available,
-    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -2542,9 +2579,19 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
+    from .models.data2vec import (
+        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecAudioConfig,
+        Data2VecTextConfig,
+        Data2VecVisionConfig,
+    )
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DecisionTransformerConfig,
+    )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -2556,12 +2603,14 @@ if TYPE_CHECKING:
         DPRReaderOutput,
         DPRReaderTokenizer,
     )
+    from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
@@ -2604,6 +2653,7 @@ if TYPE_CHECKING:
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
@@ -2625,6 +2675,7 @@ if TYPE_CHECKING:
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
+    from .models.tapex import TapexTokenizer
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -2716,7 +2767,42 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
-    from .utils import logging
+
+    # Files and general utilities
+    from .utils import (
+        CONFIG_NAME,
+        MODEL_CARD_NAME,
+        PYTORCH_PRETRAINED_BERT_CACHE,
+        PYTORCH_TRANSFORMERS_CACHE,
+        SPIECE_UNDERLINE,
+        TF2_WEIGHTS_NAME,
+        TF_WEIGHTS_NAME,
+        TRANSFORMERS_CACHE,
+        WEIGHTS_NAME,
+        TensorType,
+        add_end_docstrings,
+        add_start_docstrings,
+        cached_path,
+        is_apex_available,
+        is_datasets_available,
+        is_faiss_available,
+        is_flax_available,
+        is_phonemizer_available,
+        is_psutil_available,
+        is_py3nvml_available,
+        is_pyctcdecode_available,
+        is_scipy_available,
+        is_sentencepiece_available,
+        is_sklearn_available,
+        is_speech_available,
+        is_tf_available,
+        is_timm_available,
+        is_tokenizers_available,
+        is_torch_available,
+        is_torch_tpu_available,
+        is_vision_available,
+        logging,
+    )
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -2757,6 +2843,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
+        from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
@@ -2817,6 +2904,8 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.dpt import DPTFeatureExtractor
+        from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
@@ -2900,7 +2989,7 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
         )
         from .generation_utils import top_k_top_p_filtering
-        from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
+        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -3095,6 +3184,7 @@ if TYPE_CHECKING:
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
             Data2VecAudioForSequenceClassification,
@@ -3109,6 +3199,10 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3127,6 +3221,13 @@ if TYPE_CHECKING:
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+        )
+        from .models.decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
+            DecisionTransformerModel,
+            DecisionTransformerPreTrainedModel,
         )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3157,6 +3258,13 @@ if TYPE_CHECKING:
             DPRPretrainedReader,
             DPRQuestionEncoder,
             DPRReader,
+        )
+        from .models.dpt import (
+            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DPTForDepthEstimation,
+            DPTForSemanticSegmentation,
+            DPTModel,
+            DPTPreTrainedModel,
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3208,6 +3316,12 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.glpn import (
+            GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GLPNForDepthEstimation,
+            GLPNModel,
+            GLPNPreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3479,6 +3593,12 @@ if TYPE_CHECKING:
             ReformerModel,
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
+        )
+        from .models.regnet import (
+            REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RegNetForImageClassification,
+            RegNetModel,
+            RegNetPreTrainedModel,
         )
         from .models.rembert import (
             REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3756,6 +3876,7 @@ if TYPE_CHECKING:
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
         )
+        from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
         # Trainer
         from .trainer import Trainer
@@ -3772,6 +3893,8 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_logits_process import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
             TFLogitsProcessor,
             TFLogitsProcessorList,
             TFLogitsWarper,
@@ -3983,6 +4106,13 @@ if TYPE_CHECKING:
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
+        from .models.gptj import (
+            TFGPTJForCausalLM,
+            TFGPTJForQuestionAnswering,
+            TFGPTJForSequenceClassification,
+            TFGPTJModel,
+            TFGPTJPreTrainedModel,
+        )
         from .models.hubert import (
             TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFHubertForCTC,
@@ -4115,6 +4245,7 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
+        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
