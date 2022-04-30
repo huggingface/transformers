@@ -9,7 +9,7 @@ name: Self-hosted runner (scheduled)
 on:
   push:
     branches:
-      - move_test_model_folders
+      - ci_move_test_model_folders
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
