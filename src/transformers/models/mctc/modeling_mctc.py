@@ -182,6 +182,9 @@ class Conv1dSubsampler(nn.Module):
         self.kernel_size = config.conv_kernel
         self.stride = config.conv_stride
 
+        # NOTE: MCTC by construction only uses one convolution kernel. I've made this flexible to allow for 
+        # multiple layers of convolutions, but not sure if this model definition should just restrict it
+        # to one layer. This becomes especially relevant when considering the padding like line 1 of forward().
         self.conv_layers = nn.ModuleList(
             nn.Conv1d(
                 self.in_channels if i == 0 else self.mid_channels[i],
@@ -194,9 +197,10 @@ class Conv1dSubsampler(nn.Module):
         )
 
     def forward(self, input_features):
-        # input_features == B x T x Features
-        # -> hidden_states == B x F (channels) x T
+        # NOTE: in reference to the NOTE in __init__, right now it just calculates padding as if
+        # there will be just one conv layer.
         padding = sum([size // 2 for size in self.kernel_size])  # (7, 7) -> (3, 3)
+
         input_features = torch.nn.functional.pad(input_features, (0, 0, padding, padding), "constant", 0)
         hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x F x T
         for conv in self.conv_layers:
@@ -280,9 +284,7 @@ class MCTCSelfAttention(nn.Module):
             )
 
         self.num_attention_heads = config.num_attention_heads
-        # self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.attention_head_size = config.attention_head_dim
-
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
@@ -351,35 +353,19 @@ class MCTCSelfAttention(nn.Module):
         mixed_query_layer = self.query(hidden_states)
         mixed_query_layer = mixed_query_layer / math.sqrt(self.attention_head_size)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        # if is_cross_attention and past_key_value is not None:
-        #     # reuse k,v, cross_attentions
-        #     key_layer = past_key_value[0]
-        #     value_layer = past_key_value[1]
-        #     # attention_mask = encoder_attention_mask
-        # elif is_cross_attention:
-        #     key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-        #     value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-        #     # attention_mask = encoder_attention_mask
-        # elif past_key_value is not None:
-        #     key_layer = self.transpose_for_scores(self.key(hidden_states))
-        #     value_layer = self.transpose_for_scores(self.value(hidden_states))
-        #     key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-        #     value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        # else:
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        if past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        save_dict = {}
-        save_dict["pre_posemb_attention_scores"] = attention_scores.clone()
 
         if self.position_embedding_type == "relative_key":
             positional_embedding = self.distance_embedding.weight
@@ -388,29 +374,26 @@ class MCTCSelfAttention(nn.Module):
             )
 
             relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
-
             attention_scores = attention_scores + relative_position_scores
 
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
-            attention_scores = attention_scores + attention_mask
+        # if attention_mask is not None:
+        #     # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
+        #     attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        # ====> auto attn = dropout(softmax(scores, 1), pDropout);
-
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        # ====> auto result = matmul(attn.as(v.type()), v);
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).flatten(start_dim=-2)
-        # new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        # context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -432,18 +415,13 @@ class MCTCSelfOutput(nn.Module):
         super().__init__()
         self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        # self.dense.weight = self.dense.weight.transpose(0,1)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-        # hidden_states = torch.matmul(self.dense.weight.clone().unsqueeze(0), hidden_states.transpose(1,2))
-        # hidden_states = torch.einsum('hh, bhe -> bhe', self.dense.weight, hidden_states.transpose(-1, -2))
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        # hidden_states = hidden_states.transpose(1,2)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
-
         return hidden_states
 
 
@@ -492,10 +470,7 @@ class MCTCAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        # outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-
-        # attention_output = self.output(self_outputs[0])
-        outputs = (attention_output,) + self_outputs[1:]  # add at
+        outputs = (attention_output,) + self_outputs[1:]    # add attentions if we output them
 
         return outputs
 
@@ -509,8 +484,6 @@ class MCTCIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-        # self.LayerNorm = MCTCLayerNorm()
-
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -522,7 +495,6 @@ class MCTCOutput(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        # self.LayerNorm = MCTCLayerNorm()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -536,10 +508,6 @@ class MCTCLayer(nn.Module):
     def __init__(self, config: MCTCConfig):
         super().__init__()
 
-        """
-        following conventions for now and adding this feed_forward_chunking utility, but not entirely sure what it does
-        and what I'm supposed to be doing with this seq_len_dim. Why isn't this a config variable?
-        """
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
 
@@ -616,13 +584,14 @@ class MCTCPreTrainedModel(PreTrainedModel):
         """
         Computes the output length of the convolutional layers
         """
-        padding = 0
         dilation = 1
         for i, kernel_sz, stride in zip(
             range(self.config.num_conv_layers), self.config.conv_kernel, self.config.conv_stride
         ):
-            input_lengths = ((input_lengths + 2 * padding - dilation * (kernel_sz - 1) - 1) // stride) + 1
-            # input_lengths = input_lengths // self.config.conv_glu_dim
+            padding = kernel_sz // 2
+            input_lengths = input_lengths + 2*padding - dilation*(kernel_sz - 1) - 1
+            input_lengths = torch.div(input_lengths, stride, rounding_mode="trunc") + 1
+        
         return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
@@ -713,10 +682,8 @@ MCTC_INPUTS_DOCSTRING = r"""
 class MCTCEncoder(MCTCPreTrainedModel):
     def __init__(self, config: MCTCConfig):
         super().__init__(config)
-
         self.hidden_dropout_prob = config.hidden_dropout_prob
 
-        # self.layer_norm = nn.LayerNorm(config.input_feat_per_channel)
         self.layer_norm = MCTCLayerNorm()
         self.conv = Conv1dSubsampler(config)
         self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
@@ -741,8 +708,6 @@ class MCTCEncoder(MCTCPreTrainedModel):
         input_features = self.layer_norm(input_features)
 
         inputs_embeds = self.conv(input_features)
-
-        # inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
         if attention_mask is not None:
