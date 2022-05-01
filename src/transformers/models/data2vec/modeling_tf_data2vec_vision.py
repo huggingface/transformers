@@ -206,15 +206,18 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config: Data2VecVisionConfig, image_size: int = 224, patch_size: int = 16, **kwargs):
         super().__init__(**kwargs)
+        self.config = config
+
         image_size = to_2tuple(config.image_size)
         patch_size = to_2tuple(config.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
+        self.patch_shape = patch_shape
         self.num_channels = config.num_channels
         self.embed_dim = config.hidden_size
-        self.config = config
 
         self.projection = tf.keras.layers.Conv2D(
             filters=self.embed_dim,
@@ -317,11 +320,7 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            # Passing `0.0` to the `relative_position_bias()` layer because
-            # Keras layers need an input to operate. In this case this input
-            # i.e., 0.0 is not going to be used in any calculations so we're
-            # safe.
-            attention_scores = attention_scores + self.relative_position_bias(0.0)[None, ...]
+            attention_scores = attention_scores + self.relative_position_bias()[None, ...]
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -373,7 +372,7 @@ class TFData2VecVisionAttention(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TFData2VecVisionSelfAttention(config, window_size=window_size, name="attention")
+        self.attention = TFData2VecVisionSelfAttention(config, window_size=window_size, name="attention")
         self.dense_output = TFData2VecVisionSelfOutput(config, name="output")
 
     def prune_heads(self, heads):
@@ -387,7 +386,7 @@ class TFData2VecVisionAttention(tf.keras.layers.Layer):
         relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        self_outputs = self.self_attention(
+        self_outputs = self.attention(
             hidden_states=input_tensor,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -629,15 +628,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            relative_position_bias = (
-                # Passing `0.0` to the `relative_position_bias()` layer because
-                # Keras layers need an input to operate. In this case this input
-                # i.e., 0.0 is not going to be used in any calculations so we're
-                # safe.
-                self.relative_position_bias(0.0)
-                if self.relative_position_bias is not None
-                else None
-            )
+            relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
             layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
@@ -668,7 +659,9 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
         self.add_pooling_layer = add_pooling_layer
 
         self.embeddings = TFData2VecVisionEmbeddings(config, name="embeddings")
-        self.encoder = TFData2VecVisionEncoder(config, name="encoder")
+        self.encoder = TFData2VecVisionEncoder(
+            config, window_size=self.embeddings.patch_embeddings.patch_shape, name="encoder"
+        )
         self.layernorm = (
             tf.identity
             if config.use_mean_pooling
