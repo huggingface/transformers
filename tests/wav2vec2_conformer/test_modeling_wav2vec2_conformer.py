@@ -821,7 +821,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
     def test_inference_ctc_normal_batched_rel_pos(self):
         model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large-960h-ft")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large-960h-ft", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-conformer-rel-pos-large-960h-ft", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 
@@ -844,7 +846,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
     def test_inference_ctc_normal_batched_rope(self):
         model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-rope-large-960h-ft")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-conformer-rope-large-960h-ft", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-conformer-rope-large-960h-ft", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 

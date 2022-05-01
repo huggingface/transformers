@@ -23,10 +23,14 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- Wav2Vec2Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
+  as introduced in [Conformer: Convolution-augmented Transformer for Speech Recognition](https://arxiv.org/abs/2005.08100).
+- Wav2Vec2Conformer uses the same tokenizer and feature extractor as Wav2Vec2.
+- Wav2Vec2Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or
+  rotary position embeddings by setting the correct `config.position_embeddings_type`.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec).
 
 
 ## Wav2Vec2ConformerConfig
@@ -35,15 +39,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## Wav2Vec2Conformer specific outputs
 
-[[autodoc]] models.wav2vec2_conformer_with_lm.processing_wav2vec2_conformer_with_lm.Wav2Vec2ConformerDecoderWithLMOutput
-
 [[autodoc]] models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerBaseModelOutput
 
 [[autodoc]] models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForPreTrainingOutput
-
-[[autodoc]] models.wav2vec2_conformer.modeling_flax_wav2vec2_conformer.FlaxWav2Vec2ConformerBaseModelOutput
-
-[[autodoc]] models.wav2vec2_conformer.modeling_flax_wav2vec2_conformer.FlaxWav2Vec2ConformerForPreTrainingOutput
 
 ## Wav2Vec2ConformerModel
 
