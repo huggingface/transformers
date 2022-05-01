@@ -71,7 +71,7 @@ class Wav2Vec2ConformerModelTester:
         num_conv_pos_embedding_groups=2,
         num_hidden_layers=4,
         num_attention_heads=2,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
+        hidden_dropout_prob=0.1,
         intermediate_size=20,
         layer_norm_eps=1e-5,
         hidden_act="gelu",

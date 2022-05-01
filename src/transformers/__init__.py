@@ -2179,14 +2179,6 @@ if is_tf_available():
             "TFWav2Vec2PreTrainedModel",
         ]
     )
-    _import_structure["models.wav2vec2_conformer"].extend(
-        [
-            "TF_WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFWav2Vec2ConformerForCTC",
-            "TFWav2Vec2ConformerModel",
-            "TFWav2Vec2ConformerPreTrainedModel",
-        ]
-    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2439,14 +2431,6 @@ if is_flax_available():
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
-    )
-    _import_structure["models.wav2vec2_conformer"].extend(
-        [
-            "FlaxWav2Vec2ConformerForCTC",
-            "FlaxWav2Vec2ConformerForPreTraining",
-            "FlaxWav2Vec2ConformerModel",
-            "FlaxWav2Vec2ConformerPreTrainedModel",
-        ]
     )
     _import_structure["models.xglm"].extend(
         [
