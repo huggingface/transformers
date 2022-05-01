@@ -31,6 +31,7 @@ from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..models.xlm import XLMOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
@@ -361,6 +362,16 @@ class FeaturesManager:
         ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
+        ),
+        "xlm":supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=XLMOnnxConfig,        
         ),
         "xlm-roberta": supported_features_mapping(
             "default",
