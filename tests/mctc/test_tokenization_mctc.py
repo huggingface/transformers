@@ -16,12 +16,9 @@
 import inspect
 import json
 import os
-import random
 import shutil
 import tempfile
 import unittest
-
-import numpy as np
 
 from transformers import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCConfig, MCTCTokenizer
 from transformers.models.mctc.tokenization_mctc import VOCAB_FILES_NAMES, MCTCTokenizerOutput
@@ -147,7 +144,6 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
         self.assertEqual(sent, expected_sent)
-
 
     def test_save_pretrained(self):
         pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
@@ -428,13 +424,13 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         time_offset_mctc = 480 / 16_000
 
         expected_char_time_stamps_text = [' ', 'W', 'h', 'y', ' ', 'd', 'o', 'e', 's', ' ', 'M', 'e', 'l', 'i', 's', 's', 'a', 'n', 'd', 'r', 'a', ' ', 'l', 'o', 'o', 'k', ' ', 'l', 'i', 'k', 'e', ' ', 's', 'h', 'e', ' ', 'w', 'a', 'n', 't', 's', ' ', 't', 'o', ' ', 'c', 'o', 'n', 's', 'u', 'm', 'e', ' ', 'J', 'o', 'h', 'n', ' ', 'S', 'n', 'o', 'w', ' ', 'o', 'n', ' ', 't', 'h', 'e', ' ', 'r', 'i', 'g', 'h', 't', '-', 'u', 'p', ' ', 't', 'h', 'e', ' ', 'w', 'a', 'l', 'l', '.', ' ']
-        expected_char_time_stamps_start =  [0.0, 1.23, 1.29, 1.35, 1.5, 1.56, 1.65, 1.71, 1.77, 1.92, 2.1, 2.16, 2.28, 2.34, 2.37, 2.46, 2.55, 2.61, 2.7, 2.73, 2.79, 2.91, 2.94, 3.0, 3.06, 3.09, 3.21, 3.24, 3.27, 3.33, 3.36, 3.51, 3.57, 3.6, 3.63, 3.69, 3.75, 3.78, 3.84, 3.87, 3.93, 3.99, 4.05, 4.11, 4.14, 4.26, 4.32, 4.38, 4.44, 4.53, 4.59, 4.65, 4.71, 4.89, 4.95, 4.98, 5.04, 5.16, 5.25, 5.31, 5.37, 5.43, 5.52, 5.58, 5.61, 5.67, 5.73, 5.76, 5.82, 5.85, 5.94, 6.0, 6.03, 6.09, 6.12, 6.21, 6.27, 6.33, 6.45, 6.51, 6.54, 6.57, 6.63, 6.72, 6.78, 6.84, 6.93, 7.59, 7.65]
+        expected_char_time_stamps_start = [0.0, 1.23, 1.29, 1.35, 1.5, 1.56, 1.65, 1.71, 1.77, 1.92, 2.1, 2.16, 2.28, 2.34, 2.37, 2.46, 2.55, 2.61, 2.7, 2.73, 2.79, 2.91, 2.94, 3.0, 3.06, 3.09, 3.21, 3.24, 3.27, 3.33, 3.36, 3.51, 3.57, 3.6, 3.63, 3.69, 3.75, 3.78, 3.84, 3.87, 3.93, 3.99, 4.05, 4.11, 4.14, 4.26, 4.32, 4.38, 4.44, 4.53, 4.59, 4.65, 4.71, 4.89, 4.95, 4.98, 5.04, 5.16, 5.25, 5.31, 5.37, 5.43, 5.52, 5.58, 5.61, 5.67, 5.73, 5.76, 5.82, 5.85, 5.94, 6.0, 6.03, 6.09, 6.12, 6.21, 6.27, 6.33, 6.45, 6.51, 6.54, 6.57, 6.63, 6.72, 6.78, 6.84, 6.93, 7.59, 7.65]
         expected_char_time_stamps_end = [0.03, 1.26, 1.32, 1.38, 1.53, 1.59, 1.68, 1.74, 1.8, 2.01, 2.13, 2.19, 2.31, 2.37, 2.4, 2.49, 2.58, 2.64, 2.73, 2.79, 2.82, 2.94, 2.97, 3.03, 3.09, 3.12, 3.24, 3.27, 3.3, 3.36, 3.39, 3.57, 3.6, 3.63, 3.69, 3.75, 3.78, 3.81, 3.87, 3.93, 3.99, 4.05, 4.08, 4.14, 4.2, 4.29, 4.35, 4.41, 4.47, 4.56, 4.62, 4.68, 4.8, 4.92, 4.98, 5.04, 5.1, 5.22, 5.28, 5.34, 5.4, 5.46, 5.55, 5.61, 5.64, 5.7, 5.76, 5.82, 5.85, 5.91, 5.97, 6.03, 6.06, 6.12, 6.15, 6.24, 6.3, 6.36, 6.48, 6.54, 6.57, 6.6, 6.66, 6.75, 6.81, 6.87, 6.96, 7.62, 7.68]
-
 
         expected_word_time_stamps_text = ['Why', 'does', 'Melissandra', 'look', 'like', 'she', 'wants', 'to', 'consume', 'John', 'Snow', 'on', 'the', 'right-up', 'the', 'wall.']
         expected_word_time_stamps_start = [1.23, 1.56, 2.1, 2.94, 3.24, 3.57, 3.75, 4.05, 4.26, 4.89, 5.25, 5.58, 5.73, 5.94, 6.51, 6.72]
         expected_word_time_stamps_end = [1.38, 1.8, 2.82, 3.12, 3.39, 3.69, 3.99, 4.14, 4.68, 5.1, 5.46, 5.64, 5.85, 6.36, 6.6, 7.62]
+        # fmt:on
 
         output = tokenizer.batch_decode(pred_ids, output_char_offsets=True, output_word_offsets=True)
 

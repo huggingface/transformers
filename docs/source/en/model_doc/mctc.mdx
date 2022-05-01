@@ -1,0 +1,76 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# MCTC
+
+## Overview
+
+The MCTC model was proposed in [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert. 
+<INSERT SHORT SUMMARY HERE>
+
+The abstract from the paper is the following:
+
+*Semi-supervised learning through pseudo-labeling has become a staple of state-of-the-art monolingual
+speech recognition systems. In this work, we extend pseudo-labeling to massively multilingual speech
+recognition with 60 languages. We propose a simple pseudo-labeling recipe that works well even
+with low-resource languages: train a supervised multilingual model, fine-tune it with semi-supervised
+learning on a target language, generate pseudo-labels for that language, and train a final model using
+pseudo-labels for all languages, either from scratch or by fine-tuning. Experiments on the labeled
+Common Voice and unlabeled VoxPopuli datasets show that our recipe can yield a model with better
+performance for many languages that also transfers well to LibriSpeech.*
+
+
+This model was contributed by [cwkeam](<https://huggingface.co/cwkeam). The original code can be found [here](https://github.com/flashlight/wav2letter/tree/main/recipes/mling_pl).
+
+## MCTCConfig
+
+[[autodoc]] MCTCConfig
+
+## MCTCTokenizer
+
+[[autodoc]] MCTCTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## MCTCFeatureExtractor
+
+[[autodoc]] MCTCFeatureExtractor
+    - __call__
+
+## MCTCProcessor
+
+[[autodoc]] MCTCProcessor
+    - __call__
+    - pad
+    - from_pretrained
+    - save_pretrained
+    - batch_decode
+    - decode
+    - as_target_processor
+
+## Wav2Vec2 specific outputs
+
+[[autodoc]] models.wav2vec2.modeling_wav2vec2.Wav2Vec2BaseModelOutput
+
+[[autodoc]] models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTrainingOutput
+
+## MCTCModel
+
+[[autodoc]] MCTCModel
+    - forward
+
+## MCTCForCTC
+
+[[autodoc]] MCTCForCTC
+    - forward
