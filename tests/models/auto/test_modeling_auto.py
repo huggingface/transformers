@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 from ..bert.test_modeling_bert import BertModelTester
 
 
-sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 

@@ -41,7 +41,7 @@ from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 
 
-sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402

@@ -53,7 +53,7 @@ from transformers.testing_utils import (
 )
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
