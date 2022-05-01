@@ -1553,13 +1553,17 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ConformerForPreTraining
+        >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
         >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
-        >>> model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(
+        ...     "facebook/wav2vec2_conformer-conformer-rel-pos-large"
+        ... )
+        >>> model = Wav2Vec2ConformerForPreTraining.from_pretrained(
+        ...     "facebook/wav2vec2_conformer-conformer-rel-pos-large"
+        ... )
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1
@@ -1582,6 +1586,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         >>> # for contrastive loss training model should be put into train mode
         >>> model = model.train()
+        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
