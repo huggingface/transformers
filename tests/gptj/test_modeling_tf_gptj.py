@@ -20,7 +20,7 @@ from transformers import AutoTokenizer, GPTJConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow, tooslow
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 from ..utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -70,7 +70,7 @@ class TFGPTJModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -345,6 +345,10 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 assert name is None
 
     @slow
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) > 0,
+        "skip testing on GPU for now to avoid GPU OOM.",
+    )
     def test_model_from_pretrained(self):
         model = TFGPTJModel.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         self.assertIsNotNone(model)
@@ -395,6 +399,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         )  # token_type_ids should change output
 
     @slow
+    @unittest.skip(reason="TF generate currently has no time-based stopping criteria")
     def test_gptj_sample_max_time(self):
         tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
         model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)

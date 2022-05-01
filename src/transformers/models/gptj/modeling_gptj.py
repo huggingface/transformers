@@ -36,9 +36,18 @@ from .configuration_gptj import GPTJConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
+_CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
 _CONFIG_FOR_DOC = "GPTJConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
+
+_CHECKPOINT_FOR_QA = "ydshieh/tiny-random-gptj-for-question-answering"
+_QA_EXPECTED_OUTPUT = "' was Jim Henson?Jim Henson was a n'"
+_QA_EXPECTED_LOSS = 3.13
+
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/tiny-random-gptj-for-sequence-classification"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.76
+
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
@@ -51,7 +60,9 @@ def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     if seq_len is None:
         seq_len = x.shape[seq_dim]
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(x.device).float()
+    sinusoid_inp = (
+        torch.einsum("i , j -> i j", torch.arange(seq_len, dtype=torch.float), inv_freq).to(x.device).float()
+    )
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 
@@ -62,8 +73,19 @@ def rotate_every_two(x):
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
+def duplicate_interleave(m):
+    """
+    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
+    """
+    dim0 = m.shape[0]
+    m = m.view(-1, 1)  # flatten the matrix
+    m = m.repeat(1, 2)  # repeat all elements into the 2nd dimension
+    m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
+    return m
+
+
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: t[None, offset : x.shape[1] + offset, None, :].repeat_interleave(2, 3), sincos)
+    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
     # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
@@ -562,7 +584,8 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -880,9 +903,11 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -928,9 +953,8 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         else:
             batch_size = inputs_embeds.shape[0]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -1006,9 +1030,11 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,

@@ -51,6 +51,7 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -66,7 +67,6 @@ from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enab
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
-from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -123,6 +123,7 @@ from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
+    find_labels,
     get_full_repo_name,
     is_apex_available,
     is_datasets_available,
@@ -170,11 +171,6 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
-else:
-    import torch.distributed as dist
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -401,6 +397,13 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
+        if (self.sharded_ddp is not None or args.deepspeed) and (
+            self.optimizer is not None or self.lr_scheduler is not None
+        ):
+            raise RuntimeError(
+                "Passing `optimizers` is not allowed if Fairscale or Deepspeed is enabled."
+                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
+            )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
@@ -492,18 +495,18 @@ class Trainer:
         else:
             self.label_smoother = None
 
-        self.state = TrainerState()
+        self.state = TrainerState(
+            is_local_process_zero=self.is_local_process_zero(),
+            is_world_process_zero=self.is_world_process_zero(),
+        )
+
         self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
-        default_label_names = (
-            ["start_positions", "end_positions"]
-            if type(self.model).__name__ in MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES.values()
-            else ["labels"]
-        )
+        default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -585,7 +588,7 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not has_length(self.train_dataset):
+        if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
         generator = None
@@ -661,8 +664,8 @@ class Trainer:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
 
-        Will use no sampler if `self.train_dataset` does not implement `__len__`, a random sampler (adapted to
-        distributed training if necessary) otherwise.
+        Will use no sampler if `train_dataset` does not implement `__len__`, a random sampler (adapted to distributed
+        training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -840,16 +843,18 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through `optimizers`, or subclass and override this method in a subclass.
         """
+        opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
+
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
+            decay_parameters = get_parameter_names(opt_model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
+                    "params": [p for n, p in opt_model.named_parameters() if n in decay_parameters],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
+                    "params": [p for n, p in opt_model.named_parameters() if n not in decay_parameters],
                     "weight_decay": 0.0,
                 },
             ]
@@ -864,6 +869,15 @@ class Trainer:
                 )
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+                if optimizer_cls.__name__ == "Adam8bit":
+                    import bitsandbytes
+
+                    manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
+
+                    for module in opt_model.modules():
+                        if isinstance(module, nn.Embedding):
+                            manager.register_module_override(module, "weight", {"optim_bits": 32})
+                            logger.debug(f"bitsandbytes: will optimize {module} in fp32")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -914,6 +928,14 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
+        elif args.optim == OptimizerNames.ADAMW_BNB:
+            try:
+                from bitsandbytes.optim import Adam8bit
+
+                optimizer_cls = Adam8bit
+                optimizer_kwargs.update(adam_kwargs)
+            except ImportError:
+                raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -937,11 +959,13 @@ class Trainer:
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
-        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset.
-
-        Will raise an exception if the underlying dataset does not implement method `__len__`
+        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset. When
+        dataloader.dataset does not exist or has no length, estimates as best it can
         """
-        return len(dataloader.dataset)
+        try:
+            return len(dataloader.dataset)
+        except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
+            return len(dataloader) * self.args.per_device_train_batch_size
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
@@ -978,9 +1002,10 @@ class Trainer:
             logger.info(f"W&B Sweep parameters: {trial}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
-            from transformers.deepspeed import HfDeepSpeedConfig
+            from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
-            self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args.deepspeed)
+            self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
+            self.args.hf_deepspeed_config.trainer_config_process(self.args)
 
     def _report_to_hp_search(
         self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
@@ -993,6 +1018,7 @@ class Trainer:
 
             trial.report(self.objective, epoch)
             if trial.should_prune():
+                self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
@@ -1076,7 +1102,9 @@ class Trainer:
                 ).to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+            model = nn.parallel.DistributedDataParallel(
+                model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
+            )
         elif self.args.local_rank != -1:
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
@@ -1198,9 +1226,6 @@ class Trainer:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
-        # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = has_length(self.train_dataset)
-
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
@@ -1209,28 +1234,36 @@ class Trainer:
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
         total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
-        if train_dataset_is_sized:
-            num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
+
+        len_dataloader = None
+        if has_length(train_dataloader):
+            len_dataloader = len(train_dataloader)
+            num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+            num_examples = self.num_examples(train_dataloader)
             if args.max_steps > 0:
                 max_steps = args.max_steps
                 num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
                     args.max_steps % num_update_steps_per_epoch > 0
                 )
-                # May be slightly incorrect if the last batch in the training datalaoder has a smaller size but it's
+                # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
                 # the best we can do.
                 num_train_samples = args.max_steps * total_train_batch_size
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
-                num_train_samples = len(self.train_dataset) * args.num_train_epochs
-        else:
-            # see __init__. max_steps is set when the dataset has no __len__
+                num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
+        elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
             num_update_steps_per_epoch = max_steps
+            num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
+        else:
+            raise ValueError(
+                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+            )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -1281,10 +1314,6 @@ class Trainer:
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
-        num_examples = (
-            self.num_examples(train_dataloader) if train_dataset_is_sized else total_train_batch_size * args.max_steps
-        )
-
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Num Epochs = {num_train_epochs}")
@@ -1370,7 +1399,7 @@ class Trainer:
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
-            elif isinstance(train_dataloader.dataset, IterableDatasetShard):
+            elif hasattr(train_dataloader, "dataset") and isinstance(train_dataloader.dataset, IterableDatasetShard):
                 train_dataloader.dataset.set_epoch(epoch)
 
             if is_torch_tpu_available():
@@ -1384,7 +1413,9 @@ class Trainer:
                 self._past = None
 
             steps_in_epoch = (
-                len(epoch_iterator) if train_dataset_is_sized else args.max_steps * args.gradient_accumulation_steps
+                len(epoch_iterator)
+                if len_dataloader is not None
+                else args.max_steps * args.gradient_accumulation_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
@@ -2142,7 +2173,7 @@ class Trainer:
             if isinstance(unwrap_model(self.model), PreTrainedModel):
                 unwrap_model(self.model).save_pretrained(
                     output_dir,
-                    save_config=self.args.should_save,
+                    is_main_process=self.args.should_save,
                     state_dict=self.model.state_dict(),
                     save_function=xm.save,
                 )
@@ -2151,7 +2182,7 @@ class Trainer:
                 state_dict = self.model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, save_config=self.args.should_save, save_function=xm.save)
+            self.model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
@@ -2196,7 +2227,7 @@ class Trainer:
     ) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")]
+        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
 
         for path in glob_checkpoints:
             if use_mtime:
@@ -2407,10 +2438,10 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = dataloader.batch_size
+        batch_size = self.args.eval_batch_size
 
         logger.info(f"***** Running {description} *****")
-        if has_length(dataloader.dataset):
+        if has_length(dataloader):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
             logger.info("  Num examples: Unknown")
@@ -2420,7 +2451,7 @@ class Trainer:
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
-        eval_dataset = dataloader.dataset
+        eval_dataset = getattr(dataloader, "dataset", None)
 
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
@@ -2433,10 +2464,13 @@ class Trainer:
         losses_host = None
         preds_host = None
         labels_host = None
+        inputs_host = None
+
         # losses/preds/labels on CPU (final containers)
         all_losses = None
         all_preds = None
         all_labels = None
+        all_inputs = None
         # Will be useful when we have an iterable dataset so don't know its length.
 
         observed_num_examples = 0
@@ -2452,6 +2486,7 @@ class Trainer:
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
                 xm.mark_step()
@@ -2464,6 +2499,14 @@ class Trainer:
                 labels = self._pad_across_processes(labels)
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+            if inputs_decode is not None:
+                inputs_decode = self._pad_across_processes(inputs_decode)
+                inputs_decode = self._nested_gather(inputs_decode)
+                inputs_host = (
+                    inputs_decode
+                    if inputs_host is None
+                    else nested_concat(inputs_host, inputs_decode, padding_index=-100)
+                )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
                 logits = self._nested_gather(logits)
@@ -2480,6 +2523,13 @@ class Trainer:
                 if preds_host is not None:
                     logits = nested_numpify(preds_host)
                     all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
+                if inputs_host is not None:
+                    inputs_decode = nested_numpify(inputs_host)
+                    all_inputs = (
+                        inputs_decode
+                        if all_inputs is None
+                        else nested_concat(all_inputs, inputs_decode, padding_index=-100)
+                    )
                 if labels_host is not None:
                     labels = nested_numpify(labels_host)
                     all_labels = (
@@ -2487,7 +2537,7 @@ class Trainer:
                     )
 
                 # Set back to None to begin a new accumulation
-                losses_host, preds_host, labels_host = None, None, None
+                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -2500,6 +2550,11 @@ class Trainer:
         if preds_host is not None:
             logits = nested_numpify(preds_host)
             all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
+        if inputs_host is not None:
+            inputs_decode = nested_numpify(inputs_host)
+            all_inputs = (
+                inputs_decode if all_inputs is None else nested_concat(all_inputs, inputs_decode, padding_index=-100)
+            )
         if labels_host is not None:
             labels = nested_numpify(labels_host)
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
@@ -2512,7 +2567,10 @@ class Trainer:
         elif isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
             num_samples = eval_dataset.num_examples
         else:
-            num_samples = observed_num_examples
+            if has_length(dataloader):
+                num_samples = self.num_examples(dataloader)
+            else:  # both len(dataloader.dataset) and len(dataloader) fail
+                num_samples = observed_num_examples
 
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
         # samplers has been rounded to a multiple of batch_size, so we truncate.
@@ -2522,10 +2580,17 @@ class Trainer:
             all_preds = nested_truncate(all_preds, num_samples)
         if all_labels is not None:
             all_labels = nested_truncate(all_labels, num_samples)
+        if all_inputs is not None:
+            all_inputs = nested_truncate(all_inputs, num_samples)
 
         # Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
+            if args.include_inputs_for_metrics:
+                metrics = self.compute_metrics(
+                    EvalPrediction(predictions=all_preds, label_ids=all_labels, inputs=all_inputs)
+                )
+            else:
+                metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
         else:
             metrics = {}
 
@@ -2732,6 +2797,7 @@ class Trainer:
                 self.args.output_dir,
                 clone_from=repo_name,
                 use_auth_token=use_auth_token,
+                private=self.args.hub_private_repo,
             )
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
@@ -2865,6 +2931,11 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+        # Cancel any async push in progress if blocking=True. The commits will all be pushed together.
+        if blocking and self.push_in_progress is not None and not self.push_in_progress.is_done:
+            self.push_in_progress._process.kill()
+            self.push_in_progress = None
+
         git_head_commit_url = self.repo.push_to_hub(
             commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
         )
@@ -2899,13 +2970,13 @@ class Trainer:
         """
         args = self.args
 
-        if not has_length(dataloader.dataset):
-            raise ValueError("dataset must implement __len__")
+        if not has_length(dataloader):
+            raise ValueError("dataloader must implement a working __len__")
+
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
-
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
@@ -2936,6 +3007,7 @@ class Trainer:
         losses_host: torch.Tensor = None
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
+        inputs_host: Union[torch.Tensor, List[torch.Tensor]] = None
 
         world_size = max(1, args.world_size)
 
@@ -2948,6 +3020,7 @@ class Trainer:
                 make_multiple_of = dataloader.sampler.batch_size
             preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
             labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
+            inputs_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
 
@@ -2961,6 +3034,8 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
+
             if loss is not None:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
@@ -2968,6 +3043,12 @@ class Trainer:
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+            if inputs_decode is not None:
+                inputs_host = (
+                    inputs_decode
+                    if inputs_host is None
+                    else nested_concat(inputs_host, inputs_decode, padding_index=-100)
+                )
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
@@ -2976,9 +3057,10 @@ class Trainer:
                 if not prediction_loss_only:
                     preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
                     labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+                    inputs_gatherer.add_arrays(self._gather_and_numpify(inputs_host, "eval_inputs_ids"))
 
                 # Set back to None to begin a new accumulation
-                losses_host, preds_host, labels_host = None, None, None
+                losses_host, preds_host, labels_host, inputs_host = None, None, None, None
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -2989,13 +3071,20 @@ class Trainer:
         if not prediction_loss_only:
             preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
             labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+            inputs_gatherer.add_arrays(self._gather_and_numpify(inputs_host, "eval_inputs_ids"))
 
         eval_loss = eval_losses_gatherer.finalize()
         preds = preds_gatherer.finalize() if not prediction_loss_only else None
         label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
+        inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+            if args.include_inputs_for_metrics:
+                metrics = self.compute_metrics(
+                    EvalPrediction(predictions=preds, label_ids=label_ids, inputs=inputs_ids)
+                )
+            else:
+                metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
 

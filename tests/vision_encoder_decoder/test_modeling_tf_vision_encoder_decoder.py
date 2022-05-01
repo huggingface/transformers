@@ -96,6 +96,7 @@ class TFVisionEncoderDecoderMixin:
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            kwargs=kwargs,
         )
 
         self.assertEqual(
@@ -124,6 +125,7 @@ class TFVisionEncoderDecoderMixin:
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            kwargs=kwargs,
         )
         self.assertEqual(
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
@@ -137,6 +139,7 @@ class TFVisionEncoderDecoderMixin:
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            kwargs=kwargs,
         )
 
         self.assertEqual(
@@ -164,6 +167,7 @@ class TFVisionEncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             return_dict=True,
+            kwargs=kwargs,
         )
 
         self.assertEqual(
@@ -189,6 +193,7 @@ class TFVisionEncoderDecoderMixin:
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            kwargs=kwargs,
         )
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
@@ -201,6 +206,7 @@ class TFVisionEncoderDecoderMixin:
                 pixel_values=pixel_values,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
+                kwargs=kwargs,
             )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
@@ -226,6 +232,7 @@ class TFVisionEncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=labels,
+            kwargs=kwargs,
         )
 
         # Make sure `loss` exist
@@ -257,6 +264,7 @@ class TFVisionEncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_attentions=True,
+            kwargs=kwargs,
         )
 
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
@@ -291,6 +299,12 @@ class TFVisionEncoderDecoderMixin:
     def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+
+        # Generate until max length
+        if hasattr(enc_dec_model.config, "eos_token_id"):
+            enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(

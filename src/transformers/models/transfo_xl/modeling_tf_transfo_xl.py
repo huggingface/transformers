@@ -31,7 +31,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -236,7 +236,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             attn_score = attn_score * (1.0 - attn_mask_t) - 1e30 * attn_mask_t
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = tf.nn.softmax(attn_score, axis=1)
+        attn_prob = stable_softmax(attn_score, axis=1)
         attn_prob = self.dropatt(attn_prob, training=training)
 
         # Mask heads if we want to
@@ -550,7 +550,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
@@ -898,7 +897,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.transformer(
             input_ids=input_ids,
@@ -979,7 +977,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None:
             bsz, tgt_len = shape_list(input_ids)[:2]
@@ -1001,12 +998,13 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
 
         softmax_output = self.crit(pred_hid, labels, training=training)
+        prediction_scores = softmax_output if labels is None else ()
 
         if not return_dict:
-            return (softmax_output,) + transformer_outputs[1:]
+            return (prediction_scores,) + transformer_outputs[1:]
 
         return TFTransfoXLLMHeadModelOutput(
-            prediction_scores=softmax_output,
+            prediction_scores=prediction_scores,
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
@@ -1088,7 +1086,6 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFTransfoXLSequenceClassifierOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -41,7 +41,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -398,7 +398,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
         scores += position_bias
-        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
+        weights = stable_softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
         weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
 
         # Mask heads if we want to
@@ -654,7 +654,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ) -> Tuple:
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1152,7 +1151,6 @@ class TFT5Model(TFT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFSeq2SeqModelOutput]:
         r"""
         Returns:
@@ -1167,7 +1165,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
 
         >>> # forward pass
@@ -1329,7 +1327,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1356,7 +1353,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         >>> # inference
         >>> inputs = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(inputs)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you
@@ -1611,6 +1608,10 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
+    @property
+    def dummy_inputs(self):
+        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+
     def get_encoder(self):
         return self.encoder
 
@@ -1627,7 +1628,6 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[Tuple, TFBaseModelOutput]:
         r"""
         Returns:
@@ -1642,7 +1642,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model(input_ids)
         ```"""
 
@@ -1669,6 +1669,19 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
     # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):

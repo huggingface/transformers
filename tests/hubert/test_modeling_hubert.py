@@ -106,7 +106,7 @@ class HubertModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
@@ -133,6 +133,7 @@ class HubertModelTester:
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
+            do_stable_layer_norm=self.do_stable_layer_norm,
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
@@ -300,7 +301,6 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
@@ -445,7 +445,6 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(

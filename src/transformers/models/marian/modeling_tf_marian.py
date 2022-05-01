@@ -39,7 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -284,7 +284,7 @@ class TFMarianAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
             # The tf.debugging asserts are not compliant with XLA then they
@@ -707,7 +707,6 @@ class TFMarianEncoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         """
         Args:
@@ -866,7 +865,6 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1296,7 +1294,6 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):

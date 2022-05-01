@@ -26,8 +26,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -541,7 +542,8 @@ class DeiTModel(DeiTPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -661,7 +663,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
         if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[2:]
+            output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
         return MaskedLMOutput(
@@ -693,7 +695,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -702,7 +704,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -774,10 +776,10 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
@@ -881,7 +883,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         logits = (cls_logits + distillation_logits) / 2
 
         if not return_dict:
-            output = (logits, cls_logits, distillation_logits) + outputs[2:]
+            output = (logits, cls_logits, distillation_logits) + outputs[1:]
             return output
 
         return DeiTForImageClassificationWithTeacherOutput(

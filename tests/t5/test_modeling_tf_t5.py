@@ -20,7 +20,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 from transformers.utils import cached_property
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -58,7 +58,7 @@ class TFT5ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_labels = None
         if self.use_labels:
@@ -227,7 +227,7 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
-    def create_and_check_t5_xla_generate(self, config, input_ids, *args):
+    def create_and_check_t5_xla_generate_fast(self, config, input_ids, *args):
         config.eos_token_id = None
         config.max_length = 10
         config.do_sample = False
@@ -297,9 +297,9 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_t5_model_xla_generate(self):
+    def test_t5_model_xla_generate_fast(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_t5_xla_generate(*config_and_inputs)
+        self.model_tester.create_and_check_t5_xla_generate_fast(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -345,6 +345,11 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # the vocab size is now resized to the length of the tokenizer, which is different from the original size
         self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
         self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
+
+    # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
+    @unittest.skip(reason="The inputs of the Main Layer are different.")
+    def test_keras_save_load(self):
+        pass
 
 
 class TFT5EncoderOnlyModelTester:
@@ -480,8 +485,12 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-        sentence = "Translate English to German: Today is a beautiful day."
-        input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+        # two examples with different lengths to confirm that attention masks are operational in XLA
+        sentences = [
+            "Translate English to German: Today is a beautiful day.",
+            "Translate English to German: I have four cats, three dogs, two birds, and a horse.",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
 
         xla_generate = tf.function(model.generate, jit_compile=True)
 
@@ -491,7 +500,10 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
 
-        expected_output_string = ["Heute ist ein schöner Tag."]
+        expected_output_string = [
+            "Heute ist ein schöner Tag.",
+            "Ich habe vier Katzen, drei Hunde, zwei Vögel und ein Pferd.",
+        ]
 
         self.assertListEqual(expected_output_string, output_strings)
         self.assertListEqual(expected_output_string, output_strings_xla)
@@ -520,6 +532,33 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings)
 
     @slow
+    def test_sample_xla_generate_simple(self):
+        # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
+        # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
+        # and that we can seed both versions.
+
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+            tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+            sentence = "Translate English to German: I have two bananas"
+            input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+            expected_output_string = ["Ich habe zwei Bananen"]
+            expected_output_string_xla = ["Ich habe 2 Bananen"]
+
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids = model.generate(input_ids, do_sample=True, seed=[42, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(expected_output_string, output_strings)
+
+            xla_generate = tf.function(model.generate, jit_compile=True)
+            # seed set -> deterministic sampling sequence -> deterministic generation
+            output_ids_xla = xla_generate(input_ids, do_sample=True, seed=[42, 0])
+            output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+            self.assertListEqual(expected_output_string_xla, output_strings_xla)
+
+    @slow
     def test_sample_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -535,16 +574,16 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
             "temperature": 0.8,
             "top_k": 500,
             "top_p": 0.9,
+            "seed": [20, 0],  # seed set -> deterministic sampling sequence -> deterministic generation
         }
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
             output_ids = model.generate(input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
-        expected_output_string = ["i love her I really love my heart", "die Transformatoren sind wirklich erstaunlich"]
+        expected_output_string = ["- I really love my way of this.", "die Transformatoren sind wirklich erstaunlich"]
 
         self.assertListEqual(expected_output_string, output_strings)
 
@@ -799,33 +838,3 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
         self.assertEqual(translation, expected_translation)
-
-    def test_finetune_keras_trainer(self):
-        """Ensure that the model can be fine-tuned via the keras API and
-        that metrics work as expected.
-        """
-
-        # This metric expects to be called with the logits output
-        def _accuracy(y_true, y_pred):
-            return tf.keras.metrics.sparse_categorical_crossentropy(y_true[:, 0], y_pred[:, 0])
-
-        # measure the accuracy of the first token
-        class FirstTokenAccuracy(tf.keras.metrics.MeanMetricWrapper):
-            def __init__(self, name="accuracy", **kwargs):
-                super().__init__(_accuracy, name=name, **kwargs)
-
-        model = self.model
-        model.compile("adam", metrics=FirstTokenAccuracy())
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-
-        examples = [
-            ("sentiment: Everything is awesome!", "positive"),
-            ("sentiment: Tensorflow datasets are hard to use", "negative"),
-        ]
-
-        inputs = dict(tokenizer([x[0] for x in examples], padding=True, return_tensors="tf"))
-        inputs["labels"] = tokenizer([x[1] for x in examples], return_tensors="tf").input_ids
-
-        model.fit(inputs)
-        m = model.evaluate(inputs)
-        self.assertEqual(len(m), 2)

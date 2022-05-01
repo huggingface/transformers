@@ -139,11 +139,7 @@ class ViTMAEModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -322,6 +318,23 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # overwrite from common since ViTMAEForPretraining has random masking, we need to fix the noise
+    # to generate masks during test
+    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
+
+        # make masks reproducible
+        np.random.seed(2)
+
+        num_patches = int((pt_model.config.image_size // pt_model.config.patch_size) ** 2)
+        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
+        pt_noise = torch.from_numpy(noise)
+
+        # Add `noise` argument.
+        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
+        pt_inputs_dict["noise"] = pt_noise
+
+        super().check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
+
     def test_save_load(self):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -400,11 +413,8 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # make random mask reproducible
-        # note that the same seed on CPU and on GPU doesn’t mean they spew the same random number sequences,
-        # as they both have fairly different PRNGs (for efficiency reasons).
-        # source: https://discuss.pytorch.org/t/random-seed-that-spans-across-devices/19735
-        torch.manual_seed(2)
+        # make random mask reproducible across the PT and TF model
+        np.random.seed(2)
 
         model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to(torch_device)
 
@@ -412,22 +422,22 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
+        # prepare a noise vector that will be also used for testing the TF model
+        # (this way we can ensure that the PT and TF models operate on the same inputs)
+        vit_mae_config = ViTMAEConfig()
+        num_patches = int((vit_mae_config.image_size // vit_mae_config.patch_size) ** 2)
+        noise = np.random.uniform(size=(1, num_patches))
+
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(**inputs, noise=torch.from_numpy(noise).to(device=torch_device))
 
         # verify the logits
         expected_shape = torch.Size((1, 196, 768))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice_cpu = torch.tensor(
-            [[0.7366, -1.3663, -0.2844], [0.7919, -1.3839, -0.3241], [0.4313, -0.7168, -0.2878]]
+        expected_slice = torch.tensor(
+            [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
-        expected_slice_gpu = torch.tensor(
-            [[0.8948, -1.0680, 0.0030], [0.9758, -1.1181, -0.0290], [1.0602, -1.1522, -0.0528]]
-        )
-
-        # set expected slice depending on device
-        expected_slice = expected_slice_cpu if torch_device == "cpu" else expected_slice_gpu
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))

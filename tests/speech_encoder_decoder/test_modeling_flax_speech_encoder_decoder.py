@@ -79,6 +79,7 @@ class FlaxEncoderDecoderMixin:
         enc_dec_model = FlaxSpeechEncoderDecoderModel(encoder_decoder_config)
 
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
+        self.assertFalse(enc_dec_model.config.tie_word_embeddings)
 
         outputs_encoder_decoder = enc_dec_model(
             inputs=inputs,
@@ -360,20 +361,24 @@ class FlaxEncoderDecoderMixin:
             logits = outputs_enc_dec.logits
             vocab_size = logits.shape[-1]
             loss = cross_entropy(logits, onehot(labels=decoder_input_ids, num_classes=vocab_size)).sum()
-            return loss
+            return (loss, logits)
 
         # transform the loss function to get the gradients
-        grad_fn = jax.value_and_grad(compute_loss)
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
-        # compute the loss and gradients for the unfrozen model
-        loss, grads = grad_fn(params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False)
+        # compute the loss, logits, and gradients for the unfrozen model
+        (loss, logits), grads = grad_fn(
+            params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False
+        )
 
-        # compare to the loss and gradients for the frozen model
-        loss_frozen, grads_frozen = grad_fn(
+        # compare to the loss, logits and gradients for the frozen model
+        (loss_frozen, logits_frozen), grads_frozen = grad_fn(
             params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=True
         )
 
-        self.assert_almost_equals(loss, loss_frozen, 1e-5)
+        # ensure that the logits and losses remain precisely equal
+        self.assertTrue((logits == logits_frozen).all())
+        self.assertEqual(loss, loss_frozen)
 
         grads = flatten_dict(grads)
         grads_frozen = flatten_dict(grads_frozen)
@@ -381,7 +386,7 @@ class FlaxEncoderDecoderMixin:
         # ensure that the dicts of gradients contain the same keys
         self.assertEqual(grads.keys(), grads_frozen.keys())
 
-        # ensure that the gradients of the frozen layers are precisely zero and that they differ to the gradients of the unfrozen layers
+        # ensure that the gradients of the feature extractor layers are precisely zero when frozen and contain non-zero entries when unfrozen
         feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
         feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
 
@@ -389,14 +394,14 @@ class FlaxEncoderDecoderMixin:
             feature_extractor_grads, feature_extractor_grads_frozen
         ):
             self.assertTrue((feature_extractor_grad_frozen == 0.0).all())
-            self.assert_difference(feature_extractor_grad, feature_extractor_grad_frozen, 1e-5)
+            self.assertTrue((feature_extractor_grad > 0.0).any())
 
-        # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
+        # ensure that the gradients of all unfrozen layers remain precisely equal, i.e. all layers excluding the frozen 'feature_extractor'
         grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
         grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
 
         for grad, grad_frozen in zip(grads, grads_frozen):
-            self.assert_almost_equals(grad, grad_frozen, 1e-5)
+            self.assertTrue((grad == grad_frozen).all())
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
 
@@ -408,28 +413,22 @@ class FlaxEncoderDecoderMixin:
         pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
 
         with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs)
-        pt_logits = pt_outputs.logits
-        pt_outputs = pt_outputs.to_tuple()
+            pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-        fx_outputs = fx_model(**inputs_dict)
-        fx_logits = fx_outputs.logits
-        fx_outputs = fx_outputs.to_tuple()
-
+        fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits, pt_logits.numpy(), 4e-2)
+        for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+            self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
             fx_model_loaded = FlaxSpeechEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
 
-        fx_outputs_loaded = fx_model_loaded(**inputs_dict)
-        fx_logits_loaded = fx_outputs_loaded.logits
-        fx_outputs_loaded = fx_outputs_loaded.to_tuple()
-
+        fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits_loaded, pt_logits.numpy(), 4e-2)
+        for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-5)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -440,12 +439,11 @@ class FlaxEncoderDecoderMixin:
         pt_model_loaded.eval()
 
         with torch.no_grad():
-            pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-        pt_logits_loaded = pt_outputs_loaded.logits
-        pt_outputs_loaded = pt_outputs_loaded.to_tuple()
+            pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
+        for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
 
@@ -504,11 +502,7 @@ class FlaxEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between arrays is {diff} (>= {tol}).")
-
-    def assert_difference(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
-        self.assertGreaterEqual(diff, tol, f"Difference between arrays is {diff} (<= {tol}).")
+        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
@@ -542,6 +536,12 @@ class FlaxEncoderDecoderMixin:
         # check `enc_to_dec_proj` work as expected
         decoder_config.hidden_size = decoder_config.hidden_size * 2
         self.assertTrue(config.hidden_size != decoder_config.hidden_size)
+        self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
+        self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
+
+        # check `add_adapter` works as expected
+        config.add_adapter = True
+        self.assertTrue(config.add_adapter)
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
 
@@ -582,7 +582,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "gpt2-medium"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -638,7 +638,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -699,7 +699,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "bart-large"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -755,7 +755,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])

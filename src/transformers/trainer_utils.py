@@ -32,7 +32,6 @@ import numpy as np
 from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_sagemaker_dp_enabled,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -64,17 +63,43 @@ def set_seed(seed: int):
         tf.random.set_seed(seed)
 
 
-class EvalPrediction(NamedTuple):
+class EvalPrediction:
     """
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
+        inputs (`np.ndarray`, *optional*)
     """
 
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Union[np.ndarray, Tuple[np.ndarray]]
+    def __init__(
+        self,
+        predictions: Union[np.ndarray, Tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+    ):
+        self.predictions = predictions
+        self.label_ids = label_ids
+        self.inputs = inputs
+
+    def __iter__(self):
+        if self.inputs is not None:
+            return iter((self.predictions, self.label_ids, self.inputs))
+        else:
+            return iter((self.predictions, self.label_ids))
+
+    def __getitem__(self, idx):
+        if idx < 0 or idx > 2:
+            raise IndexError("tuple index out of range")
+        if idx == 2 and self.inputs is None:
+            raise IndexError("tuple index out of range")
+        if idx == 0:
+            return self.predictions
+        elif idx == 1:
+            return self.label_ids
+        elif idx == 2:
+            return self.inputs
 
 
 class EvalLoopOutput(NamedTuple):
@@ -263,10 +288,6 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_dp_enabled():
-        import smdistributed.dataparallel.torch.distributed as dist
-
-        return dist.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
