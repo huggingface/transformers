@@ -15,17 +15,12 @@
 """ Testing suite for the TensorFlow Data2VecVision model. """
 
 import inspect
-import json
-import math
-import os
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, Data2VecVisionConfig
+from transformers import Data2VecVisionConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, require_vision, slow
 
 from ..test_configuration_common import ConfigTester
