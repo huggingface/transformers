@@ -181,6 +181,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roberta", "roberta-base"),
     ("roformer", "junnyu/roformer_chinese_base"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
