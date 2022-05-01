@@ -818,10 +818,10 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def test_inference_ctc_normal_batched(self):
-        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-large-rel-pos")
+    def test_inference_ctc_normal_batched_rel_pos(self):
+        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large-960h-ft")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-conformer-large-rel-pos", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large-960h-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
@@ -837,15 +837,38 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+            "sweat covered brion's body trickling into the tight loincloth that was the only garment he wore",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_ctc_normal_batched_rope(self):
+        model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-rope-large-960h-ft")
+        model.to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-conformer-rope-large-960h-ft", do_lower_case=True)
+
+        input_speech = self._load_datasamples(2)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+
+        with torch.no_grad():
+            logits = model(input_values).logits
+
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_pretrained(self):
-        model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2_conformer-base")
+        model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
         model.to(torch_device)
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "facebook/wav2vec2_conformer-base", return_attention_mask=True
+            "facebook/wav2vec2-conformer-rel-pos-large", return_attention_mask=True
         )
         input_speech = self._load_datasamples(2)
 
@@ -880,7 +903,7 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         # ... now compare to randomly initialized model
 
-        config = Wav2Vec2ConformerConfig.from_pretrained("facebook/wav2vec2_conformer-base")
+        config = Wav2Vec2ConformerConfig.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
         model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
 
         with torch.no_grad():
