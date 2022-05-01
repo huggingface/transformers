@@ -15,10 +15,10 @@
 """ XLM configuration"""
 from collections import OrderedDict
 from typing import Mapping
+
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-
 
 
 logger = logging.get_logger(__name__)
@@ -231,7 +231,8 @@ class XLMConfig(PretrainedConfig):
             self.n_words = kwargs["n_words"]
 
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
-        
+
+
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
 class XLMOnnxConfig(OnnxConfig):
     @property
