@@ -899,6 +899,9 @@ if is_torch_available():
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+            "TFData2VecVisionForImageClassification",
+            "TFData2VecVisionModel",
+            "TFData2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -4028,6 +4031,11 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            TFData2VecVisionForImageClassification,
+            TFData2VecVisionModel,
+            TFData2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

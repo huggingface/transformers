@@ -17,7 +17,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -34,13 +34,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
 
@@ -320,7 +314,10 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            attention_scores = attention_scores + self.relative_position_bias()[None, ...]
+            # Passing `0.0` to the `relative_position_bias()` layer because otherwise Keras
+            # might complain about `Layer.call()` not being invoked properly. In this case this input
+            # i.e., 0.0 is not going to be used in any calculations so we're safe.
+            attention_scores = attention_scores + self.relative_position_bias(0.0)[None, ...]
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -862,7 +859,6 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_beit.BeitModel with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,True->False
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
