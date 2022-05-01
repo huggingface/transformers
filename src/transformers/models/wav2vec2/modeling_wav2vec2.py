@@ -1470,13 +1470,13 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
+        >>> from transformers import AutoFeatureExtractor, Wav2Vec2ForPreTraining
         >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-        >>> model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+        >>> model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1

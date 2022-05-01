@@ -1158,7 +1158,6 @@ class Wav2Vec2ConformerAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
 class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1318,7 +1317,6 @@ WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
     "The bare Wav2Vec2Conformer Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->Wav2Vec2Conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
@@ -1467,7 +1465,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 @add_start_docstrings(
     """Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.""", WAV2VEC2_CONFORMER_START_DOCSTRING
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining with Wav2Vec2->Wav2Vec2Conformer,wav2vec2-base->wav2vec2-conformer-rel-pos-large,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
