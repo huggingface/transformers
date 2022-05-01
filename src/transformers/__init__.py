@@ -1203,7 +1203,6 @@ if is_torch_available():
             "MCTCForCTC",
             "MCTCModel",
             "MCTCPreTrainedModel",
-            "load_tf_weights_in_mctc",
         ]
     )
     _import_structure["models.megatron_bert"].extend(
@@ -3448,13 +3447,7 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
-        from .models.mctc import (
-            MCTC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MCTCForCTC,
-            MCTCModel,
-            MCTCPreTrainedModel,
-            load_tf_weights_in_mctc,
-        )
+        from .models.mctc import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCForCTC, MCTCModel, MCTCPreTrainedModel
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,
