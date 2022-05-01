@@ -51,26 +51,26 @@ _CONFIG_FOR_DOC = "Wav2Vec2ConformerConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-conformer-large-rel-pos"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-conformer-rope-large-960h-ft"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
 
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
+_CTC_EXPECTED_LOSS = 64.21
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2_conformer-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 6.54
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-seq-class"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.68
 
 # Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2_conformer-base-superb-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
+_FRAME_CLASS_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-frame-class"
+_FRAME_EXPECTED_OUTPUT = [1, 0]
 
 # Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "anton-l/wav2vec2_conformer-base-superb-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.98
+_XVECTOR_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-xvector"
+_XVECTOR_EXPECTED_OUTPUT = 1.0
 
 
 WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1560,8 +1560,8 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2_conformer-base")
-        >>> model = Wav2Vec2ConformerForPreTraining.from_pretrained("patrickvonplaten/wav2vec2_conformer-base")
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
+        >>> model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1
@@ -1584,7 +1584,6 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         >>> # for contrastive loss training model should be put into train mode
         >>> model = model.train()
-        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
