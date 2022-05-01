@@ -18,13 +18,20 @@ import shutil
 import tempfile
 import unittest
 
+from transformers import MCTCProcessor, MCTCTokenizer, is_speech_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
-from transformers.models.mctc import MCTCFeatureExtractor, MCTCProcessor, MCTCTokenizer
 from transformers.models.mctc.tokenization_mctc import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_torch, require_torchaudio
 
 from .test_feature_extraction_mctc import floats_list
 
 
+if is_speech_available():
+    from transformers import MCTCFeatureExtractor
+
+
+@require_torch
+@require_torchaudio
 class MCTCProcessorTest(unittest.TestCase):
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
