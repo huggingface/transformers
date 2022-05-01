@@ -37,6 +37,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Wav2Vec2ConformerForAudioFrameClassification,
         Wav2Vec2ConformerForCTC,
         Wav2Vec2ConformerForPreTraining,
         Wav2Vec2ConformerForSequenceClassification,
@@ -395,6 +396,8 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             Wav2Vec2ConformerModel,
             Wav2Vec2ConformerForSequenceClassification,
             Wav2Vec2ConformerForPreTraining,
+            Wav2Vec2ConformerForAudioFrameClassification,
+            Wav2Vec2ConformerForXVector,
         )
         if is_torch_available()
         else ()
