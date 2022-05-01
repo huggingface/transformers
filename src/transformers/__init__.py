@@ -311,7 +311,6 @@ _import_structure = {
     "models.wav2vec2_conformer": [
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2ConformerConfig",
-        "Wav2Vec2ConformerTokenizer",
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
@@ -2704,11 +2703,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
-    from .models.wav2vec2_conformer import (
-        WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Wav2Vec2ConformerConfig,
-        Wav2Vec2ConformerTokenizer,
-    )
+    from .models.wav2vec2_conformer import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2ConformerConfig
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
