@@ -93,7 +93,7 @@ class MCTCModelTester:
 
         output_seq_length = self.seq_length
         dilation = 1
-        for i, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
+        for _, kernel_sz, stride in zip(range(self.num_conv_layers), self.conv_kernel, self.conv_stride):
             padding = kernel_sz // 2
             output_seq_length = output_seq_length + 2 * padding - dilation * (kernel_sz - 1) - 1
             output_seq_length = torch.div(output_seq_length, stride, rounding_mode="trunc") + 1

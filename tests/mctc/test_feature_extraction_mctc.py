@@ -38,7 +38,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
         rng = global_rng
 
     values = []
-    for batch_idx in range(shape[0]):
+    for _batch_idx in range(shape[0]):
         values.append([])
         for _ in range(shape[1]):
             values[-1].append(rng.random() * scale)

@@ -329,8 +329,10 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        # convert input values to correct format
-        input_features = padded_inputs["input_features"]
+        # make sure list is in array format
+        input_features = padded_inputs.get("input_features")
+        if isinstance(input_features[0], list):
+            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:

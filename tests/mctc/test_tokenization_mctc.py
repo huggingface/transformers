@@ -30,23 +30,6 @@ from transformers.testing_utils import require_torch, slow
 from ..test_tokenization_common import TokenizerTesterMixin
 
 
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
-
-
 class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MCTCTokenizer
     test_rust_tokenizer = False
@@ -74,15 +57,15 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # check adding a single token
         tokenizer.add_tokens("x")
         token_ids = tokenizer("C x A").input_ids
-        self.assertEqual(token_ids, [25, 82, 78, 82, 23])
+        self.assertEqual(token_ids, [24, 81, 77, 81, 22])
 
         tokenizer.add_tokens(["a", "b", "c"])
         token_ids = tokenizer("C a A c").input_ids
-        self.assertEqual(token_ids, [25, 82, 55, 82, 23, 82, 57])
+        self.assertEqual(token_ids, [24, 81, 54, 81, 22, 81, 56])
 
         tokenizer.add_tokens(["a", "b", "c"])
         token_ids = tokenizer("CaA c").input_ids
-        self.assertEqual(token_ids, [25, 55, 23, 82, 57])
+        self.assertEqual(token_ids, [24, 54, 22, 81, 56])
 
     def test_tokenizer_add_token_words(self):
         tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
@@ -90,22 +73,22 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # check adding a single token
         tokenizer.add_tokens("xxx")
         token_ids = tokenizer("C xxx A B").input_ids
-        self.assertEqual(token_ids, [25, 82, 8068, 82, 23, 82, 24])
+        self.assertEqual(token_ids, [24, 81, 8067, 81, 22, 81, 23])
 
         tokenizer.add_tokens(["aaa", "bbb", "ccc"])
         token_ids = tokenizer("C aaa A ccc B B").input_ids
-        self.assertEqual(token_ids, [25, 82, 8069, 82, 23, 82, 8071, 82, 24, 82, 24])
+        self.assertEqual(token_ids, [24, 81, 8068, 81, 22, 81, 8070, 81, 23, 81, 23])
 
         tokenizer.add_tokens(["aaa", "bbb", "ccc"])
         token_ids = tokenizer("CaaaA ccc B B").input_ids
-        self.assertEqual(token_ids, [25, 8069, 23, 82, 8071, 82, 24, 82, 24])
+        self.assertEqual(token_ids, [24, 8068, 22, 81, 8070, 81, 23, 81, 23])
 
     def test_tokenizer_decode(self):
         tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
 
         sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27],
+            [29, 26, 33, tokenizer.pad_token_id, 33, 36],
+            [23, 46, 26, tokenizer.word_delimiter_token_id, 81, 23, 46, 26],
         ]
         tokens = tokenizer.decode(sample_ids[0])
         batch_tokens = tokenizer.batch_decode(sample_ids)
@@ -116,12 +99,12 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
         # fmt: off
         sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.word_delimiter_token_id, 82, 24, 47, 27],
+            [29, 26, 33, tokenizer.pad_token_id, 33, 36],
+            [23, 46, 26, tokenizer.word_delimiter_token_id, 81, 23, 46, 26],
         ]
         sample_ids_2 = [
-            [30, 27, 27, 27, 27, 27, 34, 34, 34, 34, 34, tokenizer.pad_token_id, 34, 37],
-            [24, 47, 27, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 82, 24, 47, 27, tokenizer.word_delimiter_token_id],
+            [29, 26, 26, 26, 26, 26, 33, 33, 33, 33, 33, tokenizer.pad_token_id, 33, 36],
+            [23, 46, 26, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 81, 23, 46, 26, tokenizer.word_delimiter_token_id],
         ]
         # fmt: on
 
@@ -138,7 +121,7 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         # fmt: off
         sample_ids = [
-            [30, 27, 34, tokenizer.pad_token_id, 34, 34, 34, 37, 37, tokenizer.word_delimiter_token_id, 37, 37, 8068, 8068],
+            [29, 26, 33, tokenizer.pad_token_id, 33, 33, 33, 36, 36, tokenizer.word_delimiter_token_id, 36, 36, 8067, 8067],
         ]
         # fmt: on
         batch_tokens = tokenizer.batch_decode(sample_ids)
@@ -165,82 +148,6 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
         self.assertEqual(sent, expected_sent)
 
-    def test_call(self):
-        # Tests that all call wrap to encode_plus and batch_encode_plus
-        tokenizer = self.get_tokenizer()
-        # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
-
-        # Test not batched input
-        encoded_sequences_1 = tokenizer(speech_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = tokenizer(np_speech_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
-
-        # Test batched
-        encoded_sequences_1 = tokenizer(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = tokenizer(np_speech_inputs, return_tensors="np").input_values
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
-    def test_padding(self, max_length=50):
-        def _input_values_have_equal_length(input_values):
-            length = len(input_values[0])
-            for input_values_slice in input_values[1:]:
-                if len(input_values_slice) != length:
-                    return False
-            return True
-
-        def _input_values_are_equal(input_values_1, input_values_2):
-            if len(input_values_1) != len(input_values_2):
-                return False
-
-            for input_values_slice_1, input_values_slice_2 in zip(input_values_1, input_values_2):
-                if not np.allclose(np.asarray(input_values_slice_1), np.asarray(input_values_slice_2), atol=1e-3):
-                    return False
-            return True
-
-        tokenizer = self.get_tokenizer()
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-
-        input_values_1 = tokenizer(speech_inputs).input_values
-        input_values_2 = tokenizer(speech_inputs, padding="longest").input_values
-        input_values_3 = tokenizer(speech_inputs, padding="longest", max_length=1600).input_values
-
-        self.assertFalse(_input_values_have_equal_length(input_values_1))
-        self.assertTrue(_input_values_have_equal_length(input_values_2))
-        self.assertTrue(_input_values_have_equal_length(input_values_3))
-        self.assertTrue(_input_values_are_equal(input_values_2, input_values_3))
-        self.assertTrue(len(input_values_1[0]) == 800)
-        self.assertTrue(len(input_values_2[0]) == 1200)
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_2[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_2[1])[1000:])) < 1e-3)
-
-        input_values_4 = tokenizer(speech_inputs, padding="max_length").input_values
-        input_values_5 = tokenizer(speech_inputs, padding="max_length", max_length=1600).input_values
-
-        self.assertTrue(_input_values_are_equal(input_values_1, input_values_4))
-        self.assertTrue(input_values_5.shape, (3, 1600))
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_5[0])[800:1200])) < 1e-3)
-
-        input_values_6 = tokenizer(speech_inputs, pad_to_multiple_of=500).input_values
-        input_values_7 = tokenizer(speech_inputs, padding="longest", pad_to_multiple_of=500).input_values
-        input_values_8 = tokenizer(
-            speech_inputs, padding="max_length", pad_to_multiple_of=500, max_length=2400
-        ).input_values
-
-        self.assertTrue(_input_values_are_equal(input_values_1, input_values_6))
-        self.assertTrue(input_values_7.shape, (3, 1500))
-        self.assertTrue(input_values_8.shape, (3, 2500))
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_7[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_7[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_7[2])[1200:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_8[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_8[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_8[2])[1200:])) < 1e-3)
 
     def test_save_pretrained(self):
         pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
@@ -327,31 +234,6 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         for parameter_name, parameter in signature.parameters.items():
             if parameter.default != inspect.Parameter.empty:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
-
-    def test_zero_mean_unit_variance_normalization(self):
-        tokenizer = self.get_tokenizer(do_normalize=True)
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        processed = tokenizer(speech_inputs, padding="longest")
-        input_values = processed.input_values
-
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
-            self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
-
-        _check_zero_mean_unit_variance(input_values[0, :800])
-        _check_zero_mean_unit_variance(input_values[1, :1000])
-        _check_zero_mean_unit_variance(input_values[2])
-
-    def test_return_attention_mask(self):
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-
-        # default case -> no attention_mask is returned
-        tokenizer = self.get_tokenizer()
-        processed = tokenizer(speech_inputs)
-        self.assertNotIn("attention_mask", processed)
-
-        self.assertListEqual(list(processed.attention_mask.shape), list(processed.input_values.shape))
-        self.assertListEqual(processed.attention_mask.sum(-1).tolist(), [800, 1000, 1200])
 
     @slow
     @require_torch
@@ -518,71 +400,71 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         outputs = [tokenizer.decode(ids, output_word_offsets=True, output_char_offsets=True) for ids in sample_ids]
         check_list_tuples_equal(outputs_batch, outputs)
 
-    # def test_offsets_integration(self):
-    #     tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
-    #     # pred_ids correspond to the following code
-    #     # ```
-    #     #        from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
-    #     #        from datasets import load_dataset
-    #     #        import datasets
-    #     #        import torch
-    #     #        model = AutoModelForCTC.from_pretrained("cwkeam/mctc-large")
-    #     #        feature_extractor = AutoFeatureExtractor.from_pretrained("cwkeam/mctc-large")
-    #     #
-    #     #        ds = load_dataset("common_voice", "en", split="train", streaming=True)
-    #     #        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-    #     #        ds_iter = iter(ds)
-    #     #        sample = next(ds_iter)
-    #     #
-    #     #        input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
-    #     #        logits = model(input_values).logits
-    #     #        pred_ids = torch.argmax(logits, axis=-1).cpu().tolist()
-    #     # ```
-    #     # fmt: off
-    #     pred_ids = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 11, 0, 0, 0, 22, 0, 0, 4, 4, 4, 14, 0, 0, 0, 0, 0, 8, 8, 0, 5, 5, 0, 12, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 10, 0, 0, 0, 15, 0, 0, 10, 0, 0, 0, 12, 0, 0, 0, 0, 0, 7, 0, 9, 0, 0, 14, 0, 0, 0, 13, 0, 7, 0, 0, 4, 4, 0, 15, 8, 8, 0, 0, 8, 0, 26, 0, 0, 4, 4, 0, 0, 15, 0, 0, 0, 0, 0, 0, 10, 0, 26, 5, 5, 0, 4, 4, 0, 0, 12, 11, 0, 0, 5, 4, 4, 4, 0, 18, 0, 0, 0, 7, 9, 9, 0, 6, 0, 12, 12, 4, 4, 0, 6, 0, 0, 8, 0, 4, 4, 4, 0, 19, 0, 0, 8, 9, 9, 0, 0, 0, 0, 12, 12, 0, 0, 0, 0, 0, 0, 0, 16, 16, 0, 0, 17, 5, 5, 5, 0, 4, 4, 4, 0, 0, 29, 29, 0, 0, 0, 0, 8, 11, 0, 9, 9, 0, 0, 0, 4, 4, 0, 12, 12, 0, 0, 0, 9, 0, 0, 0, 0, 0, 8, 18, 0, 0, 0, 4, 4, 0, 0, 8, 9, 0, 4, 4, 0, 6, 11, 5, 0, 4, 4, 0, 13, 13, 0, 0, 0, 10, 0, 0, 25, 0, 0, 6, 0, 4, 4, 0, 0, 0, 0, 7, 0, 0, 23, 0, 0, 4, 4, 0, 0, 0, 6, 11, 0, 5, 4, 4, 18, 0, 0, 0, 0, 0, 0, 7, 15, 0, 0, 0, 15, 15, 0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+    def test_offsets_integration(self):
+        tokenizer = self.tokenizer_class.from_pretrained("cwkeam/mctc-large")
+        # pred_ids correspond to the following code
+        # ```
+        # from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
+        # from datasets import load_dataset
+        # import datasets
+        # import torch
+        # model = AutoModelForCTC.from_pretrained("cwkeam/mctc-large")
+        # feature_extractor = AutoFeatureExtractor.from_pretrained("cwkeam/mctc-large")
 
-    #     # wav2vec2-base downsamples input audio by a factor of 320
-    #     # sampling rate for wav2vec2-base is 16_000
-    #     time_offset_wav2vec2_base = 320 / 16_000
+        # ds = load_dataset("common_voice", "en", split="train", streaming=True)
+        # ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        # ds_iter = iter(ds)
+        # sample = next(ds_iter)
 
-    #     expected_char_time_stamps_text = ['W', 'H', 'Y', ' ', 'D', 'O', 'E', 'S', ' ', 'M', 'I', 'L', 'I', 'S', 'A', 'N', 'D', 'R', 'A', ' ', 'L', 'O', 'O', 'K', ' ', 'L', 'I', 'K', 'E', ' ', 'S', 'H', 'E', ' ', 'W', 'A', 'N', 'T', 'S', ' ', 'T', 'O', ' ', 'C', 'O', 'N', 'S', 'U', 'M', 'E', ' ', 'J', 'O', 'H', 'N', ' ', 'S', 'N', 'O', 'W', ' ', 'O', 'N', ' ', 'T', 'H', 'E', ' ', 'R', 'I', 'V', 'T', ' ', 'A', 'P', ' ', 'T', 'H', 'E', ' ', 'W', 'A', 'L', 'L', ' ']
-    #     expected_char_time_stamps_start = [1.42, 1.44, 1.52, 1.58, 1.64, 1.76, 1.82, 1.88, 1.92, 2.26, 2.32, 2.4, 2.46, 2.54, 2.66, 2.7, 2.76, 2.84, 2.88, 2.94, 3.0, 3.02, 3.1, 3.14, 3.2, 3.28, 3.42, 3.46, 3.48, 3.54, 3.62, 3.64, 3.7, 3.72, 3.8, 3.88, 3.9, 3.96, 4.0, 4.04, 4.1, 4.16, 4.2, 4.28, 4.34, 4.36, 4.48, 4.66, 4.74, 4.76, 4.84, 4.94, 5.06, 5.08, 5.12, 5.22, 5.28, 5.38, 5.5, 5.52, 5.6, 5.68, 5.7, 5.74, 5.8, 5.82, 5.84, 5.88, 5.94, 6.04, 6.1, 6.16, 6.2, 6.32, 6.38, 6.44, 6.54, 6.56, 6.6, 6.62, 6.66, 6.8, 6.82, 6.9, 6.96]
-    #     expected_char_time_stamps_end = [1.44, 1.46, 1.54, 1.64, 1.66, 1.8, 1.86, 1.9, 2.06, 2.28, 2.34, 2.42, 2.48, 2.56, 2.68, 2.72, 2.78, 2.86, 2.9, 2.98, 3.02, 3.06, 3.12, 3.16, 3.24, 3.3, 3.44, 3.48, 3.52, 3.58, 3.64, 3.66, 3.72, 3.78, 3.82, 3.9, 3.94, 3.98, 4.04, 4.08, 4.12, 4.18, 4.26, 4.3, 4.36, 4.4, 4.52, 4.7, 4.76, 4.82, 4.9, 4.98, 5.08, 5.1, 5.16, 5.26, 5.32, 5.4, 5.52, 5.54, 5.64, 5.7, 5.72, 5.78, 5.82, 5.84, 5.86, 5.92, 5.98, 6.06, 6.12, 6.18, 6.24, 6.34, 6.4, 6.48, 6.56, 6.58, 6.62, 6.66, 6.68, 6.82, 6.84, 6.94, 7.02]
+        # input_features = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_features
+        # logits = model(input_features).logits
+        # pred_ids = torch.argmax(logits, axis=-1).cpu().tolist()
+        # print(pred_ids)
+        # ```
+        # fmt: off
+        pred_ids = [[81, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 44, 8064, 61, 8064, 78, 8064, 8064, 8064, 8064, 81, 8064, 57, 8064, 8064, 68, 8064, 58, 8064, 72, 8064, 8064, 8064, 8064, 81, 81, 81, 8064, 8064, 8064, 34, 8064, 58, 8064, 8064, 8064, 65, 8064, 62, 72, 8064, 8064, 72, 8064, 8064, 54, 8064, 67, 8064, 8064, 57, 71, 71, 54, 8064, 8064, 8064, 81, 65, 8064, 68, 8064, 68, 64, 8064, 8064, 8064, 81, 65, 62, 8064, 64, 58, 8064, 8064, 8064, 8064, 81, 81, 72, 61, 58, 58, 81, 81, 76, 54, 8064, 67, 73, 73, 72, 72, 81, 81, 73, 8064, 68, 81, 81, 8064, 8064, 56, 8064, 68, 8064, 67, 8064, 72, 8064, 8064, 74, 8064, 66, 8064, 58, 8064, 81, 81, 81, 8064, 8064, 8064, 31, 8064, 68, 61, 61, 67, 67, 8064, 8064, 81, 81, 8064, 40, 8064, 67, 8064, 68, 8064, 76, 8064, 8064, 81, 8064, 68, 67, 8064, 81, 8064, 73, 61, 61, 58, 81, 81, 8064, 71, 8064, 62, 60, 8064, 61, 73, 8064, 8064, 11, 8064, 74, 8064, 69, 8064, 8064, 8064, 81, 8064, 73, 61, 58, 8064, 81, 8064, 8064, 76, 8064, 54, 8064, 65, 8064, 8064, 65, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 8064, 12, 8064, 81]]
+        # wav2vec2-base downsamples input audio by a factor of 320
+        # sampling rate for wav2vec2-base is 16_000
+        time_offset_mctc = 480 / 16_000
 
-    #     expected_word_time_stamps_text = ['WHY', 'DOES', 'MILISANDRA', 'LOOK', 'LIKE', 'SHE', 'WANTS', 'TO', 'CONSUME', 'JOHN', 'SNOW', 'ON', 'THE', 'RIVT', 'AP', 'THE', 'WALL']
-    #     expected_word_time_stamps_start = [1.42, 1.64, 2.26, 3.0, 3.28, 3.62, 3.8, 4.1, 4.28, 4.94, 5.28, 5.68, 5.8, 5.94, 6.32, 6.54, 6.66]
-    #     expected_word_time_stamps_end = [1.54, 1.9, 2.9, 3.16, 3.52, 3.72, 4.04, 4.18, 4.82, 5.16, 5.54, 5.72, 5.86, 6.18, 6.4, 6.62, 6.94]
-    #     # fmt: on
+        expected_char_time_stamps_text = [' ', 'W', 'h', 'y', ' ', 'd', 'o', 'e', 's', ' ', 'M', 'e', 'l', 'i', 's', 's', 'a', 'n', 'd', 'r', 'a', ' ', 'l', 'o', 'o', 'k', ' ', 'l', 'i', 'k', 'e', ' ', 's', 'h', 'e', ' ', 'w', 'a', 'n', 't', 's', ' ', 't', 'o', ' ', 'c', 'o', 'n', 's', 'u', 'm', 'e', ' ', 'J', 'o', 'h', 'n', ' ', 'S', 'n', 'o', 'w', ' ', 'o', 'n', ' ', 't', 'h', 'e', ' ', 'r', 'i', 'g', 'h', 't', '-', 'u', 'p', ' ', 't', 'h', 'e', ' ', 'w', 'a', 'l', 'l', '.', ' ']
+        expected_char_time_stamps_start =  [0.0, 1.23, 1.29, 1.35, 1.5, 1.56, 1.65, 1.71, 1.77, 1.92, 2.1, 2.16, 2.28, 2.34, 2.37, 2.46, 2.55, 2.61, 2.7, 2.73, 2.79, 2.91, 2.94, 3.0, 3.06, 3.09, 3.21, 3.24, 3.27, 3.33, 3.36, 3.51, 3.57, 3.6, 3.63, 3.69, 3.75, 3.78, 3.84, 3.87, 3.93, 3.99, 4.05, 4.11, 4.14, 4.26, 4.32, 4.38, 4.44, 4.53, 4.59, 4.65, 4.71, 4.89, 4.95, 4.98, 5.04, 5.16, 5.25, 5.31, 5.37, 5.43, 5.52, 5.58, 5.61, 5.67, 5.73, 5.76, 5.82, 5.85, 5.94, 6.0, 6.03, 6.09, 6.12, 6.21, 6.27, 6.33, 6.45, 6.51, 6.54, 6.57, 6.63, 6.72, 6.78, 6.84, 6.93, 7.59, 7.65]
+        expected_char_time_stamps_end = [0.03, 1.26, 1.32, 1.38, 1.53, 1.59, 1.68, 1.74, 1.8, 2.01, 2.13, 2.19, 2.31, 2.37, 2.4, 2.49, 2.58, 2.64, 2.73, 2.79, 2.82, 2.94, 2.97, 3.03, 3.09, 3.12, 3.24, 3.27, 3.3, 3.36, 3.39, 3.57, 3.6, 3.63, 3.69, 3.75, 3.78, 3.81, 3.87, 3.93, 3.99, 4.05, 4.08, 4.14, 4.2, 4.29, 4.35, 4.41, 4.47, 4.56, 4.62, 4.68, 4.8, 4.92, 4.98, 5.04, 5.1, 5.22, 5.28, 5.34, 5.4, 5.46, 5.55, 5.61, 5.64, 5.7, 5.76, 5.82, 5.85, 5.91, 5.97, 6.03, 6.06, 6.12, 6.15, 6.24, 6.3, 6.36, 6.48, 6.54, 6.57, 6.6, 6.66, 6.75, 6.81, 6.87, 6.96, 7.62, 7.68]
 
-    #     output = tokenizer.batch_decode(pred_ids, output_char_offsets=True, output_word_offsets=True)
 
-    #     char_offsets_text = self.get_from_offsets(output["char_offsets"][0], "char")
-    #     char_offsets_start = self.get_from_offsets(output["char_offsets"][0], "start_offset")
-    #     char_offsets_end = self.get_from_offsets(output["char_offsets"][0], "end_offset")
+        expected_word_time_stamps_text = ['Why', 'does', 'Melissandra', 'look', 'like', 'she', 'wants', 'to', 'consume', 'John', 'Snow', 'on', 'the', 'right-up', 'the', 'wall.']
+        expected_word_time_stamps_start = [1.23, 1.56, 2.1, 2.94, 3.24, 3.57, 3.75, 4.05, 4.26, 4.89, 5.25, 5.58, 5.73, 5.94, 6.51, 6.72]
+        expected_word_time_stamps_end = [1.38, 1.8, 2.82, 3.12, 3.39, 3.69, 3.99, 4.14, 4.68, 5.1, 5.46, 5.64, 5.85, 6.36, 6.6, 7.62]
 
-    #     word_offsets_text = self.get_from_offsets(output["word_offsets"][0], "word")
-    #     word_offsets_start = self.get_from_offsets(output["word_offsets"][0], "start_offset")
-    #     word_offsets_end = self.get_from_offsets(output["word_offsets"][0], "end_offset")
+        output = tokenizer.batch_decode(pred_ids, output_char_offsets=True, output_word_offsets=True)
 
-    #     # let's transform offsets to time stamps in seconds
-    #     char_time_stamps_start = [round(c * time_offset_wav2vec2_base, 2) for c in char_offsets_start]
-    #     char_time_stamps_end = [round(c * time_offset_wav2vec2_base, 2) for c in char_offsets_end]
+        char_offsets_text = self.get_from_offsets(output["char_offsets"][0], "char")
+        char_offsets_start = self.get_from_offsets(output["char_offsets"][0], "start_offset")
+        char_offsets_end = self.get_from_offsets(output["char_offsets"][0], "end_offset")
 
-    #     word_time_stamps_start = [round(w * time_offset_wav2vec2_base, 2) for w in word_offsets_start]
-    #     word_time_stamps_end = [round(w * time_offset_wav2vec2_base, 2) for w in word_offsets_end]
+        word_offsets_text = self.get_from_offsets(output["word_offsets"][0], "word")
+        word_offsets_start = self.get_from_offsets(output["word_offsets"][0], "start_offset")
+        word_offsets_end = self.get_from_offsets(output["word_offsets"][0], "end_offset")
 
-    #     # NOTE: you can verify the above results by checking out the dataset viewer
-    #     # on https://huggingface.co/datasets/common_voice/viewer/en/train and
-    #     # downloading / playing the sample `common_voice_en_100038.mp3`. As
-    #     # you can hear the time-stamps match more or less
+        # let's transform offsets to time stamps in seconds
+        char_time_stamps_start = [round(c * time_offset_mctc, 2) for c in char_offsets_start]
+        char_time_stamps_end = [round(c * time_offset_mctc, 2) for c in char_offsets_end]
 
-    #     self.assertListEqual(expected_char_time_stamps_text, char_offsets_text)
-    #     self.assertListEqual(expected_char_time_stamps_start, char_time_stamps_start)
-    #     self.assertListEqual(expected_char_time_stamps_end, char_time_stamps_end)
+        word_time_stamps_start = [round(w * time_offset_mctc, 2) for w in word_offsets_start]
+        word_time_stamps_end = [round(w * time_offset_mctc, 2) for w in word_offsets_end]
 
-    #     self.assertListEqual(expected_word_time_stamps_text, word_offsets_text)
-    #     self.assertListEqual(expected_word_time_stamps_start, word_time_stamps_start)
-    #     self.assertListEqual(expected_word_time_stamps_end, word_time_stamps_end)
+        # NOTE: you can verify the above results by checking out the dataset viewer
+        # on https://huggingface.co/datasets/common_voice/viewer/en/train and
+        # downloading / playing the sample `common_voice_en_100038.mp3`. As
+        # you can hear the time-stamps match more or less
+
+        self.assertListEqual(expected_char_time_stamps_text, char_offsets_text)
+        self.assertListEqual(expected_char_time_stamps_start, char_time_stamps_start)
+        self.assertListEqual(expected_char_time_stamps_end, char_time_stamps_end)
+
+        self.assertListEqual(expected_word_time_stamps_text, word_offsets_text)
+        self.assertListEqual(expected_word_time_stamps_start, word_time_stamps_start)
+        self.assertListEqual(expected_word_time_stamps_end, word_time_stamps_end)
 
     def test_pretrained_model_lists(self):
         # MCTCModel has no max model length => no testing
@@ -647,3 +529,14 @@ class MCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
+
+    def test_convert_tokens_to_string_format(self):
+        # The default common tokenizer tests assumes that the output of `convert_tokens_to_string` is a string which
+        # is not the case for Wav2vec2.
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["T", "H", "I", "S", "|", "I", "S", "|", "A", "|", "T", "E", "X", "T"]
+                output = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(output["text"], str)
