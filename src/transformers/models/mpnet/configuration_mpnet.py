@@ -31,7 +31,7 @@ class MPNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MPNetModel`] or a [`TFMPNetModel`]. It is used to
     instantiate a MPNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPNet
-    [mpnet-base](https://huggingface.co/mpnet-base) architecture.
+    [microsoft/mpnet-base](https://huggingface.co/microsoft/mpnet-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

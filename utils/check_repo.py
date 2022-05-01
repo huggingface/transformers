@@ -186,6 +186,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     [
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
+        ("data2vec-vision", "data2vec"),
     ]
 )
 
@@ -360,7 +361,7 @@ def check_models_are_tested(module, test_file):
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
     if tested_models is None:
-        if test_file in TEST_FILES_WITH_NO_COMMON_TESTS:
+        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
             f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
@@ -392,9 +393,9 @@ def check_all_models_are_tested():
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
             test_file = test_file[0]
-        new_failures = check_models_are_tested(module, test_file)
-        if new_failures is not None:
-            failures += new_failures
+            new_failures = check_models_are_tested(module, test_file)
+            if new_failures is not None:
+                failures += new_failures
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
