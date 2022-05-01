@@ -182,7 +182,7 @@ class Conv1dSubsampler(nn.Module):
         self.kernel_size = config.conv_kernel
         self.stride = config.conv_stride
 
-        # NOTE: MCTC by construction only uses one convolution kernel. I've made this flexible to allow for 
+        # NOTE: MCTC by construction only uses one convolution kernel. I've made this flexible to allow for
         # multiple layers of convolutions, but not sure if this model definition should just restrict it
         # to one layer. This becomes especially relevant when considering the padding like line 1 of forward().
         self.conv_layers = nn.ModuleList(
@@ -470,7 +470,7 @@ class MCTCAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]    # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
         return outputs
 
@@ -585,13 +585,13 @@ class MCTCPreTrainedModel(PreTrainedModel):
         Computes the output length of the convolutional layers
         """
         dilation = 1
-        for i, kernel_sz, stride in zip(
+        for _, kernel_sz, stride in zip(
             range(self.config.num_conv_layers), self.config.conv_kernel, self.config.conv_stride
         ):
             padding = kernel_sz // 2
-            input_lengths = input_lengths + 2*padding - dilation*(kernel_sz - 1) - 1
+            input_lengths = input_lengths + 2 * padding - dilation * (kernel_sz - 1) - 1
             input_lengths = torch.div(input_lengths, stride, rounding_mode="trunc") + 1
-        
+
         return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
@@ -759,7 +759,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
-                        # (head_mask[idx] if head_mask is not None else None),
+                        (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
                     layer_outputs = encoder_layer(

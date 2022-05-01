@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" mCTC model configuration"""
+"""MCTC model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -108,8 +108,8 @@ class MCTCConfig(PretrainedConfig):
         conv_glu_dim=1,
         conv_dropout=0.3,
         num_conv_layers=1,
-        conv_kernel=[7],
-        conv_stride=[3],
+        conv_kernel=(7,),
+        conv_stride=(3,),
         input_feat_per_channel=80,
         input_channels=1,
         conv_channels=None,
