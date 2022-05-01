@@ -24,6 +24,7 @@ from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
+from ..models.mobilebert import MobileBertOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
@@ -191,6 +192,16 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
+        ),
+        "mobilebert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "next-sentence-prediction",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=MobileBertOnnxConfig,
         ),
         "convbert": supported_features_mapping(
             "default",

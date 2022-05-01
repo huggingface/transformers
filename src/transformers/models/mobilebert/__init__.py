@@ -22,7 +22,11 @@ from ...utils import _LazyModule, is_tf_available, is_tokenizers_available, is_t
 
 
 _import_structure = {
-    "configuration_mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig"],
+    "configuration_mobilebert": [
+        "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileBertConfig",
+        "MobileBertOnnxConfig",
+    ],
     "tokenization_mobilebert": ["MobileBertTokenizer"],
 }
 
@@ -62,7 +66,11 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
+    from .configuration_mobilebert import (
+        MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileBertConfig,
+        MobileBertOnnxConfig,
+    )
     from .tokenization_mobilebert import MobileBertTokenizer
 
     if is_tokenizers_available():
