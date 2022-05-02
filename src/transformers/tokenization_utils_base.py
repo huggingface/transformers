@@ -1998,7 +1998,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # This method should be deleted in Transformers v5
         # Its only purpose is to potentially throw a warning
         # that incorrectly defined max lengths of T5's tokenizer are used
-        # which will we correct in Transformers v5 when this method should be deleted.
+        # which we will correct in Transformers v5.
         return max_model_length
 
     def save_pretrained(
