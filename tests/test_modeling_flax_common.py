@@ -136,21 +136,6 @@ class FlaxModelTesterMixin:
 
         return inputs_dict
 
-    def fx_model_to_pt(self, model_class):
-        # load corresponding PyTorch class
-        pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-        try:
-            pt_model_class = getattr(transformers, pt_model_class_name)
-        except AttributeError:
-            # Check if Flax "ForCausalLM" needs to be converted to (deprecated) PyTorch "LMHeadModel"
-            pt_lmheadmodel_class_name = pt_model_class_name[:-11] + "LMHeadModel"
-            try:
-                pt_model_class = getattr(transformers, pt_lmheadmodel_class_name)
-            except AttributeError:
-                # Return the original AttributeError if "LMHeadModel" does not exist
-                pt_model_class = getattr(transformers, pt_model_class_name)
-        return pt_model_class
-
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
@@ -245,7 +230,8 @@ class FlaxModelTesterMixin:
                 pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
                 # load corresponding PyTorch class
-                pt_model_class = self.fx_model_to_pt(model_class)
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -297,7 +283,8 @@ class FlaxModelTesterMixin:
                 pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
                 # load corresponding PyTorch class
-                pt_model_class = self.fx_model_to_pt(model_class)
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -426,7 +413,7 @@ class FlaxModelTesterMixin:
             base_params = flatten_dict(unfreeze(model.params))
 
             # convert Flax model to PyTorch model
-            pt_model_class = self.fx_model_to_pt(model_class)
+            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
 
@@ -455,7 +442,7 @@ class FlaxModelTesterMixin:
             base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
 
             # convert Flax model to PyTorch model
-            pt_model_class = self.fx_model_to_pt(model_class)
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
 
@@ -484,7 +471,7 @@ class FlaxModelTesterMixin:
             base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
 
             # convert Flax model to PyTorch model
-            pt_model_class = self.fx_model_to_pt(model_class)
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
 
