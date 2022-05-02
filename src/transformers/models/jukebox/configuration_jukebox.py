@@ -159,6 +159,28 @@ class JukeboxConfig(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        sampling_rate=16000,
+        sample_length=None,
+        sample_length_in_seconds=10,
+        vq_vae_levels=3,
+        vq_vae_downsampling=(3, 2, 2),
+        vq_vae_strides=(2, 2, 1),
+        vq_vae_emmbedding_width=2048,
+        vq_vae_codebook_dimension=2048,
+        vq_vae_width=64,
+        vq_vae_depth=4,
+        vq_vae_m_conv=1,
+        vq_vae_dilation_growth_rate=3,
+        vq_vae_dilation_cycle=1,
+        vq_vae_multipliers=(1, 1, 1),
+        vq_vae_lmu=0.99,  # for the ema?
+        vq_vae_commit=0.02,
+        # vq_vae_spectral
+        vq_vae_multi_spectral=1,
+        # vq_vae_loss_fn = 'l1',
+        vq_vae_conv_block_depth=4,
+        vq_vae_conv_block_width=64,
+        vq_vae_reverse_decoder_dilation=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -183,41 +205,34 @@ class JukeboxConfig(PretrainedConfig):
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
 
+        self.sampling_rate = sampling_rate
+        self.sample_length = sample_length
+        self.sample_length_in_seconds = sample_length_in_seconds
+        self.vq_vae_levels = vq_vae_levels
+        self.vq_vae_downsampling = vq_vae_downsampling
+        self.vq_vae_strides = vq_vae_strides
+        self.vq_vae_emmbedding_width = vq_vae_emmbedding_width
+        self.vq_vae_codebook_dimension = vq_vae_codebook_dimension
+        self.vq_vae_width = vq_vae_width
+        self.vq_vae_depth = vq_vae_depth
+        self.vq_vae_m_conv = vq_vae_m_conv
+        self.vq_vae_dilation_growth_rate = vq_vae_dilation_growth_rate
+        self.vq_vae_dilation_cycle = vq_vae_dilation_cycle
+        self.vq_vae_strides = vq_vae_strides
+        self.vq_vae_multipliers = vq_vae_multipliers
+        self.vq_vae_commit = vq_vae_commit
+        self.vq_vae_conv_block_depth = vq_vae_conv_block_depth
+        self.vq_vae_conv_block_width = vq_vae_conv_block_width
+        self.vq_vae_reverse_decoder_dilation = vq_vae_reverse_decoder_dilation
+        self.vq_vae_multi_spectral = vq_vae_multi_spectral
+        self.vq_vae_lmu = vq_vae_lmu
+
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-"""
-Hyper parameters : 
 
-vq_vae_levels
-vq_vae_level_downsampling
-vq_vae_level_stride
-vq_vae_emmbedding_width
-vq_vae_codebook_dimension
-vq_vae_dilation_growth_rate
-vq_vae_l_mu                     # for the ema? 
-vq_vae_commit
-vq_vae_spectral
-vq_vae_multi_spectral
-vq_vae_use_bottleneck
-vq_vae_block_kwargs (width and depth) block_kwargs = dict(width=hps.width, depth=hps.depth, m_conv=hps.m_conv,
-                        dilation_growth_rate=hps.dilation_growth_rate,
-                        dilation_cycle=hps.dilation_cycle,
-                        reverse_decoder_dilation=hps.vqvae_reverse_decoder_dilation)
-vq_vae_loss_fn
-vq_vae_conv_block_depth
-vq_vae_conv_block_width (and at least 4 more)
-vq_vae_hvqvae_multipliers
-va_vae_sample_length
-
-
-
-
-
-
-"""
 
 class JukeboxOnnxConfig(OnnxConfigWithPast):
     def __init__(
