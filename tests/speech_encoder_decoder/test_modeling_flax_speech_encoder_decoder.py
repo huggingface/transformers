@@ -864,63 +864,11 @@ class FlaxWav2Vec2BertModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "encoder_hidden_states": encoder_hidden_states,
         }
 
-
-@require_flax
-class FlaxWav2Vec2RobertaModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
-    def get_pretrained_model_and_inputs(self):
-        model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-large-lv60", "roberta-large"
-        )
-        batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
-        attention_mask = random_attention_mask([batch_size, 512])
-        decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
-        decoder_attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "inputs": input_values,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-        }
-
-        return model, inputs
-
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = FlaxWav2Vec2Model(config)
-        decoder_model = FlaxRobertaForCausalLM(decoder_config)
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        model_tester_encoder = FlaxWav2Vec2ModelTester(self, batch_size=13)
-        model_tester_decoder = FlaxRobertaModelTester(self, batch_size=13)
-        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
-        (config, inputs, attention_mask) = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = decoder_config_and_inputs
-
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        return {
-            "config": config,
-            "inputs": inputs,
-            "attention_mask": attention_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "encoder_hidden_states": encoder_hidden_states,
-        }
-
     @slow
-    def test_flaxwav2vec2roberta_pt_flax_equivalence(self):
-        pt_model = SpeechEncoderDecoderModel.from_pretrained("speech-seq2seq/wav2vec2-2-roberta-large")
+    def test_flaxwav2vec2bert_pt_flax_equivalence(self):
+        pt_model = SpeechEncoderDecoderModel.from_pretrained("speech-seq2seq/wav2vec2-2-bert-large")
         fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained(
-            "speech-seq2seq/wav2vec2-2-roberta-large", from_pt=True
+            "speech-seq2seq/wav2vec2-2-bert-large", from_pt=True
         )
 
         pt_model.to(torch_device)

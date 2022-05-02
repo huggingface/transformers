@@ -25,6 +25,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
+from ..roberta.test_modeling_flax_roberta import FlaxRobertaModelTester
 from ..test_modeling_flax_common import ids_tensor
 
 
@@ -34,8 +35,10 @@ if is_flax_available():
         EncoderDecoderConfig,
         FlaxBartForCausalLM,
         FlaxBertModel,
+        FlaxBertForCausalLM,
         FlaxEncoderDecoderModel,
         FlaxGPT2LMHeadModel,
+        FlaxRobertaForCausalLM,
     )
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
@@ -305,7 +308,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-            self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -315,7 +318,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -330,7 +333,7 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 4e-2)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
 
@@ -543,6 +546,79 @@ class FlaxBartEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
 
     def get_pretrained_model(self):
         return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "facebook/bart-base")
+
+@require_flax
+class FlaxBertEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = FlaxBertModel(config)
+        decoder_model = FlaxBertForCausalLM(decoder_config)
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
+        model_tester_decoder = FlaxBertModelTester(self, batch_size=13)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    def get_pretrained_model(self):
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
+
+
+@require_flax
+class FlaxRobertaEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = FlaxBertModel(config)
+        decoder_model = FlaxRobertaForCausalLM(decoder_config)
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
+        model_tester_decoder = FlaxRobertaModelTester(self, batch_size=13)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    def get_pretrained_model(self):
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
 
 
 @require_flax
