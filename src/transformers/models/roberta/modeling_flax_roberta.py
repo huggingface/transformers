@@ -1383,8 +1383,7 @@ class FlaxRobertaForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Bart Decoder Model with a language modeling head on top (linear layer with weights tied to the input embeddings)
-    e.g for autoregressive tasks.
+    Roberta Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
     """,
     ROBERTA_START_DOCSTRING,
 )

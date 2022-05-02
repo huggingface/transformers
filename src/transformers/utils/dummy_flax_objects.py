@@ -396,6 +396,13 @@ class FlaxBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxBigBirdForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxBigBirdForMaskedLM(metaclass=DummyObject):
     _backends = ["flax"]
 

@@ -2315,6 +2315,7 @@ if is_flax_available():
     )
     _import_structure["models.big_bird"].extend(
         [
+            "FlaxBigBirdForCausalLM",
             "FlaxBigBirdForMaskedLM",
             "FlaxBigBirdForMultipleChoice",
             "FlaxBigBirdForPreTraining",
@@ -4354,6 +4355,7 @@ if TYPE_CHECKING:
             FlaxBertPreTrainedModel,
         )
         from .models.big_bird import (
+            FlaxBigBirdForCausalLM,
             FlaxBigBirdForMaskedLM,
             FlaxBigBirdForMultipleChoice,
             FlaxBigBirdForPreTraining,
