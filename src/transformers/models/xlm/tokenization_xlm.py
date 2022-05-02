@@ -978,3 +978,21 @@ class XLMTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sm"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses

@@ -524,3 +524,21 @@ class FSMTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return src_vocab_file, tgt_vocab_file, merges_file
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sm"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses
