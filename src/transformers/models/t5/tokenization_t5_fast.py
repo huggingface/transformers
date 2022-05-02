@@ -61,11 +61,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class classproperty(property):
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
-
-
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" T5 tokenizer (backed by HuggingFace's *tokenizers* library). Based on

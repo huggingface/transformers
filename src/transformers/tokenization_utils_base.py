@@ -1907,10 +1907,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # init_kwargs["model_max_length"] = model_max_length
                 # TODO(PVP) - remove in Transformers v5
                 # ---
-                init_kwargs["model_max_length"] = cls._eventually_correct_t5_max_length(pretrained_model_name_or_path, model_max_length, init_kwargs.get("model_max_length"))
+                init_kwargs["model_max_length"] = cls._eventually_correct_t5_max_length(
+                    pretrained_model_name_or_path, model_max_length, init_kwargs.get("model_max_length")
+                )
                 # ---
-
-
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
