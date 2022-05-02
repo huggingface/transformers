@@ -31,6 +31,57 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+# these archs are known to Deepspeed-Inference and are handled automatically
+inference_auto_map = ["gpt_neo", "gptj", "gpt2", "bert"]
+
+# these archs are known to Deepspeed-Inference but they need to specify which of their linear layers
+# require `all_reduce`, and the rest is automated. For details study the `replace_module` function
+# in DeepSpeed.
+inference_custom_map = dict(
+    electra=dict(ElectraLayer=("output.dense")),
+    roberta=dict(RobertaLayer=("output.dense")),
+    t5=dict(T5Block=("SelfAttention.o", "EncDecAttention.o", "DenseReluDense.wo")),
+    albert=dict(AlbertLayer=("attention.dense", "ffn_output")),
+    bart=dict(BartEncoderLayer=("self_attn.out_proj", "fc2")),
+    deberta=dict(DebertaLayer=("output.dense")),
+    deberta_v2=dict(DebertaV2Layer=("output.dense")),
+    wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense")),
+)
+
+
+def deepspeed_inference_init(trainer):
+    """
+    XXX:
+    """
+
+    dep_version_check("deepspeed")
+    import deepspeed
+
+    args = trainer.args
+
+    model_arch = trainer.model.config.model_type
+
+    if model_arch in inference_auto_map:
+        kwargs = dict(
+            replace_method="auto",
+            replace_with_kernel_inject=True,
+        )
+    elif model_arch in inference_custom_map:
+        kwargs = dict(injection_policy=inference_custom_map[model_arch])
+    else:
+        raise ValueError(
+            f"[Deepspeed Inference] {model_arch} hasn't yet been mapped out, please file an Issue to request support for it"
+        )
+
+    deepspeed_inference_engine = deepspeed.init_inference(
+        trainer.model,
+        mp_size=args.world_size,
+        dtype=torch.half if args.fp16 else torch.float,  # XXX: add bf16 once ds supports it
+        **kwargs,
+    )
+
+    return deepspeed_inference_engine
+
 
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
