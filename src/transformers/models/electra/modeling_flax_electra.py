@@ -226,7 +226,7 @@ class FlaxElectraSelfAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.config.hidden_size,))
 
     @nn.compact
-    # Copied from transformers.models.bart.modeling_flax_bert.FlaxBartAttention._concatenate_to_cache
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
@@ -681,6 +681,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -723,6 +724,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -733,8 +735,8 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
                 cache.
         """
         # init input variables to retrieve cache
-        input_ids = jnp.ones((batch_size, max_length))
-        attention_mask = jnp.ones_like(input_ids)
+        input_ids = jnp.ones((batch_size, max_length), dtype="i4")
+        attention_mask = jnp.ones_like(input_ids, dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
@@ -753,7 +755,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         params: dict = None,
-        dropout_rng: PRNGKey = None,
+        dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
