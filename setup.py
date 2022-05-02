@@ -288,6 +288,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        'sacremoses'
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -365,7 +366,6 @@ extras["torchhub"] = deps_list(
     "protobuf",
     "regex",
     "requests",
-    "sacremoses",
     "sentencepiece",
     "torch",
     "tokenizers",
@@ -383,7 +383,6 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
-    deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
