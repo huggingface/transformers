@@ -112,12 +112,7 @@ class GPTNeoXModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.prepare_config_and_inputs()
+        config, input_ids, input_mask, token_labels = self.prepare_config_and_inputs()
 
         config.is_decoder = True
 
@@ -131,12 +126,7 @@ class GPTNeoXModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        input_mask,
-    ):
+    def create_and_check_model_as_decoder(self, config, input_ids, input_mask):
         config.add_cross_attention = True
         model = GPTNeoXModel(config)
         model.to(torch_device)
