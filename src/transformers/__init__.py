@@ -461,7 +461,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
     ]
 else:
-    # Fast tokenizers
+    # Fast tokenizers structure
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -2887,6 +2887,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_tokenizers_objects import *
     else:
+        # Fast tokenizers imports
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -3066,6 +3067,8 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -3997,6 +4000,8 @@ if TYPE_CHECKING:
             TFLayoutLMPreTrainedModel,
         )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+
+        # TensorFlow model imports
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
@@ -4394,6 +4399,8 @@ if TYPE_CHECKING:
             FlaxTopPLogitsWarper,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
+
+        # Flax model imports
         from .models.albert import (
             FlaxAlbertForMaskedLM,
             FlaxAlbertForMultipleChoice,
