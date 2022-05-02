@@ -96,9 +96,9 @@ class BeitModelTester:
         self.out_indices = out_indices
         self.num_labels = num_labels
 
-        # in BeiT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.expected_seq_length = num_patches + 1
+        self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -136,16 +136,14 @@ class BeitModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
         model = BeitForMaskedImageModeling(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.expected_seq_length - 1, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length - 1, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
@@ -155,7 +153,7 @@ class BeitModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
         model = BeitForSemanticSegmentation(config)
         model.to(torch_device)
@@ -200,8 +198,8 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="BEiT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # BEiT does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -229,9 +227,17 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_image_segmentation(self):
+    def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    def test_for_semantic_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -267,13 +273,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
-            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
-            # this can then be incorporated into _prepare_for_class in test_modeling_common.py
-            elif model_class.__name__ == "BeitForSemanticSegmentation":
-                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
-                inputs_dict["labels"] = torch.zeros(
-                    [self.model_tester.batch_size, height, width], device=torch_device
-                ).long()
+
             model = model_class(config)
             model.gradient_checkpointing_enable()
             model.to(torch_device)
@@ -299,106 +299,6 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        # BEiT has a different seq_length
-        seq_len = self.model_tester.expected_seq_length
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + 1, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # BEiT has a different seq_length
-            seq_length = self.model_tester.expected_seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
