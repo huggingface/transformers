@@ -25,7 +25,6 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from ..roberta.test_modeling_flax_roberta import FlaxRobertaModelTester
 from ..test_modeling_flax_common import ids_tensor
 
 
@@ -38,7 +37,6 @@ if is_flax_available():
         FlaxBertModel,
         FlaxEncoderDecoderModel,
         FlaxGPT2LMHeadModel,
-        FlaxRobertaForCausalLM,
     )
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
@@ -390,7 +388,7 @@ class FlaxEncoderDecoderMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    @is_pt_flax_cross_test
+    # @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
 
         config_inputs_dict = self.prepare_config_and_inputs()
@@ -558,43 +556,6 @@ class FlaxBertEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
     def prepare_config_and_inputs(self):
         model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
         model_tester_decoder = FlaxBertModelTester(self, batch_size=13)
-        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
-        (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = decoder_config_and_inputs
-
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        return {
-            "config": config,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "encoder_hidden_states": encoder_hidden_states,
-        }
-
-    def get_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
-
-
-@require_flax
-class FlaxRobertaEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = FlaxBertModel(config)
-        decoder_model = FlaxRobertaForCausalLM(decoder_config)
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
-        model_tester_decoder = FlaxRobertaModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
         (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
