@@ -125,7 +125,7 @@ class FlaxBertModelTester(unittest.TestCase):
         return (
             config,
             input_ids,
-            token_type_ids,
+            attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
         )
