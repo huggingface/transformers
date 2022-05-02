@@ -830,6 +830,8 @@ def add_model_to_main_init(
         with_processsing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
+    re_else = re.compile(rf"\s+else:")
+
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -840,12 +842,28 @@ def add_model_to_main_init(
     while idx < len(lines):
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        elif lines[idx].lstrip().startswith("if is_torch_available"):
-            framework = "pt"
-        elif lines[idx].lstrip().startswith("if is_tf_available"):
-            framework = "tf"
-        elif lines[idx].lstrip().startswith("if is_flax_available"):
-            framework = "flax"
+        else:
+            if lines[idx].lstrip().startswith("if not is_torch_available"):
+                framework = "pt"
+            if lines[idx].lstrip().startswith("if not is_tf_available"):
+                framework = "tf"
+            if lines[idx].lstrip().startswith("if not is_flax_available"):
+                framework = "flax"
+
+            # Add the block between the framework declaration and `else:` (inclusive) if in (any) framework
+            import_block = [lines[idx]]
+            idx += 1
+
+            while re_else.search(lines[idx]) is not None:
+                import_block.append(lines[idx])
+                idx += 1
+
+            # Add `else:`, too, and enter the else block
+            import_block.append(lines[idx])
+            idx += 1
+
+            import_block = "\n".join(import_block)
+            new_lines.append(import_block)
 
         # Skip if we are in a framework not wanted.
         if framework is not None and frameworks is not None and framework not in frameworks:
