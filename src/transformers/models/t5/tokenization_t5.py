@@ -160,12 +160,13 @@ class T5Tokenizer(PreTrainedTokenizer):
             if init_max_model_length is not None and init_max_model_length != max_model_length:
                 return init_max_model_length
             elif init_max_model_length is None:
-                logger.warning(
+                warnings.warn(
                     f"This tokenizer was incorrectly instantiated with a model max length of {deprecated_max_model_length} which will be corrected in Transformers v5.\n"
                     f"For now, this behavior is kept to avoid breaking backwards compatibility when padding/encoding with `truncation is True`.\n"
                     f"- Be aware that you SHOULD NOT rely on {pretrained_model_name_or_path} automatically truncating your input to {deprecated_max_model_length} when padding/encoding.\n"
                     f"- If you want to encode/pad to sequences longer than {deprecated_max_model_length} you can either instantiate this tokenizer with `model_max_length` or pass `max_length` when encoding/padding.\n"
-                    f"- To avoid this warning, please instantiate this tokenizer with `model_max_length` set to your preferred value."
+                    f"- To avoid this warning, please instantiate this tokenizer with `model_max_length` set to your preferred value.",
+                    FutureWarning,
                 )
 
         return max_model_length
