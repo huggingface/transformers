@@ -779,7 +779,7 @@ def clean_frameworks_in_init(
     idx = 0
     while idx < len(lines):
         # Conditional imports in try-except-else blocks
-        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx-1]) is not None):
+        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
             idx += 1
             # Iterate until `else:`
             while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
