@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXTokenizer"
+_TOKENIZER_FOR_DOC = "GPTNeoXTokenizerFast"
 
 GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt-neox-20b",

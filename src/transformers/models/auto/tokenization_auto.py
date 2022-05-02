@@ -180,7 +180,7 @@ else:
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-            ("gpt_neox", ("GPTNeoXTokenizer", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("luke", ("LukeTokenizer", None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),

@@ -206,12 +206,7 @@ class GPTNeoXModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = config_and_inputs
+        config, input_ids, input_mask, token_labels = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -219,14 +214,7 @@ class GPTNeoXModelTester:
 @require_torch
 class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            GPTNeoXModel,
-            GPTNeoXForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_missing_keys = False
@@ -241,47 +229,20 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(
-            config,
-            input_ids,
-            input_mask,
-        )
+        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(config, input_ids, input_mask)
 
     def test_model_as_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            input_mask,
-        )
+        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None
 
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            input_mask,
-        )
+        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     @slow
     def test_model_from_pretrained(self):

@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 
 _import_structure = {
     "configuration_gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
-    "tokenization_gpt_neox": ["GPTNeoXTokenizer"],
 }
 
 if is_tokenizers_available():
@@ -41,7 +40,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
-    from .tokenization_gpt_neox import GPTNeoXTokenizer
 
     if is_tokenizers_available():
         from .tokenization_gpt_neox_fast import GPTNeoXTokenizerFast

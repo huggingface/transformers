@@ -21,14 +21,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gpt-neox-20b": "https://huggingface.co/gpt-neox-20b/resolve/main/config.json",
+    "eleutherai/gpt-neox-20b": "https://huggingface.co/eleutherai/gpt-neox-20b/resolve/main/config.json",
     # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
 }
 
 
 class GPTNeoXConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~GPTNeoXModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPTNeoX
     [gpt-neox-20b](https://huggingface.co/gpt-neox-20b) architecture.
@@ -40,7 +40,7 @@ class GPTNeoXConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the GPTNeoX model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~GPTNeoXModel`] or [`~TFGPTNeoXModel`].
+            `inputs_ids` passed when calling [`GPTNeoXModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
