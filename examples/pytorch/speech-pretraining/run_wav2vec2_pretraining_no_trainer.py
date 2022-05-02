@@ -16,7 +16,6 @@
 """ Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
 
 import argparse
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from huggingface_hub import Repository
 from transformers import (
     AdamW,
@@ -46,7 +46,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 from transformers.utils import get_full_repo_name
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def parse_args():
@@ -362,11 +362,7 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()

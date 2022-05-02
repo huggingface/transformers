@@ -16,7 +16,6 @@
 
 import argparse
 import json
-import logging
 import math
 import os
 import random
@@ -34,6 +33,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository, hf_hub_download
 from transformers import (
@@ -48,7 +48,7 @@ from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
@@ -308,11 +308,7 @@ def main():
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
     accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
