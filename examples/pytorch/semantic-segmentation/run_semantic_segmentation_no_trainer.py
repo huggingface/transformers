@@ -475,6 +475,10 @@ def main():
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Instantiate metric
     metric = load_metric("mean_iou")
 
