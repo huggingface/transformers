@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/gdpdepth-kitti/resolve/main/config.json",
-    # See all GLPN models at https://huggingface.co/models?filter=gdpdepth
+    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/glpn-kitti/resolve/main/config.json",
+    # See all GLPN models at https://huggingface.co/models?filter=glpn
 }
 
 
@@ -31,7 +31,7 @@ class GLPNConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GLPNModel`]. It is used to instantiate an GLPN
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GLPN
-    [kaist/gdpdepth-kitti](https://huggingface.co/kaist/gdpdepth-kitti) architecture.
+    [vinvino02/glpn-kitti](https://huggingface.co/vinvino02/glpn-kitti) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -81,10 +81,10 @@ class GLPNConfig(PretrainedConfig):
     ```python
     >>> from transformers import GLPNModel, GLPNConfig
 
-    >>> # Initializing a GLPN kaist/gdpdepth-kitti style configuration
+    >>> # Initializing a GLPN vinvino02/glpn-kitti style configuration
     >>> configuration = GLPNConfig()
 
-    >>> # Initializing a model from the kaist/gdpdepth-kitti style configuration
+    >>> # Initializing a model from the vinvino02/glpn-kitti style configuration
     >>> model = GLPNModel(configuration)
 
     >>> # Accessing the model configuration

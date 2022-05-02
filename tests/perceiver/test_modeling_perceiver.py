@@ -143,7 +143,7 @@ class PerceiverModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
         if model_class is None or model_class.__name__ == "PerceiverModel":
-            inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], self.vocab_size)
+            inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], scale=1.0)
             return config, inputs, input_mask, sequence_labels, token_labels
         elif model_class.__name__ in ["PerceiverForMaskedLM", "PerceiverForSequenceClassification"]:
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

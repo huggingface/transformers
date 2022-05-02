@@ -117,7 +117,7 @@ class FlaxWav2Vec2ModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = Wav2Vec2Config(

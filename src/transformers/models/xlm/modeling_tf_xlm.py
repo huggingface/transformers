@@ -44,7 +44,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -187,7 +187,7 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
         mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
-        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        weights = stable_softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to

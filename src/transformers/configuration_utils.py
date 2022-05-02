@@ -306,7 +306,7 @@ class PretrainedConfig(PushToHubMixin):
         if self.id2label is not None:
             num_labels = kwargs.pop("num_labels", None)
             if num_labels is not None and len(self.id2label) != num_labels:
-                logger.warn(
+                logger.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
                 )
@@ -634,7 +634,7 @@ class PretrainedConfig(PushToHubMixin):
             raise EnvironmentError(
                 f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
                 f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
-                "{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
+                f"{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
         except EnvironmentError:

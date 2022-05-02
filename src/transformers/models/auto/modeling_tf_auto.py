@@ -411,7 +411,9 @@ class TFAutoModelForImageClassification(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 
-AutoModelForImageClassification = auto_class_update(TFAutoModelForImageClassification, head_doc="image classification")
+TFAutoModelForImageClassification = auto_class_update(
+    TFAutoModelForImageClassification, head_doc="image classification"
+)
 
 
 class TFAutoModelForVision2Seq(_BaseAutoModelClass):

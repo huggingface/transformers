@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import tempfile
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -592,7 +593,8 @@ class ModuleUtilsMixin:
 
         return encoder_extended_attention_mask
 
-    def create_extended_attention_mask_for_decoder(self, input_shape, attention_mask, device):
+    @staticmethod
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device):
         batch_size, seq_length = input_shape
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -637,7 +639,7 @@ class ModuleUtilsMixin:
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                extended_attention_mask = self.create_extended_attention_mask_for_decoder(
+                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )
             else:
@@ -1157,7 +1159,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
+        new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -1228,7 +1230,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
         new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
-        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
+        new_lm_head = new_lm_head.to(old_lm_head.weight.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -1347,7 +1349,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        save_config: bool = True,
+        is_main_process: bool = True,
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
@@ -1361,10 +1363,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Arguments:
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
-            save_config (`bool`, *optional*, defaults to `True`):
-                Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
-                to call this function on all processes. In this case, set `save_config=True` only on the main process
-                to avoid race conditions.
+            is_main_process (`bool`, *optional*, defaults to `True`):
+                Whether the process calling this is the main process or not. Useful when in distributed training like
+                TPUs and need to call this function on all processes. In this case, set `is_main_process=True` only on
+                the main process to avoid race conditions.
             state_dict (nested dictionary of `torch.Tensor`):
                 The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
                 save parts of the model or if special precautions need to be taken when recovering the state dictionary
@@ -1397,6 +1399,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        if "save_config" in kwargs:
+            warnings.warn(
+                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
+            )
+            is_main_process = kwargs.pop("save_config")
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -1424,7 +1432,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if save_config:
+        if is_main_process:
             model_to_save.config.save_pretrained(save_directory)
 
         # Save the model
@@ -1443,7 +1451,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            if (
+                filename.startswith(WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+                and is_main_process
+            ):
                 os.remove(full_filename)
 
         # Save the model
@@ -2022,6 +2037,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("gamma", "weight")
             return key
 
+        original_loaded_keys = loaded_keys
         loaded_keys = [_fix_key(key) for key in loaded_keys]
 
         if len(prefix) > 0:
@@ -2114,7 +2130,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mismatched_keys = _find_mismatched_keys(
                 state_dict,
                 model_state_dict,
-                loaded_keys,
+                original_loaded_keys,
                 add_prefix_to_model,
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
@@ -2140,7 +2156,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 mismatched_keys += _find_mismatched_keys(
                     state_dict,
                     model_state_dict,
-                    loaded_keys,
+                    original_loaded_keys,
                     add_prefix_to_model,
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,

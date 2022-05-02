@@ -34,7 +34,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -800,7 +800,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ),
             lambda: attn_scores,
         )
-        attn_probs = tf.nn.softmax(attn_scores, axis=-1)
+        attn_probs = stable_softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         # Make sure to create a mask with the proper shape:
@@ -1415,7 +1415,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # compute global attn probs
-        global_attn_probs_float = tf.nn.softmax(global_attn_scores, axis=-1)
+        global_attn_probs_float = stable_softmax(global_attn_scores, axis=-1)
 
         # apply layer head masking
         if layer_head_mask is not None:

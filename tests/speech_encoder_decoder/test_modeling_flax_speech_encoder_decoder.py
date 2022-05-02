@@ -582,7 +582,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "gpt2-medium"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -638,7 +638,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -699,7 +699,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "bart-large"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -755,7 +755,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])

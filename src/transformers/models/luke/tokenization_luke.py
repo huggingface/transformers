@@ -17,6 +17,7 @@
 import itertools
 import json
 import os
+from collections.abc import Mapping
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1140,7 +1141,7 @@ class LukeTokenizer(RobertaTokenizer):
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
+        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has be passed for padding

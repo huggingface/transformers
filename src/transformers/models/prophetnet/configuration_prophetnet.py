@@ -29,7 +29,9 @@ PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class ProphetNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used to instantiate a
-    ProphetNet model according to the specified arguments, defining the model architecture.
+    ProphetNet model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ProphetNet
+    [microsoft/prophetnet-large-uncased](https://huggingface.co/microsoft/prophetnet-large-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

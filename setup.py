@@ -19,6 +19,9 @@ To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
+   
+   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
@@ -108,7 +111,7 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.2.0",
+    "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",

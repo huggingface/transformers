@@ -1782,7 +1782,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
-        >>> ).input_ids
+        ... ).input_ids
 
         >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
         >>> predicted_answer = tokenizer.decode(predicted_answer_ids)

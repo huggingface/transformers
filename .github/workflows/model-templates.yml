@@ -33,14 +33,27 @@ jobs:
         id: cache
         with:
           path: ~/venv/
-          key: v2-tests_templates-${{ hashFiles('setup.py') }}
+          key: v3-tests_templates-${{ hashFiles('setup.py') }}
 
       - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           python -m venv ~/venv && . ~/venv/bin/activate
           pip install --upgrade pip!=21.3
-          pip install .[dev]
+          pip install -e .[dev]
+
+      - name: Check transformers location
+        # make `transformers` available as package (required since we use `-e` flag) and check it's indeed from the repo.
+        run: |
+          . ~/venv/bin/activate
+          python setup.py develop
+          transformer_loc=$(pip show transformers | grep "Location: " | cut -c11-)
+          transformer_repo_loc=$(pwd .)
+          if [ "$transformer_loc" != "$transformer_repo_loc/src" ]; then
+              echo "transformers is from $transformer_loc but it shoud be from $transformer_repo_loc/src."
+              echo "A fix is required. Stop testing."
+              exit 1
+          fi
 
       - name: Create model files
         run: |
