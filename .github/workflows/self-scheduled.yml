@@ -78,6 +78,8 @@ jobs:
     steps:
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
         run: |
           echo "${{ matrix.folders }}"
           matrix_folders=${{ matrix.folders }}
@@ -263,6 +265,8 @@ jobs:
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
