@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
+            ("fastspeech2", ("FastSpeech2Tokenizer", None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
