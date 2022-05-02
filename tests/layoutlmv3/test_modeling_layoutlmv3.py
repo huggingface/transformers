@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import LayoutLMv3FeatureExtractor
 
 
 class LayoutLMv3ModelTester:
@@ -310,8 +310,7 @@ def prepare_img():
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO use LayoutLMv3FeatureExtractor for this
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):

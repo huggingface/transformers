@@ -22,9 +22,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 
 # soft dependency
@@ -119,8 +118,18 @@ class LayoutLMv3FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, do_normalize=True, image_mean=None,
-        image_std=None, apply_ocr=True, ocr_lang=None, **kwargs):
+    def __init__(
+        self,
+        do_resize=True,
+        size=224,
+        resample=Image.BILINEAR,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
+        apply_ocr=True,
+        ocr_lang=None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
