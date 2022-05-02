@@ -22,7 +22,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
-from flax.linen import make_causal_mask, combine_masks
+from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -30,10 +30,12 @@ from jax import lax
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxBaseModelOutputWithPooling,
+    FlaxBaseModelOutputWithPoolingAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
     FlaxSequenceClassifierOutput,
-    FlaxTokenClassifierOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxBaseModelOutputWithPoolingAndCrossAttentions,
+    FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -1305,7 +1307,9 @@ class FlaxBigBirdLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.attention = FlaxBigBirdAttention(self.config, layer_id=self.layer_id, causal=self.config.is_decoder, dtype=self.dtype)
+        self.attention = FlaxBigBirdAttention(
+            self.config, layer_id=self.layer_id, causal=self.config.is_decoder, dtype=self.dtype
+        )
         self.intermediate = FlaxBigBirdIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxBigBirdOutput(self.config, dtype=self.dtype)
         if self.config.add_cross_attention:
@@ -2464,7 +2468,8 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    BigBird Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
+    BigBird Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for
+    autoregressive tasks.
     """,
     BIG_BIRD_START_DOCSTRING,
 )

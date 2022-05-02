@@ -1595,7 +1595,8 @@ class FlaxBertForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Bert Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
+    Bert Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for
+    autoregressive tasks.
     """,
     BERT_START_DOCSTRING,
 )

@@ -34,8 +34,8 @@ if is_flax_available():
         AutoTokenizer,
         EncoderDecoderConfig,
         FlaxBartForCausalLM,
-        FlaxBertModel,
         FlaxBertForCausalLM,
+        FlaxBertModel,
         FlaxEncoderDecoderModel,
         FlaxGPT2LMHeadModel,
         FlaxRobertaForCausalLM,
@@ -546,6 +546,7 @@ class FlaxBartEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
 
     def get_pretrained_model(self):
         return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "facebook/bart-base")
+
 
 @require_flax
 class FlaxBertEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):

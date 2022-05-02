@@ -867,9 +867,7 @@ class FlaxWav2Vec2BertModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     @slow
     def test_flaxwav2vec2bert_pt_flax_equivalence(self):
         pt_model = SpeechEncoderDecoderModel.from_pretrained("speech-seq2seq/wav2vec2-2-bert-large")
-        fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained(
-            "speech-seq2seq/wav2vec2-2-bert-large", from_pt=True
-        )
+        fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained("speech-seq2seq/wav2vec2-2-bert-large", from_pt=True)
 
         pt_model.to(torch_device)
         pt_model.eval()

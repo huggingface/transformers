@@ -29,13 +29,14 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
     FlaxQuestionAnsweringModelOutput,
     FlaxSequenceClassifierOutput,
-    FlaxTokenClassifierOutput, FlaxCausalLMOutputWithCrossAttentions,
+    FlaxTokenClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -1450,6 +1451,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
+
 class FlaxElectraForCausalLMModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
@@ -1513,7 +1515,8 @@ class FlaxElectraForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Electra Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
+    Electra Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for
+    autoregressive tasks.
     """,
     ELECTRA_START_DOCSTRING,
 )
