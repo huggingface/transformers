@@ -579,7 +579,8 @@ def main():
         model.eval()
         samples_seen = 0
         for step, batch in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
 
             upsampled_logits = torch.nn.functional.interpolate(
                 outputs.logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
