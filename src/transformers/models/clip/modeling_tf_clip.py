@@ -551,7 +551,10 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         )
 
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
-
+        # It is possible with an unspecified sequence length for seq_length to be
+        # a runtime value, which is unsupported by tf.constant. Per the TensorFlow
+        # docs, tf.fill can handle runtime dynamic shapes:
+        # https://www.tensorflow.org/api_docs/python/tf/fill
         diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
@@ -1085,22 +1088,8 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec(
-                    (
-                        None,
-                        None,
-                    ),
-                    tf.int32,
-                    name="input_ids",
-                ),
-                "attention_mask": tf.TensorSpec(
-                    (
-                        None,
-                        None,
-                    ),
-                    tf.int32,
-                    name="attention_mask",
-                ),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
