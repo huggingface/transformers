@@ -31,6 +31,7 @@ from ..utils import (
 )
 from .config import OnnxConfig, OnnxConfigWithPast
 
+
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
 
@@ -374,11 +375,14 @@ def validate_model_outputs(
     for name, value in reference_model_inputs.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
-            onnx_inputs.update({
-                tensor_name: np.stack([t.numpy() for t in pt_tensor])
-                if isinstance(pt_tensor, tuple) else pt_tensor.numpy()
-                for tensor_name, pt_tensor in value.items()
-            })
+            onnx_inputs.update(
+                {
+                    tensor_name: np.stack([t.numpy() for t in pt_tensor])
+                    if isinstance(pt_tensor, tuple)
+                    else pt_tensor.numpy()
+                    for tensor_name, pt_tensor in value.items()
+                }
+            )
         else:
             onnx_inputs[name] = value.numpy()
 

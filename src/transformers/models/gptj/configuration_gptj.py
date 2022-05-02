@@ -211,7 +211,9 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
                 ]
 
             if self.use_past:
-                ordered_inputs["attention_mask"] = torch.ones(batch, seqlen + past_key_values_length, dtype=torch.int64)
+                ordered_inputs["attention_mask"] = torch.ones(
+                    batch, seqlen + past_key_values_length, dtype=torch.int64
+                )
         else:
             ordered_inputs["attention_mask"] = common_inputs["attention_mask"].long()
 

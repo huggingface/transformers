@@ -87,14 +87,16 @@ if is_torch_available():
                     # Since transformers v4.*, past key and values are separated outputs.
                     # Here we concatenate them into one tensor to be compatible with Attention operator.
                     present.append(
-                        torch.cat((
-                            result["past_key_values"][i][0].unsqueeze(0),
-                            result["past_key_values"][i][1].unsqueeze(0)
-                        ), dim=0)
+                        torch.cat(
+                            (
+                                result["past_key_values"][i][0].unsqueeze(0),
+                                result["past_key_values"][i][1].unsqueeze(0),
+                            ),
+                            dim=0,
+                        )
                     )
                 return {"logits": result["logits"], "past_key_values": tuple(present)}
             else:
                 return result
 
         return compatible_forward
-
