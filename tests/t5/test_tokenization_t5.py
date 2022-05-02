@@ -223,6 +223,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
         )
         self.assertIsInstance(batch, BatchEncoding)
+        # Since T5 does NOT have a max input length,
+        # this test should be changed to the following in Transformers v5:
+        # self.assertEqual(batch.input_ids.shape, (2, 8001))
         self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_eos_in_input(self):
@@ -360,6 +363,13 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
                     ),
                 )
+
+    # overwritten from `test_tokenization_common` since T5 has no max length
+    def test_pretrained_model_lists(self):
+        # We should have at least one default checkpoint for each tokenizer
+        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
+        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
+        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @slow
     def test_tokenizer_integration(self):
