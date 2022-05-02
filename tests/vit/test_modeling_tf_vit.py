@@ -16,12 +16,10 @@
 
 
 import inspect
-import os
-import tempfile
 import unittest
 
 from transformers import ViTConfig
-from transformers.testing_utils import require_tf, require_vision, slow, tooslow
+from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
@@ -114,18 +112,14 @@ class TFViTModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFViTModel(config=config)
         result = model(pixel_values, training=False)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
         # Test with an image with different size than the one specified in config.
         image_size = self.image_size // 2
         pixel_values = pixel_values[:, :, :image_size, :image_size]
         result = model(pixel_values, interpolate_pos_encoding=True, training=False)
         seq_length = (image_size // self.patch_size) ** 2 + 1
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, seq_length, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size

@@ -118,9 +118,7 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels

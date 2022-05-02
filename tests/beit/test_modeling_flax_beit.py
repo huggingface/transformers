@@ -108,9 +108,7 @@ class FlaxBeitModelTester(unittest.TestCase):
 
         model = FlaxBeitModel(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels):
         model = FlaxBeitForMaskedImageModeling(config=config)

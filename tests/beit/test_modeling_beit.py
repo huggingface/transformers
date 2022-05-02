@@ -136,9 +136,7 @@ class BeitModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
         model = BeitForMaskedImageModeling(config=config)
@@ -236,7 +234,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-    
+
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
@@ -275,7 +273,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
-        
+
             model = model_class(config)
             model.gradient_checkpointing_enable()
             model.to(torch_device)
