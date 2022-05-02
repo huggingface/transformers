@@ -592,6 +592,13 @@ class FlaxDistilBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxElectraForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxElectraForMaskedLM(metaclass=DummyObject):
     _backends = ["flax"]
 

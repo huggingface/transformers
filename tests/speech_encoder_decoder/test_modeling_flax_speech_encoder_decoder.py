@@ -24,7 +24,6 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from ..roberta.test_modeling_flax_roberta import FlaxRobertaModelTester
 from ..test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
 from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
 
@@ -38,7 +37,6 @@ if is_flax_available():
         FlaxBartForCausalLM,
         FlaxBertForCausalLM,
         FlaxGPT2LMHeadModel,
-        FlaxRobertaForCausalLM,
         FlaxSpeechEncoderDecoderModel,
         FlaxWav2Vec2Model,
         SpeechEncoderDecoderConfig,
