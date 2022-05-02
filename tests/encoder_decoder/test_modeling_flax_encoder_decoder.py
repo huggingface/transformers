@@ -388,7 +388,7 @@ class FlaxEncoderDecoderMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    # @is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
 
         config_inputs_dict = self.prepare_config_and_inputs()
