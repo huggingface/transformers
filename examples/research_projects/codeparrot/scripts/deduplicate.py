@@ -1,16 +1,16 @@
+import gzip
 import json
 import multiprocessing as mp
-import gzip
 import os
-import shutil
 import re
+import shutil
 from collections import defaultdict
 from typing import List, Optional, Set
 
-from datasets import load_dataset
-from datasketch import MinHash, MinHashLSH, minhash
-from dpu_utils.utils.iterators import ThreadedIterator
 from tqdm import tqdm
+
+from datasketch import MinHash, MinHashLSH
+from dpu_utils.utils.iterators import ThreadedIterator
 
 
 NUM_PERM = 256
@@ -25,7 +25,7 @@ def get_min_hash(tokens: List[str]) -> Optional[MinHash]:
     for token in set(tokens):
         min_hash.update(token.encode())
     return min_hash
-    
+
 
 def get_tokens(code: str) -> Set[str]:
     """
@@ -45,9 +45,7 @@ class DuplicationIndex:
         self.__duplication_jaccard_threshold = duplication_jaccard_threshold
         self.__num_perm = num_perm
         self.__min_num_tokens = min_num_tokens
-        self.__index = MinHashLSH(
-            threshold=self.__duplication_jaccard_threshold, num_perm=self.__num_perm
-        )
+        self.__index = MinHashLSH(threshold=self.__duplication_jaccard_threshold, num_perm=self.__num_perm)
 
         self.__duplicate_clusters = defaultdict(set)
 
@@ -82,9 +80,7 @@ class DuplicationIndex:
 
 def compute_min_hash(element):
     index, data = element
-    min_hash = get_min_hash(
-        [t for t in NON_ALPHA.split(data["content"]) if len(t.strip()) > 0]
-    )
+    min_hash = get_min_hash([t for t in NON_ALPHA.split(data["content"]) if len(t.strip()) > 0])
     if min_hash is not None:
         return (index, data["repo_name"], data["path"]), min_hash
 
@@ -101,13 +97,10 @@ def minhash_iter(dataset_iterator):
 
 
 def make_duplicate_clusters(dataset_iterator):
-    """This function will be rewritten with dataset map
-    """
+    """This function will be rewritten with dataset map"""
     di = DuplicationIndex()
 
-    for filename, min_hash in tqdm(
-        ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)
-    ):
+    for filename, min_hash in tqdm(ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)):
         di.add(filename, min_hash)
 
     # Returns a List[Cluster] where Cluster is List[str] with the filenames.
