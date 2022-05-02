@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import DetrFeatureExtractor, YolosConfig, YolosForObjectDetection
+from transformers import YolosConfig, YolosFeatureExtractor, YolosForObjectDetection
 from transformers.utils import logging
 
 
@@ -92,7 +92,7 @@ def rename_key(name):
     if "cls_token" in name:
         name = name.replace("cls_token", "embeddings.cls_token")
     if "det_token" in name:
-        name = name.replace("det_token", "embeddings.det_token")
+        name = name.replace("det_token", "embeddings.detection_tokens")
     if "mid_pos_embed" in name:
         name = name.replace("mid_pos_embed", "encoder.mid_position_embeddings")
     if "pos_embed" in name:
@@ -170,20 +170,20 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by DetrFeatureExtractor
-    feature_extractor = DetrFeatureExtractor(format="coco_detection")
+    # Check outputs on an image, prepared by YolosFeatureExtractor
+    size = 800 if yolos_name != "yolos_ti" else 512
+    feature_extractor = YolosFeatureExtractor(format="coco_detection", size=size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    outputs = model(**encoding)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
 
     expected_slice_logits, expected_slice_boxes = None, None
     if yolos_name == "yolos_ti":
         expected_slice_logits = torch.tensor(
-            [[-43.3948, -14.6000, -19.4968], [-27.2291, -7.9266, -10.7180], [-44.8437, -22.2187, -34.0474]]
+            [[-39.5022, -11.9820, -17.6888], [-29.9574, -9.9769, -17.7691], [-42.3281, -20.7200, -30.6294]]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.4408, 0.0750, 0.8582], [0.5009, 0.4857, 1.0000], [0.1724, 0.2022, 0.2394]]
+            [[0.4021, 0.0836, 0.7979], [0.0184, 0.2609, 0.0364], [0.1781, 0.2004, 0.2095]]
         )
     elif yolos_name == "yolos_s_200_pre":
         expected_slice_logits = torch.tensor(
@@ -249,7 +249,9 @@ if __name__ == "__main__":
         type=str,
         help="Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre', 'yolos_s_300_pre', 'yolos_s_dWr', 'yolos_base'.",
     )
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the original state dict.")
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to the original state dict (.pth file)."
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )

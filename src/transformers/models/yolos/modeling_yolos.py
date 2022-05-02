@@ -120,7 +120,7 @@ def to_2tuple(x):
 
 class YolosEmbeddings(nn.Module):
     """
-    Construct the CLS token, detection token, position and patch embeddings.
+    Construct the CLS token, detection tokens, position and patch embeddings.
 
     """
 
@@ -128,7 +128,7 @@ class YolosEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.det_token = nn.Parameter(torch.zeros(1, config.num_detection_tokens, config.hidden_size))
+        self.detection_tokens = nn.Parameter(torch.zeros(1, config.num_detection_tokens, config.hidden_size))
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -150,10 +150,10 @@ class YolosEmbeddings(nn.Module):
 
         batch_size, seq_len, _ = embeddings.size()
 
-        # add the [CLS] token to the embedded patch tokens
+        # add the [CLS] and detection tokens to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        det_tokens = self.det_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings, det_tokens), dim=1)
+        detection_tokens = self.detection_tokens.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings, detection_tokens), dim=1)
 
         # add positional encoding to each token
         # this might require interpolation of the existing position embeddings
@@ -625,8 +625,11 @@ class YolosModel(YolosPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
+        Prunes heads of the model.
+
+        Args:
+            heads_to_prune (`dict` of {layer_num: list of heads to prune in this layer}):
+                See base class `PreTrainedModel`.
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
