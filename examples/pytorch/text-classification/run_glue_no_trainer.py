@@ -22,6 +22,7 @@ import random
 from pathlib import Path
 
 import datasets
+import torch
 from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -514,7 +515,8 @@ def main():
         model.eval()
         samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             # If we are in a multiprocess environment, the last batch has duplicates
