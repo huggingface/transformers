@@ -2359,6 +2359,7 @@ if is_flax_available():
     )
     _import_structure["models.electra"].extend(
         [
+            "FlaxElectraForCausalLM",
             "FlaxElectraForMaskedLM",
             "FlaxElectraForMultipleChoice",
             "FlaxElectraForPreTraining",
@@ -4393,6 +4394,7 @@ if TYPE_CHECKING:
             FlaxDistilBertPreTrainedModel,
         )
         from .models.electra import (
+            FlaxElectraForCausalLM,
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
             FlaxElectraForPreTraining,

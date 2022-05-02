@@ -2464,7 +2464,7 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
+    BigBird Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for autoregressive tasks.
     """,
     BIG_BIRD_START_DOCSTRING,
 )
