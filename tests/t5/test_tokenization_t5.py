@@ -223,7 +223,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
         )
         self.assertIsInstance(batch, BatchEncoding)
-        self.assertEqual(batch.input_ids.shape, (2, 8001))
+        # Since T5 does NOT have a max input length,
+        # this test should be changed to the following in Transformers v5:
+        # self.assertEqual(batch.input_ids.shape, (2, 8001))
+        self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_eos_in_input(self):
         tokenizer = self.t5_base_tokenizer
