@@ -313,7 +313,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         # create multiprocessing pool and list numpy arrays
         # filter out logits padding
         logits_list = [array[(array != -100.0).all(axis=-1)] for array in logits]
-        pool = get_context("fork").Pool(num_processes)
+        pool = get_context("spawn").Pool(num_processes)
 
         # pyctcdecode
         decoded_beams = self.decoder.decode_beams_batch(
