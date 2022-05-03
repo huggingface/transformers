@@ -161,7 +161,7 @@ Use o [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] para carregar o
 </pt>
 <tf>
 
-Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` below):
+Use o [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] para carregar o modelo pré-treinado e o tokenizer associado (mais em `TFAutoClass` abaixo):
 
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
@@ -172,7 +172,7 @@ Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load t
 </tf>
 </frameworkcontent>
 
-Then you can specify the model and tokenizer in the [`pipeline`], and apply the `classifier` on your target text:
+Então você pode especificar o modelo e o tokenizador na [`pipeline`] e aplicar o `classifier` no seu texto alvo: 
 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
@@ -180,21 +180,21 @@ Then you can specify the model and tokenizer in the [`pipeline`], and apply the 
 [{'label': '5 stars', 'score': 0.7273}]
 ```
 
-If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
+Se você não conseguir achar um modelo para o seu caso de uso, precisará usar fine-tune em um modelo pré-treinado nos seus dados. Veja nosso [tutorial de fine-tuning](./training) para descobrir como. Finalmente, depois que você tiver usado esse processo em seu modelo, considere compartilhá-lo conosco (veja o tutorial [aqui](./model_sharing)) na plataforma Model Hub afim de democratizar NLP! 🤗
 
 ## AutoClass
 
 <Youtube id="AhChOFRegn4"/>
 
-Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`]. An [AutoClass](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from it's name or path. You only need to select the appropriate `AutoClass` for your task and it's associated tokenizer with [`AutoTokenizer`]. 
+Por baixo dos panos, as classes [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] trabalham juntas para fortificar o [`pipeline`]. Um [AutoClass](./model_doc/auto) é um atalho que automaticamente recupera a arquitetura de um modelo pré-treinado a partir de seu nome ou caminho. Basta selecionar a `AutoClass` apropriada para sua tarefa e seu tokenizer associado com [`AutoTokenizer`]. 
 
-Let's return to our example and see how you can use the `AutoClass` to replicate the results of the [`pipeline`].
+Vamos voltar ao nosso exemplo e ver como você pode usar a `AutoClass` para replicar os resultados do [`pipeline`].
 
 ### AutoTokenizer
 
-A tokenizer is responsible for preprocessing text into a format that is understandable to the model. First, the tokenizer will split the text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more about tokenization [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the same model name to ensure you're using the same tokenization rules a model was pretrained with.
+Um tokenizer é responsável por pré-processar o texto em um formato que seja compreensível para o modelo. Primeiro, o tokenizer dividirá o texto em palavras chamadas *tokens*. Existem várias regras que regem o processo de tokenização, incluindo como dividir uma palavra e em que nível (saiba mais sobre tokenização [aqui](./tokenizer_summary)). A coisa mais importante a lembrar, porém, é que você precisa instanciar o tokenizer com o mesmo nome do modelo para garantir que está usando as mesmas regras de tokenização com as quais um modelo foi pré-treinado.
 
-Load a tokenizer with [`AutoTokenizer`]:
+Carregue um tokenizer com [`AutoTokenizer`]:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -203,9 +203,9 @@ Load a tokenizer with [`AutoTokenizer`]:
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-Next, the tokenizer converts the tokens into numbers in order to construct a tensor as input to the model. This is known as the model's *vocabulary*.
+Em seguida, o tokenizer converte os tokens em números para construir um tensor como entrada para o modelo. Isso é conhecido como o *vocabulário* do modelo.
 
-Pass your text to the tokenizer:
+Passe o texto para o tokenizer:
 
 ```py
 >>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
@@ -222,38 +222,26 @@ The tokenizer will return a dictionary containing:
 
 Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addition, the tokenizer can also pad and truncate the text to return a batch with uniform length:
 
+O tokenizer retornará um dicionário contendo:
+
+* [input_ids](./glossary#input-ids): representações numéricas de seus tokens.
+* [atttention_mask](.glossary#attention-mask): indica quais tokens devem ser atendidos.
+
+Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além disso, o tokenizer também pode preencher e truncar o texto para retornar um grupo com comprimento uniforme:
+
 <frameworkcontent>
 <pt>
 ```py
->>> pt_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="pt",
-... )
+>>> pt_batch = tokenizer(["We are very happy to show you the 🤗 transformers library.", "We hope you don't hate it."],padding=True, truncation=True, max_length=512, return_tensors="pt")
 ```
-</pt>
-<tf>
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
-</tf>
-</frameworkcontent>
 
-Read the [preprocessing](./preprocessing) tutorial for more details about tokenization.
+Leia o tutorial de [pré-processamento](./pré-processamento) para obter mais detalhes sobre tokenização.
 
 ### AutoModel
 
 <frameworkcontent>
 <pt>
-🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. Since you are doing text - or sequence - classification, load [`AutoModelForSequenceClassification`]:
+🤗 Transformers fornecem uma maneira simples e unificada de carregar instâncias pré-treinadas. Isso significa que você pode carregar um [`AutoModel`] como carregaria um [`AutoTokenizer`]. A única diferença é selecionar o [`AutoModel`] correto para a tarefa. Como você está fazendo classificação de texto ou sequência, carregue [`AutoModelForSequenceClassification`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -264,17 +252,16 @@ Read the [preprocessing](./preprocessing) tutorial for more details about tokeni
 
 <Tip>
 
-See the [task summary](./task_summary) for which [`AutoModel`] class to use for which task.
+Veja o [sumário de tarefas](./task_summary) para qual classe de [`AutoModel`] usar para cada tarefa.
 
 </Tip>
 
-Now you can pass your preprocessed batch of inputs directly to the model. You just have to unpack the dictionary by adding `**`:
+Agora você pode passar seu grupo de entradas pré-processadas diretamente para o modelo. Você apenas tem que descompactar o dicionário usando `**`:
 
 ```py
 >>> pt_outputs = pt_model(**pt_batch)
 ```
-
-The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
+O modelo gera as ativações finais no atributo `logits`. Aplique a função softmax aos `logits` para recuperar as probabilidades:
 
 ```py
 >>> from torch import nn
@@ -286,7 +273,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```
 </pt>
 <tf>
-🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`TFAutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`TFAutoModel`] for the task. Since you are doing text - or sequence - classification, load [`TFAutoModelForSequenceClassification`]:
+🤗 Transformers fornecem uma maneira simples e unificada de carregar instâncias pré-treinadas. Isso significa que você pode carregar um [`TFAutoModel`] como carregaria um [`AutoTokenizer`]. A única diferença é selecionar o [`TFAutoModel`] correto para a tarefa. Como você está fazendo classificação de texto ou sequência, carregue [`TFAutoModelForSequenceClassification`]:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
@@ -297,17 +284,17 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <Tip>
 
-See the [task summary](./task_summary) for which [`AutoModel`] class to use for which task.
+Veja o [sumário de tarefas](./task_summary) para qual classe de [`AutoModel`] usar para cada tarefa.
 
 </Tip>
 
-Now you can pass your preprocessed batch of inputs directly to the model by passing the dictionary keys directly to the tensors:
+Agora você pode passar seu grupo de entradas pré-processadas diretamente para o modelo através da passagem de chaves de dicionários ao tensor.
 
 ```py
 >>> tf_outputs = tf_model(tf_batch)
 ```
 
-The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
+O modelo gera as ativações finais no atributo `logits`. Aplique a função softmax aos `logits` para recuperar as probabilidades:
 
 ```py
 >>> import tensorflow as tf
@@ -320,25 +307,25 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 
 <Tip>
 
-All 🤗 Transformers models (PyTorch or TensorFlow) outputs the tensors *before* the final activation
-function (like softmax) because the final activation function is often fused with the loss.
+Todos os modelos de 🤗 Transformers (PyTorch ou TensorFlow) geram tensores *antes* da função de ativação final (como softmax) pois essa função algumas vezes é fundida com a perda.
 
 </Tip>
+Os modelos são um padrão [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) ou um [`tf.keras.Model`](https: //www.tensorflow.org/api_docs/python/tf/keras/Model) para que você possa usá-los em seu loop de treinamento habitual. No entanto, para facilitar as coisas, 🤗 Transformers fornece uma classe [`Trainer`] para PyTorch que adiciona funcionalidade para treinamento distribuído, precisão mista e muito mais. Para o TensorFlow, você pode usar o método `fit` de [Keras](https://keras.io/). Consulte o [tutorial de treinamento](./training) para obter mais detalhes.
 
 Models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
 
 <Tip>
 
-🤗 Transformers model outputs are special dataclasses so their attributes are autocompleted in an IDE.
-The model outputs also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which case the attributes that are `None` are ignored.
+🤗 As saídas do modelo Transformers são classes de dados especiais para que seus atributos sejam preenchidos automaticamente em um IDE.
+As saídas do modelo também se comportam como uma tupla ou um dicionário (por exemplo, você pode indexar com um inteiro, uma parte ou uma string), caso em que os atributos `None` são ignorados.
 
 </Tip>
 
-### Save a model
+### Salvar um modelo
 
 <frameworkcontent>
 <pt>
-Once your model is fine-tuned, you can save it with its tokenizer using [`PreTrainedModel.save_pretrained`]:
+Uma vez que seu modelo estiver afinado, você pode salvá-lo com seu Tokenizer usando [`PreTrainedModel.save_pretrained`]:
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
@@ -346,14 +333,14 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`PreTra
 >>> pt_model.save_pretrained(pt_save_directory)
 ```
 
-When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
+Quando você estiver pronto para usá-lo novamente, recarregue com [`PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
 </pt>
 <tf>
-Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreTrainedModel.save_pretrained`]:
+Uma vez que seu modelo estiver afinado, você pode salvá-lo com seu Tokenizer usando [`TFPreTrainedModel.save_pretrained`]:
 
 ```py
 >>> tf_save_directory = "./tf_save_pretrained"
@@ -361,7 +348,7 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreT
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
 
-When you are ready to use the model again, reload it with [`TFPreTrainedModel.from_pretrained`]:
+Quando você estiver pronto para usá-lo novamente, recarregue com [`TFPreTrainedModel.from_pretrained`]
 
 ```py
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
@@ -370,6 +357,7 @@ When you are ready to use the model again, reload it with [`TFPreTrainedModel.fr
 </frameworkcontent>
 
 One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
+Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de salvar um modelo e recarregá-lo como um modelo PyTorch ou TensorFlow. Use `from_pt` ou `from_tf` para converter o modelo de um framework para outro:
 
 <frameworkcontent>
 <pt>
@@ -380,7 +368,10 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </pt>
+</frameworkcontent>
+
 <tf>
+<frameworkcontent>
 ```py
 >>> from transformers import TFAutoModel
 
