@@ -43,13 +43,14 @@ jobs:
         working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
           rm -rf reports
 
       - id: set-matrix
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
-          echo "::set-output name=matrix::$(python3 -c 'import os; x = list(filter(os.path.isdir, os.listdir(os.getcwd()))); x.sort(); print(x)')"
+          echo "::set-output name=matrix::$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')"
 
       - name: NVIDIA-SMI
         run: |
@@ -76,7 +77,16 @@ jobs:
     needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
-        run: echo "${{ matrix.folders }}"
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          echo "$matrix_folders"
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
       - name: Update clone
         working-directory: /transformers
@@ -95,7 +105,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ matrix.folders }}_test_reports
+          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
 
   run_examples_gpu:
@@ -255,6 +265,8 @@ jobs:
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
