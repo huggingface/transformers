@@ -463,7 +463,7 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
                 # Check attention outputs
                 self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
 
-                seq_length = getattr(self.model_tester, "seq_length", self.model_tester.seq_length)
+                seq_length = self.model_tester.seq_length
                 key_length = getattr(self.model_tester, "key_length", seq_length)
 
                 self.assertListEqual(
