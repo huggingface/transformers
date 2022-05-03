@@ -75,7 +75,3 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # can't serialise custom PreTokenizer
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
-
-    # can't serialise custom PreTokenizer
-    def test_saving_tokenizer_trainer(self):
-        pass
