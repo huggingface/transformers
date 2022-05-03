@@ -33,10 +33,13 @@ Models and code are available at www.github.com/pytorch/fairseq/tree/master/exam
 
 Tips:
 
-- Both Data2VecAudio and Data2VecText have been trained using the same self-supervised learning method.
-  In the case of Data2VecAudio, preprocessing is identical to [`RobertaModel`], including tokenization.
+- Data2VecAudio, Data2VecText, and Data2VecVision have all been trained using the same self-supervised learning method.
+- For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
+- For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
+- For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
 
-This model was contributed by [edugp](https://huggingface.co/edugp).
+This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten)
+
 The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
 
 
@@ -48,11 +51,15 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 
 [[autodoc]] Data2VecAudioConfig
 
+## Data2VecVisionConfig
+
+[[autodoc]] Data2VecVisionConfig
+
+
 ## Data2VecAudioModel
 
 [[autodoc]] Data2VecAudioModel
     - forward
-
 
 ## Data2VecAudioForAudioFrameClassification
 
@@ -107,4 +114,19 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 ## Data2VecTextForQuestionAnswering
 
 [[autodoc]] Data2VecTextForQuestionAnswering
+    - forward
+
+## Data2VecVisionModel
+
+[[autodoc]] Data2VecVisionModel
+    - forward
+
+## Data2VecVisionForImageClassification
+
+[[autodoc]] Data2VecVisionForImageClassification
+    - forward
+
+## Data2VecVisionForSemanticSegmentation
+
+[[autodoc]] Data2VecVisionForSemanticSegmentation
     - forward

@@ -43,7 +43,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
 
@@ -191,7 +191,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = stable_softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -934,9 +934,8 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         loss = None
 
         if labels is not None:
-            assert (
-                self.config.pad_token_id is not None or logits_shape[0] == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and logits_shape[0] != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]

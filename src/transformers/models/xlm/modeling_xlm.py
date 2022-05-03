@@ -35,14 +35,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    SQuADHead,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -1045,7 +1039,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0
-        >>> )  # Batch size 1
+        ... )  # Batch size 1
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 

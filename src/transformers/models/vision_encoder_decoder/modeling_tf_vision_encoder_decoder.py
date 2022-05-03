@@ -326,7 +326,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         >>> output_ids = model.generate(
         ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
-        >>> ).sequences
+        ... ).sequences
 
         >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         >>> preds = [pred.strip() for pred in preds]

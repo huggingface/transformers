@@ -117,7 +117,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             head_mask = [None] * sent_encoder.config.num_hidden_layers
             extended_attention_mask: torch.Tensor = sent_encoder.get_extended_attention_mask(
-                attention_mask, input_shape, device
+                attention_mask, input_shape
             )
 
             # define function for checkpointing
