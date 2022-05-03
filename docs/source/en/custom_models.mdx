@@ -106,7 +106,7 @@ directly upload your config to the Hub.
 
 Now that we have our ResNet configuration, we can go on writing the model. We will actually write two: one that
 extracts the hidden features from a batch of images (like [`BertModel`]) and one that is suitable for image
-classification (like [`BertModelForSequenceClassification`]).
+classification (like [`BertForSequenceClassification`]).
 
 As we mentioned before, we'll only write a loose wrapper of the model to keep it simple for this example. The only
 thing we need to do before writing this class is a map between the block types and actual block classes. Then the

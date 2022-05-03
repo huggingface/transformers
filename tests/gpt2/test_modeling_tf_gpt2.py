@@ -294,7 +294,7 @@ class TFGPT2ModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_gpt2_xla_generate(self, config, input_ids, *args):
+    def create_and_check_gpt2_xla_generate_fast(self, config, input_ids, *args):
         config.eos_token_id = None
         config.max_length = 10
         model = TFGPT2LMHeadModel(config=config)
@@ -408,9 +408,9 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
 
-    def test_gpt2_xla_generate(self):
+    def test_gpt2_xla_generate_fast(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_xla_generate(*config_and_inputs)
+        self.model_tester.create_and_check_gpt2_xla_generate_fast(*config_and_inputs)
 
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -447,19 +447,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
 @require_tf
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
-    @slow
-    def test_lm_generate_distilgpt2(self):
-        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = tf.convert_to_tensor([[464, 1893]], dtype=tf.int32)  # The president
-
-        # The president of the United States, and the president of the United Kingdom, have been in the White
-        # fmt: off
-        expected_output_ids = [464, 1893, 286, 262, 1578, 1829, 11, 290, 262, 1893, 286, 262, 1578, 7526, 11, 423, 587, 287, 262, 2635]
-        # fmt: on
-
-        output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
-
     @slow
     def test_lm_generate_greedy_distilgpt2_batch_special(self):
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
@@ -506,18 +493,18 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "temperature": 1.5,
             "top_k": 500,
             "top_p": 0.9,
+            "seed": [42, 0],  # seed set -> deterministic sampling sequence -> deterministic generation
         }
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
             output_ids = model.generate(input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         expected_output_string = [
-            "Today is a beautiful day and this makes finding holiday travel easier for you to do other project\nOh",
-            "Yesterday was an enjoyable but especially great note though it certainly upset many Democrats who say",
+            "Today is a beautiful day and we will make you feel very hot/terrific in all",
+            "Yesterday was another solid success as news coverage became standard American domestic television hit.",
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
@@ -549,28 +536,58 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    def test_lm_generate_gpt2(self):
+    def test_lm_generate_gpt2_greedy_xla(self):
+        # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
+        # the underlying problem)
         model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
-        # fmt: on
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["The dog"]
+        expected_output_strings = [
+            "The dog was found in a field near the intersection of West and West Streets.\n\nThe dog",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
         output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        output_ids = xla_generate(input_ids, do_sample=False)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
 
     @slow
-    def test_lm_generate_gpt2_xla(self):
-        """This test gives the exact same results as the non-xla test above"""
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+    def test_lm_generate_gpt2_sample_xla(self):
+        # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
+        # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
+        # and that we can seed both versions.
 
-        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
-        # fmt: on
-        xla_generate = tf.function(model.generate, jit_compile=True)
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+            tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        output_ids = xla_generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.padding_side = "left"
+
+            sentence = ["The dog"]
+            expected_output_string = [
+                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most puppies"
+            ]
+            expected_output_string_xla = [
+                "The dog has been named in connection with the murder of a 20-year-old man in!"
+            ]
+            input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+
+            output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(output_strings, expected_output_string)
+
+            xla_generate = tf.function(model.generate, jit_compile=True)
+            output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
+            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            self.assertListEqual(output_strings, expected_output_string_xla)

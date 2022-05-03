@@ -20,9 +20,9 @@ repository by Colin Raffel et al. It's an improved version of the original T5 mo
 One can directly plug in the weights of T5v1.1 into a T5 model, like so:
 
 ```python
-from transformers import T5ForConditionalGeneration
+>>> from transformers import T5ForConditionalGeneration
 
-model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-base")
+>>> model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-base")
 ```
 
 T5 Version 1.1 includes the following improvements compared to the original T5 model:

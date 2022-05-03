@@ -183,11 +183,20 @@ def sort_imports(file, check_only=True):
         # Check if the block contains some `_import_structure`s thingy to sort.
         block = main_blocks[block_idx]
         block_lines = block.split("\n")
-        if len(block_lines) < 3 or "_import_structure" not in "".join(block_lines[:2]):
+
+        # Get to the start of the imports.
+        line_idx = 0
+        while line_idx < len(block_lines) and "_import_structure" not in block_lines[line_idx]:
+            # Skip dummy import blocks
+            if "import dummy" in block_lines[line_idx]:
+                line_idx = len(block_lines)
+            else:
+                line_idx += 1
+        if line_idx >= len(block_lines):
             continue
 
-        # Ignore first and last line: they don't contain anything.
-        internal_block_code = "\n".join(block_lines[1:-1])
+        # Ignore beginning and last line: they don't contain anything.
+        internal_block_code = "\n".join(block_lines[line_idx:-1])
         indent = get_indent(block_lines[1])
         # Slit the internal block into blocks of indent level 1.
         internal_blocks = split_code_in_indented_blocks(internal_block_code, indent_level=indent)
@@ -211,7 +220,7 @@ def sort_imports(file, check_only=True):
                 count += 1
 
         # And we put our main block back together with its first and last line.
-        main_blocks[block_idx] = "\n".join([block_lines[0]] + reorderded_blocks + [block_lines[-1]])
+        main_blocks[block_idx] = "\n".join(block_lines[:line_idx] + reorderded_blocks + [block_lines[-1]])
 
     if code != "\n".join(main_blocks):
         if check_only:

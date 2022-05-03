@@ -31,12 +31,8 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     ModelOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_realm import RealmConfig
 
@@ -1786,7 +1782,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
-        >>> ).input_ids
+        ... ).input_ids
 
         >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
         >>> predicted_answer = tokenizer.decode(predicted_answer_ids)

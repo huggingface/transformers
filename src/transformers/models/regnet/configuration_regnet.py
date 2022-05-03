@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "regnety-40": "https://huggingface.co/zuppif/regnety-040/blob/main/config.json",
+    "facebook/regnet-y-040": "https://huggingface.co/facebook/regnet-y-040/blob/main/config.json",
 }
 
 
@@ -29,8 +29,8 @@ class RegNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RegNetModel`]. It is used to instantiate a RegNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the
-    [facebook/regnet-y-40](https://huggingface.co/facebook/regnet-y-40) architecture.
+    defaults will yield a similar configuration to that of the RegNet
+    [facebook/regnet-y-040](https://huggingface.co/facebook/regnet-y-040) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

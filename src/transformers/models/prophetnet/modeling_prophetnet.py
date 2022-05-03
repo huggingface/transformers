@@ -757,7 +757,7 @@ class ProphetNetAttention(nn.Module):
             batch_size * self.num_attn_heads,
             tgt_len,
             self.head_dim,
-        ), "`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of shape {attn_output.size()}"
+        ), f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of shape {attn_output.size()}"
 
         attn_output = (
             attn_output.view(batch_size, self.num_attn_heads, tgt_len, self.head_dim)
@@ -1813,7 +1813,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -1935,7 +1935,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -2202,7 +2202,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
         >>> labels = tokenizer_dec(
         ...     "us rejects charges against its ambassador in bolivia", return_tensors="pt"
-        >>> ).input_ids
+        ... ).input_ids
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
         >>> loss = outputs.loss

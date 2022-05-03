@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     get_gpu_count,
     mockenv_context,
     require_deepspeed,
+    require_optuna,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -362,6 +363,33 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+
+    @require_optuna
+    def test_hyperparameter_search(self):
+        with mockenv_context(**self.dist_env_1_gpu):
+
+            ds_config_zero3_dict = self.get_config_dict(ZERO3)
+
+            # hyperparameter_search requires model_init() to recreate the model for each trial
+            def model_init():
+                config = RegressionModelConfig(a=0, b=0, double_output=False)
+                model = RegressionPreTrainedModel(config)
+                return model
+
+            trainer = get_regression_trainer(
+                local_rank=0,
+                fp16=True,
+                model_init=model_init,
+                deepspeed=ds_config_zero3_dict,
+            )
+
+            n_trials = 3
+            with CaptureLogger(deepspeed_logger) as cl:
+                with CaptureStd() as cs:
+                    trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #
 
