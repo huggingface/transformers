@@ -367,7 +367,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_2 = tokenizer.decode(ids)
                 self.assertIsInstance(text_2, str)
 
-                output_text = "lower newer"
+                output_text = "lowernewer"
                 self.assertEqual(text_2, output_text)
 
     def test_mask_output(self):
