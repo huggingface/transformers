@@ -10,21 +10,21 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Create a custom architecture
+# Crea una arquitectura personalizada
 
-An [`AutoClass`](model_doc/auto) automatically infers the model architecture and downloads pretrained configuration and weights. Generally, we recommend using an `AutoClass` to produce checkpoint-agnostic code. But users who want more control over specific model parameters can create a custom 🤗 Transformers model from just a few base classes. This could be particularly useful for anyone who is interested in studying, training or experimenting with a 🤗 Transformers model. In this guide, dive deeper into creating a custom model without an `AutoClass`. Learn how to:
+Una [`AutoClass`](model_doc/auto) infiere automáticamente la arquitectura del modelo y descarga la configuración y los pesos del modelo preentrenado. Normalmente, recomendamos usar una `AutoClass` para producir un código agnóstico a puntos de guardado o checkpoints. Sin embargo, los usuarios que quieren más control sobre los parámetros específicos de los modelos pueden crear su propio modelo 🤗 Transformers personalizado a partir de varias clases base. Esto puede ser particularmente útil para alguien que esté interesado en estudiar, entrenar o experimentar con modelos 🤗 Transformers. En esta guía vamos a profundizar en la creación de modelos personalizados sin usar `AutoClass`. Aprenderemos a:
 
-- Load and customize a model configuration.
-- Create a model architecture.
-- Create a slow and fast tokenizer for text.
-- Create a feature extractor for audio or image tasks.
-- Create a processor for multimodal tasks.
+- Cargar y personalizar una configuración para un modelo.
+- Crear una arquitectura para un modelo.
+- Crear tokenizadores rápidos y lentos para textos.
+- Crear un extractor de propiedades para tareas de audio o imágenes.
+- Crear un procesador para tareas multimodales.
 
-## Configuration
+## Configuración
 
-A [configuration](main_classes/configuration) refers to a model's specific attributes. Each model configuration has different attributes; for instance, all NLP models have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` attributes in common. These attributes specify the number of attention heads or hidden layers to construct a model with.
+Una [configuración](main_classes/configuration) es un conjunto de atributos específicos de un modelo. Cada configuración de modelo tiene atributos diferentes; por ejemplo, todos los modelos de PLN tienen los atributos `hidden_size`, `num_attention_heads`, `num_hidden_layers` y `vocab_size` en común. Estos atributos especifican el número de cabezas de atención o de capas ocultas con las que se construyen los modelos.
 
-Get a closer look at [DistilBERT](model_doc/distilbert) by accessing [`DistilBertConfig`] to inspect it's attributes:
+Puedes echarle un vistazo a [DistilBERT](model_doc/distilbert) y sus atributos accediendo a [`DistilBertConfig`]:
 
 ```py
 >>> from transformers import DistilBertConfig
@@ -51,10 +51,10 @@ DistilBertConfig {
 }
 ```
 
-[`DistilBertConfig`] displays all the default attributes used to build a base [`DistilBertModel`]. All attributes are customizable, creating space for experimentation. For example, you can customize a default model to:
+[`DistilBertConfig`] muestra todos los atributos por defecto que se han usado para construir un modelo [`DistilBertModel`] base. Todos ellos son personalizables, lo que deja espacio para la experimentación. Por ejemplo, puedes personalizar un modelo predeterminado para:
 
-- Try a different activation function with the `activation` parameter.
-- Use a higher dropout ratio for the attention probabilities with the `attention_dropout` parameter.
+- Probar una función de activación diferente con el parámetro `activation`.
+- Usar un valor de abandono (también conocido como _dropout_) más alto para las probabilidades de las capas de atención con el parámetro `attention_dropout`.
 
 ```py
 >>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
@@ -79,27 +79,27 @@ DistilBertConfig {
 }
 ```
 
-Pretrained model attributes can be modified in the [`~PretrainedConfig.from_pretrained`] function:
+Los atributos de los modelos preentrenados pueden ser modificados en la función [`~PretrainedConfig.from_pretrained`]Ñ
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-Once you are satisfied with your model configuration, you can save it with [`~PretrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory:
+Una vez que estés satisfecho con la configuración de tu modelo, puedes guardarlo con la función [`~PretrainedConfig.save_pretrained`]. Tu configuración se guardará en un archivo JSON dentro del directorio que le especifiques como parámetro.
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-To reuse the configuration file, load it with [`~PretrainedConfig.from_pretrained`]:
+Para volver a usar el archivo de configuración, puedes cargarlo con [`~PretrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 ```
 
 <Tip>
-
-You can also save your configuration file as a dictionary or even just the difference between your custom configuration attributes and the default configuration attributes! See the [configuration](main_classes/configuration) documentation for more details.
+  
+También puedes guardar los archivos de configuración como un diccionario; o incluso guardar solo la diferencia entre tu archivo personalizado y la configuración por defecto. Consulta la [documentación sobre configuración](main_classes/configuration) para ver más detalles.
 
 </Tip>
 
