@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Data2VecVision model. """
 
+import collections.abc
 import inspect
 import unittest
 
@@ -40,7 +41,6 @@ if is_tf_available():
     from transformers.models.data2vec.modeling_tf_data2vec_vision import (
         TFData2VecVisionForImageClassification,
         TFData2VecVisionModel,
-        to_2tuple,
     )
 
 
@@ -130,8 +130,16 @@ class TFData2VecVisionModelTester:
         model = TFData2VecVisionModel(config=config)
         result = model(pixel_values, training=False)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
+        image_size = (
+            self.image_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.image_size, self.image_size)
+        )
+        patch_size = (
+            self.patch_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.patch_size, self.patch_size)
+        )
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
@@ -213,8 +221,16 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         # in Data2VecVision, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(self.model_tester.patch_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+        patch_size = (
+            self.model_tester.patch_size
+            if isinstance(self.model_tester.patch_size, collections.abc.Iterable)
+            else (self.model_tester.patch_size, self.model_tester.patch_size)
+        )
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         seq_len = num_patches + 1
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
@@ -276,8 +292,16 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # Data2VecVision has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
+            image_size = (
+                self.model_tester.image_size
+                if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+                else (self.model_tester.image_size, self.model_tester.image_size)
+            )
+            patch_size = (
+                self.model_tester.patch_size
+                if isinstance(self.model_tester.patch_size, collections.abc.Iterable)
+                else (self.model_tester.patch_size, self.model_tester.patch_size)
+            )
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
             seq_length = num_patches + 1
 
