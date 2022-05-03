@@ -8,7 +8,7 @@
   - local: pipeline_tutorial
     title: Pipelines para inferencia
   - local: autoclass_tutorial
-    title: Carga las instancias preentrenadas con un AutoClass
+    title: Carga instancias preentrenadas con un AutoClass
   - local: training
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
