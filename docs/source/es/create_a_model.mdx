@@ -109,6 +109,7 @@ El siguiente paso será crear un [modelo](main_classes/models). El modelo, al qu
 
 <frameworkcontent>
 <pt>
+
 Carga los atributos de tu configuración personalizada en el modelo de la siguiente forma:
 
 ```py
@@ -121,7 +122,6 @@ Carga los atributos de tu configuración personalizada en el modelo de la siguie
 Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápidos, consumiendo solo una fracción de los recursos que un entrenamiento completo requeriría. 
 
 Crea un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
-
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
