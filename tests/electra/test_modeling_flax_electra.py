@@ -10,6 +10,7 @@ from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random
 
 if is_flax_available():
     from transformers.models.electra.modeling_flax_electra import (
+        FlaxElectraForCausalLM,
         FlaxElectraForMaskedLM,
         FlaxElectraForMultipleChoice,
         FlaxElectraForPreTraining,
@@ -110,6 +111,7 @@ class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaxElectraModel,
+            FlaxElectraForCausalLM,
             FlaxElectraForMaskedLM,
             FlaxElectraForPreTraining,
             FlaxElectraForTokenClassification,
