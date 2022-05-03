@@ -24,8 +24,12 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- In terms of data processing, LayoutLMv3 is identical to LayoutLMv2, except that you need to make sure images are resized and normalized (whereas LayoutLMv2 normalized the images internally).
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/layoutlmv3_architecture.png"
+alt="drawing" width="600"/> 
+
+<small> LayoutLMv3 architecture. Taken from the <a href="https://arxiv.org/abs/2204.08387">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
 
@@ -37,6 +41,22 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 ## LayoutLMv3FeatureExtractor
 
 [[autodoc]] LayoutLMv3FeatureExtractor
+    - __call__
+
+## LayoutLMv3Tokenizer
+
+[[autodoc]] LayoutLMv3Tokenizer
+    - __call__
+    - save_vocabulary
+
+## LayoutLMv3TokenizerFast
+
+[[autodoc]] LayoutLMv3TokenizerFast
+    - __call__
+
+## LayoutLMv3Processor
+
+[[autodoc]] LayoutLMv3Processor
     - __call__
 
 ## LayoutLMv3Model

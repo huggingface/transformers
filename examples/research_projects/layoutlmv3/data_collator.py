@@ -12,7 +12,7 @@ from transformers.file_utils import PaddingStrategy
 class DataCollatorForKeyValueExtraction(DataCollatorMixin):
     """
     Data collator that will dynamically pad the inputs received, as well as the labels.
-    
+
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
@@ -34,6 +34,7 @@ class DataCollatorForKeyValueExtraction(DataCollatorMixin):
         label_pad_token_id (:obj:`int`, `optional`, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignore by PyTorch loss functions).
     """
+
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None

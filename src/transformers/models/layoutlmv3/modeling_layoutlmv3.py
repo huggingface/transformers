@@ -34,16 +34,91 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
 from ...activations import ACT2FN
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
 logger = logging.get_logger(__name__)
+
+_CHECKPOINT_FOR_DOC = "microsoft/layoutlmv3-base"
+_CONFIG_FOR_DOC = "LayoutLMv3Config"
+_TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlmv3-base",
     "microsoft/layoutlmv3-large",
     # See all LayoutLMv3 models at https://huggingface.co/models?filter=layoutlmv3
 ]
+
+LAYOUTLMV3_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`LayoutLMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+LAYOUTLMV3_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `{0}`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LayoutLMv2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Batch of document images.
+
+        attention_mask (`torch.FloatTensor` of shape `{0}`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `{0}`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `{0}`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
@@ -635,6 +710,10 @@ class LayoutLMv3Output(nn.Module):
         return hidden_states
 
 
+@add_start_docstrings(
+    "The bare LayoutLMv3 Model transformer outputting raw hidden-states without any specific head on top.",
+    LAYOUTLMV3_START_DOCSTRING,
+)
 class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -728,6 +807,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         x = self.norm(x)
         return x
 
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -742,6 +823,26 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         return_dict=None,
         pixel_values=None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
+        >>> image = dataset["train"][0]["image"]
+
+        >>> encoding = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -886,6 +987,15 @@ class LayoutLMv3ClassificationHead(nn.Module):
         return x
 
 
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a token classification head on top (a linear layer on top of the final hidden states) e.g.
+    for sequence labeling (information extraction) tasks such as [FUNSD](https://guillaumejaume.github.io/FUNSD/),
+    [SROIE](https://rrc.cvc.uab.es/?ch=13), [CORD](https://github.com/clovaai/cord) and
+    [Kleister-NDA](https://github.com/applicaai/kleister-nda).
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -903,6 +1013,8 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -921,7 +1033,31 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForTokenClassification
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", revision="no_ocr")
+        >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
+        >>> example = dataset["train"][0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["boxes"]
+        >>> word_labels = [0, 1]
+
+        >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv3(
@@ -1042,6 +1178,14 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a sequence classification head on top (a linear layer on top of the final hidden state of the
+    [CLS] token) e.g. for document image classification tasks such as the
+    [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
 class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1054,6 +1198,8 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1069,6 +1215,29 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         bbox=None,
         pixel_values=None,
     ):
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForSequenceClassification
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
+        >>> image = dataset["train"][0]["image"]
+
+        >>> encoding = processor(image, return_tensors="pt")
+        >>> sequence_label = torch.tensor([1])
+
+        >>> outputs = model(**encoding, labels=sequence_label)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv3(

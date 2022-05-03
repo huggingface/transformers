@@ -1,26 +1,28 @@
-import torch
+from datasets import load_dataset
 
-from transformers import LayoutLMv2Processor, LayoutLMv3Model
+from transformers import (
+    LayoutLMv3FeatureExtractor,
+    LayoutLMv3ForSequenceClassification,
+    LayoutLMv3Processor,
+    LayoutLMv3Tokenizer,
+)
 
 
-# from datasets import load_dataset
-# from PIL import Image
+feature_extractor = LayoutLMv3FeatureExtractor(apply_ocr=False)
+tokenizer = LayoutLMv3Tokenizer.from_pretrained("microsoft/layoutlmv3-base")
+processor = LayoutLMv3Processor(feature_extractor, tokenizer)
 
+model = LayoutLMv3ForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
+dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+image = dataset[0]["image"]
+words = dataset[0]["tokens"]
+boxes = dataset[0]["bboxes"]
 
-# ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
-# image = Image.open(ds[0]["file"]).convert("RGB")
+encoding = processor(image, words, boxes=boxes, return_tensors="pt")
 
-# encoding = processor(image, return_tensors="pt")
+for k, v in encoding.items():
+    print(k, v.shape)
 
-input_ids = torch.tensor([[1, 2]])
-bbox = torch.tensor([[0, 0, 1, 2], [1, 5, 2, 5]]).unsqueeze(0)
-pixel_values = torch.randn(1, 3, 224, 224)
-
-print("Shape of input_ids:", input_ids.shape)
-print("Shape of bbox:", bbox.shape)
-
-outputs = model(input_ids=input_ids, bbox=bbox, pixel_values=pixel_values)
-last_hidden_states = outputs.last_hidden_state
+outputs = model(**encoding)
+logits = outputs.logits

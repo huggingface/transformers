@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,12 +18,17 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_torch_available, is_vision_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_layoutlmv3": ["LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv3Config"],
+    "processing_layoutlmv3": ["LayoutLMv3Processor"],
+    "tokenization_layoutlmv3": ["LayoutLMv3Tokenizer"],
 }
+
+if is_tokenizers_available():
+    _import_structure["tokenization_layoutlmv3_fast"] = ["LayoutLMv3TokenizerFast"]
 
 if is_vision_available():
     _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
@@ -40,6 +45,11 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_layoutlmv3 import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv3Config
+    from .processing_layoutlmv3 import LayoutLMv3Processor
+    from .tokenization_layoutlmv3 import LayoutLMv3Tokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_layoutlmv3_fast import LayoutLMv3TokenizerFast
 
     if is_vision_available():
         from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
