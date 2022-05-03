@@ -600,16 +600,16 @@ def find_executable_batch_size(
         auto_find_batch_size (`bool`, *optional*)
             If False, will just execute `function`
     """
+    if function is None:
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            auto_find_batch_size=auto_find_batch_size,
+        )
     if auto_find_batch_size:
         if is_accelerate_available():
             import accelerate.memory_utils as mem_utils
 
-            if function is None:
-                return functools.partial(
-                    find_executable_batch_size,
-                    starting_batch_size=starting_batch_size,
-                    auto_find_batch_size=auto_find_batch_size,
-                )
             return mem_utils.find_executable_batch_size(function, starting_batch_size)
         else:
             raise ImportError("To use this functionality, Accelerate must be installed. (`pip install accelerate`)")
