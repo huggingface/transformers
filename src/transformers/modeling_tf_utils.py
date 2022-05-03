@@ -958,8 +958,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         that they are available to the model during the forward pass.
         """
 
-        # For now, we hardcode the most common renamings - this will hopefully be expanded to model-specific
-        # attributes in future.
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
         arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
         if self._label_to_output_map is not None:
@@ -970,6 +969,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
         elif "next_sentence_label" in arg_names:
             label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        elif "mc_labels" in arg_names:
+            label_to_output = {"labels": "logits", "mc_labels": "mc_logits"}
         else:
             label_to_output = dict()
         output_to_label = {val: key for key, val in label_to_output.items()}
@@ -1039,7 +1040,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if loss is None:
                 loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
 
-        breakpoint()
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
 
@@ -1061,8 +1061,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         labels where appropriate. It will also copy label keys into the input dict when using the dummy loss, to ensure
         that they are available to the model during the forward pass.
         """
-        # For now, we hardcode the most common renamings - this will hopefully be expanded to model-specific
-        # attributes in future.
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
         arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
         if self._label_to_output_map is not None:
@@ -1073,6 +1072,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
         elif "next_sentence_label" in arg_names:
             label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        elif "mc_labels" in arg_names:
+            label_to_output = {"labels": "logits", "mc_labels": "mc_logits"}
         else:
             label_to_output = dict()
         output_to_label = {val: key for key, val in label_to_output.items()}
