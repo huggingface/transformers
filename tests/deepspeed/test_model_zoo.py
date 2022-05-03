@@ -43,6 +43,7 @@ set_seed(42)
 
 FIXTURE_DIRECTORY = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures")
 ROOT_DIRECTORY = os.path.join(dirname(dirname(dirname(os.path.abspath(__file__)))))
+DS_TESTS_DIRECTORY = dirname(os.path.abspath(__file__))
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
@@ -56,7 +57,7 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
 BIG_BIRD_TINY = "hf-internal-testing/tiny-random-big_bird"
 BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
-DEBERTA_TINY = "hf-internal-testing/tiny-deberta"
+DEBERTA_TINY = "hf-internal-testing/tiny-random-deberta"
 DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
@@ -69,12 +70,18 @@ GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
 LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
 LED_TINY = "hf-internal-testing/tiny-random-led"
 LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
+M2M_100_TINY = "stas/tiny-m2m_100" # hf tiny model is unsuitable
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 MBART_TINY = "sshleifer/tiny-mbart"
 MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
 MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
 PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
+
+#PROPHETNET_TINY = "microsoft/prophetnet-large-uncased"
 PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
+#PROPHETNET_TINY = "/hf/transformers-ds-model-zoo-2/tiny-prophetnet"
+
+
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
@@ -85,11 +92,7 @@ XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 
 
 # *** To Fix ***
-M2M_100_TINY = "hf-internal-testing/tiny-random-m2m_100"
-# XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
-# PYTHONPATH=src deepspeed  --master_port 6666 --num_nodes 1 --num_gpus 2 examples/pytorch/translation/run_translation.py --train_file tests/fixtures/tests_samples/wmt_en_ro/train.json --source_lang en --target_lang ro --model_name_or_path hf-internal-testing/tiny-random-m2m_100 --do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --report_to none --overwrite_output_dir --deepspeed tests/deepspeed/ds_config_zero3.json --output_dir /tmp/tmpi4k4wz8s --save_steps 1
-# if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
-# AttributeError: 'Parameter' object has no attribute 'ds_status'
+
 
 
 # *** tiny model issues ***
@@ -163,52 +166,52 @@ def make_task_cmds():
         --overwrite_output_dir
         """.split()
 
-    # XXX: try to cover as many models as possible once (it's enough to run on one task per model)
+    # try to cover as many models as possible once (it's enough to run on one task per model)
     # but need a tiny model for each
     #
-    # should have T5_TINY, etc. global var defined
+    # should have "{model_type.upper()}_TINY" corresponding vars defined, e.g., T5_TINY, etc.
     tasks2models = dict(
         trans=[
             "bart",
             "fsmt",
+            "m2m_100",
             "marian",
             "mbart",
             "t5",
             "t5_v1",
-            "m2m_100",
             # "mt5", missing model files
         ],
         sum=[
             "pegasus",
         ],
         clm=[
-            "gpt2",
-            "xlm-roberta",
-            "gpt_neo",
-            # "camembert", missing model files
             "big_bird",
-            "gptj",
-            "blenderbot",
             "bigbird_pegasus",
+            "blenderbot",
+            "gpt2",
+            "gpt_neo",
+            "gptj",
+            "xlm-roberta",
             "prophetnet",
+            # "camembert", missing model files
         ],
         mlm=[
-            "electra",
-            "distilbert",
             "albert",
-            "layoutlm",
+            "deberta",
             "deberta-v2",
-            "funnel",
+            "distilbert",
+            "electra",
             "flaubert",
+            "funnel",
+            "layoutlm",
             # "reformer", # multiple issues with either mlm/qa/clas
         ],
         qa=[
-            "roberta",
-            "deberta",
+            "led",
             "longformer",
             "mobilebert",
             "mpnet",
-            "led",
+            "roberta",
             "squeezebert",
             # "convbert", # missing tokenizer files
             # "layoutlmv2", missing model files
@@ -268,7 +271,7 @@ def make_task_cmds():
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
             --remove_unused_columns False
             --max_steps 10
-            --image_size=30
+            --feature_extractor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
         """,
     )
 
