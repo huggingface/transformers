@@ -66,7 +66,7 @@ from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, unwrap_model
+from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -122,6 +122,7 @@ from .trainer_utils import (
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     CONFIG_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     find_labels,
     get_full_repo_name,
@@ -1559,7 +1560,9 @@ class Trainer:
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_from_checkpoint(self, resume_from_checkpoint):
-        if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
+            os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
+        ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
         logger.info(f"Loading model from {resume_from_checkpoint}).")
@@ -1577,14 +1580,19 @@ class Trainer:
         if self.args.deepspeed:
             # will be resumed in deepspeed_init
             pass
-        else:
+        elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             # We load the model state dict on the CPU to avoid an OOM error.
             state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
-            self._load_state_dict_in_model(state_dict)
+            load_result = self.model.load_state_dict(state_dict, strict=False)
+            self._issue_warnings_after_load(load_result)
 
             # release memory
             del state_dict
+        else:
+            # We load the sharded checkpoint
+            load_result = load_sharded_checkpoint(self.model, resume_from_checkpoint, strict=False)
+            self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
@@ -1606,15 +1614,19 @@ class Trainer:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
                 # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
+                load_result = self.model.load_state_dict(state_dict, strict=False)
+                self._issue_warnings_after_load(load_result)
+        elif os.path.exists(best_model_path, os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
+            # Best model is a sharded checkpoint
+            load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
+            self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
                 f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                 "on multiple nodes, you should activate `--save_on_each_node`."
             )
 
-    def _load_state_dict_in_model(self, state_dict):
-        load_result = self.model.load_state_dict(state_dict, strict=False)
+    def _issue_warnings_after_load(self, load_result):
 
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
