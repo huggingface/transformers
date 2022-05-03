@@ -73,7 +73,6 @@ jobs:
 
       - name: Run style changes
         run: |
-          git fetch origin main:main
           . ~/venv/bin/activate
           make style && make quality && make repo-consistency
 
