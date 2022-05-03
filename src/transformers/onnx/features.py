@@ -2,6 +2,11 @@ from functools import partial, reduce
 from typing import Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
+from transformers.utils.dummy_pt_objects import (
+    LukeForEntityClassification,
+    LukeForEntityPairClassification,
+    LukeForEntitySpanClassification,
+)
 
 from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
 from ..utils import logging
@@ -86,6 +91,9 @@ class FeaturesManager:
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
             "masked-im": AutoModelForMaskedImageModeling,
+            "entity-classification": LukeForEntityClassification,
+            "entity-pair-classification": LukeForEntityPairClassification,
+            "entity-span-classification": LukeForEntitySpanClassification,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -284,6 +292,9 @@ class FeaturesManager:
         "luke": supported_features_mapping(
             "default",
             "masked-lm",
+            "entity-classification",
+            "entity-pair-classification",
+            "entity-span-classification",
             onnx_config_cls=LukeOnnxConfig,
         ),
         
