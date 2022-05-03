@@ -13,5 +13,9 @@
     title: Entrenamiento distribuido con 🤗 Accelerate
   title: Tutorials
 - sections:
+  - local: create_a_model
+    title: Crea una arquitectura personalizada
+  title: Guías prácticas
+- sections:
   - local: multilingual
     title: Modelos multilingües para inferencia
