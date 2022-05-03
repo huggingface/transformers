@@ -312,6 +312,12 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            cls_token_box=cls_token_box,
+            sep_token_box=sep_token_box,
+            pad_token_box=pad_token_box,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            add_visual_labels=add_visual_labels,
             **kwargs,
         )
 

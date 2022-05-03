@@ -23,18 +23,10 @@ import unittest
 from typing import List
 
 from transformers import AddedToken, LayoutLMv3TokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
-from transformers.models.layoutlmv3.tokenization_layoutlmv3 import (
-    VOCAB_FILES_NAMES,
-    LayoutLMv3Tokenizer,
-)
+from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES, LayoutLMv3Tokenizer
 from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
 
-from ..test_tokenization_common import (
-    SMALL_TRAINING_CORPUS,
-    TokenizerTesterMixin,
-    filter_non_english,
-    merge_model_tokenizer_mappings,
-)
+from ..test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
 
 
 @require_tokenizers
@@ -44,6 +36,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
+    test_seq2seq = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
     def get_words_and_boxes(self):
@@ -115,11 +108,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
-        output_text = "unwanted, running"
-        return input_text, output_text
-
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -160,35 +148,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
         assert encoded_pair == [0] + text + [2] + [2] + text_2 + [2]
-
-    def test_offsets_with_special_characters(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                words, boxes = self.get_words_and_boxes()
-                words[1] = tokenizer_r.mask_token
-                tokens = tokenizer_r.encode_plus(
-                    words,
-                    boxes=boxes,
-                    return_attention_mask=False,
-                    return_token_type_ids=False,
-                    return_offsets_mapping=True,
-                    add_special_tokens=True,
-                )
-
-                expected_results = [
-                    ((0, 0), tokenizer_r.cls_token),
-                    ((0, 1), "a"),
-                    ((0, 6), tokenizer_r.mask_token),
-                    ((0, 4), "test"),
-                    ((0, 0), tokenizer_r.sep_token),
-                ]
-
-                self.assertEqual(
-                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
-                )
-                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
         tokenizers: List[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
@@ -408,7 +367,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_2 = tokenizer.decode(ids)
                 self.assertIsInstance(text_2, str)
 
-                output_text = "a weirdly test"
+                output_text = "lower newer"
                 self.assertEqual(text_2, output_text)
 
     def test_mask_output(self):
@@ -2232,7 +2191,9 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
         tokenizer_p = LayoutLMv3Tokenizer.from_pretrained(
-            "microsoft/layoutlmv3-base", only_label_first_subword=False, add_visual_labels=False,
+            "microsoft/layoutlmv3-base",
+            only_label_first_subword=False,
+            add_visual_labels=False,
         )
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
@@ -2243,7 +2204,9 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
         tokenizer_r = LayoutLMv3Tokenizer.from_pretrained(
-            "microsoft/layoutlmv3-base", only_label_first_subword=False, add_visual_labels=False,
+            "microsoft/layoutlmv3-base",
+            only_label_first_subword=False,
+            add_visual_labels=False,
         )
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
