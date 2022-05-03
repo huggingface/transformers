@@ -610,7 +610,7 @@ def find_executable_batch_size(
         if is_accelerate_available():
             import accelerate.memory_utils as mem_utils
 
-            return mem_utils.find_executable_batch_size(function, starting_batch_size)
+            return mem_utils.find_executable_batch_size(starting_batch_size=starting_batch_size)
         else:
             raise ImportError("To use this functionality, Accelerate must be installed. (`pip install accelerate`)")
     return function

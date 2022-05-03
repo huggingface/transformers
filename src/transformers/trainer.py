@@ -1214,6 +1214,7 @@ class Trainer:
             starting_batch_size=self._train_batch_size, auto_find_batch_size=auto_find_batch_size
         )
         def _inner_training_loop(batch_size):
+            self._train_batch_size = batch_size
             # Data loader and number of training steps
             train_dataloader = self.get_train_dataloader()
 
