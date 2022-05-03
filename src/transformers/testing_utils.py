@@ -40,6 +40,7 @@ from .integrations import (
     is_wandb_available,
 )
 from .utils import (
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_detectron2_available,
@@ -236,6 +237,13 @@ def require_git_lfs(test_case):
     variable to a truthy value to run them.
     """
     return unittest.skipUnless(_run_git_lfs_tests, "test of git lfs workflow")(test_case)
+
+
+def require_accelerate(test_case):
+    """
+    Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
+    """
+    return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
 
 
 def require_rjieba(test_case):
