@@ -61,6 +61,8 @@
     title: Export 🤗 Transformers models
   - local: performance
     title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
+  - local: big_models
+    title: Instantiating a big model
   - local: parallelism
     title: Model Parallelism
   - local: benchmarks
