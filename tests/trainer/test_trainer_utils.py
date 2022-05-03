@@ -423,19 +423,6 @@ class TrainerUtilsTest(unittest.TestCase):
             self.check_shard_sampler(dataset, 4, drop_last=True, num_processes=3)
             self.check_shard_sampler(dataset, 4, drop_last=False, num_processes=3)
 
-    def test_executable_batch_size_import_error(self):
-        if not is_accelerate_available():
-
-            @find_executable_batch_size(auto_find_batch_size=True)
-            def mock_training_loop_function(batch_size):
-                return
-
-            with self.assertRaises(ImportError) as e:
-                mock_training_loop_function()
-                self.assertEqual(
-                    "To use this functionality, Accelerate must be installed. (`pip install accelerate`)", e.args[0]
-                )
-
     @require_accelerate
     def test_executable_batch_size(self):
         batch_sizes = []

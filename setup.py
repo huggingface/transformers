@@ -288,6 +288,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "accelerate"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
