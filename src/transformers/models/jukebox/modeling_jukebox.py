@@ -35,6 +35,8 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 else:
     is_amp_available = False
 
+import gc
+
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -54,7 +56,7 @@ from ...utils import (
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_jukebox import JukeboxConfig
-import gc
+
 
 logger = logging.get_logger(__name__)
 
@@ -68,12 +70,9 @@ JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 def empty_cache():
     gc.collect()
     torch.cuda.empty_cache()
-    
-
 
 
 ####################################################################
@@ -85,6 +84,7 @@ try:
     print("Using apex FusedLayerNorm")
 except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
+
 
 class JukeboxMLP(nn.Module):
     def __init__(self, intermediate_size, config):
@@ -704,7 +704,7 @@ class JukeboxAttention(nn.Module):
             ), f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(y_forw - y_forw_in_chunks)[:, i, :]) > 1e-6]}"
 
 
-class JukeboxBlock(nn.module):
+class JukeboxBlock(nn.Module):
     # previously ResAttnBlock
     def __init__(
         self,
@@ -971,14 +971,15 @@ class JukeboxTransformer(nn.Module):
 ##################################
 # Jukebox Prior ##################
 
-def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (vocabulary size)
-            top_k >0: keep only top k tokens with highest probability (top-k filtering).
-            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+
+def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
+    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    Args:
+        logits: logits distribution shape (vocabulary size)
+        top_k >0: keep only top k tokens with highest probability (top-k filtering).
+        top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
     """
-    #assert logits.dim() == 2  # batch size 1 for now - could be updated for more but the code would be less clear
+    # assert logits.dim() == 2  # batch size 1 for now - could be updated for more but the code would be less clear
     logits = logits.clone()
     top_k = min(top_k, logits.size(-1))  # Safety check
     assert (top_k == 0) or (top_p == 0.0)
@@ -997,8 +998,10 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
 
-        #indices_to_remove = sorted_indices[sorted_indices_to_remove]
-        indices_to_remove = torch.zeros_like(logits, dtype=torch.uint8).scatter_(dim=-1, index=sorted_indices, src=sorted_indices_to_remove)
+        # indices_to_remove = sorted_indices[sorted_indices_to_remove]
+        indices_to_remove = torch.zeros_like(logits, dtype=torch.uint8).scatter_(
+            dim=-1, index=sorted_indices, src=sorted_indices_to_remove
+        )
         logits[indices_to_remove] = filter_value
     return logits
 
@@ -1008,14 +1011,17 @@ def get_normal(*shape, std=0.01):
     nn.init.normal_(w, std=std)
     return w
 
+
 def roll(x, n):
     return torch.cat((x[:, -n:], x[:, :-n]), dim=1)
+
 
 def split_chunks(length, chunk_size):
     n_passes = (length + chunk_size - 1) // chunk_size
     chunk_sizes = [*[chunk_size] * (n_passes - 1), (length - 1) % chunk_size + 1]
     assert sum(chunk_sizes) == length
     return chunk_sizes
+
 
 class PositionEmbedding(nn.Module):
     def __init__(self, input_shape, width, init_scale=1.0, pos_init=False):
@@ -1024,7 +1030,7 @@ class PositionEmbedding(nn.Module):
         self.input_dims = input_dims = np.prod(input_shape)
         self.pos_init = pos_init
         if pos_init:
-            self.register_buffer('pos', torch.tensor(get_pos_idx(input_shape)).long())
+            self.register_buffer("pos", torch.tensor(get_pos_idx(input_shape)).long())
             self._pos_embs = nn.ModuleList()
             for i in range(len(input_shape)):
                 emb = nn.Embedding(input_shape[i], width)
@@ -1035,21 +1041,44 @@ class PositionEmbedding(nn.Module):
 
     def forward(self):
         if self.pos_init:
-            pos_emb = sum([self._pos_embs[i](self.pos[:,i]) for i in range(len(self.input_shape))])
+            pos_emb = sum([self._pos_embs[i](self.pos[:, i]) for i in range(len(self.input_shape))])
         else:
             pos_emb = self.pos_emb
         return pos_emb
 
-class JukeboxPrior(nn.Module):
+
+class JukeboxConditionalAutoregressive(nn.Module):
     # previously ConditionalAutoregressive2D, renamed it to prior
-    def __init__(self, input_shape, bins,
-                 width=128, depth=2, heads=1,
-                 attn_dropout=0.0, resid_dropout=0.0, emb_dropout=0.0, mask=True,
-                 zero_out=False, init_scale=1.0, res_scale=False, pos_init=False,
-                 m_attn=0.25, m_mlp=1,
-                 checkpoint_res=0, checkpoint_attn=0, checkpoint_mlp=0,
-                 attn_order=0, blocks=None, spread=None, x_cond=False, y_cond=False,
-                 encoder_dims=0, only_encode=False, merged_decoder=False, prime_len=None):
+    def __init__(
+        self,
+        input_shape,
+        bins,
+        width=128,
+        depth=2,
+        heads=1,
+        attn_dropout=0.0,
+        resid_dropout=0.0,
+        emb_dropout=0.0,
+        mask=True,
+        zero_out=False,
+        init_scale=1.0,
+        res_scale=False,
+        pos_init=False,
+        m_attn=0.25,
+        m_mlp=1,
+        checkpoint_res=0,
+        checkpoint_attn=0,
+        checkpoint_mlp=0,
+        attn_order=0,
+        blocks=None,
+        spread=None,
+        x_cond=False,
+        y_cond=False,
+        encoder_dims=0,
+        only_encode=False,
+        merged_decoder=False,
+        prime_len=None,
+    ):
         super().__init__()
         self.input_shape = input_shape
         self.input_dims = input_dims = np.prod(input_shape)
@@ -1066,17 +1095,35 @@ class JukeboxPrior(nn.Module):
         if not y_cond:
             self.start_token = nn.Parameter(get_normal(1, width, std=0.01 * init_scale))
 
-        self.pos_emb = PositionEmbedding(input_shape=input_shape, width=width, init_scale=init_scale, pos_init=pos_init)
+        self.pos_emb = PositionEmbedding(
+            input_shape=input_shape, width=width, init_scale=init_scale, pos_init=pos_init
+        )
         self.pos_emb_dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = JukeboxTransformer(n_in=width, n_ctx=input_dims, n_head=heads, n_depth=depth,
-                                       attn_dropout=attn_dropout, resid_dropout=resid_dropout,
-                                       afn='relu', scale=True, mask=mask,
-                                       zero_out=zero_out, init_scale=init_scale, res_scale=res_scale,
-                                       m_attn=m_attn, m_mlp=m_mlp,
-                                       checkpoint_attn=checkpoint_attn, checkpoint_mlp=checkpoint_mlp, checkpoint_res=checkpoint_res,
-                                       attn_order=attn_order, blocks=blocks, spread=spread,
-                                       encoder_dims=encoder_dims, prime_len=prime_len)
+        self.transformer = JukeboxTransformer(
+            n_in=width,
+            n_ctx=input_dims,
+            n_head=heads,
+            n_depth=depth,
+            attn_dropout=attn_dropout,
+            resid_dropout=resid_dropout,
+            afn="relu",
+            scale=True,
+            mask=mask,
+            zero_out=zero_out,
+            init_scale=init_scale,
+            res_scale=res_scale,
+            m_attn=m_attn,
+            m_mlp=m_mlp,
+            checkpoint_attn=checkpoint_attn,
+            checkpoint_mlp=checkpoint_mlp,
+            checkpoint_res=checkpoint_res,
+            attn_order=attn_order,
+            blocks=blocks,
+            spread=spread,
+            encoder_dims=encoder_dims,
+            prime_len=prime_len,
+        )
 
         self.only_encode = only_encode
         self.prime_len = prime_len
@@ -1104,13 +1151,24 @@ class JukeboxPrior(nn.Module):
         # Convert back from NL and long to NHWC
         N = x.shape[0]
         assert (0 <= x).all() and (x < self.bins).all()
-        if sample_tokens is None or sample_tokens==self.input_dims:
+        if sample_tokens is None or sample_tokens == self.input_dims:
             return x.view(N, *self.input_shape)
         else:
             return x.view(N, -1)
 
-    def forward(self, x, x_cond=None, y_cond=None, encoder_kv=None, fp16=False, loss_full=False,
-                encode=False, get_preds=False, get_acts=False, get_sep_loss=False):
+    def forward(
+        self,
+        x,
+        x_cond=None,
+        y_cond=None,
+        encoder_kv=None,
+        fp16=False,
+        loss_full=False,
+        encode=False,
+        get_preds=False,
+        get_acts=False,
+        get_sep_loss=False,
+    ):
         # Preprocess.
         with torch.no_grad():
             x = self.preprocess(x)
@@ -1127,41 +1185,45 @@ class JukeboxPrior(nn.Module):
 
         if self.x_cond:
             assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (N, 1, self.width), f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct --sample_length?"
+            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
+                N,
+                1,
+                self.width,
+            ), f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct --sample_length?"
         else:
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
 
-        x_t = x # Target
-        x = self.x_emb(x) # X emb
-        x = roll(x, 1) # Shift by 1, and fill in start token
+        x_t = x  # Target
+        x = self.x_emb(x)  # X emb
+        x = roll(x, 1)  # Shift by 1, and fill in start token
         if self.y_cond:
-            x[:,0] = y_cond.view(N, self.width)
+            x[:, 0] = y_cond.view(N, self.width)
         else:
-            x[:,0] = self.start_token
+            x[:, 0] = self.start_token
 
-        x = self.x_emb_dropout(x) + self.pos_emb_dropout(self.pos_emb()) + x_cond # Pos emb and dropout
+        x = self.x_emb_dropout(x) + self.pos_emb_dropout(self.pos_emb()) + x_cond  # Pos emb and dropout
 
-        x = self.transformer(x, encoder_kv=encoder_kv, fp16=fp16) # Transformer
-        if self.add_cond_after_transformer: # Piped doesnt add x_cond
+        x = self.transformer(x, encoder_kv=encoder_kv, fp16=fp16)  # Transformer
+        if self.add_cond_after_transformer:  # Piped doesnt add x_cond
             x = x + x_cond
 
         acts = x
         if self.only_encode:
             return x
-        x = self.x_out(x) # Predictions
+        x = self.x_out(x)  # Predictions
 
         if get_sep_loss:
             assert self.prime_len is not None
-            x_prime = x[:, :self.prime_len].reshape(-1, self.bins)
-            x_gen = x[:, self.prime_len:].reshape(-1, self.bins)
+            x_prime = x[:, : self.prime_len].reshape(-1, self.bins)
+            x_gen = x[:, self.prime_len :].reshape(-1, self.bins)
 
-            prime_loss = F.cross_entropy(x_prime, x_t[:, :self.prime_len].reshape(-1)) / np.log(2.)
-            gen_loss = F.cross_entropy(x_gen, x_t[:, self.prime_len:].reshape(-1)) / np.log(2.)
+            prime_loss = F.cross_entropy(x_prime, x_t[:, : self.prime_len].reshape(-1)) / np.log(2.0)
+            gen_loss = F.cross_entropy(x_gen, x_t[:, self.prime_len :].reshape(-1)) / np.log(2.0)
 
-            loss = (prime_loss, gen_loss) # Note order! Prime is first
+            loss = (prime_loss, gen_loss)  # Note order! Prime is first
         else:
-            loss = F.cross_entropy(x.view(-1, self.bins), x_t.view(-1)) / np.log(2.)  # Loss
+            loss = F.cross_entropy(x.view(-1, self.bins), x_t.view(-1)) / np.log(2.0)  # Loss
 
         if get_preds:
             return loss, x
@@ -1176,7 +1238,7 @@ class JukeboxPrior(nn.Module):
             # Fill in start token
             # x = torch.empty(n_samples, 1, self.width).cuda()
             x = torch.empty(n_samples, 1, self.width).cpu()
-            
+
             if self.y_cond:
                 x[:, 0] = y_cond.view(N, self.width)
             else:
@@ -1187,18 +1249,30 @@ class JukeboxPrior(nn.Module):
             x = self.x_emb(x)
         assert x.shape == (n_samples, 1, self.width)
         if x_cond.shape == (N, D, self.width):
-            cond = x_cond[:, sample_t:sample_t + 1, :]
+            cond = x_cond[:, sample_t : sample_t + 1, :]
         else:
             cond = x_cond
-        x = x + self.pos_emb()[sample_t:sample_t + 1] + cond  # Pos emb, dropout is identity at eval time
+        x = x + self.pos_emb()[sample_t : sample_t + 1] + cond  # Pos emb, dropout is identity at eval time
         assert x.shape == (n_samples, 1, self.width)
         return x, cond
 
-    def sample(self, n_samples, x_cond=None, y_cond=None, encoder_kv=None, fp16=False, temp=1.0, top_k=0, top_p=0.0,
-               get_preds=False, sample_tokens=None):
+    def sample(
+        self,
+        n_samples,
+        x_cond=None,
+        y_cond=None,
+        encoder_kv=None,
+        fp16=False,
+        temp=1.0,
+        top_k=0,
+        top_p=0.0,
+        get_preds=False,
+        sample_tokens=None,
+    ):
         assert self.training == False
 
-        if sample_tokens is None: sample_tokens=self.input_dims
+        if sample_tokens is None:
+            sample_tokens = self.input_dims
         N, D = n_samples, self.input_dims
         if self.y_cond:
             assert y_cond is not None
@@ -1208,7 +1282,11 @@ class JukeboxPrior(nn.Module):
 
         if self.x_cond:
             assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (N, 1, self.width), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
+            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
+                N,
+                1,
+                self.width,
+            ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).cuda()
@@ -1219,20 +1297,20 @@ class JukeboxPrior(nn.Module):
                 preds = []
             # for sample_t in get_range(range(0, sample_tokens)):
             for sample_t in range(0, sample_tokens):
-            
+
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
-                x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16) # Transformer
+                x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
                 assert x.shape == (n_samples, 1, self.width)
-                x = self.x_out(x) # Predictions
+                x = self.x_out(x)  # Predictions
                 if get_preds:
                     preds.append(x.clone())
                 # Adjust logits
                 x = x / temp
                 x = filter_logits(x, top_k=top_k, top_p=top_p)
-                x = torch.distributions.Categorical(logits=x).sample() # Sample and replace x
+                x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
 
@@ -1248,11 +1326,25 @@ class JukeboxPrior(nn.Module):
         else:
             return x
 
-    def primed_sample(self, n_samples, x, x_cond=None, y_cond=None, encoder_kv=None, fp16=False, temp=1.0, top_k=0,
-                      top_p=0.0, get_preds=False, chunk_size=None, sample_tokens=None):
+    def primed_sample(
+        self,
+        n_samples,
+        x,
+        x_cond=None,
+        y_cond=None,
+        encoder_kv=None,
+        fp16=False,
+        temp=1.0,
+        top_k=0,
+        top_p=0.0,
+        get_preds=False,
+        chunk_size=None,
+        sample_tokens=None,
+    ):
         assert self.training == False
 
-        if sample_tokens is None: sample_tokens=self.input_dims
+        if sample_tokens is None:
+            sample_tokens = self.input_dims
         # Preprocess.
         with torch.no_grad():
             x = self.preprocess(x)
@@ -1272,7 +1364,11 @@ class JukeboxPrior(nn.Module):
 
         if self.x_cond:
             assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (N, 1, self.width), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
+            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
+                N,
+                1,
+                self.width,
+            ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).cuda()
@@ -1285,14 +1381,14 @@ class JukeboxPrior(nn.Module):
             # We do so in chunks instead of doing the whole past in one forward pass to reduce max memory usage.
             if chunk_size is None:
                 chunk_size = len(xs)
-            #assert len(xs) % chunk_size == 0, f'expected {len(xs)} to be divisible by {chunk_size}'
+            # assert len(xs) % chunk_size == 0, f'expected {len(xs)} to be divisible by {chunk_size}'
             chunk_sizes = split_chunks(len(xs), chunk_size)
             x_primes = []
             start = 0
             x = None
             # for current_chunk_size in get_range(chunk_sizes):
             for current_chunk_size in chunk_sizes:
-            
+
                 xs_prime, conds_prime = [], []
                 for sample_t in range(start, start + current_chunk_size):
                     x_prime, cond_prime = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
@@ -1333,20 +1429,20 @@ class JukeboxPrior(nn.Module):
             empty_cache()
             # for sample_t in get_range(range(len(xs), sample_tokens)):
             for sample_t in range(len(xs), sample_tokens):
-                
+
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
-                x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16) # Transformer
+                x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
                 assert x.shape == (n_samples, 1, self.width)
-                x = self.x_out(x) # Predictions
+                x = self.x_out(x)  # Predictions
                 if get_preds:
                     preds.append(x)
                 # Adjust logits
                 x = x / temp
                 x = filter_logits(x, top_k=top_k, top_p=top_p)
-                x = torch.distributions.Categorical(logits=x).sample() # Sample and replace x
+                x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
 
@@ -1364,7 +1460,7 @@ class JukeboxPrior(nn.Module):
 
     def check_sample(self, chunk_size):
         bs, l, d = (4, self.input_dims, self.width)
-        prime = int(self.input_dims//8*7)
+        prime = int(self.input_dims // 8 * 7)
         enc_l = self.encoder_dims
         with torch.no_grad():
             y_cond = torch.randn(bs, 1, d).cuda() if self.y_cond else None
@@ -1374,22 +1470,30 @@ class JukeboxPrior(nn.Module):
             x, preds_sample = self.sample(bs, x_cond, y_cond, encoder_kv, get_preds=True)
             loss, preds_forw = self.forward(x, x_cond, y_cond, encoder_kv, get_preds=True)
             max_err = torch.max(torch.abs(preds_sample - preds_forw))
-            assert max_err <= 1e-6, f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
+            assert (
+                max_err <= 1e-6
+            ), f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
 
-            x_prime = x.view(bs, -1)[:,:prime]
+            x_prime = x.view(bs, -1)[:, :prime]
             # unchunked
             x, preds_sample = self.primed_sample(bs, x_prime.clone(), x_cond, y_cond, encoder_kv, get_preds=True)
-            assert (x.view(bs, -1)[:,:prime] == x_prime).all(), "Priming samples don't match"
+            assert (x.view(bs, -1)[:, :prime] == x_prime).all(), "Priming samples don't match"
             loss, preds_forw = self.forward(x, x_cond, y_cond, encoder_kv, get_preds=True)
             max_err = torch.max(torch.abs(preds_sample - preds_forw))
-            assert max_err <= 1e-6, f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
+            assert (
+                max_err <= 1e-6
+            ), f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
 
             # chunked
-            x, preds_sample = self.primed_sample(bs, x_prime.clone(), x_cond, y_cond, encoder_kv, get_preds=True, chunk_size=chunk_size)
-            assert (x.view(bs, -1)[:,:prime] == x_prime).all(), "Priming samples don't match"
+            x, preds_sample = self.primed_sample(
+                bs, x_prime.clone(), x_cond, y_cond, encoder_kv, get_preds=True, chunk_size=chunk_size
+            )
+            assert (x.view(bs, -1)[:, :prime] == x_prime).all(), "Priming samples don't match"
             loss, preds_forw = self.forward(x, x_cond, y_cond, encoder_kv, get_preds=True)
             max_err = torch.max(torch.abs(preds_sample - preds_forw))
-            assert max_err <= 1e-6, f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
+            assert (
+                max_err <= 1e-6
+            ), f"Max err is {max_err} {[i for i in range(l) if torch.max(torch.abs(preds_sample - preds_forw)[:, i, :]) > 1e-6]}"
 
 
 ####################################################################
@@ -1399,8 +1503,6 @@ class JukeboxPrior(nn.Module):
 ####################################################################
 ####################################################################
 ####################################################################
-
-
 class ResConvBlock(nn.Module):
     def __init__(self, n_in, n_state):
         super().__init__()
@@ -1413,7 +1515,6 @@ class ResConvBlock(nn.Module):
 
     def forward(self, x):
         return x + self.model(x)
-
 
 class Resnet(nn.Module):
     def __init__(self, n_in, n_depth, m_conv=1.0):
@@ -1443,43 +1544,6 @@ class ResConv1DBlock(nn.Module):
     def forward(self, x):
         return x + self.res_scale * self.model(x)
 
-
-# def checkpoint(func, inputs, params, flag):
-#     """
-# Wrapper to checkpoint results of a forward path during training. # This should only be used to reproduce results as #
-# it messes # with RNG. see https://pytorch.org/docs/stable/checkpoint.html for more details
-
-# Args: # func (`_type_`): # _description_ # inputs (`_type_`): # _description_ # params (`_type_`): # _description_ #
-# flag (`_type_`): # _description_ #"""
-#     if flag:
-#         args = inputs + tuple(params)
-#         return CheckpointFunction.apply(func, len(inputs), *args)
-#     else:
-#         return func(*inputs)
-
-# # TODO: I have no Idea what that function does
-# class CheckpointFunction (torch.autograd.Function):
-#     @staticmethod
-#     def forward(ctx, run_function, length, *args):
-#         ctx.run_function = run_function
-#         ctx.input_tensors = list(args[:length])
-#         ctx.input_params = list(args[length:])
-#         with torch.no_grad():
-#             output_tensors = ctx.run_function(*ctx.input_tensors)
-#         return output_tensors
-
-#     @staticmethod
-#     def backward(ctx, *output_grads):
-#         for i in range(len(ctx.input_tensors)):
-#             temp = ctx.input_tensors[i]
-#             ctx.input_tensors[i] = temp.detach()
-#             ctx.input_tensors[i].requires_grad = temp.requires_grad
-#         with torch.enable_grad():
-#             output_tensors = ctx.run_function(*ctx.input_tensors)
-#         input_grads = torch.autograd.grad(output_tensors, ctx.input_tensors + ctx.input_params, output_grads, allow_unused=True)
-#         del ctx.input_tensors
-#         del output_tensors
-#         return (None, None) + input_grads
 class Resnet1D(nn.Module):
     def __init__(
         self,
@@ -2245,12 +2309,21 @@ class VQVAE(nn.Module):
         return x_out, loss, metrics
 
 
-############################### 
+###############################
 # Conditioners
 
 
-class Conditioner(nn.Module):
-    def __init__(self, input_shape, bins, down_t, stride_t, out_width, init_scale, zero_out, res_scale, **block_kwargs):
+class MusicTokenConditioner(nn.Module):
+    """
+    The MusicTokenConditioner takes music tokens as an input (coresponding to vocabularies in the VQ-VAE codebook) 
+    and upsamples it using a single layer of decoder convolution block (the same is used in the VQ-VAE). 
+    
+    The tokens are passed through an embedding layer and the embeddings are upsampled. 
+    
+    """
+    def __init__(
+        self, input_shape, bins, down_t, stride_t, out_width, init_scale, zero_out, res_scale, **block_kwargs
+    ):
         super().__init__()
         self.x_shape = input_shape
 
@@ -2259,23 +2332,25 @@ class Conditioner(nn.Module):
         self.x_emb = nn.Embedding(bins, out_width)
         nn.init.normal_(self.x_emb.weight, std=0.02 * init_scale)
 
-        # Conditioner
-        self.cond = DecoderConvBock(self.width, self.width, down_t, stride_t, **block_kwargs, zero_out=zero_out, res_scale=res_scale)
+        # MusicTokenConditioner
+        self.cond = DecoderConvBock(
+            self.width, self.width, down_t, stride_t, **block_kwargs, zero_out=zero_out, res_scale=res_scale
+        )
         self.ln = LayerNorm(self.width)
 
     def preprocess(self, x):
-        x = x.permute(0,2,1) # NTC -> NCT
+        x = x.permute(0, 2, 1)  # NTC -> NCT
         return x
 
     def postprocess(self, x):
-        x = x.permute(0,2,1) # NCT -> NTC
+        x = x.permute(0, 2, 1)  # NCT -> NTC
         return x
 
     def forward(self, x, x_cond=None):
         N = x.shape[0]
         # assert_shape(x, (N, *self.x_shape))
         if x_cond is not None:
-            #assert_shape(x_cond, (N, *self.x_shape, self.width))
+            # assert_shape(x_cond, (N, *self.x_shape, self.width))
             pass
         else:
             x_cond = 0.0
@@ -2292,12 +2367,15 @@ class Conditioner(nn.Module):
         x = self.ln(x)
         return x
 
+
 def flip(x):
     def _flip(x):
-        return x.permute(0,2,1).contiguous()
+        return x.permute(0, 2, 1).contiguous()
+
     if isinstance(x, (list, tuple)):
         return [flip(z) for z in x]
     return _flip(x)
+
 
 class SimpleEmbedding(nn.Module):
     def __init__(self, bins, out_width, init_scale):
@@ -2308,8 +2386,9 @@ class SimpleEmbedding(nn.Module):
 
     def forward(self, y):
         assert len(y.shape) == 2, f"Expected shape with 2 dims, got {y.shape}"
-        # assert isinstance(y, t.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}        assert (0 <= y).all() and (y < self.bins).all(), f"Bins {self.bins}, got label {y}"
+        # assert isinstance(y, torch.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}        assert (0 <= y).all() and (y < self.bins).all(), f"Bins {self.bins}, got label {y}"
         return self.emb(y)
+
 
 class RangeEmbedding(nn.Module):
     # Interpolating
@@ -2332,30 +2411,47 @@ class RangeEmbedding(nn.Module):
     def forward(self, pos_start, pos_end=None):
         # Check if [pos_start,pos_end] in [pos_min, pos_max)
         assert len(pos_start.shape) == 2, f"Expected shape with 2 dims, got {pos_start.shape}"
-        assert (self.pos_min <= pos_start).all() and (pos_start < self.pos_max).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_start}"
+        assert (self.pos_min <= pos_start).all() and (
+            pos_start < self.pos_max
+        ).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_start}"
         pos_start = pos_start.float()
         if pos_end is not None:
             assert len(pos_end.shape) == 2, f"Expected shape with 2 dims, got {pos_end.shape}"
             if self.clamp:
                 pos_end = pos_end.clamp(self.pos_min, self.pos_max)
-            assert (self.pos_min <= pos_end).all() and (pos_end <= self.pos_max).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_end}"
+            assert (self.pos_min <= pos_end).all() and (
+                pos_end <= self.pos_max
+            ).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_end}"
             pos_end = pos_end.float()
         # Interpolate so that [pos_start, ..., pos_end] <-> position tensor of length n_ctx
         n_time = self.n_time
         if n_time != 1:
             assert pos_end is not None
-            interpolation  = (torch.arange(0, n_time, dtype=torch.float, device='cpu').view(1,n_time)/n_time)
-            position = pos_start + (pos_end - pos_start)*interpolation
+            interpolation = torch.arange(0, n_time, dtype=torch.float, device="cpu").view(1, n_time) / n_time
+            position = pos_start + (pos_end - pos_start) * interpolation
         else:
             position = pos_start
 
         # Bin each value to bins
-        normalised_position = (position - self.pos_min) / (self.pos_max - self.pos_min) # [0,1)
-        bins = (self.bins * normalised_position).floor().long().detach() # [0,1) -> [0,1..,bins) -> [0,1...,bins-1]
+        normalised_position = (position - self.pos_min) / (self.pos_max - self.pos_min)  # [0,1)
+        bins = (self.bins * normalised_position).floor().long().detach()  # [0,1) -> [0,1..,bins) -> [0,1...,bins-1]
         return self.emb(bins)
 
+
 class LabelConditioner(nn.Module):
-    def __init__(self, y_bins, t_bins, sr, min_duration, max_duration, n_time, out_width, init_scale, max_bow_genre_size, include_time_signal):
+    def __init__(
+        self,
+        y_bins,
+        t_bins,
+        sr,
+        min_duration,
+        max_duration,
+        n_time,
+        out_width,
+        init_scale,
+        max_bow_genre_size,
+        include_time_signal,
+    ):
         super().__init__()
         self.n_time = n_time
         self.out_width = out_width
@@ -2366,21 +2462,27 @@ class LabelConditioner(nn.Module):
         self.artist_emb = SimpleEmbedding(artist_bins, out_width, init_scale)
         self.include_time_signal = include_time_signal
         if self.include_time_signal:
-            t_ranges = ((min_duration * sr, max_duration * sr),  # Total length
-                        (0.0, max_duration * sr),                # Absolute pos
-                        (0.0, 1.0))                              # Relative pos
+            t_ranges = (
+                (min_duration * sr, max_duration * sr),  # Total length
+                (0.0, max_duration * sr),  # Absolute pos
+                (0.0, 1.0),
+            )  # Relative pos
             assert len(t_ranges) == 3, f"Expecting (total, absolute, relative) ranges, got {t_ranges}"
             total_length_range, absolute_pos_range, relative_pos_range = t_ranges
             self.total_length_emb = RangeEmbedding(1, t_bins, total_length_range, out_width, init_scale)
             self.absolute_pos_emb = RangeEmbedding(n_time, t_bins, absolute_pos_range, out_width, init_scale)
-            self.relative_pos_emb = RangeEmbedding(n_time, t_bins, relative_pos_range, out_width, init_scale, clamp=True)
+            self.relative_pos_emb = RangeEmbedding(
+                n_time, t_bins, relative_pos_range, out_width, init_scale, clamp=True
+            )
 
     def forward(self, y):
         assert len(y.shape) == 2, f"Expected shape with 2 dims, got {y.shape}"
-        assert y.shape[-1] == 4 + self.max_bow_genre_size, f"Expected shape (N,{4 + self.max_bow_genre_size}), got {y.shape}"
-        # assert isinstance(y, t.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}"
+        assert (
+            y.shape[-1] == 4 + self.max_bow_genre_size
+        ), f"Expected shape (N,{4 + self.max_bow_genre_size}), got {y.shape}"
+        # assert isinstance(y, torch.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}"
         N = y.shape[0]
-        total_length, offset, length, artist, genre = y[:,0:1], y[:,1:2], y[:,2:3], y[:,3:4], y[:,4:]
+        total_length, offset, length, artist, genre = y[:, 0:1], y[:, 1:2], y[:, 2:3], y[:, 3:4], y[:, 4:]
 
         # Start embedding of length 1
         artist_emb = self.artist_emb(artist)
@@ -2394,69 +2496,390 @@ class LabelConditioner(nn.Module):
         if self.include_time_signal:
             start, end = offset, offset + length
             total_length, start, end = total_length.float(), start.float(), end.float()
-            pos_emb = self.total_length_emb(total_length) + self.absolute_pos_emb(start, end) + self.relative_pos_emb(start/total_length, end/total_length)
+            pos_emb = (
+                self.total_length_emb(total_length)
+                + self.absolute_pos_emb(start, end)
+                + self.relative_pos_emb(start / total_length, end / total_length)
+            )
             # assert_shape(pos_emb, (N, self.n_time, self.out_width))
         else:
             pos_emb = None
         return start_emb, pos_emb
+
+
+####################################################################
+####################################################################
+
+
+class JukeboxPrior(nn.Module):
+    """
+    Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. 
+    To condition on the timing, genre and artist, we use the LabelConditioner class
+    To condition on the codes from the level above, we use the MusicTokenConditioner class
+    To condition on lyrics, we allow two types of priors:
+    - Separate Encoder Decoder: This is the usual encoder-decoder style transformer. The encoder transformer autoregressively 
+    models the lyrics, and we use its last layer to produce keys/values that are attened to by the decoder transformer
+    - Single Encoder Decoder: This is a simplification where we combine them into a single model. We merge the text vocab 
+    and VQ vocab into a single large vocab, and the lyric tokens and VQ tokens into a single longer sequence of tokens which 
+    we autoregressively model together.
+    """
+    def __init__(self, config, level,vqvae_z_shapes):
+        super().__init__()
+
+        rescale = lambda z_shape: (z_shape[0]*config.n_ctx//vqvae_z_shapes[config.level][0],)
+        z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
+        self.use_tokens = config.use_tokens[level]
+        self.n_tokens = config.n_tokens[level]
+        self.prime_loss_fraction = config.prime_loss_fraction
+
+        self.copy_input = config.copy_input
+        if self.copy_input:
+            config.bins = config.l_bins
+
+        self.z_shapes = z_shapes
+        self.levels = len(self.z_shapes)
+
+        self.z_shape = self.z_shapes[level]
+
+        self.level = level
+        assert level < self.levels, f"Total levels {self.levels}, got level {level}"
+
+        self.l_bins = config.l_bins
+        
+        prior_kwargs = dict(input_shape=(config.n_ctx,), bins=config.l_bins,
+                        width=config.prior_width, depth=config.prior_depth, heads=config.heads,
+                        attn_order=config.attn_order, blocks=config.blocks, spread=config.spread,
+                        attn_dropout=config.attn_dropout, resid_dropout=config.resid_dropout, emb_dropout=config.emb_dropout,
+                        zero_out=config.zero_out, res_scale=config.res_scale, pos_init=config.pos_init,
+                        init_scale=config.init_scale,
+                        m_attn=config.m_attn, m_mlp=config.m_mlp
+        )
+        
+        prime_kwargs = dict(use_tokens=config.use_tokens, prime_loss_fraction=config.prime_loss_fraction,
+                            n_tokens=config.n_tokens, bins=config.n_vocab)
+        
+
+        x_cond_kwargs = dict(out_width=config.prior_width, init_scale=config.init_scale,
+                         width=config.cond_width, depth=config.cond_depth, m_conv=config.cond_m_conv,
+                         dilation_growth_rate=config.cond_dilation_growth_rate, dilation_cycle=config.cond_dilation_cycle,
+                         zero_out=config.cond_zero_out, res_scale=config.cond_res_scale,
+                         checkpoint_res=config.cond_c_res)  # have to keep this else names wrong
+
+        y_cond_kwargs = dict(out_width=config.prior_width, init_scale=config.init_scale,
+                            y_bins=config.y_bins, t_bins=config.t_bins, sr= config.sr, min_duration=config.min_duration,
+                            max_duration=config.max_duration, max_bow_genre_size=config.max_bow_genre_size)
     
-####################################################################
-####################################################################
-# def load_tf_weights_in_jukebox(model, config, jukebox_checkpoint_path):
-#     """Load tf checkpoints in a pytorch model"""
-#     try:
-#         import re
+        # X conditioning
+        self.x_cond = (level != (self.levels - 1))
+        self.cond_level = level + 1
 
-#         import tensorflow as tf
-#     except ImportError:
-#         logger.error(
-#             "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-#             "https://www.tensorflow.org/install/ for installation instructions."
-#         )
-#         raise
-#     tf_path = os.path.abspath(jukebox_checkpoint_path)
-#     logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-#     # Load weights from TF model
-#     init_vars = tf.train.list_variables(tf_path)
-#     names = []
-#     arrays = []
-#     for name, shape in init_vars:
-#         logger.info(f"Loading TF weight {name} with shape {shape}")
-#         array = tf.train.load_variable(tf_path, name)
-#         names.append(name)
-#         arrays.append(array.squeeze())
+        # Y conditioning
+        self.y_cond = config.labels
 
-#     for name, array in zip(names, arrays):
-#         name = name[6:]  # skip "model/"
-#         name = name.split("/")
-#         pointer = model
-#         for m_name in name:
-#             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-#                 scope_names = re.split(r"(\d+)", m_name)
-#             else:
-#                 scope_names = [m_name]
-#             if scope_names[0] == "w" or scope_names[0] == "g":
-#                 pointer = getattr(pointer, "weight")
-#             elif scope_names[0] == "b":
-#                 pointer = getattr(pointer, "bias")
-#             elif scope_names[0] == "wpe" or scope_names[0] == "wte":
-#                 pointer = getattr(pointer, scope_names[0])
-#                 pointer = getattr(pointer, "weight")
-#             else:
-#                 pointer = getattr(pointer, scope_names[0])
-#             if len(scope_names) >= 2:
-#                 num = int(scope_names[1])
-#                 pointer = pointer[num]
-#         try:
-#             assert (
-#                 pointer.shape == array.shape
-#             ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-#         except AssertionError as e:
-#             e.args += (pointer.shape, array.shape)
-#             raise
-#         logger.info(f"Initialize PyTorch weight {name}")
-#         pointer.data = torch.from_numpy(array)
-#     return model
+        self.single_enc_dec = config.use_single_enc_dec
+        # X conditioning : conditioning on music tokens (either from audio or from previous levels )
+        if self.x_cond:
+            self.conditioner_blocks = nn.ModuleList()
+            conditioner_block = lambda _level: MusicTokenConditioner(input_shape=z_shapes[_level],
+                                                          bins=config.l_bins,
+                                                          down_t=config.downsampling[_level],
+                                                          stride_t=config.strides[_level],
+                                                          **x_cond_kwargs)
+            # if dist.get_rank() == 0: print(f"Conditioning on 1 above level(s)")
+            self.conditioner_blocks.append(conditioner_block(self.cond_level))
+
+        # Y conditioning : contioning on timing, genres, and artist
+        if self.y_cond:
+            self.n_time = self.z_shape[0] # Assuming STFT=TF order and raw=T1 order, so T is first dim
+            self.y_emb = LabelConditioner(n_time=self.n_time,include_time_signal=not self.x_cond,**y_cond_kwargs)
+
+        # Lyric conditioning
+        if config.single_enc_dec:
+            # Single encoder-decoder transformer
+            self.prior_shapes = [(self.n_tokens,), prior_kwargs.pop('input_shape')]
+            self.prior_bins = [prime_kwargs['bins'], prior_kwargs.pop('bins')]
+            self.prior_dims = [np.prod(shape) for shape in self.prior_shapes]
+            self.prior_bins_shift = np.cumsum([0, *self.prior_bins])[:-1]
+            self.prior_width = prior_kwargs['width']
+            print(f'Creating cond. autoregress with prior bins {self.prior_bins}, ')
+            print(f'dims {self.prior_dims}, ')
+            print(f'shift {self.prior_bins_shift}')
+            print(f'input shape {sum(self.prior_dims)}')
+            print(f'input bins {sum(self.prior_bins)}')
+            print(f'Self copy is {self.copy_input}')
+
+            self.prime_loss_dims, self.gen_loss_dims = self.prior_dims[0], self.prior_dims[1]
+            self.total_loss_dims = self.prime_loss_dims + self.gen_loss_dims
+            self.prior = JukeboxConditionalAutoregressive(input_shape=(sum(self.prior_dims),),
+                                                     bins=sum(self.prior_bins),
+                                                     x_cond=(self.x_cond or self.y_cond), y_cond=True,
+                                                     prime_len=self.prime_loss_dims,
+                                                     **prior_kwargs)
+
+        else:
+            # Separate encoder-decoder transformer
+            if self.n_tokens != 0 and self.use_tokens:
+                from jukebox.transformer.ops import Conv1D
+                prime_input_shape = (self.n_tokens,)
+                self.prime_loss_dims = np.prod(prime_input_shape)
+                self.prime_acts_width, self.prime_state_width = prime_kwargs['width'], prior_kwargs['width']
+                self.prime_prior = JukeboxConditionalAutoregressive(input_shape=prime_input_shape, x_cond=False, y_cond=False,
+                                                               only_encode=True,
+                                                               **prime_kwargs)
+                self.prime_state_proj = Conv1D(self.prime_acts_width, self.prime_state_width, init_scale=prime_kwargs['init_scale'])
+                self.prime_state_ln = LayerNorm(self.prime_state_width)
+                self.prime_bins = prime_kwargs['bins']
+                self.prime_x_out = nn.Linear(self.prime_state_width, self.prime_bins, bias=False)
+                nn.init.normal_(self.prime_x_out.weight, std=0.02 * prior_kwargs['init_scale'])
+            else: 
+                self.prime_loss_dims = 0
+            self.gen_loss_dims = np.prod(self.z_shape)
+            self.total_loss_dims = self.prime_loss_dims + self.gen_loss_dims
+            self.prior = JukeboxConditionalAutoregressive(x_cond=(self.x_cond or self.y_cond), y_cond=self.y_cond,
+                                                     encoder_dims = self.prime_loss_dims, merged_decoder=merged_decoder,
+                                                     **prior_kwargs)
+
+        self.n_ctx = self.gen_loss_dims
+        self.downsamples = calculate_strides(config.strides, config.downsampling)
+        self.cond_downsample = self.downsamples[level+1] if level != self.levels - 1 else None
+        self.raw_to_tokens = np.prod(self.downsamples[:level+1])
+        self.sample_length = self.n_ctx*self.raw_to_tokens
+        # if the labels are used for training, the trainer will use it? 
+        # This is probably were its gonna get a bit complicated 
+        
+        # if labels:
+        #     self.labels_v3 = labels_v3
+        #     self.labeller = Labeller(self.y_emb.max_bow_genre_size, self.n_tokens, self.sample_length, v3=self.labels_v3)
+        # else:
+        #     self.labeller = EmptyLabeller()
+
+        print(f"Level:{level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample length:{self.sample_length}")
+
+
+    def get_y(self, labels, start, get_indices=False):
+        # labeler does not exist this should be removed 
+        # if isinstance(self.labeller, EmptyLabeller):
+        #     return None
+        y = labels['y'].clone()
+
+        # Set sample_length to match this level
+        y[:, 2] = int(self.sample_length)
+
+        # Set offset
+        y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
+
+        # Set lyric tokens
+        indices = self.labeller.set_y_lyric_tokens(y, labels)
+        if get_indices:
+            return y, indices
+        else:
+            return y
+
+    def get_z_conds(self, zs, start, end):
+        if self.level != self.levels - 1:
+            assert start % self.cond_downsample == end % self.cond_downsample == 0
+            z_cond = zs[self.level + 1][:,start//self.cond_downsample:end//self.cond_downsample]
+            assert z_cond.shape[1] == self.n_ctx//self.cond_downsample
+            z_conds = [z_cond]
+        else:
+            z_conds = None
+        return z_conds
+
+    def prior_preprocess(self, xs, conds):
+        N = xs[0].shape[0]
+        for i in range(len(xs)):
+            x, shape, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
+            bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
+            assert isinstance(x,  torch.cuda.LongTensor), x
+            assert (0 <= x).all() and (x < bins).all()
+            #assert_shape(x, (N, *shape))
+            xs[i] = (xs[i] + bins_shift).view(N, -1)
+
+        for i in range(len(conds)):
+            cond, shape, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
+            if cond is not None:
+                # assert_shape(cond, (N, dims, self.prior_width))
+                pass
+            else:
+                conds[i] =  torch.zeros((N, dims, self.prior_width), dtype=torch.float, device='cuda')
+
+        return  torch.cat(xs, dim=1),  torch.cat(conds, dim=1)
+
+    def prior_postprocess(self, z):
+        N = z.shape[0]
+        dims = (self.prior_dims[0], z.shape[1] - self.prior_dims[0])
+        # xs = list(t.split(z, self.prior_dims, dim=1))
+        xs = list(torch.split(z, dims, dim=1))
+
+        for i in range(len(xs)):
+            # x, shape, dims, bins, bins_shift = xs[i], self.prior_shapes[i], self.prior_dims[i], self.prior_bins[i], self.prior_bins_shift[i]
+            # assert_shape(x, (N, dims))
+            shape = self.prior_shapes[i]
+            bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
+            # xs[i] = (xs[i] - bins_shift).view(N, *shape) #view(N, -1, *shape[1:])
+            xs[i] = (xs[i] - bins_shift).view(N, -1, *shape[1:])
+            xs[i] =  torch.clamp(xs[i], min=0)  # If not masking loss, model may have generated lyric/midi tokens which are now shifted <0 by bin_shift
+            # assert (xs[i] < bins).all(), f'rank: {dist.get_rank()}, bins: {bins}, dims {dims}, shape {shape}, prior_shape {self.prior_shapes}, bins_shift {bins_shift}, xs[i]: {xs[i]}'
+
+        return xs[-1]
+
+    def x_emb(self, z_conds):
+        z_conds = z_conds[:self.cond_level - self.level]
+        assert len(z_conds) == len(self.conditioner_blocks) == self.cond_level - self.level, f"Expected {len(z_conds)} == {len(self.conditioner_blocks)} == {self.cond_level} - {self.level}"
+        x_cond = None
+        for z_cond, conditioner_block in reversed(list(zip(z_conds, self.conditioner_blocks))):
+            x_cond = conditioner_block(z_cond, x_cond)
+        return x_cond
+
+    # should be removed as the vq-vae is no longer part of the prior
+    def encode(self, x, start_level=None, end_level=None, bs_chunks=1):
+        if start_level == None:
+            start_level = self.level
+        if end_level == None:
+            end_level = self.levels
+        # Get latents
+        with  torch.no_grad():
+            zs = self.encoder(x, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
+        return zs
+    
+    # same as above, the va-vae is no longer part of the prior
+    def decode(self, zs, start_level=None, end_level=None, bs_chunks=1):
+        if start_level == None:
+            start_level = self.level
+        if end_level == None:
+            end_level = self.levels
+
+        assert len(zs) == end_level - start_level
+        with  torch.no_grad():
+            x_out = self.decoder(zs, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
+        return x_out
+
+    def get_cond(self, z_conds, y):
+        if y is not None:
+            assert y.shape[1] == 4 + self.y_emb.max_bow_genre_size + self.n_tokens, f"Expected {4} + {self.y_emb.max_bow_genre_size} + {self.n_tokens}, got {y.shape[1]}"
+            n_labels = y.shape[1] - self.n_tokens
+            y, prime = y[:,:n_labels], y[:,n_labels:]
+        else:
+            y, prime = None, None
+        y_cond, y_pos = self.y_emb(y) if self.y_cond else (None, None)
+        x_cond = self.x_emb(z_conds) if self.x_cond else y_pos
+        return x_cond, y_cond, prime
+
+    def sample(self, n_samples, z=None, z_conds=None, y=None, fp16=False, temp=1.0, top_k=0, top_p=0.0,
+               chunk_size=None, sample_tokens=None):
+        N = n_samples
+        if z is not None: assert z.shape[0] == N, f"Expected shape ({N},**), got shape {z.shape}"
+        if y is not None: assert y.shape[0] == N, f"Expected shape ({N},**), got shape {y.shape}"
+        if z_conds is not None:
+            for z_cond in z_conds:
+                assert z_cond.shape[0] == N,  f"Expected shape ({N},**), got shape {z_cond.shape}"
+
+        no_past_context = (z is None or z.shape[1] == 0)
+        # if dist.get_rank() == 0:
+        #     name = {True: 'Ancestral', False: 'Primed'}[no_past_context]
+        #     print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
+        name = {True: 'Ancestral', False: 'Primed'}[no_past_context]
+        print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
+
+        with  torch.no_grad():
+            # Currently x_cond only uses immediately above layer
+            x_cond, y_cond, prime = self.get_cond(z_conds, y)
+            if self.single_enc_dec:
+                # assert chunk_size % self.prime_loss_dims == 0. TODO: Check if needed
+                if no_past_context:
+                    z, x_cond = self.prior_preprocess([prime], [None, x_cond])
+                else:
+                    z, x_cond = self.prior_preprocess([prime, z], [None, x_cond])
+                if sample_tokens is not None:
+                    sample_tokens += self.n_tokens
+                z = self.prior.primed_sample(n_samples, z, x_cond, y_cond, fp16=fp16, temp=temp,
+                                             top_k=top_k, top_p=top_p, chunk_size=chunk_size, sample_tokens=sample_tokens)
+                z = self.prior_postprocess(z)
+            else:
+                encoder_kv = self.get_encoder_kv(prime, fp16=fp16, sample=True)
+                if no_past_context:
+                    z = self.prior.sample(n_samples, x_cond, y_cond, encoder_kv, fp16=fp16, temp=temp, top_k=top_k,
+                                          top_p=top_p, sample_tokens=sample_tokens)
+                else:
+                    z = self.prior.primed_sample(n_samples, z, x_cond, y_cond, encoder_kv, fp16=fp16, temp=temp,
+                                             top_k=top_k, top_p=top_p, chunk_size=chunk_size, sample_tokens=sample_tokens)
+            if sample_tokens is None:
+               # assert_shape(z, (N, *self.z_shape))
+               pass
+        return z
+
+    def get_encoder_kv(self, prime, fp16=False, sample=False):
+        if self.n_tokens != 0 and self.use_tokens:
+            if sample:
+                #self.prime_prior.cuda()
+                pass
+            N = prime.shape[0]
+            prime_acts = self.prime_prior(prime, None, None, None, fp16=fp16)
+            # assert_shape(prime_acts, (N, self.prime_loss_dims, self.prime_acts_width))
+            assert prime_acts.dtype ==  torch.float, f'Expected  torch.float, got {prime_acts.dtype}'
+            encoder_kv = self.prime_state_ln(self.prime_state_proj(prime_acts))
+            assert encoder_kv.dtype ==  torch.float, f'Expected  torch.float, got {encoder_kv.dtype}'
+            if sample:
+                self.prime_prior.cpu()
+                if fp16:
+                    encoder_kv = encoder_kv.half()
+        else:
+            encoder_kv = None
+        return encoder_kv
+
+    def get_prime_loss(self, encoder_kv, prime_t):
+        if self.use_tokens:
+            encoder_kv = encoder_kv.float()
+            encoder_kv = self.prime_x_out(encoder_kv)
+            prime_loss = nn.functional.cross_entropy(encoder_kv.view(-1, self.prime_bins), prime_t.view(-1)) / np.log(2.)
+        else:
+            prime_loss =  torch.tensor(0.0, device='cuda')
+        return prime_loss
+
+    def z_forward(self, z, z_conds=[], y=None, fp16=False, get_preds=False, get_attn_weights=False):
+        """
+        Arguments:
+            get_attn_weights (bool or set): Makes forward prop dump
+                self-attention softmaxes to self.prior.transformer.ws. Either a
+                set of layer indices indicating which layers to store, or a
+                boolean value indicating whether to dump all.
+        """
+        assert isinstance(get_attn_weights, (bool, set))
+        if get_attn_weights:
+            self.prior.transformer.set_record_attn(get_attn_weights)
+        x_cond, y_cond, prime = self.get_cond(z_conds, y)
+        if self.copy_input:
+            prime = z[:,:self.n_tokens]
+        if self.single_enc_dec:
+            z, x_cond = self.prior_preprocess([prime, z], [None, x_cond])
+            (prime_loss, gen_loss), preds = self.prior(z, x_cond, y_cond, fp16=fp16, get_sep_loss=True, get_preds=get_preds)
+        else:
+            encoder_kv = self.get_encoder_kv(prime, fp16=fp16)
+            prime_loss = self.get_prime_loss(encoder_kv, prime)
+            gen_loss, preds = self.prior(z, x_cond, y_cond, encoder_kv, fp16=fp16, get_preds=get_preds)
+        loss = (self.prime_loss_fraction*prime_loss*self.prime_loss_dims/self.total_loss_dims) + \
+                   (gen_loss*self.gen_loss_dims/self.total_loss_dims)
+        metrics=dict(bpd=gen_loss.clone().detach(), prime_loss=prime_loss.clone().detach(),
+                     gen_loss=gen_loss.clone().detach())
+        if get_preds:
+            metrics["preds"] = preds.clone().detach()
+        if get_attn_weights:
+            ws = self.prior.transformer.ws
+            self.prior.transformer.set_record_attn(False)
+            return ws
+        else:
+            return loss, metrics
+
+    def forward(self, x, y=None, fp16=False, decode=False, get_preds=False):
+        bs = x.shape[0]
+        z, *z_conds = self.encode(x, bs_chunks=bs)
+        loss, metrics = self.z_forward(z=z, z_conds=z_conds, y=y, fp16=fp16, get_preds=get_preds)
+        if decode:
+            x_out = self.decode([z, *z_conds])
+        else:
+            x_out = None
+        return x_out, loss, metrics
+
 
 
 class JukeboxPreTrainedModel(PreTrainedModel):
@@ -2683,6 +3106,98 @@ DEPARALLELIZE_DOCSTRING = r"""
 """
 
 
+def split_batch(obj, n_samples, split_size):
+    n_passes = (n_samples + split_size - 1) // split_size
+    if isinstance(obj, torch.Tensor):
+        return torch.split(obj, split_size, dim=0)
+    elif isinstance(obj, list):
+        return list(zip(*[torch.split(item, split_size, dim=0) for item in obj]))
+    elif obj is None:
+        return [None] * n_passes
+    else:
+        raise TypeError("Unknown input type")
+
+# Break total_length into hops/windows of size n_ctx separated by hop_length
+def get_starts(total_length, n_ctx, hop_length):
+    starts = []
+    for start in range(0, total_length - n_ctx + hop_length, hop_length):
+        if start + n_ctx >= total_length:
+            # Last hop could be smaller, we make it n_ctx to maximise context
+            start = total_length - n_ctx
+        starts.append(start)
+    return starts
+
+def get_alignment(x, zs, labels, prior, fp16, hps):
+    level = hps.levels - 1  # Top level used
+    n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
+    z = zs[level]
+    bs, total_length = z.shape[0], z.shape[1]
+    if total_length < n_ctx:
+        padding_length = n_ctx - total_length
+        z = torch.cat([z, torch.zeros(bs, n_ctx - total_length, dtype=z.dtype, device=z.device)], dim=1)
+        total_length = z.shape[1]
+    else:
+        padding_length = 0
+
+    hop_length = int(hps.hop_fraction[level] * prior.n_ctx)
+    n_head = prior.prior.transformer.n_head
+    alignment_head, alignment_layer = prior.alignment_head, prior.alignment_layer
+    attn_layers = set([alignment_layer])
+    alignment_hops = {}
+    indices_hops = {}
+
+    prior.cuda()
+    empty_cache()
+    for start in get_starts(total_length, n_ctx, hop_length):
+        end = start + n_ctx
+
+        # set y offset, sample_length and lyrics tokens
+        y, indices_hop = prior.get_y(labels, start, get_indices=True)
+        assert len(indices_hop) == bs
+        for indices in indices_hop:
+            assert len(indices) == n_tokens
+
+        z_bs = torch.chunk(z, bs, dim=0)
+        y_bs = torch.chunk(y, bs, dim=0)
+        w_hops = []
+        for z_i, y_i in zip(z_bs, y_bs):
+            w_hop = prior.z_forward(z_i[:, start:end], [], y_i, fp16=fp16, get_attn_weights=attn_layers)
+            assert len(w_hop) == 1
+            w_hops.append(w_hop[0][:, alignment_head])
+            del w_hop
+        w = torch.cat(w_hops, dim=0)
+        del w_hops
+        # assert_shape(w, (bs, n_ctx, n_tokens))
+        alignment_hop = w.float().cpu().numpy()
+        # assert_shape(alignment_hop, (bs, n_ctx, n_tokens))
+        del w
+
+        # alignment_hop has shape (bs, n_ctx, n_tokens)
+        # indices_hop is a list of len=bs, each entry of len hps.n_tokens
+        indices_hops[start] = indices_hop
+        alignment_hops[start] = alignment_hop
+    prior.cpu()
+    empty_cache()
+
+    # Combine attn for each hop into attn for full range
+    # Use indices to place them into correct place for corresponding source tokens
+    alignments = []
+    for item in range(bs):
+        # Note each item has different length lyrics
+        full_tokens = labels["info"][item]["full_tokens"]
+        alignment = np.zeros((total_length, len(full_tokens) + 1))
+        for start in reversed(get_starts(total_length, n_ctx, hop_length)):
+            end = start + n_ctx
+            alignment_hop = alignment_hops[start][item]
+            indices = indices_hops[start][item]
+            assert len(indices) == n_tokens
+            assert alignment_hop.shape == (n_ctx, n_tokens)
+            alignment[start:end, indices] = alignment_hop
+        alignment = alignment[: total_length - padding_length, :-1]  # remove token padding, and last lyric index
+        alignments.append(alignment)
+    return alignments
+
+
 @add_start_docstrings(
     "The bare JUKEBOX Model transformer outputting raw hidden-states without any specific head on top.",
     JUKEBOX_START_DOCSTRING,
@@ -2695,12 +3210,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-
-        self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([JukeboxBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.vqvae = VQVAE(config)
+        self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
         # Model parallel
         self.model_parallel = False
@@ -2709,6 +3220,159 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # Sample a partial window of length<n_ctx with tokens_to_sample new tokens on level=level
+    def sample_partial_window(self, zs, labels, sampling_kwargs, level, tokens_to_sample, hps):
+        prior = self.prior[level]
+        z = zs[level]
+        n_ctx = prior.n_ctx
+        current_tokens = z.shape[1]
+        if current_tokens < n_ctx - tokens_to_sample:
+            sampling_kwargs["sample_tokens"] = current_tokens + tokens_to_sample
+            start = 0
+        else:
+            sampling_kwargs["sample_tokens"] = n_ctx
+            start = current_tokens - n_ctx + tokens_to_sample
+
+        return self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+
+    # Sample a single window of length=n_ctx at position=start on level=level
+    def sample_single_window(self, zs, labels, sampling_kwargs, level, start, hps):
+        prior = self.prior[level]
+        n_samples = hps.n_samples
+        n_ctx = prior.n_ctx
+        end = start + n_ctx
+
+        # get z already sampled at current level
+        z = zs[level][:, start:end]
+
+        if "sample_tokens" in sampling_kwargs:
+            # Support sampling a window shorter than n_ctx
+            sample_tokens = sampling_kwargs["sample_tokens"]
+        else:
+            sample_tokens = end - start
+        conditioning_tokens, new_tokens = z.shape[1], sample_tokens - z.shape[1]
+
+        print(
+            f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on {conditioning_tokens} tokens"
+        )
+
+        if new_tokens <= 0:
+            # Nothing new to sample
+            return zs
+
+        # get z_conds from level above
+        z_conds = prior.get_z_conds(zs, start, end)
+        # if there are no levels above should return None!
+
+        # set y offset, sample_length and lyrics tokens
+        y = prior.get_y(labels, start)
+
+        empty_cache()
+        max_batch_size = 2
+        max_batch_size = sampling_kwargs["max_batch_size"]
+        del sampling_kwargs["max_batch_size"]
+
+        z_list = split_batch(z, n_samples, max_batch_size)
+        z_conds_list = split_batch(z_conds, n_samples, max_batch_size)
+        y_list = split_batch(y, n_samples, max_batch_size)
+        z_samples = []
+        for z_i, z_conds_i, y_i in zip(z_list, z_conds_list, y_list):
+            z_samples_i = prior.sample(n_samples=z_i.shape[0], z=z_i, z_conds=z_conds_i, y=y_i, **sampling_kwargs)
+            z_samples.append(z_samples_i)
+        z = torch.cat(z_samples, dim=0)
+
+        sampling_kwargs["max_batch_size"] = max_batch_size
+
+        # Update z with new sample
+        z_new = z[:, -new_tokens:]
+        zs[level] = torch.cat([zs[level], z_new], dim=1)
+        return zs
+
+    # Sample total_length tokens at level=level with hop_length=hop_length
+    def sample_level(self, zs, labels, sampling_kwargs, level, total_length, hop_length, hps):
+        # print(f"Sampling level {level}")
+        print(f"Sampling level {level}")
+        prior = self.prior[level]
+        if total_length >= prior.n_ctx:
+            for start in get_starts(total_length, prior.n_ctx, hop_length):
+                zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+        else:
+            zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
+        return zs
+
+    # Sample multiple levels
+    def _sample(self, zs, labels, sampling_kwargs, sample_levels, hps):
+        def save_wav(fname, aud, sr):
+            import soundfile
+
+            # clip before saving?
+            aud = torch.clamp(aud, -1, 1).cpu().numpy()
+            for i in list(range(aud.shape[0])):
+                soundfile.write(f"{fname}/item_{i}.wav", aud[i], samplerate=sr, format="wav")
+
+        alignments = None
+        for level in reversed(sample_levels):
+            prior = self.priors[level]
+            # prior.cuda()
+            empty_cache()
+
+            # Set correct total_length, hop_length, labels and sampling_kwargs for level
+            assert (
+                hps.sample_length % prior.raw_to_tokens == 0
+            ), f"Expected sample_length {hps.sample_length} to be multiple of {prior.raw_to_tokens}"
+            total_length = hps.sample_length // prior.raw_to_tokens
+            hop_length = int(hps.hop_fraction[level] * prior.n_ctx)
+            zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
+
+            prior.cpu()
+            empty_cache()
+
+            # Decode sample
+            x = prior.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
+
+            # if dist.get_world_size() > 1:
+            #     logdir = f"{hps.name}_rank_{dist.get_rank()}/level_{level}"
+            # else:
+            #     logdir = f"{hps.name}/level_{level}"
+            logdir = f"{hps.name}/level_{level}"
+            if not os.path.exists(logdir):
+                os.makedirs(logdir)
+            torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
+            save_wav(logdir, x, hps.sr)
+            if (
+                alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
+            ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
+                alignments = get_alignment(x, zs, labels[-1], self.priors[-1], sampling_kwargs[-1]["fp16"], hps)
+        return zs
+
+        # Generate ancestral samples given a list of artists and genres
+
+    def ancestral_sample(self, labels, sampling_kwargs, hps):
+        priors = self.priors
+        sample_levels = list(range(len(priors)))
+        zs = [torch.zeros(hps.n_samples, 0, dtype=torch.long, device="cpu") for _ in range(len(priors))]
+        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        return zs
+
+    # Continue ancestral sampling from previously saved codes
+    def continue_sample(self, zs, labels, sampling_kwargs, hps):
+        sample_levels = list(range(len(self.priors)))
+        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        return zs
+
+    # Upsample given already generated upper-level codes
+    def upsample(self, zs, labels, sampling_kwargs, hps):
+        sample_levels = list(range(len(self.priors) - 1))
+        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        return zs
+
+    # Prompt the model with raw audio input (dimension: NTC) and generate continuations
+    def primed_sample(self, x, labels, sampling_kwargs, hps):
+        sample_levels = list(range(len(self.priors)))
+        zs = self.priors[-1].encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
+        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        return zs
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -2956,3 +3620,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
+
+
+
+
