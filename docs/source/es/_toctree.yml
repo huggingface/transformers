@@ -13,5 +13,7 @@
     title: Entrenamiento distribuido con 🤗 Accelerate
   title: Tutorials
 - sections:
+  - local: fast_tokenizers
+    title: "Usa los tokenizadores de 🤗 Tokenizers"
   - local: multilingual
     title: Modelos multilingües para inferencia
