@@ -789,13 +789,16 @@ class ModuleUtilsMixin:
         Returns:
             `int`: The total number of tokens.
         """
+        if not hasattr(self, "warnings_issued"):
+            self.warnings_issued = {}
         if self.main_input_name in input_dict:
             return input_dict[self.main_input_name].numel()
-        else:
+        elif "estimate_tokens" not in self.warnings_issued:
             logger.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
-            return 0
+            self.warnings_issued["estimate_tokens"] = True
+        return 0
 
     def floating_point_ops(
         self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
@@ -895,6 +898,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.warnings_issued = {}
 
     def post_init(self):
         """
