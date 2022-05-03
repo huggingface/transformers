@@ -92,14 +92,6 @@ El pipeline descarga y almacena en caché el [modelo preentrenado](https://huggi
 
 Para más de un enunciado, entrega una lista al [`pipeline`] que devolverá una lista de diccionarios:
 
-```py
->>> resultados = clasificador(["Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.", "No me gusta esta comida."])
->>> for resultado in resultados:
-...     print(f"label: {resultado['label']}, con score: {round(resultado['score'], 4)}")
-label: POS, con score: 0.9917
-label: NEG, con score: 0.9979
-```
-
 El [`pipeline`] también puede iterar sobre un dataset entero. Comienza instalando la biblioteca [🤗 Datasets](https://huggingface.co/docs/datasets/):
 
 ```bash
@@ -135,10 +127,7 @@ Extraigamos las matrices de onda cruda (raw waveform, en inglés) de las primera
 ```py
 >>> resultado = reconocedor_de_voz(dataset[:4]["audio"])
 >>> print([d["text"] for d in resultado])
-['ahora buenas e a ver  tengo un problema como vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser',
- 'la aplicación no cargue salda de mi nueva cuenta',
- 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo aceder a mi cuenta no necesito inmediatamente',
- 'ora buena la aplicación no se carga la viladad no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puede hacer a mi cuenta']
+['ahora buenas e a ver  tengo un problema como vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser', 'la aplicación no cargue salda de mi nueva cuenta', 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo aceder a mi cuenta no necesito inmediatamente', 'ora buena la aplicación no se carga la viladad no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puede hacer a mi cuenta']
 ```
 
 Para un dataset más grande, donde los inputs son de mayor tamaño (como en habla/audio o visión), querrás pasar un generador en lugar de una lista que carga todos los inputs en memoria. Ve la [documentación del pipeline](./main_classes/pipelines) para más información.
