@@ -15,6 +15,7 @@
 """ TensorFlow Hubert model."""
 import inspect
 import warnings
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -23,8 +24,7 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
 from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
-from ...tf_utils import shape_list
-from ...tokenization_utils_base import BatchEncoding
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -97,7 +97,7 @@ def input_values_processing(func, config, input_values, **kwargs):
                 raise ValueError(
                     f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
                 )
-    elif isinstance(input_values, (dict, BatchEncoding)):
+    elif isinstance(input_values, Mapping):
         if "inputs" in input_values:
             warnings.warn(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_values` instead.",
@@ -826,7 +826,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
             # The tf.debugging asserts are not compliant with XLA then they

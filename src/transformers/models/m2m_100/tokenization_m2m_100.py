@@ -303,7 +303,8 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
-        assert save_dir.is_dir(), f"{save_directory} should be a directory"
+        if not save_dir.is_dir():
+            raise OSError(f"{save_directory} should be a directory")
         vocab_save_path = save_dir / (
             (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
         )

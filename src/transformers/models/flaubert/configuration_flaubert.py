@@ -36,6 +36,8 @@ class FlaubertConfig(XLMConfig):
     """
     This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
     used to instantiate a FlauBERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the FlauBERT
+    [flaubert/flaubert_base_uncased](https://huggingface.co/flaubert/flaubert_base_uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -146,9 +148,13 @@ class FlaubertConfig(XLMConfig):
 class FlaubertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
             ]
         )

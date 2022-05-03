@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("yolos", "YolosModel"),
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("glpn", "GLPNModel"),
@@ -55,6 +56,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Model"),
         ("plbart", "PLBartModel"),
         ("beit", "BeitModel"),
+        ("data2vec-vision", "Data2VecVisionModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
         ("canine", "CanineModel"),
@@ -290,6 +292,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),
+        ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         (
@@ -321,6 +324,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
         ("beit", "BeitForSemanticSegmentation"),
+        ("data2vec-vision", "Data2VecVisionForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
         ("dpt", "DPTForSemanticSegmentation"),
     ]
@@ -383,6 +387,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
+        ("yolos", "YolosForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
     ]
 )
@@ -390,6 +395,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("tapex", "BartForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
@@ -419,6 +425,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("tapex", "BartForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
         ("plbart", "PLBartForSequenceClassification"),

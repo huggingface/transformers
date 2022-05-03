@@ -113,6 +113,7 @@ from . import (
     swin,
     t5,
     tapas,
+    tapex,
     transfo_xl,
     trocr,
     unispeech,
@@ -134,5 +135,6 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    yolos,
     yoso,
 )

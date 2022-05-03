@@ -35,9 +35,9 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the
-    "facebook/maskformer-swin-base-ade" architecture trained on
-    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
+    configuration with the defaults will yield a similar configuration to that of the MaskFormer
+    [facebook/maskformer-swin-base-ade](https://huggingface.co/facebook/maskformer-swin-base-ade) architecture trained
+    on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

@@ -592,7 +592,6 @@ def main():
 
             if (cur_step % training_args.eval_steps == 0 or cur_step % steps_per_epoch == 0) and cur_step > 0:
 
-                eval_metrics = {}
                 # evaluate
                 eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(
@@ -623,7 +622,7 @@ def main():
                 logger.info(f"Step... ({cur_step}/{total_steps} | Eval metrics: {eval_metric})")
 
                 if has_tensorboard and jax.process_index() == 0:
-                    write_eval_metric(summary_writer, eval_metrics, cur_step)
+                    write_eval_metric(summary_writer, eval_metric, cur_step)
 
             if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
                 # save checkpoint after each epoch and push checkpoint to the hub
