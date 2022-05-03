@@ -136,7 +136,7 @@ jobs:
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -173,7 +173,7 @@ jobs:
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -571,7 +571,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -607,7 +607,7 @@ jobs:
     run_examples_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -833,7 +833,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -859,7 +859,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -881,6 +881,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_config_docstrings.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
 
@@ -925,7 +926,7 @@ jobs:
 # TPU JOBS
     run_examples_tpu:
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -945,7 +946,7 @@ jobs:
 
     cleanup-gke-jobs:
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         steps:
             - gcp-gke/install
             - gcp-gke/update-kubeconfig-with-credentials:

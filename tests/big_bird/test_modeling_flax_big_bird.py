@@ -25,6 +25,7 @@ from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random
 if is_flax_available():
     import jax
     from transformers.models.big_bird.modeling_flax_big_bird import (
+        FlaxBigBirdForCausalLM,
         FlaxBigBirdForMaskedLM,
         FlaxBigBirdForMultipleChoice,
         FlaxBigBirdForPreTraining,
@@ -136,6 +137,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
+            FlaxBigBirdForCausalLM,
             FlaxBigBirdModel,
             FlaxBigBirdForPreTraining,
             FlaxBigBirdForMaskedLM,

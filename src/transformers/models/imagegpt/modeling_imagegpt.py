@@ -1000,7 +1000,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> samples = output[:, 1:].cpu().detach().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [n_px, n_px, 3]).astype(np.uint8) for s in samples
-        >>> ]  # convert color cluster tokens back to pixels
+        ... ]  # convert color cluster tokens back to pixels
         >>> f, axes = plt.subplots(1, batch_size, dpi=300)
 
         >>> for img, ax in zip(samples_img, axes):

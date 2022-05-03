@@ -19,7 +19,7 @@ import numpy as np
 from transformers import BertConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
@@ -113,6 +113,22 @@ class FlaxBertModelTester(unittest.TestCase):
         config, input_ids, token_type_ids, attention_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask}
         return config, inputs_dict
+
+    def prepare_config_and_inputs_for_decoder(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, token_type_ids, attention_mask = config_and_inputs
+
+        config.is_decoder = True
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
 
 
 @require_flax

@@ -91,6 +91,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
+    "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -361,7 +362,7 @@ def check_models_are_tested(module, test_file):
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
     if tested_models is None:
-        if test_file in TEST_FILES_WITH_NO_COMMON_TESTS:
+        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
             f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
