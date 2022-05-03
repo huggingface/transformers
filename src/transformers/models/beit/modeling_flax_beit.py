@@ -22,8 +22,9 @@ import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
@@ -591,13 +592,21 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
     main_input_name = "pixel_values"
     module_class: nn.Module = None
 
-    def __init__(self, config: BeitConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self,
+        config: BeitConfig,
+        input_shape=None,
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        **kwargs
+    ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
             input_shape = (1, config.image_size, config.image_size, 3)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
@@ -605,7 +614,17 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         dropout_rng, droppath_rng = jax.random.split(dropout_rng)
         rngs = {"params": params_rng, "dropout": dropout_rng, "droppath": droppath_rng}
 
-        return self.module.init(rngs, pixel_values, return_dict=False)["params"]
+        random_params = self.module.init(rngs, pixel_values, return_dict=False)["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(

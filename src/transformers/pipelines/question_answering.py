@@ -301,11 +301,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 ]
             )
 
-            # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-            if self.tokenizer.cls_token_id is not None:
-                cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
-                p_mask[cls_index] = 0
-
             features = []
             for span_idx in range(num_spans):
                 input_ids_span_idx = encoded_inputs["input_ids"][span_idx]
@@ -315,6 +310,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 token_type_ids_span_idx = (
                     encoded_inputs["token_type_ids"][span_idx] if "token_type_ids" in encoded_inputs else None
                 )
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id is not None:
+                    cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
+                    for cls_index in cls_indices:
+                        p_mask[span_idx][cls_index] = 0
                 submask = p_mask[span_idx]
                 if isinstance(submask, np.ndarray):
                     submask = submask.tolist()

@@ -118,20 +118,27 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
 
 ```py
->>> import datasets
+>>> from datasets import load_dataset, Audio
 
->>> dataset = datasets.load_dataset("PolyAI/minds14", name="es-ES", split="train")  # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="es-ES", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-Puedes pasar el dataset entero al pipeline:
+Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coincide con la frecuencia de muestreo con la que se entrenó `jonatasgrosman/wav2vec2-large-xlsr-53-spanish`.
 
 ```py
->>> archivos = dataset["path"]
->>> reconocedor_de_voz(archivos[:4])
-[{'text': 'ahora buenas e a ver  tengo un problema como vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser'},
- {'text': 'la aplicación no cargue salda de mi nueva cuenta'},
- {'text': 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo aceder a mi cuenta no necesito inmediatamente'},
- {'text': 'ora buena la aplicación no se carga la viladad no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puede hacer a mi cuenta'}]
+>>> dataset = dataset.cast_column("audio", Audio(sampling_rate=reconocedor_de_voz.feature_extractor.sampling_rate))
+```
+
+Los archivos de audio se cargan y remuestrean automáticamente cuando llamamos a la columna `"audio"`.
+Extraigamos las matrices de onda cruda (raw waveform, en inglés) de las primeras 4 muestras y pasémosla como una lista al pipeline:
+
+```py
+>>> resultado = reconocedor_de_voz(dataset[:4]["audio"])
+>>> print([d["text"] for d in resultado])
+['ahora buenas e a ver  tengo un problema como vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser',
+ 'la aplicación no cargue salda de mi nueva cuenta',
+ 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo aceder a mi cuenta no necesito inmediatamente',
+ 'ora buena la aplicación no se carga la viladad no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puede hacer a mi cuenta']
 ```
 
 Para un dataset más grande, donde los inputs son de mayor tamaño (como en habla/audio o visión), querrás pasar un generador en lugar de una lista que carga todos los inputs en memoria. Ve la [documentación del pipeline](./main_classes/pipelines) para más información.

@@ -158,7 +158,7 @@ def postprocess_qa_predictions(
                             "end_logit": end_logits[end_index],
                         }
                     )
-        if version_2_with_negative:
+        if version_2_with_negative and min_null_prediction is not None:
             # Add the minimum null prediction
             prelim_predictions.append(min_null_prediction)
             null_score = min_null_prediction["score"]
@@ -167,7 +167,11 @@ def postprocess_qa_predictions(
         predictions = sorted(prelim_predictions, key=lambda x: x["score"], reverse=True)[:n_best_size]
 
         # Add back the minimum null prediction if it was removed because of its low score.
-        if version_2_with_negative and not any(p["offsets"] == (0, 0) for p in predictions):
+        if (
+            version_2_with_negative
+            and min_null_prediction is not None
+            and not any(p["offsets"] == (0, 0) for p in predictions)
+        ):
             predictions.append(min_null_prediction)
 
         # Use the offsets to gather the answer text in the original context.
@@ -350,9 +354,12 @@ def postprocess_qa_predictions_with_beam_search(
                         start_index >= len(offset_mapping)
                         or end_index >= len(offset_mapping)
                         or offset_mapping[start_index] is None
+                        or len(offset_mapping[start_index]) < 2
                         or offset_mapping[end_index] is None
+                        or len(offset_mapping[end_index]) < 2
                     ):
                         continue
+
                     # Don't consider answers with a length negative or > max_answer_length.
                     if end_index < start_index or end_index - start_index + 1 > max_answer_length:
                         continue
@@ -381,7 +388,9 @@ def postprocess_qa_predictions_with_beam_search(
         # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
         # failure.
         if len(predictions) == 0:
-            predictions.insert(0, {"text": "", "start_logit": -1e-6, "end_logit": -1e-6, "score": -2e-6})
+            # Without predictions min_null_score is going to be None and None will cause an exception later
+            min_null_score = -2e-6
+            predictions.insert(0, {"text": "", "start_logit": -1e-6, "end_logit": -1e-6, "score": min_null_score})
 
         # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
         # the LogSumExp trick).

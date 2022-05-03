@@ -299,6 +299,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             if output_word_offsets:
                 word_offsets = self._get_word_offsets(char_offsets, self.replace_word_delimiter_char)
 
+            # don't output chars if not set to True
+            if not output_char_offsets:
+                char_offsets = None
+
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
         string = join_char.join(processed_chars).strip()

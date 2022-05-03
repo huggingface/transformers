@@ -326,6 +326,13 @@ class FlaxBeitPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxBertForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxBertForMaskedLM(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -383,6 +390,13 @@ class FlaxBertModel(metaclass=DummyObject):
 
 
 class FlaxBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBigBirdForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
@@ -572,6 +586,13 @@ class FlaxDistilBertModel(metaclass=DummyObject):
 
 
 class FlaxDistilBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
@@ -789,6 +810,13 @@ class FlaxPegasusModel(metaclass=DummyObject):
 
 
 class FlaxPegasusPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):

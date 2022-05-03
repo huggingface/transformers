@@ -22,14 +22,16 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "unc-nlp/lxmert-base-uncased": "",
+    "unc-nlp/lxmert-base-uncased": "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/config.json",
 }
 
 
 class LxmertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LxmertModel`] or a [`TFLxmertModel`]. It is used
-    to instantiate a LXMERT model according to the specified arguments, defining the model architecture.
+    to instantiate a LXMERT model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the Lxmert
+    [unc-nlp/lxmert-base-uncased](https://huggingface.co/unc-nlp/lxmert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
