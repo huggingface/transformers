@@ -67,28 +67,28 @@ class LayoutLMv3Config(PretrainedConfig):
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever be used with. Typically set this to something
             large just in case (e.g., 1024).
-        max_rel_pos (`int`, *optional*, defaults to 128):
-            The maximum number of relative positions to be used in the self-attention mechanism.
-        rel_pos_bins (`int`, *optional*, defaults to 32):
-            The number of relative position bins to be used in the self-attention mechanism.
-        fast_qkv (`bool`, *optional*, defaults to `True`):
-            Whether or not to use a single matrix for the queries, keys, values in the self-attention layers.
-        max_rel_2d_pos (`int`, *optional*, defaults to 256):
-            The maximum number of relative 2D positions in the self-attention mechanism.
-        rel_2d_pos_bins (`int`, *optional*, defaults to 64):
-            The number of 2D relative position bins in the self-attention mechanism.
-        image_feature_pool_shape (`List[int]`, *optional*, defaults to [7, 7, 256]):
-            The shape of the average-pooled feature map.
         coordinate_size (`int`, *optional*, defaults to 128):
             Dimension of the coordinate embeddings.
         shape_size (`int`, *optional*, defaults to 128):
             Dimension of the width and height embeddings.
         has_relative_attention_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use a relative attention bias in the self-attention mechanism.
+        rel_pos_bins (`int`, *optional*, defaults to 32):
+            The number of relative position bins to be used in the self-attention mechanism.
+        max_rel_pos (`int`, *optional*, defaults to 128):
+            The maximum number of relative positions to be used in the self-attention mechanism.
+        max_rel_2d_pos (`int`, *optional*, defaults to 256):
+            The maximum number of relative 2D positions in the self-attention mechanism.
+        rel_2d_pos_bins (`int`, *optional*, defaults to 64):
+            The number of 2D relative position bins in the self-attention mechanism.
         has_spatial_attention_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use a spatial attention bias in the self-attention mechanism.
-        has_visual_segment_embedding (`bool`, *optional*, defaults to `False`):
-            Whether or not to add visual segment embeddings.
+        visual_embed (`bool`, *optional*, defaults to `True`):
+            Whether or not to add patch embeddings.
+        input_size (`int`, *optional*, defaults to `224`):
+            The size (resolution) of the images.
+        patch_size (`int`, *optional*, defaults to `16`)
+            The size (resolution) of the patches.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
 
@@ -131,9 +131,9 @@ class LayoutLMv3Config(PretrainedConfig):
         has_relative_attention_bias=False,
         rel_pos_bins=32,
         max_rel_pos=128,
-        has_spatial_attention_bias=False,
         rel_2d_pos_bins=64,
         max_rel_2d_pos=256,
+        has_spatial_attention_bias=False,
         visual_embed=True,
         input_size=224,
         patch_size=16,

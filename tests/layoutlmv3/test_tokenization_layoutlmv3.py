@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1691,7 +1691,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return words, boxes, output_ids
 
-    # @unittest.skip("LayoutLMv3 tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -1763,6 +1762,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
+
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
                                 self.assertEqual(len(output["bbox"]), model_max_length)
 
@@ -2002,6 +2002,9 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflowing_bbox = information_first_truncated["overflowing_token_boxes"]
                     bbox = information_first_truncated["bbox"]
 
+                    print(tokenizer.decode(truncated_sequence))
+                    print(tokenizer.decode(truncated_first_sequence))
+
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
@@ -2051,7 +2054,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(bbox, bbox_second_sequence)
                     self.assertEqual(overflowing_bbox, overflowing_token_bbox_second_sequence_slow)
 
-    # @unittest.skip("LayoutLMv3 tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -2088,6 +2090,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
+
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
                                 self.assertEqual(len(output["bbox"]), model_max_length)
 

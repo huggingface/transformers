@@ -1187,7 +1187,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
             if pair_token_boxes:
-                pair_token_boxes = pair_token_boxes + [self.sep_token_box]
+                pair_token_boxes = [self.sep_token_box] + pair_token_boxes + [self.sep_token_box]
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
         else:
