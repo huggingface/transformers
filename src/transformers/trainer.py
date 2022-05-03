@@ -66,7 +66,7 @@ from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, unwrap_model
+from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -122,6 +122,7 @@ from .trainer_utils import (
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     CONFIG_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     find_labels,
     get_full_repo_name,
@@ -1150,7 +1151,8 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
-        resume_from_checkpoint = None if not resume_from_checkpoint else resume_from_checkpoint
+        if resume_from_checkpoint is False:
+            resume_from_checkpoint = None
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -1193,32 +1195,7 @@ class Trainer:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
-            if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-                raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
-
-            logger.info(f"Loading model from {resume_from_checkpoint}).")
-
-            if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
-                config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
-                checkpoint_version = config.transformers_version
-                if checkpoint_version is not None and checkpoint_version != __version__:
-                    logger.warning(
-                        f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
-                        f"Transformers but your current version is {__version__}. This is not recommended and could "
-                        "yield to errors or unwanted behaviors."
-                    )
-
-            if args.deepspeed:
-                # will be resumed in deepspeed_init
-                pass
-            else:
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
-
-                # release memory
-                del state_dict
+            self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1419,6 +1396,9 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
+            if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
+                self._load_rng_state(resume_from_checkpoint)
+
             step = -1
             for step, inputs in enumerate(epoch_iterator):
 
@@ -1562,33 +1542,7 @@ class Trainer:
             elif args.local_rank != -1:
                 dist.barrier()
 
-            logger.info(
-                f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
-            )
-
-            best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-            if os.path.exists(best_model_path):
-                if self.deepspeed:
-                    # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
-                    deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
-                    self.model = deepspeed_engine.module
-                    self.model_wrapped = deepspeed_engine
-                    self.deepspeed = deepspeed_engine
-                    self.optimizer = optimizer
-                    self.lr_scheduler = lr_scheduler
-                    self.deepspeed.load_checkpoint(
-                        self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-                    )
-                else:
-                    # We load the model state dict on the CPU to avoid an OOM error.
-                    state_dict = torch.load(best_model_path, map_location="cpu")
-                    # If the model is on the GPU, it still works!
-                    self._load_state_dict_in_model(state_dict)
-            else:
-                logger.warning(
-                    f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
-                    "on multiple nodes, you should activate `--save_on_each_node`."
-                )
+            self._load_best_model()
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
@@ -1609,8 +1563,74 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    def _load_state_dict_in_model(self, state_dict):
-        load_result = self.model.load_state_dict(state_dict, strict=False)
+    def _load_from_checkpoint(self, resume_from_checkpoint):
+        if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
+            os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
+        ):
+            raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
+
+        logger.info(f"Loading model from {resume_from_checkpoint}).")
+
+        if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
+            config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
+            checkpoint_version = config.transformers_version
+            if checkpoint_version is not None and checkpoint_version != __version__:
+                logger.warning(
+                    f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
+                    f"Transformers but your current version is {__version__}. This is not recommended and could "
+                    "yield to errors or unwanted behaviors."
+                )
+
+        if self.args.deepspeed:
+            # will be resumed in deepspeed_init
+            pass
+        elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+            # We load the model state dict on the CPU to avoid an OOM error.
+            state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+            # If the model is on the GPU, it still works!
+            load_result = self.model.load_state_dict(state_dict, strict=False)
+            self._issue_warnings_after_load(load_result)
+
+            # release memory
+            del state_dict
+        else:
+            # We load the sharded checkpoint
+            load_result = load_sharded_checkpoint(self.model, resume_from_checkpoint, strict=False)
+            self._issue_warnings_after_load(load_result)
+
+    def _load_best_model(self):
+        logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
+
+        best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+        if os.path.exists(best_model_path):
+            if self.deepspeed:
+                # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
+                deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                self.model = deepspeed_engine.module
+                self.model_wrapped = deepspeed_engine
+                self.deepspeed = deepspeed_engine
+                self.optimizer = optimizer
+                self.lr_scheduler = lr_scheduler
+                self.deepspeed.load_checkpoint(
+                    self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+                )
+            else:
+                # We load the model state dict on the CPU to avoid an OOM error.
+                state_dict = torch.load(best_model_path, map_location="cpu")
+                # If the model is on the GPU, it still works!
+                load_result = self.model.load_state_dict(state_dict, strict=False)
+                self._issue_warnings_after_load(load_result)
+        elif os.path.exists(best_model_path, os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
+            # Best model is a sharded checkpoint
+            load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
+            self._issue_warnings_after_load(load_result)
+        else:
+            logger.warning(
+                f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
+                "on multiple nodes, you should activate `--save_on_each_node`."
+            )
+
+    def _issue_warnings_after_load(self, load_result):
 
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(

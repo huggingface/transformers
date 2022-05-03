@@ -1634,10 +1634,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
         >>> attention_mask = torch.ones(
         ...     input_ids.shape, dtype=torch.long, device=input_ids.device
-        >>> )  # initialize to local attention
+        ... )  # initialize to local attention
         >>> global_attention_mask = torch.zeros(
         ...     input_ids.shape, dtype=torch.long, device=input_ids.device
-        >>> )  # initialize to global attention to be deactivated for all tokens
+        ... )  # initialize to global attention to be deactivated for all tokens
         >>> global_attention_mask[
         ...     :,
         ...     [
@@ -1645,7 +1645,7 @@ class LongformerModel(LongformerPreTrainedModel):
         ...         4,
         ...         21,
         ...     ],
-        >>> ] = 1  # Set global attention to random tokens for the sake of this example
+        ... ] = 1  # Set global attention to random tokens for the sake of this example
         >>> # Usually, set global attention based on the task. For example,
         >>> # classification: the <s> token
         >>> # QA: question tokens
@@ -1692,7 +1692,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)[
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)[
             :, 0, 0, :
         ]
 
@@ -2025,7 +2025,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         >>> answer_tokens = all_tokens[torch.argmax(start_logits) : torch.argmax(end_logits) + 1]
         >>> answer = tokenizer.decode(
         ...     tokenizer.convert_tokens_to_ids(answer_tokens)
-        >>> )  # remove space prepending space token
+        ... )  # remove space prepending space token
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

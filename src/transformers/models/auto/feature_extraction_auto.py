@@ -61,6 +61,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "BeitFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("yolos", "YolosFeatureExtractor"),
     ]
 )
 
