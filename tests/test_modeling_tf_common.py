@@ -1351,9 +1351,17 @@ class TFModelTesterMixin:
                 labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
                 inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
                 self.assertGreater(len(inputs_minus_labels), 0)
-                accuracy_classes = ["ForPreTraining", "ForCausalLM", "ForMaskedLM", "ForQuestionAnswering",
-                                    "ForMultipleChoice", "ForSequenceClassification", "ForTokenClassification",
-                                    "ForNextSentencePrediction", "LMHeadModel"]
+                accuracy_classes = [
+                    "ForPreTraining",
+                    "ForCausalLM",
+                    "ForMaskedLM",
+                    "ForQuestionAnswering",
+                    "ForMultipleChoice",
+                    "ForSequenceClassification",
+                    "ForTokenClassification",
+                    "ForNextSentencePrediction",
+                    "LMHeadModel",
+                ]
                 for accuracy_class in accuracy_classes:
                     if model.__class__.__name__.endswith(accuracy_class):
                         metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
@@ -1386,7 +1394,7 @@ class TFModelTesterMixin:
                 self.assertEqual(history1.history.keys(), history2.history.keys())
                 for key in history1.history.keys():
                     if not key.startswith("val_"):
-                        self.assertTrue("val_"+key in history1.history.keys(), "Outputs differ in train/test step!")
+                        self.assertTrue("val_" + key in history1.history.keys(), "Outputs differ in train/test step!")
                 if metrics:
                     self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
 
