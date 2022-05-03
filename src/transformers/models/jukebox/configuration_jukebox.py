@@ -42,6 +42,11 @@ class JukeboxConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
 
+    The downsampling and stride are used to determine downsampling of the input sequence.
+    For example,  downsamoling = (5,3), and strides = (2, 2)  will downsample the audio by 2**5 = 32
+    to get the first level of codes, and 2**8 = 256 to get the second level codes.
+    This is mostly true for training the top level prior and the upsamplers.
+    
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
@@ -133,7 +138,7 @@ class JukeboxConfig(PretrainedConfig):
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
     }
-
+    
     def __init__(
         self,
         vocab_size=50257,
@@ -181,6 +186,37 @@ class JukeboxConfig(PretrainedConfig):
         vq_vae_conv_block_depth=4,
         vq_vae_conv_block_width=64,
         vq_vae_reverse_decoder_dilation=1,
+        
+        # args for the priors, 3 priors 
+        priors_width=[4096, 2048, 1024],
+        
+        
+        
+        prior_n_ctx=8192,
+        prior_depth=79,
+        prior_n_heads=8,
+        prior_attn_order=10,
+        prior_blocks=128,
+        prior_init_scale=0.1,
+        prior_c_res=1,
+        prior_prime_width=1280,
+        prior_prime_depth=18,
+        prior_prime_heads=4,
+        prior_prime_attn_order=2,
+        prior_prime_blocks=32,
+        prior_prime_init_scale=0.7,
+        prior_prime_c_res=1,
+        prior_min_duration=23.8,
+        prior_max_duration=600.0,
+        prior_use_tokens=True,
+        prior_n_tokens=512,
+        prior_prime_loss_fraction=0.4,
+        prior_merged_decoder=True,
+        fp16_params=True,
+        prior_alignment_layer=68,
+        prior_alignment_head=2,
+    
+    
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,11 +263,13 @@ class JukeboxConfig(PretrainedConfig):
         self.vq_vae_multi_spectral = vq_vae_multi_spectral
         self.vq_vae_lmu = vq_vae_lmu
 
+        
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        
+        
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
 
 
 class JukeboxOnnxConfig(OnnxConfigWithPast):
