@@ -835,8 +835,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
         >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
-        >>> image = dataset["train"][0]["image"]
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> image = dataset[0]["image"]
 
         >>> encoding = processor(image, return_tensors="pt")
 
@@ -1045,8 +1045,8 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", revision="no_ocr")
         >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
-        >>> example = dataset["train"][0]
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
         >>> boxes = example["boxes"]
@@ -1096,6 +1096,14 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to
+    compute `span start logits` and `span end logits`).
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1109,6 +1117,8 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1125,6 +1135,42 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         bbox=None,
         pixel_values=None,
     ):
+        r"""
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForQuestionAnswering
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> image = dataset[0]["image"]
+        >>> question = "what's his name?"
+
+        >>> encoding = processor(image, question, return_tensors="pt")
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv3(
@@ -1228,8 +1274,8 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
         >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3")
-        >>> image = dataset["train"][0]["image"]
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> image = dataset[0]["image"]
 
         >>> encoding = processor(image, return_tensors="pt")
         >>> sequence_label = torch.tensor([1])
