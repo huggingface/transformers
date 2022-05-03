@@ -17,12 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
-
-      - name: Install Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.6
+        uses: actions/checkout@v2
 
       - name: Install dependencies
         run: |
