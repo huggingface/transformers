@@ -623,8 +623,12 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
+            # Passing `0.0` to the `relative_position_bias()` layer because otherwise Keras
+            # might complain about `Layer.call()` not being invoked properly. In this case this input
+            # i.e., 0.0 is not going to be used in any calculations so we're safe.
+            relative_position_bias = (
+                self.relative_position_bias(0.0) if self.relative_position_bias is not None else None
+            )
             layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
