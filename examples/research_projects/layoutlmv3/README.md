@@ -18,7 +18,7 @@ limitations under the License.
 
 ## PyTorch version
 
-Fine-tuning LayoutLMv3 for token classification on FUNSD can be done as follows:
+Fine-tuning LayoutLMv3 for token classification on [FUNSD](https://guillaumejaume.github.io/FUNSD/) can be done as follows:
 
 ```bash
 python run_funsd_cord.py \
@@ -41,7 +41,7 @@ python run_funsd_cord.py \
 
 The main script `run_funsd_cord.py` leverages the 🤗 Datasets library and the Trainer API. You can easily customize it to your needs.
 
-Fine-tuning LayoutLMv3 for token classification on CORD can be done as follows:
+Fine-tuning LayoutLMv3 for token classification on [CORD](https://github.com/clovaai/cord) can be done as follows:
 
 ```bash
 python run_funsd_cord.py \

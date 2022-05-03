@@ -27,9 +27,12 @@ from typing import Optional
 
 import datasets
 import numpy as np
+import torch
 from datasets import ClassLabel, load_dataset, load_metric
+from torchvision import transforms
 
 import transformers
+from data_collator import DataCollatorForKeyValueExtraction
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
@@ -44,11 +47,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-
-from torchvision import transforms
-import torch
-
-from data_collator import DataCollatorForKeyValueExtraction
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -65,8 +63,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
 
-    model_name_or_path: str = field(default="microsoft/layoutlmv3-base",
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    model_name_or_path: str = field(
+        default="microsoft/layoutlmv3-base",
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -99,7 +98,8 @@ class DataTrainingArguments:
 
     task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
     dataset_name: Optional[str] = field(
-        default="nielsr/funsd-layoutlmv3", metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default="nielsr/funsd-layoutlmv3",
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
@@ -375,14 +375,14 @@ def main():
     padding = "max_length" if data_args.pad_to_max_length else False
 
     # Image transformation
-    patch_transform = transforms.Compose([
-            transforms.Resize((224,224)),                   
+    patch_transform = transforms.Compose(
+        [
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=torch.tensor([0.5, 0.5, 0.5]),
-                std=torch.tensor([0.5, 0.5, 0.5]))
-    ])
-    
+            transforms.Normalize(mean=torch.tensor([0.5, 0.5, 0.5]), std=torch.tensor([0.5, 0.5, 0.5])),
+        ]
+    )
+
     # Tokenize all texts and align the labels with them.
     def tokenize_and_align_labels(examples, augmentation=False):
         tokenized_inputs = tokenizer(
@@ -483,7 +483,10 @@ def main():
             )
 
     # Data collator
-    data_collator = DataCollatorForKeyValueExtraction(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None, padding=padding,
+    data_collator = DataCollatorForKeyValueExtraction(
+        tokenizer,
+        pad_to_multiple_of=8 if training_args.fp16 else None,
+        padding=padding,
         max_length=512,
     )
 
