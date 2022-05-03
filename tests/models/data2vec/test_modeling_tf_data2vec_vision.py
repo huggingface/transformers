@@ -426,8 +426,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            # (sayakpaul) remove `from_pt=True` after the TF weights have been uploaded to Hub.
-            model = TFData2VecVisionModel.from_pretrained(model_name, from_pt=True)
+            model = TFData2VecVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -450,10 +449,7 @@ class TFData2VecVisionModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        # (sayakpaul) remove `from_pt=True` after the TF weights have been uploaded to Hub.
-        model = TFData2VecVisionForImageClassification.from_pretrained(
-            "facebook/data2vec-vision-base-ft1k", from_pt=True
-        )
+        model = TFData2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
