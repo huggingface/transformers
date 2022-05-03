@@ -21,7 +21,6 @@ import numpy as np
 from transformers.testing_utils import require_accelerate, require_torch
 from transformers.trainer_utils import find_executable_batch_size
 from transformers.utils import is_torch_available
-from transformers.utils.import_utils import is_accelerate_available
 
 
 if is_torch_available():
