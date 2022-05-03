@@ -651,7 +651,13 @@ class ModuleUtilsMixin:
         return encoder_extended_attention_mask
 
     @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device):
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
+        if device is not None:
+            warnings.warn(
+                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+        else:
+            device = attention_mask.device
         batch_size, seq_length = input_shape
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -672,7 +678,9 @@ class ModuleUtilsMixin:
         extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
         return extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int], device: device) -> Tensor:
+    def get_extended_attention_mask(
+        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None
+    ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
@@ -681,12 +689,16 @@ class ModuleUtilsMixin:
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (`torch.device`):
-                The device of the input to the model.
 
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
+        if not (attention_mask.dim() == 2 and self.config.is_decoder):
+            # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
+            if device is not None:
+                warnings.warn(
+                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
