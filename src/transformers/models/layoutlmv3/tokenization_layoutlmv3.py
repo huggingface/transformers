@@ -262,6 +262,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
+        add_visual_labels (`bool`, *optional*, defaults to `True`):
+            Whether or not to also add labels for the visual tokens. Visual tokens will be labeled with
+            `pad_token_label`.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -286,6 +289,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
+        add_visual_labels=True,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -333,6 +337,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
+        self.add_visual_labels = add_visual_labels
 
     @property
     def vocab_size(self):
@@ -1182,6 +1187,11 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+
+        # Add visual labels
+        # We hardcode the number of visual tokens here to (224/16)**2 + 1 = 197
+        if labels and self.add_visual_labels:
+            labels += [self.pad_token_label] * 197
 
         # Build output dictionary
         encoded_inputs["input_ids"] = sequence
