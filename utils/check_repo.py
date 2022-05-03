@@ -361,7 +361,7 @@ def check_models_are_tested(module, test_file):
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
     if tested_models is None:
-        if test_file in TEST_FILES_WITH_NO_COMMON_TESTS:
+        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
             f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "

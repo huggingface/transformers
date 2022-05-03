@@ -16,12 +16,10 @@
 
 
 import inspect
-import os
-import tempfile
 import unittest
 
 from transformers import ViTConfig
-from transformers.testing_utils import require_tf, require_vision, slow, tooslow
+from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
@@ -80,9 +78,9 @@ class TFViTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the expected seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.expected_seq_length = num_patches + 1
+        self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -114,18 +112,14 @@ class TFViTModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFViTModel(config=config)
         result = model(pixel_values, training=False)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
         # Test with an image with different size than the one specified in config.
         image_size = self.image_size // 2
         pixel_values = pixel_values[:, :, :image_size, :image_size]
         result = model(pixel_values, interpolate_pos_encoding=True, training=False)
-        expected_seq_length = (image_size // self.patch_size) ** 2 + 1
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size)
-        )
+        seq_length = (image_size // self.patch_size) ** 2 + 1
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, seq_length, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -166,12 +160,12 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="ViT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # ViT does not use inputs_embeds
         pass
 
+    @unittest.skip(reason="ViT does not use inputs_embeds")
     def test_graph_mode_with_inputs_embeds(self):
-        # ViT does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -198,131 +192,6 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # overwrite from common since `encoder_seq_length` and `encoder_key_length` are calculated
-    # in a different way than in text models.
-    @tooslow
-    def test_saved_model_creation_extended(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = True
-
-        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        seq_len = self.model_tester.expected_seq_length
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            num_out = len(model(class_inputs_dict))
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
-
-                output_hidden_states = outputs["hidden_states"]
-                output_attentions = outputs["attentions"]
-
-                self.assertEqual(len(outputs), num_out)
-
-                expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-                )
-
-                self.assertEqual(len(output_hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(output_hidden_states[0].shape[-2:]),
-                    [seq_len, self.model_tester.hidden_size],
-                )
-
-                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(output_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        seq_len = self.model_tester.expected_seq_length
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-
-            self.assertEqual(out_len + 1, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # ViT has a different seq_length
-            seq_length = self.model_tester.expected_seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
