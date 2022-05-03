@@ -12,19 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization class for LayoutLMv3."""
+"""Tokenization class for LayoutLMv3. Same as LayoutLMv2, but RoBERTa-like BPE tokenization instead of WordPiece."""
 
 import json
-import collections
 import os
-import sys
 from functools import lru_cache
-import unicodedata
 from typing import Dict, List, Optional, Tuple, Union
 
 import regex as re
 
-from ...tokenization_utils import PreTrainedTokenizer, AddedToken, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
@@ -51,7 +48,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "merges_file": {
         "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/merges.txt",
         "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/merges.txt",
-    }
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
