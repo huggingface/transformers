@@ -79,7 +79,7 @@ DistilBertConfig {
 }
 ```
 
-Los atributos de los modelos preentrenados pueden ser modificados en la función [`~PretrainedConfig.from_pretrained`]Ñ
+Los atributos de los modelos preentrenados pueden ser modificados en la función [`~PretrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
@@ -103,13 +103,13 @@ También puedes guardar los archivos de configuración como un diccionario; o in
 
 </Tip>
 
-## Model
+## Modelo
 
-The next step is to create a [model](main_classes/models). The model - also loosely referred to as the architecture - defines what each layer is doing and what operations are happening. Attributes like `num_hidden_layers` from the configuration are used to define the architecture. Every model shares the base class [`PreTrainedModel`] and a few common methods like resizing input embeddings and pruning self-attention heads. In addition, all models are also either a [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) or [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. This means models are compatible with each of their respective framework's usage.
+El siguiente paso será crear un [modelo](main_classes/models). El modelo, al que a veces también nos referimos como arquitectura, es el encargado de definir cada capa y qué operaciones se realizan. Los atributos como `num_hidden_layers` de la configuración se usan para definir la arquitectura. Todos los modelos comparten una clase base, [`PreTrainedModel`], y algunos métodos comunes que se pueden usar para redimensionar los _embeddings_ o para recortar _heads_ de auto-atención. Además, todos los modelos son subclases de [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) o [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module), lo que significa que son compatibles con su respectivo framework. 
 
 <frameworkcontent>
 <pt>
-Load your custom configuration attributes into the model:
+Carga los atributos de tu configuración personalizada en el modelo de la siguiente forma:
 
 ```py
 >>> from transformers import DistilBertModel
@@ -117,23 +117,25 @@ Load your custom configuration attributes into the model:
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 >>> model = DistilBertModel(my_config)
 ```
+  
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápidos, consumiendo solo una fracción de los recursos que un entrenamiento completo requeriría. 
 
-This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
+Crea un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
 
-Create a pretrained model with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
-When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
+Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
-Load your custom configuration attributes into the model:
+  
+Carga los atributos de tu configuración personalizada en el modelo de la siguiente forma:
 
 ```py
 >>> from transformers import TFDistilBertModel
@@ -142,15 +144,15 @@ Load your custom configuration attributes into the model:
 >>> tf_model = TFDistilBertModel(my_config)
 ```
 
-This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápidos, consumiendo solo una fracción de los recursos que un entrenamiento completo requeriría. 
 
-Create a pretrained model with [`~TFPreTrainedModel.from_pretrained`]:
+Crea un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
-When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
+Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
 
 ```py
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
