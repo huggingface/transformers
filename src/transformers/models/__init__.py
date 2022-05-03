@@ -118,6 +118,7 @@ from . import (
     trocr,
     unispeech,
     unispeech_sat,
+    unite,
     van,
     vilt,
     vision_encoder_decoder,
