@@ -55,6 +55,7 @@ if is_torch_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_big_bird"] = [
+        "FlaxBigBirdForCausalLM",
         "FlaxBigBirdForMaskedLM",
         "FlaxBigBirdForMultipleChoice",
         "FlaxBigBirdForPreTraining",
@@ -92,6 +93,7 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_big_bird import (
+            FlaxBigBirdForCausalLM,
             FlaxBigBirdForMaskedLM,
             FlaxBigBirdForMultipleChoice,
             FlaxBigBirdForPreTraining,

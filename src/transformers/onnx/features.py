@@ -25,6 +25,7 @@ from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
+from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
@@ -334,6 +335,17 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=Data2VecTextOnnxConfig,
         ),
+        "roformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "multiple-choice",
+            "question-answering",
+            "token-classification",
+            onnx_config_cls=RoFormerOnnxConfig,
+        ),
         "xlnet": supported_features_mapping(
             "default",
             "masked-lm",
@@ -342,7 +354,6 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=XLNetOnnxConfig,
-        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
