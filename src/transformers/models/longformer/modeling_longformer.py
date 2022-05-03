@@ -1407,28 +1407,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-LONGFORMER_GENERATION_DOCSTRING = r"""
-    Mask filling example:
-
-    ```python
-    >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
-
-    >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-    >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
-
-    >>> TXT = "My friends are <mask> but they eat too many carbs." + " That's why I decide not to eat with them." * 300
-    >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-    >>> logits = model(input_ids).logits
-
-    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-    >>> probs = logits[0, masked_index].softmax(dim=0)
-    >>> values, predictions = probs.topk(5)
-
-    >>> tokenizer.decode(predictions).split()
-    ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
-    ```
-"""
-
 LONGFORMER_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1796,23 +1774,25 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         Returns:
 
-        Examples:
+        Mask filling example:
 
         ```python
-        >>> import torch
-        >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
+        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
 
-        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+        
+        # Let's try a very long input.
+        >>> TXT = "My friends are <mask> but they eat too many carbs." + " That's why I decide not to eat with them." * 300
+        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+        >>> logits = model(input_ids).logits
 
-        >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
-        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
 
-        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-        >>> # check `LongformerModel.forward` for more details how to set *attention_mask*
-        >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
-        >>> loss = outputs.loss
-        >>> prediction_logits = outputs.logits
+        >>> tokenizer.decode(predictions).split()
+        ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1877,7 +1857,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         checkpoint="jpelhaw/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=[1, 2],
+        expected_output='ORIGINAL',
         expected_loss=0.08,
     )
     def forward(
