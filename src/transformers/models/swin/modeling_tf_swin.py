@@ -908,7 +908,7 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
 class TFSwinModel(TFSwinPreTrainedModel):
     def __init__(
         self, config,
-        add_pooling_layer=False, # True, #FIXME !!!!!!! - add in the pooling layer
+        add_pooling_layer=True,
         use_mask_token=False
     ):
         super().__init__(config)
@@ -920,7 +920,7 @@ class TFSwinModel(TFSwinPreTrainedModel):
         self.encoder = TFSwinEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
-        self.pooler = None #nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+        self.pooler = tf.keras.layers.AveragePooling1D(pool_size=26) if add_pooling_layer else None #FIXME - double check what's being pooled and if equivalent
 
 #         # Initialize weights and apply final processing
 #         self.post_init() #FIXME
@@ -982,8 +982,8 @@ class TFSwinModel(TFSwinPreTrainedModel):
 
         pooled_output = None
         if self.pooler is not None:
-            pooled_output = self.pooler(sequence_output.transpose(1, 2), training=training)
-            pooled_output = tf.reshape(pooled_output, (-1, 1))
+            pooled_output = self.pooler(sequence_output)
+            pooled_output = tf.reshape(pooled_output, (1, -1))
 
         if not return_dict:
             output = (sequence_output, pooled_output) + encoder_outputs[1:]
