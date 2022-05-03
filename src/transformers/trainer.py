@@ -1154,8 +1154,7 @@ class Trainer:
                 gathering predictions for evaluation during the training.
             auto_find_batch_size (`bool`, *optional*)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
-                avoiding CUDA Out-of-Memory errors.
-                Requires accelerate to be installed (`pip install accelerate`)
+                avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
