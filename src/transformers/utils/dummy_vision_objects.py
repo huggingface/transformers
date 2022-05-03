@@ -52,6 +52,13 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DPTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class GLPNFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -130,6 +137,13 @@ class ViltProcessor(metaclass=DummyObject):
 
 
 class ViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class YolosFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

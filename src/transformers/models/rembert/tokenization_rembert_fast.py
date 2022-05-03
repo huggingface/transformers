@@ -139,6 +139,7 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

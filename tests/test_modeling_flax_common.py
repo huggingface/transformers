@@ -43,7 +43,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from flax.core.frozen_dict import unfreeze
+    from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -120,6 +120,7 @@ class FlaxModelTesterMixin:
     test_mismatched_shapes = True
     is_encoder_decoder = False
     test_head_masking = False
+    has_attentions = True
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -168,6 +169,7 @@ class FlaxModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    # (Copied from tests.test_modeling_common.ModelTesterMixin.check_outputs)
     def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
         """
         Args:
@@ -204,8 +206,7 @@ class FlaxModelTesterMixin:
             pt_outputs[pt_nans] = 0
             fx_outputs[pt_nans] = 0
 
-            max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, 1e-5)
+            self.assert_almost_equals(fx_outputs, pt_outputs, 1e-5)
         else:
             raise ValueError(
                 f"`fx_outputs` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fx_outputs)} instead."
@@ -222,6 +223,7 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -274,7 +276,7 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                # Pure convolutional models have no attention
+                config.output_attentions = self.has_attentions
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -314,6 +316,7 @@ class FlaxModelTesterMixin:
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
+                pt_model_loaded.eval()
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs)
@@ -900,6 +903,93 @@ class FlaxModelTesterMixin:
                 raise NotImplementedError("The test has not been implemented for encoder-decoder models yet.")
             else:
                 _check_attentions_validity(outputs.attentions)
+
+    def test_no_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config, _do_init=False)
+
+            # Check that accesing parmas raises an ValueError when _do_init is False
+            with self.assertRaises(ValueError):
+                params = model.params
+
+            # Check if we params can be properly initialized when calling init_weights
+            params = model.init_weights(model.key, model.input_shape)
+            self.assertIsInstance(params, FrozenDict)
+            # Check if all required parmas are initialized
+            keys = set(flatten_dict(unfreeze(params)).keys())
+            self.assertTrue(all(k in keys for k in model.required_params))
+            # Check if the shapes match
+            flat_params = flatten_dict(unfreeze(params))
+            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
+                self.assertEqual(
+                    v.shape,
+                    flat_params[k].shape,
+                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
+                )
+
+            # Check that setting params raises an ValueError when _do_init is False
+            with self.assertRaises(ValueError):
+                model.params = params
+
+            # Check if we can do a forward pass
+            inputs_dict["output_hidden_states"] = True
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            model(**inputs, params=params)
+
+    def test_from_pretrained_with_no_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        def _assert_all_params_initialised(model, params):
+            # Check if all required parmas are loaded
+            keys = set(flatten_dict(unfreeze(params)).keys())
+            self.assertTrue(all(k in keys for k in model.required_params))
+            # Check if the shapes match
+            flat_params = flatten_dict(unfreeze(params))
+            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
+                self.assertEqual(
+                    v.shape,
+                    flat_params[k].shape,
+                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
+                )
+
+        for model_class in self.all_model_classes:
+            # init the model
+            model = model_class(config)
+
+            # save the model in the temporary directory
+            # load the saved model with _do_init=False
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
+
+            # Check that accesing parmas raises an ValueError when _do_init is False
+            with self.assertRaises(ValueError):
+                params = model.params
+
+            # Check if all required parmas are loaded
+            _assert_all_params_initialised(model, params)
+
+            # Check that setting params raises an ValueError when _do_init is False
+            with self.assertRaises(ValueError):
+                model.params = params
+
+            # Check if init_weights initializes missing keys from from_pretrained
+            flat_params = flatten_dict(unfreeze(params))
+            random_key = random.choice(list(flat_params.keys()))
+            flat_params.pop(random_key)
+            params = freeze(unflatten_dict(flat_params))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, params=params)
+                model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
+
+                params = model.init_weights(model.key, model.input_shape, params=params)
+                # Check if all required parmas are loaded
+                _assert_all_params_initialised(model, params)
 
 
 @require_flax

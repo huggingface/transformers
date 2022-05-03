@@ -33,7 +33,8 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -281,10 +282,11 @@ class T5DenseReluDense(nn.Module):
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
+        self.relu_act = ACT2FN["relu"]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = nn.functional.relu(hidden_states)
+        hidden_states = self.relu_act(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -1373,7 +1375,7 @@ class T5Model(T5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # forward pass
@@ -1581,7 +1583,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> # inference
         >>> input_ids = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
@@ -1829,7 +1831,7 @@ class T5EncoderModel(T5PreTrainedModel):
         >>> model = T5EncoderModel.from_pretrained("t5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""

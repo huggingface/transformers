@@ -413,28 +413,22 @@ class FlaxEncoderDecoderMixin:
         pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
 
         with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs)
-        pt_logits = pt_outputs.logits
-        pt_outputs = pt_outputs.to_tuple()
+            pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-        fx_outputs = fx_model(**inputs_dict)
-        fx_logits = fx_outputs.logits
-        fx_outputs = fx_outputs.to_tuple()
-
+        fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits, pt_logits.numpy(), 4e-2)
+        for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+            self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
             fx_model_loaded = FlaxSpeechEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
 
-        fx_outputs_loaded = fx_model_loaded(**inputs_dict)
-        fx_logits_loaded = fx_outputs_loaded.logits
-        fx_outputs_loaded = fx_outputs_loaded.to_tuple()
-
+        fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits_loaded, pt_logits.numpy(), 4e-2)
+        for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-5)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -445,12 +439,11 @@ class FlaxEncoderDecoderMixin:
         pt_model_loaded.eval()
 
         with torch.no_grad():
-            pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-        pt_logits_loaded = pt_outputs_loaded.logits
-        pt_outputs_loaded = pt_outputs_loaded.to_tuple()
+            pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
-        self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
+        for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
 
@@ -546,6 +539,12 @@ class FlaxEncoderDecoderMixin:
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
 
+        # check `add_adapter` works as expected
+        config.add_adapter = True
+        self.assertTrue(config.add_adapter)
+        self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
+        self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
@@ -583,7 +582,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "gpt2-medium"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -639,7 +638,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -700,7 +699,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
             "facebook/wav2vec2-large-lv60", "bart-large"
         )
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
@@ -756,7 +755,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         # prepare inputs
         batch_size = 13
-        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])

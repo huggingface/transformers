@@ -207,7 +207,8 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = torch.tensor([14]), torch.tensor([15])
+    >>> target_start_index = torch.tensor([{qa_target_start_index}])
+    >>> target_end_index = torch.tensor([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = outputs.loss
@@ -269,9 +270,10 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
+    >>> model = {model_class}.from_pretrained(
+    ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
+    ... )
 
-    >>> num_labels = len(model.config.id2label)
     >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
     ...     torch.float
     ... )
@@ -666,7 +668,8 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
 
     ```python
     >>> # target is "nice puppet"
-    >>> target_start_index, target_end_index = tf.constant([14]), tf.constant([15])
+    >>> target_start_index = tf.constant([{qa_target_start_index}])
+    >>> target_end_index = tf.constant([{qa_target_end_index}])
 
     >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
     >>> loss = tf.math.reduce_mean(outputs.loss)
@@ -720,9 +723,10 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> logits = model(**inputs).logits
 
     >>> # retrieve index of {mask}
-    >>> mask_token_index = tf.where(inputs.input_ids == tokenizer.mask_token_id)[0][1]
+    >>> mask_token_index = tf.where((inputs.input_ids == tokenizer.mask_token_id)[0])
+    >>> selected_logits = tf.gather_nd(logits[0], indices=mask_token_index)
 
-    >>> predicted_token_id = tf.math.argmax(logits[0, mask_token_index], axis=-1)
+    >>> predicted_token_id = tf.math.argmax(selected_logits, axis=-1)
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
     ```
@@ -794,6 +798,113 @@ TF_CAUSAL_LM_SAMPLE = r"""
     ```
 """
 
+TF_SPEECH_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
+    >>> outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+TF_SPEECH_CTC_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import tensorflow as tf
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
+    >>> logits = model(**inputs).logits
+    >>> predicted_ids = tf.math.argmax(logits, axis=-1)
+
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    {expected_output}
+    ```
+
+    ```python
+    >>> with processor.as_target_processor():
+    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="tf").input_ids
+
+    >>> # compute loss
+    >>> loss = model(**inputs).loss
+    >>> round(float(loss), 2)
+    {expected_loss}
+    ```
+"""
+
+TF_VISION_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+TF_VISION_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> logits = model(**inputs).logits
+
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
+    >>> print(model.config.id2label[predicted_label])
+    {expected_output}
+    ```
+"""
+
 TF_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": TF_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": TF_QUESTION_ANSWERING_SAMPLE,
@@ -802,6 +913,10 @@ TF_SAMPLE_DOCSTRINGS = {
     "MaskedLM": TF_MASKED_LM_SAMPLE,
     "LMHead": TF_CAUSAL_LM_SAMPLE,
     "BaseModel": TF_BASE_MODEL_SAMPLE,
+    "SpeechBaseModel": TF_SPEECH_BASE_MODEL_SAMPLE,
+    "CTC": TF_SPEECH_CTC_SAMPLE,
+    "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
+    "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
@@ -942,6 +1057,8 @@ def add_code_sample_docstrings(
     output_type=None,
     config_class=None,
     mask="[MASK]",
+    qa_target_start_index=14,
+    qa_target_end_index=15,
     model_cls=None,
     modality=None,
     expected_output="",
@@ -966,6 +1083,8 @@ def add_code_sample_docstrings(
             processor_class=processor_class,
             checkpoint=checkpoint,
             mask=mask,
+            qa_target_start_index=qa_target_start_index,
+            qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
         )

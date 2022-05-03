@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
@@ -241,7 +241,7 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
 
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = stable_softmax(attention_scores, axis=-1)
 
         attention_probs = self.dropout(attention_probs, training=training)
 
@@ -497,7 +497,6 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -686,7 +685,6 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.mpnet(
             input_ids=input_ids,
@@ -803,7 +801,6 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -909,7 +906,6 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1000,7 +996,6 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1112,7 +1107,6 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

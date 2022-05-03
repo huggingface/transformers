@@ -211,7 +211,6 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     )
     fx_compatible = True
     test_pruning = True
-    test_torchscript = True
     test_resize_embeddings = True
     test_resize_position_embeddings = True
 

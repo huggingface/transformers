@@ -65,7 +65,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
-from transformers.utils import WEIGHTS_NAME, is_apex_available
+from transformers.utils import WEIGHTS_NAME, is_apex_available, is_bitsandbytes_available
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -188,6 +188,26 @@ if is_torch_available():
             while self.current_sample < len(self.dataset):
                 yield self.dataset[self.current_sample]
                 self.current_sample += 1
+
+    class MultiLoader:
+        def __init__(self, loaders):
+            self.loaders = loaders
+
+        def __len__(self):
+            return sum(len(loader) for loader in self.loaders)
+
+        def __iter__(self):
+            for loader in self.loaders:
+                yield from loader
+
+    class CustomDataloaderTrainer(Trainer):
+        def get_train_dataloader(self):
+            dataloaders = [super().get_train_dataloader(), super().get_train_dataloader()]
+            return MultiLoader(dataloaders)
+
+        def get_eval_dataloader(self, eval_dataset):
+            dataloaders = [super().get_eval_dataloader(eval_dataset), super().get_eval_dataloader(eval_dataset)]
+            return MultiLoader(dataloaders)
 
     class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
@@ -647,6 +667,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
+    # tests that we do not require dataloader to have a .dataset attribute
+    def test_dataloader_without_dataset(self):
+        train_dataset = RegressionDataset(length=128)
+        trainer = CustomDataloaderTrainer(
+            model=RegressionModel(), train_dataset=train_dataset, eval_dataset=train_dataset
+        )
+        trainer.train()
+        trainer.evaluate()
+
     def test_sampler_seed(self):
         # nb: we don't want to inherit from IterableDataset to hit the right code path
         class DummyDataset(torch.utils.data.Dataset):
@@ -780,7 +809,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True)
         preds = trainer.predict(trainer.eval_dataset).predictions
         x = trainer.eval_dataset.x
-        self.assertTrue(len(preds), 2)
+        self.assertEqual(len(preds), 2)
         self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
         self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
 
@@ -790,7 +819,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         preds = outputs.predictions
         labels = outputs.label_ids
         x = trainer.eval_dataset.x
-        self.assertTrue(len(preds), 2)
+        self.assertEqual(len(preds), 2)
         self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
         self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
         self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
@@ -1841,6 +1870,7 @@ if is_torch_available():
             },
         ),
     ]
+
     if is_apex_available():
         import apex
 
@@ -1848,6 +1878,17 @@ if is_torch_available():
             (
                 OptimizerNames.ADAMW_APEX_FUSED,
                 apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
+
+    if is_bitsandbytes_available():
+        import bitsandbytes as bnb
+
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_BNB,
+                bnb.optim.Adam8bit,
                 default_adam_kwargs,
             )
         )
@@ -1876,8 +1917,8 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
 
     def test_fused_adam(self):
         # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam, but only has to return a
-        # class called, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
+        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam. It only has to return the
+        # class given, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
         # the test to run without requiring an apex installation.
         mock = Mock()
         modules = {
@@ -1898,6 +1939,33 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         # Pretend that apex does not exist, even if installed. By setting apex to None, importing
         # apex will fail even if apex is installed.
         with patch.dict("sys.modules", {"apex.optimizers": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_adam8bit(self):
+        # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
+        # Trainer.get_optimizer_cls_and_kwargs does not use Adam8bit. It only has to return the
+        # class given, so mocking bnb.optim.Adam8bit should be fine for testing and allow
+        # the test to run without requiring a bnb installation.
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Adam8bit": mock.optim.Adam8bit,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                OptimizerNames.ADAMW_BNB,
+                default_adam_kwargs,
+                mock.optim.Adam8bit,
+            )
+
+    def test_bnb_adam8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bnb.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
 

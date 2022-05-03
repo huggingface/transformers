@@ -17,6 +17,20 @@ class TensorFlowBenchmark(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLogitsProcessor(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1981,6 +1995,27 @@ class TFViTModel(metaclass=DummyObject):
 
 
 class TFViTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
