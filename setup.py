@@ -289,7 +289,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
-        'sacremoses'
+        "sacremoses",
         "rjieba"
     )
     + extras["retrieval"]
