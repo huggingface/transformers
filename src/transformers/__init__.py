@@ -192,6 +192,7 @@ _import_structure = {
     "models.emformer": [
         "EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EmformerConfig",
+        "EmformerFeatureExtractor",
         "EmformerTokenizer",
     ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
@@ -1932,14 +1933,6 @@ if is_tf_available():
             "TFElectraPreTrainedModel",
         ]
     )
-    _import_structure["models.emformer"].extend(
-        [
-            "TF_EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFEmformerForCTC",
-            "TFEmformerModel",
-            "TFEmformerPreTrainedModel",
-        ]
-    )
     _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
     _import_structure["models.flaubert"].extend(
         [
@@ -2381,9 +2374,6 @@ if is_flax_available():
             "FlaxElectraPreTrainedModel",
         ]
     )
-    _import_structure["models.emformer"].extend(
-        ["FlaxEmformerForCTC", "FlaxEmformerForPreTraining", "FlaxEmformerModel", "FlaxEmformerPreTrainedModel"]
-    )
     _import_structure["models.encoder_decoder"].append("FlaxEncoderDecoderModel")
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"])
     _import_structure["models.gpt_neo"].extend(
@@ -2604,7 +2594,7 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-    from .models.emformer import EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EmformerConfig, EmformerTokenizer
+    from .models.emformer import EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EmformerConfig, EmformerFeatureExtractor, EmformerTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
@@ -3273,12 +3263,8 @@ if TYPE_CHECKING:
         )
         from .models.emformer import (
             EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EmformerForAudioFrameClassification,
+            EmformerFeatureExtractor,
             EmformerForCTC,
-            EmformerForMaskedLM,
-            EmformerForPreTraining,
-            EmformerForSequenceClassification,
-            EmformerForXVector,
             EmformerModel,
             EmformerPreTrainedModel,
         )
@@ -4070,12 +4056,6 @@ if TYPE_CHECKING:
             TFElectraModel,
             TFElectraPreTrainedModel,
         )
-        from .models.emformer import (
-            TF_EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFEmformerForCTC,
-            TFEmformerModel,
-            TFEmformerPreTrainedModel,
-        )
         from .models.encoder_decoder import TFEncoderDecoderModel
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4419,12 +4399,6 @@ if TYPE_CHECKING:
             FlaxElectraForTokenClassification,
             FlaxElectraModel,
             FlaxElectraPreTrainedModel,
-        )
-        from .models.emformer import (
-            FlaxEmformerForCTC,
-            FlaxEmformerForPreTraining,
-            FlaxEmformerModel,
-            FlaxEmformerPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel

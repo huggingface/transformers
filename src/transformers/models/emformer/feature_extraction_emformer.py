@@ -53,17 +53,20 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             Length of hop between STFT windows.
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
+        padding_value (`float`, defaults to 0.0):
+            The value that is used to fill the padding values.
     """
 
     model_input_names = ["input_values", "attention_mask"]
 
     def __init__(
         self,
-        global_stats_file,
         sampling_rate=16000,
         n_fft=400,
         n_mels=128,
         hop_length=200,
+        global_mean=None,
+        global_invstddev=None,
         padding_value=0.0,
         **kwargs
     ):
@@ -72,16 +75,14 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
         self.n_mels = n_mels
         self.hop_length = hop_length
         self.mel_transform = MelSpectrogram(
-            sample_rate=self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels, hop_length=self.hop_length
+            sample_rate=self.sampling_rate, n_fft=self.n_fft, n_mels=self.n_mels, hop_length=self.hop_length
         )
 
         decibel = 2 * 20 * math.log10(torch.iinfo(torch.int16).max)
         self.gain = pow(10, 0.05 * decibel)
 
-        with open(global_stats_file, "r") as f:
-            global_stats = json.load(f)
-        self.mean = global_stats["mean"]
-        self.invstddev = global_stats["invstddev"]
+        self.global_mean = global_mean if global_mean is not None else np.zeros(80)
+        self.global_invstddev = global_invstddev if global_invstddev is not None else np.ones(80)
 
     @staticmethod
     def piecewise_linear_log(features: torch.FloatTensor):
@@ -96,7 +97,7 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
         features = self.mel_transform(waveform)
         features = features.transpose(1, 0)
         features = self.piecewise_linear_log(features * self.gain)
-        features = (features - self.mean) * self.invstddev
+        features = (features - self.global_mean) * self.global_invstddev
 
         return features
 
