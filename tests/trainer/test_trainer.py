@@ -1024,6 +1024,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(a, a1, delta=1e-8)
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
+    @require_torch_non_multi_gpu
+    def test_auto_batch_size_finder(self):
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=2048)
+        eval_dataset = RegressionDataset()
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1, per_device_train_batch_size=1024)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        with self.assertRaises(RuntimeError):
+            trainer.train(auto_find_batch_size=False)
+        trainer.train(auto_find_batch_size=True)
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
