@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Data2VecVision model."""
+""" TF 2.0 Data2Vec Vision model."""
 
 import collections.abc
 import math
@@ -71,8 +71,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
             will be returned.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -87,13 +87,6 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
-
-
-# copied from transformers.models.vit.modeling_tf_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
 
 
 class TFDropPath(tf.keras.layers.Layer):
@@ -195,15 +188,22 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
 class TFPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(self, config: Data2VecVisionConfig, image_size: int = 224, patch_size: int = 16, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        image_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size = (
+            config.image_size
+            if isinstance(config.image_size, collections.abc.Iterable)
+            else (config.image_size, config.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
@@ -242,9 +242,8 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
-        x = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
-        return x
+        return tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
 
 class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
@@ -346,8 +345,8 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
 
 class TFData2VecVisionSelfOutput(tf.keras.layers.Layer):
     """
-    The residual connection is defined in TFData2VecVisionLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in TFData2VecVisionLayer instead of here (as is the case with other models), due
+    to the layernorm applied before each block.
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
