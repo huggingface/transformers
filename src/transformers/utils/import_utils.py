@@ -428,6 +428,10 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
+def is_accelerate_available():
+    return importlib.util.find_spec("accelerate") is not None
+
+
 def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 

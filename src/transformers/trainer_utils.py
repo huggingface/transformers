@@ -31,6 +31,7 @@ import numpy as np
 
 from .utils import (
     ExplicitEnum,
+    is_accelerate_available,
     is_psutil_available,
     is_tf_available,
     is_torch_available,
@@ -582,3 +583,28 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+def find_executable_batch_size(
+    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+):
+    """
+    A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
+    CUDNN, the batch size is cut in half and passed to `function`
+    `function` must take in a `batch_size` parameter as its first argument.
+    Args:
+        function (`callable`, *optional*)
+            A function to wrap
+        starting_batch_size (`int`, *optional*)
+            The batch size to try and fit into memory
+        auto_find_batch_size (`bool`, *optional*)
+            If False, will just execute `function`
+    """
+    if auto_find_batch_size:
+        if is_accelerate_available():
+            import accelerate.memory_utils as mem_utils
+
+            return mem_utils.find_executable_batch_size(function, starting_batch_size)
+        else:
+            raise ImportError("To use this functionality, Accelerate must be installed. (`pip install accelerate`)")
+    return function

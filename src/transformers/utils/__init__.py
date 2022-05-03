@@ -84,6 +84,7 @@ from .import_utils import (
     USE_TORCH,
     DummyObject,
     _LazyModule,
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_coloredlogs_available,
