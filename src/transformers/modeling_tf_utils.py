@@ -716,6 +716,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     main_input_name = "input_ids"
     _auto_class = None
     _using_dummy_loss = None
+    _label_to_output_map = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -959,9 +960,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # For now, we hardcode the most common renamings - this will hopefully be expanded to model-specific
         # attributes in future.
-        label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
-        output_to_label = {val: key for key, val in label_to_output.items()}
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
+        if self._label_to_output_map is not None:
+            label_to_output = self._label_to_output_map
+        elif "start_positions" in arg_names:
+            label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
+        elif "sentence_order_label" in arg_names:
+            label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
+        elif "next_sentence_label" in arg_names:
+            label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        else:
+            label_to_output = dict()
+        output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
@@ -969,7 +980,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
-            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
@@ -1028,6 +1039,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if loss is None:
                 loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
 
+        breakpoint()
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
 
@@ -1051,9 +1063,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         # For now, we hardcode the most common renamings - this will hopefully be expanded to model-specific
         # attributes in future.
-        label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
-        output_to_label = {val: key for key, val in label_to_output.items()}
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
+        if self._label_to_output_map is not None:
+            label_to_output = self._label_to_output_map
+        elif "start_positions" in arg_names:
+            label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
+        elif "sentence_order_label" in arg_names:
+            label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
+        elif "next_sentence_label" in arg_names:
+            label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        else:
+            label_to_output = dict()
+        output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
