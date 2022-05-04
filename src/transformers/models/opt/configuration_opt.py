@@ -31,11 +31,10 @@ OPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class OPTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OPTModel`]. It is used to instantiate a OPT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    This is the configuration class to store the configuration of a [`OPTModel`]. It is used to instantiate a OPT model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the OPT
     [facebook/opt-large](https://huggingface.co/facebook/opt-large) architecture.
 
@@ -113,7 +112,7 @@ class OPTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50272, # TODO check the real value
+        vocab_size=50272,  # TODO check the real value
         max_position_embeddings=2048,
         decoder_layers=24,
         decoder_ffn_dim=4096,

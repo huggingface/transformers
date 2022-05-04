@@ -17,13 +17,12 @@ import copy
 import math
 import random
 import warnings
-from typing import List, Optional, Tuple, Union, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
-from torch import Tensor
-from torch import nn
+import torch.utils.checkpoint
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -74,7 +73,6 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
@@ -123,8 +121,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->OPT
 # class OPTLearnedPositionalEmbedding(nn.Embedding):
 #     """
-#     This module learns positional embeddings up to a fixed maximum size.
-#     """
+# This module learns positional embeddings up to a fixed maximum size. #"""
 
 #     def __init__(self, num_embeddings: int, embedding_dim: int):
 #         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
@@ -140,6 +137,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 #         )
 #         return super().forward(positions + self.offset)
 
+
 def make_positions(tensor, padding_idx: int, onnx_trace: bool = False):
     """Replace non-padding symbols with their position numbers.
 
@@ -152,15 +150,15 @@ def make_positions(tensor, padding_idx: int, onnx_trace: bool = False):
     mask = tensor.ne(padding_idx).int()
     return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
+
 class LearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int=1):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.onnx_trace = False
         if self.padding_idx is not None:
@@ -183,9 +181,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         # padding.
 
         if positions is None:
-            positions = make_positions(
-                input, self.padding_idx, onnx_trace=self.onnx_trace
-            )
+            positions = make_positions(input, self.padding_idx, onnx_trace=self.onnx_trace)
         return F.embedding(
             positions,
             self.weight,
@@ -195,6 +191,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
             self.scale_grad_by_freq,
             self.sparse,
         )
+
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
 class OPTAttention(nn.Module):
@@ -207,7 +204,7 @@ class OPTAttention(nn.Module):
         dropout: float = 0.1,
         is_decoder: bool = True,
         bias: bool = True,
-        add_zero_attn = False
+        add_zero_attn=False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -246,37 +243,35 @@ class OPTAttention(nn.Module):
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
-        is_cross_attention = key_value_states is not None
-        residual = hidden_states
 
         # create key padding mask
+        # HACK : to fix
         assert torch.equal(attention_mask[0, 0, :, :], attention_mask[-1, 0, :, :])
         attention_mask = attention_mask[0, 0, :, :]
 
         return F.multi_head_attention_forward(
-                hidden_states,
-                hidden_states,
-                hidden_states,
-                self.embed_dim,
-                self.num_heads,
-                torch.empty([0]),
-                torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-                None,
-                None,
-                self.add_zero_attn,
-                self.dropout,
-                self.out_proj.weight,
-                self.out_proj.bias,
-                self.training,
-                self_attn_padding_mask,
-                False,
-                attention_mask,
-                use_separate_proj_weight=True,
-                q_proj_weight=self.q_proj.weight,
-                k_proj_weight=self.k_proj.weight,
-                v_proj_weight=self.v_proj.weight,
-            )
-
+            hidden_states,
+            hidden_states,
+            hidden_states,
+            self.embed_dim,
+            self.num_heads,
+            torch.empty([0]),
+            torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
+            None,
+            None,
+            self.add_zero_attn,
+            self.dropout,
+            self.out_proj.weight,
+            self.out_proj.bias,
+            self.training,
+            self_attn_padding_mask,
+            False,
+            attention_mask,
+            use_separate_proj_weight=True,
+            q_proj_weight=self.q_proj.weight,
+            k_proj_weight=self.k_proj.weight,
+            v_proj_weight=self.v_proj.weight,
+        )
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->OPT
@@ -403,8 +398,6 @@ class OPTDecoderLayer(nn.Module):
         # hidden_states = hidden_states.permute(1, 0, 2)
         residual = hidden_states
 
-        
-
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -421,7 +414,6 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
 
         # Fully Connected
@@ -430,7 +422,7 @@ class OPTDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        #hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        # hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -493,7 +485,7 @@ class OPTPretrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (OPTDecoder, OPTEncoder)):
+        if isinstance(module, (OPTDecoder)):
             module.gradient_checkpointing = value
 
     @property
@@ -610,9 +602,9 @@ OPT_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
 
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_inputs`] and
-            modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information
-            on the default strategy.
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_inputs`] and modify
+            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            default strategy.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -690,7 +682,7 @@ class OPTDecoder(OPTPretrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.share_input_output_embed = config.share_input_output_embed
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.cross_self_attention = False # TODO add it on the config
+        self.cross_self_attention = False  # TODO add it on the config
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.embed_dim, self.padding_idx)
@@ -704,23 +696,14 @@ class OPTDecoder(OPTPretrainedModel):
         )
 
         self.project_out_dim = (
-            nn.Linear(config.d_model, config.embed_dim, bias=False)
-            if config.embed_dim != config.d_model
-            else None
+            nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
         )
-
 
         self.project_in_dim = (
-            nn.Linear(config.embed_dim, config.d_model, bias=False)
-            if config.d_model != config.embed_dim
-            else None
+            nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
         )
 
-
-        self.output_projection = nn.Linear(
-            config.embed_dim, config.vocab_size, bias=False
-        )
-        
+        self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.decoder_layers)])
 
@@ -838,7 +821,7 @@ class OPTDecoder(OPTPretrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
@@ -853,7 +836,7 @@ class OPTDecoder(OPTPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        
+
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
@@ -863,9 +846,7 @@ class OPTDecoder(OPTPretrainedModel):
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
-        if self_attn_padding_mask is None and (
-            self.cross_self_attention or input_ids.eq(self.padding_idx).any()
-        ):
+        if self_attn_padding_mask is None and (self.cross_self_attention or input_ids.eq(self.padding_idx).any()):
             self_attn_padding_mask = input_ids.eq(self.padding_idx)
 
         # expand encoder attention mask
@@ -954,7 +935,7 @@ class OPTDecoder(OPTPretrainedModel):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
-        
+
         if self.project_out_dim is not None:
             hidden_states = self.project_out_dim(hidden_states)
 
@@ -1393,8 +1374,8 @@ class OPTForSequenceClassification(OPTPretrainedModel):
 
 @add_start_docstrings(
     """
-    OPT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    OPT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer
+    on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     OPT_START_DOCSTRING,
 )

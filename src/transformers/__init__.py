@@ -131,7 +131,6 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
-    "models.opt": ["OPTConfig", "OPTTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
@@ -239,6 +238,7 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
+    "models.opt": ["OPTConfig", "OPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -452,7 +452,6 @@ if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
-    _import_structure["models.opt"].append("OPTTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
@@ -485,6 +484,7 @@ if is_tokenizers_available():
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
+    _import_structure["models.opt"].append("OPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
@@ -731,18 +731,6 @@ if is_torch_available():
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
-        ]
-    )
-    _import_structure["models.opt"].extend(
-        [
-            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "OPTForCausalLM",
-            "OPTForConditionalGeneration",
-            "OPTForQuestionAnswering",
-            "OPTForSequenceClassification",
-            "OPTModel",
-            "OPTPretrainedModel",
-            "PretrainedOPTModel",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -1283,6 +1271,18 @@ if is_torch_available():
             "load_tf_weights_in_openai_gpt",
         ]
     )
+    _import_structure["models.opt"].extend(
+        [
+            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OPTForCausalLM",
+            "OPTForConditionalGeneration",
+            "OPTForQuestionAnswering",
+            "OPTForSequenceClassification",
+            "OPTModel",
+            "OPTPretrainedModel",
+            "PretrainedOPTModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -1819,7 +1819,6 @@ if is_tf_available():
         ]
     )
     _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"])
-    _import_structure["models.opt"].extend(["TFOPTForConditionalGeneration", "TFOPTModel", "TFOPTPretrainedModel"])
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2088,6 +2087,7 @@ if is_tf_available():
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
+    _import_structure["models.opt"].extend(["TFOPTForConditionalGeneration", "TFOPTModel", "TFOPTPretrainedModel"])
     _import_structure["models.pegasus"].extend(
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
@@ -2318,18 +2318,6 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
-    _import_structure["models.opt"].extend(
-        [
-            "FlaxOPTDecoderPreTrainedModel",
-            "FlaxOPTForCausalLM",
-            "FlaxOPTForConditionalGeneration",
-            "FlaxOPTForQuestionAnswering",
-            "FlaxOPTForSequenceClassification",
-            "FlaxOPTModel",
-            "FlaxOPTPreTrainedModel",
-        ]
-    )
-
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -2338,6 +2326,7 @@ if is_flax_available():
             "FlaxBeitPreTrainedModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForCausalLM",
@@ -2432,6 +2421,17 @@ if is_flax_available():
         ]
     )
     _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.opt"].extend(
+        [
+            "FlaxOPTDecoderPreTrainedModel",
+            "FlaxOPTForCausalLM",
+            "FlaxOPTForConditionalGeneration",
+            "FlaxOPTForQuestionAnswering",
+            "FlaxOPTForSequenceClassification",
+            "FlaxOPTModel",
+            "FlaxOPTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         [
             "FlaxPegasusForConditionalGeneration",
@@ -2577,7 +2577,6 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
-    from .models.opt import OPTConfig, OPTTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2673,6 +2672,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+    from .models.opt import OPTConfig, OPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -2867,7 +2867,6 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
-        from .models.opt import OPTTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
@@ -2898,6 +2897,7 @@ if TYPE_CHECKING:
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
+        from .models.opt import OPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
@@ -3096,16 +3096,6 @@ if TYPE_CHECKING:
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
-        )
-        from .models.opt import (
-            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OPTForCausalLM,
-            OPTForConditionalGeneration,
-            OPTForQuestionAnswering,
-            OPTForSequenceClassification,
-            OPTModel,
-            OPTPretrainedModel,
-            PretrainedOPTModel,
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3552,6 +3542,16 @@ if TYPE_CHECKING:
             OpenAIGPTModel,
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
+        )
+        from .models.opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OPTForCausalLM,
+            OPTForConditionalGeneration,
+            OPTForQuestionAnswering,
+            OPTForSequenceClassification,
+            OPTModel,
+            OPTPretrainedModel,
+            PretrainedOPTModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,
@@ -4006,7 +4006,6 @@ if TYPE_CHECKING:
             TFAutoModelWithLMHead,
         )
         from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
-        from .models.opt import TFOPTForConditionalGeneration, TFOPTModel, TFOPTPretrainedModel
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
@@ -4220,6 +4219,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
+        from .models.opt import TFOPTForConditionalGeneration, TFOPTModel, TFOPTPretrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.rembert import (
@@ -4399,15 +4399,6 @@ if TYPE_CHECKING:
             FlaxBartModel,
             FlaxBartPreTrainedModel,
         )
-        from .models.opt import (
-            FlaxOPTDecoderPreTrainedModel,
-            FlaxOPTForCausalLM,
-            FlaxOPTForConditionalGeneration,
-            FlaxOPTForQuestionAnswering,
-            FlaxOPTForSequenceClassification,
-            FlaxOPTModel,
-            FlaxOPTPreTrainedModel,
-        )
         from .models.beit import (
             FlaxBeitForImageClassification,
             FlaxBeitForMaskedImageModeling,
@@ -4488,6 +4479,15 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.opt import (
+            FlaxOPTDecoderPreTrainedModel,
+            FlaxOPTForCausalLM,
+            FlaxOPTForConditionalGeneration,
+            FlaxOPTForQuestionAnswering,
+            FlaxOPTForSequenceClassification,
+            FlaxOPTModel,
+            FlaxOPTPreTrainedModel,
+        )
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,

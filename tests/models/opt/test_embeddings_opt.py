@@ -16,37 +16,27 @@
 
 import unittest
 
-
-from transformers import OPTConfig, is_torch_available, BartTokenizerFast
-
+from transformers import BartTokenizerFast, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoModelForSequenceClassification,
-        OPTForCausalLM,
-        OPTForConditionalGeneration,
-        OPTForQuestionAnswering,
-        OPTForSequenceClassification,
-        OPTModel,
-        OPTTokenizer,
-        pipeline,
-    )
+    from transformers import OPTForCausalLM
+
 
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_model = "/home/younes/Desktop/Work/data/opt-350-m/"
         self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq.p"
-    
+
     def test_load_model(self):
         try:
             _ = OPTForCausalLM.from_pretrained(self.path_model)
         except BaseException:
             self.fail("Failed loading model")
-    
+
     def test_logits(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
@@ -61,6 +51,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
         logits = model(input_ids)[0]
         logits_meta = torch.load(self.path_logits_meta)
         assert torch.allclose(logits, logits_meta.permute(1, 0, 2))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1735,8 +1735,8 @@ class FlaxOPTForQuestionAnsweringModule(nn.Module):
 
 @add_start_docstrings(
     """
-    OPT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    OPT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer
+    on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     OPT_START_DOCSTRING,
 )
@@ -1976,8 +1976,8 @@ class FlaxOPTForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    OPT Decoder Model with a language modeling head on top (linear layer with weights tied to the input embeddings)
-    e.g for autoregressive tasks.
+    OPT Decoder Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g
+    for autoregressive tasks.
     """,
     OPT_START_DOCSTRING,
 )
