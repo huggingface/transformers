@@ -111,7 +111,7 @@ Extrae el subcampo `text` desde su estructura anidado con el método [`flatten`]
 
 Cada subcampo es ahora una columna separada, como lo indica el prefijo `answers`. Observa que `answers.text` es una lista. En lugar de tokenizar cada enunciado por separado, convierte la lista en un string para tokenizarlos conjuntamente.
 
-Here is how you can create a preprocessing function to convert the list to a string and truncate sequences to be no longer than DistilGPT2's maximum input length:
+Así es como puedes crear una función de preprocesamiento para convertir la lista en una cadena y truncar las secuencias para que no superen la longitud máxima de input de DistilGPT2:
 
 ```py
 >>> def preprocess_function(examples):
