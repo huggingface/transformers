@@ -154,7 +154,7 @@ class PreprocessingArguments:
     filter_proba: Optional[float] = field(
         default=0.7, metadata={"help": "Probability for filtering config, test and uncommon files."}
     )
-    tokenizer_dir: Optional[str] = field(
+    tokenizer: Optional[str] = field(
         default="lvwerra/codeparrot",
         metadata={"help": "Name or path to the tokenizer."},
     )
