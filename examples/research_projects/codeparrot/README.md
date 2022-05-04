@@ -62,7 +62,7 @@ To execute the pretokenization, for the clean train data for instance, run the f
 ```bash
 python scripts/pretokenizing.py \
 --dataset_name lvwerra/codeparrot-clean-train \
---tokenized_data_repo <your Hugging Face hub username>/tokenized-codeparrot-train
+--tokenized_data_repo tokenized-codeparrot-train
 ```
 
 ## Tokenizer
