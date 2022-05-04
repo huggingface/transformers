@@ -21,7 +21,7 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from transformers import OPTConfig, is_torch_available
+from transformers import OPTConfig, GPT2Tokenizer, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -966,3 +966,35 @@ class OPTStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+class OPTEmbeddingsTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.path_model = "/home/younes/Desktop/Work/data/opt-350-m/" # TODO add the model on the hub
+        self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p" # TODO add the logits somewhere?
+
+    @unittest.skip("Skipping unless we find a solution to store the model")
+    def test_load_model(self):
+        try:
+            _ = OPTForCausalLM.from_pretrained(self.path_model)
+        except BaseException:
+            self.fail("Failed loading model")
+
+    @unittest.skip("Skipping unless we find a solution to store the logits")
+    def test_logits(self):
+        model = OPTForCausalLM.from_pretrained(self.path_model)
+        model = model.eval()
+        # tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        
+        prompts = [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
+        input_ids = tokenizer(prompts, return_tensors="pt", padding=True).input_ids
+        logits = model(input_ids)[0]
+        logits_meta = torch.load(self.path_logits_meta)
+        assert torch.allclose(logits, logits_meta)
