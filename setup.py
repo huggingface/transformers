@@ -238,7 +238,7 @@ extras["sklearn"] = deps_list("scikit-learn")
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx")
 
-extras["torch"] = deps_list("torch", "accelerate")
+extras["torch"] = deps_list("torch")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
