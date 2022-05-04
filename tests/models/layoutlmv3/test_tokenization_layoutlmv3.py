@@ -125,7 +125,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
-        bpe_tokens = ['Ġlow', 'er', 'Ġ', 'n', 'e', 'w', 'er']
+        bpe_tokens = ["Ġlow", "er", "Ġ", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
         self.assertListEqual(tokens, bpe_tokens)
 
@@ -1691,6 +1691,37 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
 
         return words, boxes, output_ids
+
+    def test_added_token_with_space_before(self):
+
+        tokenizer_s = self.get_tokenizer()
+        tokenizer_f = self.get_rust_tokenizer()
+
+        tokens_to_add = ["AAA", "bbb"]
+
+        words_with_space = [f" {token}" for token in tokens_to_add + tokenizer_s.unique_no_split_tokens]
+        words_without_space = tokens_to_add + tokenizer_s.unique_no_split_tokens
+        boxes = [[i, i, i, i] for i in range(len(words_with_space))]
+
+        tokens_to_add_formated = [
+            AddedToken(token, rstrip=True, lstrip=True, single_word=False) for token in tokens_to_add
+        ]
+        tokenizer_s.add_tokens(tokens_to_add_formated)
+        tokenizer_f.add_tokens(tokens_to_add_formated)
+
+        ids_s = tokenizer_s(words_with_space, boxes=boxes).input_ids
+        ids_f = tokenizer_f(words_with_space, boxes=boxes).input_ids
+
+        tokens_s = tokenizer_s.convert_ids_to_tokens(ids_s)
+        tokens_f = tokenizer_f.convert_ids_to_tokens(ids_f)
+
+        ids_s = tokenizer_s(words_without_space, boxes=boxes).input_ids
+        ids_f = tokenizer_f(words_without_space, boxes=boxes).input_ids
+
+        tokens_s = tokenizer_s.convert_ids_to_tokens(ids_s)
+        tokens_f = tokenizer_f.convert_ids_to_tokens(ids_f)
+
+        self.assertEqual(tokens_s, tokens_f)
 
     def test_maximum_encoding_length_pair_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
