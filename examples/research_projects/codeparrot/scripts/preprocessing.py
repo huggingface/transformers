@@ -87,7 +87,7 @@ def has_no_keywords(example):
     return {"has_no_keywords": True}
 
 
-def few_assignments(example, minimum=4):
+def has_few_assignments(example, minimum=4):
     """Check if file uses symbol '=' less than `minimum` times."""
     lines = example["content"].splitlines()
     counter = 0
