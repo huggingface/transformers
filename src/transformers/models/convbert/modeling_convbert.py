@@ -833,7 +833,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.embeddings(
