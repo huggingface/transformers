@@ -31,13 +31,12 @@ import numpy as np
 
 from .utils import (
     ExplicitEnum,
-    is_accelerate_available,
     is_psutil_available,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
-    requires_backends
+    requires_backends,
 )
 
 

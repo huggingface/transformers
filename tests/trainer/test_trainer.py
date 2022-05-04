@@ -20,6 +20,7 @@ import os
 import random
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -1029,18 +1030,29 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
-        train_dataset = RegressionDataset(length=2048)
-        eval_dataset = RegressionDataset()
 
-        config = RegressionModelConfig(a=0, b=2)
-        model = RegressionRandomPreTrainedModel(config)
+        sys.path.extend(os.path.realpath("../../../examples/pytorch/text-classification/"))
+        import run_glue
 
-        tmp_dir = self.get_auto_remove_tmp_dir()
-        args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1, per_device_train_batch_size=1024)
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        testargs = """
+            run_glue.py
+            --model_name_or_path distilbert-base-uncased
+            --task_name mrpc
+            --do_train
+            --do_eval
+            --max_seq_len 128
+            --per_device_train_batch_size 4096
+            --learning_rate 2e-5
+            --num_train_epochs 1
+            --auto_find_batch_size 0
+            """.split()
         with self.assertRaises(RuntimeError):
-            trainer.train(auto_find_batch_size=False)
-        trainer.train(auto_find_batch_size=True)
+            with patch.object(sys, "argv", testargs):
+                run_glue.main()
+
+        testargs[-1] = "--auto_find_batch_size 1"
+        with patch.object(sys, "argv", testargs):
+            run_glue.main()
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
