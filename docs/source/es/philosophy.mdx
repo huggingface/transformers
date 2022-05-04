@@ -61,7 +61,7 @@ La biblioteca está construida alrededor de tres tipos de clases para cada model
 - **Model classes** como [`BertModel`], que consisten en más de 30 modelos PyTorch ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)) o modelos Keras ([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)) que funcionan con pesos pre-entrenados proporcionados en la
   biblioteca.
 - **Configuration classes** como [`BertConfig`], que almacena todos los parámetros necesarios para construir un modelo. 
-  No siempre tienes que generarla tu. En particular, si estas usando un modelo preentrenado sin ninguna modificación,
+  No siempre tienes que generarla tu. En particular, si estas usando un modelo pre-entrenado sin ninguna modificación,
   la creación del modelo se encargará automáticamente de generar la configuración (que es parte del modelo).
 - **Tokenizer classes** como [`BertTokenizer`], que almacena el vocabulario para cada modelo y proporciona métodos para
   codificar/decodificar strings en una lista de índices de "token embeddings" para ser empleados en un modelo.          
