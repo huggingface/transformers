@@ -187,7 +187,7 @@ class PretokenizationArguments:
         default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path to the dataset to pretokenize."}
     )
     tokenized_data_repo: Optional[str] = field(
-        default="lvwerra/tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."}
+        default="tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."}
     )
     num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
 
