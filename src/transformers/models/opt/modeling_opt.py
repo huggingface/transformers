@@ -545,26 +545,6 @@ OPT_GENERATION_EXAMPLE = r"""
     >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     'PG&E scheduled the blackouts in response to forecasts for high winds amid dry conditions'
     ```
-
-    Mask filling example:
-
-    ```python
-    >>> from transformers import OPTTokenizer, OPTForConditionalGeneration
-
-    >>> tokenizer = OPTTokenizer.from_pretrained("")
-    >>> model = OPTForConditionalGeneration.from_pretrained("")
-
-    >>> TXT = "My friends are <mask> but they eat too many carbs."
-    >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-    >>> logits = model(input_ids).logits
-
-    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-    >>> probs = logits[0, masked_index].softmax(dim=0)
-    >>> values, predictions = probs.topk(5)
-
-    >>> tokenizer.decode(predictions).split()
-    ['not', 'good', 'healthy', 'great', 'very']
-    ```
 """
 
 OPT_INPUTS_DOCSTRING = r"""
