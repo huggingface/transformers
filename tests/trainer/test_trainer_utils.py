@@ -436,6 +436,7 @@ class TrainerUtilsTest(unittest.TestCase):
         mock_training_loop_function()
         self.assertEqual(batch_sizes, [64, 32, 16])
 
+    @require_accelerate
     def test_executable_batch_size_no_search(self):
         batch_sizes = []
 
@@ -447,6 +448,7 @@ class TrainerUtilsTest(unittest.TestCase):
         mock_training_loop_function()
         self.assertEqual(batch_sizes, [64])
 
+    @require_accelerate
     def test_executable_batch_size_with_error(self):
         @find_executable_batch_size(starting_batch_size=64, auto_find_batch_size=False)
         def mock_training_loop_function(batch_size):

@@ -29,6 +29,7 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
+from .import_utils import requires_backends
 from .utils import (
     ExplicitEnum,
     is_accelerate_available,
@@ -608,10 +609,9 @@ def find_executable_batch_size(
         )
 
     if auto_find_batch_size:
-        if is_accelerate_available():
-            import accelerate.memory_utils as mem_utils
+        requires_backends(find_executable_batch_size, "accelerate")
+        import accelerate.memory_utils as mem_utils
 
-            return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
-        else:
-            raise ImportError("To use this functionality, Accelerate must be installed. (`pip install accelerate`)")
+        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+
     return functools.partial(function, batch_size=starting_batch_size)
