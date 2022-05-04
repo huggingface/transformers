@@ -107,7 +107,7 @@ else:
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("tapex", ("TapexTokenizer", None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
-            ("opt", ("OPTTokenizer", "OPTTokenizerFast")),
+            ("opt", ("GPT2Tokenizer", "GPT2TokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
