@@ -85,14 +85,37 @@ try:
 except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
 
+# TODO check if I use it or the normal conv1d
+class Conv1D(nn.Module):
+    def __init__(self, n_in, n_out, zero_out=False, init_scale=1.0):
+        super(Conv1D, self).__init__()
+        self.n_in = n_in
+        self.n_out = n_out
+        if zero_out:
+            w = torch.zeros(n_in, n_out)
+        else:
+            w = torch.empty(n_in, n_out)
+            nn.init.normal_(w, std=0.02 * init_scale)
+        b = torch.zeros(n_out)
+        self.w = nn.Parameter(w)
+        self.b = nn.Parameter(b)
+
+    def forward(self, x):
+        size_out = (*x.size()[:-1], self.n_out)
+        x = torch.addmm(
+            self.b.type_as(x), x.view(-1, x.size(-1)), self.w.type_as(x)
+        )  # If x if float then float else half
+        x = x.view(*size_out)
+        return x
+
 
 class JukeboxMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(self, embed_dim, config):
+        # a single channel is always used in original code
         super().__init__()
-        embed_dim = config.hidden_size
-        init_scale = config.init_scale
-        self.c_fc = Conv1D(intermediate_size, embed_dim, init_scale=init_scale)
-        self.c_proj = Conv1D(embed_dim, intermediate_size, init_scale=init_scale)
+        init_scale = config.mlp_init_scale  # TODO: check if I remove it or not using noraml conv initshceme
+        self.c_fc = Conv1D(embed_dim, embed_dim, init_scale=init_scale)
+        self.c_proj = Conv1D(embed_dim, embed_dim, init_scale=init_scale)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
@@ -155,17 +178,13 @@ class JukeboxAttention(nn.Module):
     # previously FactoredAttention
     def __init__(
         self,
-        n_in,
+        config,
+        width,
         n_ctx,
         n_state,
         n_head,
-        attn_dropout=0.0,
-        resid_dropout=0.0,
-        scale=True,
         mask=False,
         zero_out=False,
-        init_scale=1.0,
-        checkpoint_attn=0,
         attn_func=0,
         blocks=None,
         spread=None,
@@ -173,21 +192,20 @@ class JukeboxAttention(nn.Module):
         prime_len=None,
     ):
         super().__init__()
-        self.n_in = n_in
+        self.width = width
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
         self.n_state = n_state
         assert n_state % n_head == 0
         self.n_head = n_head
-        self.scale = scale
         self.mask = mask
         if attn_func == 6:
-            self.c_attn = Conv1D(n_in, n_state, init_scale=init_scale)
-            self.c_enc_kv = Conv1D(n_in, n_state * 2, init_scale=init_scale)
+            self.c_attn = Conv1D(width, n_state, init_scale=config.attn_init_scale)
+            self.c_enc_kv = Conv1D(width, n_state * 2, init_scale=config.attn_init_scale)
         else:
-            self.c_attn = Conv1D(n_in, n_state * 3, init_scale=init_scale)
-        self.c_proj = Conv1D(n_state, n_in, zero_out, init_scale=init_scale)
-        self.attn_dropout = nn.Dropout(attn_dropout) if attn_dropout > 0.0 else lambda x: x
-        self.resid_dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
+            self.c_attn = Conv1D(width, n_state * 3, init_scale=config.attn_init_scale)
+        self.c_proj = Conv1D(n_state, width, zero_out, init_scale=config.attn_init_scale)
+        self.attn_dropout = nn.Dropout(config.attn_dropout) if config.attn_dropout > 0.0 else lambda x: x
+        self.resid_dropout = nn.Dropout(config.resid_dropout) if config.resid_dropout > 0.0 else lambda x: x
 
         # Sequence of length l is factored as [blocks, l // blocks]
         self.attn_func = attn_func
@@ -209,7 +227,7 @@ class JukeboxAttention(nn.Module):
         if blocks is not None:
             assert n_ctx % blocks == 0
             self.block_ctx = n_ctx // blocks
-        self.checkpoint_attn = checkpoint_attn  # 0: None, 1: Attn after heads split, 2: Attn
+        #   self.checkpoint_attn = checkpoint_attn  # 0: None, 1: Attn after heads split, 2: Attn
 
         self.sample_t = 0
         self.cache = {}
@@ -584,7 +602,7 @@ class JukeboxAttention(nn.Module):
     def check(self):
         blocks = self.blocks or 1
         spread = self.spread or 1
-        bs, l, d = (4, self.n_ctx, self.n_in)
+        bs, l, d = (4, self.n_ctx, self.width)
         x = torch.randn(bs, l, d).cuda()
         x.requires_grad = True
         x_out = self.forward(x)  # bs, l, d
@@ -629,7 +647,7 @@ class JukeboxAttention(nn.Module):
 
     def check_sample(self):
         torch.manual_seed(42)
-        bs, l, d = (4, self.n_ctx, self.n_in)
+        bs, l, d = (4, self.n_ctx, self.width)
         prime = 5
         x = torch.randn(bs, l, d).cuda()
         xs = torch.chunk(x, l, dim=1)
@@ -668,7 +686,7 @@ class JukeboxAttention(nn.Module):
 
     def check_chunks(self, chunk_size):
         torch.manual_seed(42)
-        bs, l, d = (4, self.n_ctx, self.n_in)
+        bs, l, d = (4, self.n_ctx, self.width)
         enc_l = self.encoder_dims
         assert l % chunk_size == 0
         n_chunks = l // chunk_size
@@ -708,7 +726,7 @@ class JukeboxBlock(nn.Module):
     # previously ResAttnBlock
     def __init__(
         self,
-        n_in,
+        width,
         n_ctx,
         n_head,
         attn_dropout=0.0,
@@ -731,9 +749,9 @@ class JukeboxBlock(nn.Module):
     ):
         super().__init__()
         self.attn = JukeboxAttention(
-            n_in=n_in,
+            width=width,
             n_ctx=n_ctx,
-            n_state=int(m_attn * n_in),
+            n_state=int(m_attn * width),
             n_head=n_head,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
@@ -748,21 +766,21 @@ class JukeboxBlock(nn.Module):
             encoder_dims=encoder_dims,
             prime_len=prime_len,
         )
-        self.ln_0 = LayerNorm(n_in)
+        self.ln_0 = LayerNorm(width)
         self.mlp = JukeboxMLP(
-            n_in=n_in,
-            n_state=int(m_mlp * n_in),
+            width=width,
+            n_state=int(m_mlp * width),
             resid_dropout=resid_dropout,
             afn=afn,
             zero_out=zero_out,
             init_scale=init_scale,
         )
-        self.ln_1 = LayerNorm(n_in)
+        self.ln_1 = LayerNorm(width)
         self.res_scale = res_scale
 
         self.checkpoint_attn = checkpoint_attn
         self.checkpoint_mlp = checkpoint_mlp
-        self.n_in = n_in
+        self.width = width
         self.attn_func = attn_func
 
     def forward(self, x, encoder_kv, sample=False):
@@ -796,7 +814,7 @@ class JukeboxBlock(nn.Module):
 class JukeboxTransformer(nn.Module):
     def __init__(
         self,
-        n_in,
+        width,
         n_ctx,
         n_head,
         n_depth,
@@ -820,7 +838,7 @@ class JukeboxTransformer(nn.Module):
         prime_len=None,
     ):
         super().__init__()
-        self.n_in = n_in
+        self.width = width
         self.n_ctx = n_ctx
         self.encoder_dims = encoder_dims
         self.blocks = blocks
@@ -857,7 +875,7 @@ class JukeboxTransformer(nn.Module):
         # assert n_depth % attn_cycle == 0, f'Depth {n_depth} not a multiple of cycle {attn_cycle} for attn_order {attn_order}'
 
         attn_block = lambda d: JukeboxBlock(
-            n_in=n_in,
+            width=width,
             n_ctx=n_ctx,
             n_head=n_head,
             attn_dropout=attn_dropout,
@@ -943,7 +961,7 @@ class JukeboxTransformer(nn.Module):
             l.attn.del_cache()
 
     def check_sample(self):
-        bs, l, s, d = (4, self.n_ctx, self.encoder_dims, self.n_in)
+        bs, l, s, d = (4, self.n_ctx, self.encoder_dims, self.width)
         prime = 5
         with torch.no_grad():
             encoder_kv = torch.randn(bs, s, d).cuda()
@@ -1101,7 +1119,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.pos_emb_dropout = nn.Dropout(emb_dropout)
 
         self.transformer = JukeboxTransformer(
-            n_in=width,
+            width=width,
             n_ctx=input_dims,
             n_head=heads,
             n_depth=depth,
@@ -1516,6 +1534,7 @@ class ResConvBlock(nn.Module):
     def forward(self, x):
         return x + self.model(x)
 
+
 class Resnet(nn.Module):
     def __init__(self, n_in, n_depth, m_conv=1.0):
         super().__init__()
@@ -1543,6 +1562,7 @@ class ResConv1DBlock(nn.Module):
 
     def forward(self, x):
         return x + self.res_scale * self.model(x)
+
 
 class Resnet1D(nn.Module):
     def __init__(
@@ -2099,10 +2119,10 @@ class VQVAE(nn.Module):
     def __init__(self, config):
         super().__init__()
         if not config.sample_length:
-            downsamples = calculate_strides(config.vq_vae_strides, config.vq_vae_downsampling)
+            downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
-                config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens
+                config.sample_length_in_seconds * config.sr // top_raw_to_tokens
             ) * top_raw_to_tokens
 
         input_shape = (config.sample_length, 1)
@@ -2120,12 +2140,12 @@ class VQVAE(nn.Module):
         self.width = config.vq_vae_width
         self.depth = config.vq_vae_depth
 
-        self.downs_t = downs_t = config.vq_vae_downsampling
-        self.strides_t = strides_t = config.vq_vae_strides
+        self.downs_t = downs_t = config.vq_vae_downs_t
+        self.strides_t = strides_t = config.vq_vae_strides_t
         self.l_bins = l_bins = config.vq_vae_codebook_dimension
         self.commit = config.vq_vae_commit
-        self.spectral = config.vq_vae_strides
-        self.multispectral = config.vq_vae_strides
+        self.spectral = config.spectral
+        self.multispectral = config.multispectral
 
         self.sample_length = input_shape[0]
         x_shape, x_channels = input_shape[:-1], input_shape[-1]
@@ -2315,12 +2335,13 @@ class VQVAE(nn.Module):
 
 class MusicTokenConditioner(nn.Module):
     """
-    The MusicTokenConditioner takes music tokens as an input (coresponding to vocabularies in the VQ-VAE codebook) 
-    and upsamples it using a single layer of decoder convolution block (the same is used in the VQ-VAE). 
-    
-    The tokens are passed through an embedding layer and the embeddings are upsampled. 
-    
+    The MusicTokenConditioner takes music tokens as an input (coresponding to vocabularies in the VQ-VAE codebook) and
+    upsamples it using a single layer of decoder convolution block (the same is used in the VQ-VAE).
+
+    The tokens are passed through an embedding layer and the embeddings are upsampled.
+
     """
+
     def __init__(
         self, input_shape, bins, down_t, stride_t, out_width, init_scale, zero_out, res_scale, **block_kwargs
     ):
@@ -2513,20 +2534,22 @@ class LabelConditioner(nn.Module):
 
 class JukeboxPrior(nn.Module):
     """
-    Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. 
-    To condition on the timing, genre and artist, we use the LabelConditioner class
-    To condition on the codes from the level above, we use the MusicTokenConditioner class
-    To condition on lyrics, we allow two types of priors:
-    - Separate Encoder Decoder: This is the usual encoder-decoder style transformer. The encoder transformer autoregressively 
+    Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. To condition
+    on the timing, genre and artist, we use the LabelConditioner class To condition on the codes from the level above,
+    we use the MusicTokenConditioner class To condition on lyrics, we allow two types of priors:
+    - Separate Encoder Decoder: This is the usual encoder-decoder style transformer. The encoder transformer
+      autoregressively
     models the lyrics, and we use its last layer to produce keys/values that are attened to by the decoder transformer
-    - Single Encoder Decoder: This is a simplification where we combine them into a single model. We merge the text vocab 
-    and VQ vocab into a single large vocab, and the lyric tokens and VQ tokens into a single longer sequence of tokens which 
-    we autoregressively model together.
+    - Single Encoder Decoder: This is a simplification where we combine them into a single model. We merge the text
+      vocab
+    and VQ vocab into a single large vocab, and the lyric tokens and VQ tokens into a single longer sequence of tokens
+    which we autoregressively model together.
     """
-    def __init__(self, config, level,vqvae_z_shapes):
-        super().__init__()
 
-        rescale = lambda z_shape: (z_shape[0]*config.n_ctx//vqvae_z_shapes[config.level][0],)
+    def __init__(self, config, level):
+        super().__init__()
+        vqvae_z_shapes = config.vqvae_z_shapes
+        rescale = lambda z_shape: (z_shape[0] * config.n_ctx // vqvae_z_shapes[level][0],)
         z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
         self.use_tokens = config.use_tokens[level]
         self.n_tokens = config.n_tokens[level]
@@ -2545,122 +2568,162 @@ class JukeboxPrior(nn.Module):
         assert level < self.levels, f"Total levels {self.levels}, got level {level}"
 
         self.l_bins = config.l_bins
-        
-        prior_kwargs = dict(input_shape=(config.n_ctx,), bins=config.l_bins,
-                        width=config.prior_width, depth=config.prior_depth, heads=config.heads,
-                        attn_order=config.attn_order, blocks=config.blocks, spread=config.spread,
-                        attn_dropout=config.attn_dropout, resid_dropout=config.resid_dropout, emb_dropout=config.emb_dropout,
-                        zero_out=config.zero_out, res_scale=config.res_scale, pos_init=config.pos_init,
-                        init_scale=config.init_scale,
-                        m_attn=config.m_attn, m_mlp=config.m_mlp
+
+        prior_kwargs = dict(
+            input_shape=(config.n_ctx,),
+            bins=config.l_bins,
+            width=config.width[level],
+            depth=config.depth[level],
+            heads=config.n_heads[level],
+            attn_order=config.attn_order[level],
+            blocks=config.blocks,
+            spread=config.spread,
+            attn_dropout=config.attn_dropout,
+            resid_dropout=config.resid_dropout,
+            emb_dropout=config.emb_dropout,
+            zero_out=config.zero_out,
+            res_scale=config.res_scale,
+            pos_init=config.pos_init,
+            init_scale=config.init_scale[level],
+            m_attn=config.m_attn,  # m_mlp=config.m_mlp
         )
-        
-        prime_kwargs = dict(use_tokens=config.use_tokens, prime_loss_fraction=config.prime_loss_fraction,
-                            n_tokens=config.n_tokens, bins=config.n_vocab)
-        
 
-        x_cond_kwargs = dict(out_width=config.prior_width, init_scale=config.init_scale,
-                         width=config.cond_width, depth=config.cond_depth, m_conv=config.cond_m_conv,
-                         dilation_growth_rate=config.cond_dilation_growth_rate, dilation_cycle=config.cond_dilation_cycle,
-                         zero_out=config.cond_zero_out, res_scale=config.cond_res_scale,
-                         checkpoint_res=config.cond_c_res)  # have to keep this else names wrong
+        prime_kwargs = dict(
+            use_tokens=config.use_tokens[level],
+            prime_loss_fraction=config.prime_loss_fraction,
+            n_tokens=config.n_tokens[level],
+            bins=config.n_vocab,
+        )
 
-        y_cond_kwargs = dict(out_width=config.prior_width, init_scale=config.init_scale,
-                            y_bins=config.y_bins, t_bins=config.t_bins, sr= config.sr, min_duration=config.min_duration,
-                            max_duration=config.max_duration, max_bow_genre_size=config.max_bow_genre_size)
-    
+        x_cond_kwargs = dict(
+            out_width=config.width[level],
+            init_scale=config.init_scale[level],
+            width=config.cond_width[level],
+            depth=config.cond_depth[level],
+            m_conv=config.cond_m_conv,
+            dilation_growth_rate=config.cond_dilation_growth_rate[level],
+            dilation_cycle=config.cond_dilation_cycle[level],
+            zero_out=config.cond_zero_out,
+            res_scale=config.cond_res_scale,
+            checkpoint_res=config.cond_c_res[level],
+        )  # have to keep this else names wrong
+
+        y_cond_kwargs = dict(
+            out_width=config.width[level],
+            init_scale=config.init_scale[level],
+            y_bins=config.y_bins,
+            t_bins=config.t_bins,
+            sr=config.sr,
+            min_duration=config.min_duration,
+            max_duration=config.max_duration,
+            max_bow_genre_size=config.max_bow_genre_size,
+        )
+
         # X conditioning
-        self.x_cond = (level != (self.levels - 1))
+        self.x_cond = level != (self.levels - 1)
         self.cond_level = level + 1
 
         # Y conditioning
         self.y_cond = config.labels
 
-        self.single_enc_dec = config.use_single_enc_dec
+        self.single_enc_dec = config.single_enc_dec
         # X conditioning : conditioning on music tokens (either from audio or from previous levels )
         if self.x_cond:
             self.conditioner_blocks = nn.ModuleList()
-            conditioner_block = lambda _level: MusicTokenConditioner(input_shape=z_shapes[_level],
-                                                          bins=config.l_bins,
-                                                          down_t=config.downsampling[_level],
-                                                          stride_t=config.strides[_level],
-                                                          **x_cond_kwargs)
+            conditioner_block = lambda _level: MusicTokenConditioner(
+                input_shape=z_shapes[_level],
+                bins=config.l_bins,
+                down_t=config.downs_t[_level],
+                stride_t=config.strides_t[_level],
+                **x_cond_kwargs,
+            )
             # if dist.get_rank() == 0: print(f"Conditioning on 1 above level(s)")
             self.conditioner_blocks.append(conditioner_block(self.cond_level))
 
         # Y conditioning : contioning on timing, genres, and artist
         if self.y_cond:
-            self.n_time = self.z_shape[0] # Assuming STFT=TF order and raw=T1 order, so T is first dim
-            self.y_emb = LabelConditioner(n_time=self.n_time,include_time_signal=not self.x_cond,**y_cond_kwargs)
+            self.n_time = self.z_shape[0]  # Assuming STFT=TF order and raw=T1 order, so T is first dim
+            self.y_emb = LabelConditioner(n_time=self.n_time, include_time_signal=not self.x_cond, **y_cond_kwargs)
 
         # Lyric conditioning
         if config.single_enc_dec:
             # Single encoder-decoder transformer
-            self.prior_shapes = [(self.n_tokens,), prior_kwargs.pop('input_shape')]
-            self.prior_bins = [prime_kwargs['bins'], prior_kwargs.pop('bins')]
+            self.prior_shapes = [(self.n_tokens,), prior_kwargs.pop("input_shape")]
+            self.prior_bins = [prime_kwargs["bins"], prior_kwargs.pop("bins")]
             self.prior_dims = [np.prod(shape) for shape in self.prior_shapes]
             self.prior_bins_shift = np.cumsum([0, *self.prior_bins])[:-1]
-            self.prior_width = prior_kwargs['width']
-            print(f'Creating cond. autoregress with prior bins {self.prior_bins}, ')
-            print(f'dims {self.prior_dims}, ')
-            print(f'shift {self.prior_bins_shift}')
-            print(f'input shape {sum(self.prior_dims)}')
-            print(f'input bins {sum(self.prior_bins)}')
-            print(f'Self copy is {self.copy_input}')
+            self.prior_width = prior_kwargs["width"]
+            print(f"Creating cond. autoregress with prior bins {self.prior_bins}, ")
+            print(f"dims {self.prior_dims}, ")
+            print(f"shift {self.prior_bins_shift}")
+            print(f"input shape {sum(self.prior_dims)}")
+            print(f"input bins {sum(self.prior_bins)}")
+            print(f"Self copy is {self.copy_input}")
 
             self.prime_loss_dims, self.gen_loss_dims = self.prior_dims[0], self.prior_dims[1]
             self.total_loss_dims = self.prime_loss_dims + self.gen_loss_dims
-            self.prior = JukeboxConditionalAutoregressive(input_shape=(sum(self.prior_dims),),
-                                                     bins=sum(self.prior_bins),
-                                                     x_cond=(self.x_cond or self.y_cond), y_cond=True,
-                                                     prime_len=self.prime_loss_dims,
-                                                     **prior_kwargs)
+            self.prior = JukeboxConditionalAutoregressive(
+                input_shape=(sum(self.prior_dims),),
+                bins=sum(self.prior_bins),
+                x_cond=(self.x_cond or self.y_cond),
+                y_cond=True,
+                prime_len=self.prime_loss_dims,
+                **prior_kwargs,
+            )
 
         else:
             # Separate encoder-decoder transformer
             if self.n_tokens != 0 and self.use_tokens:
                 from jukebox.transformer.ops import Conv1D
+
                 prime_input_shape = (self.n_tokens,)
                 self.prime_loss_dims = np.prod(prime_input_shape)
-                self.prime_acts_width, self.prime_state_width = prime_kwargs['width'], prior_kwargs['width']
-                self.prime_prior = JukeboxConditionalAutoregressive(input_shape=prime_input_shape, x_cond=False, y_cond=False,
-                                                               only_encode=True,
-                                                               **prime_kwargs)
-                self.prime_state_proj = Conv1D(self.prime_acts_width, self.prime_state_width, init_scale=prime_kwargs['init_scale'])
+                self.prime_acts_width, self.prime_state_width = prime_kwargs["width"], prior_kwargs["width"]
+                self.prime_prior = JukeboxConditionalAutoregressive(
+                    input_shape=prime_input_shape, x_cond=False, y_cond=False, only_encode=True, **prime_kwargs
+                )
+                self.prime_state_proj = Conv1D(
+                    self.prime_acts_width, self.prime_state_width, init_scale=prime_kwargs["init_scale"]
+                )
                 self.prime_state_ln = LayerNorm(self.prime_state_width)
-                self.prime_bins = prime_kwargs['bins']
+                self.prime_bins = prime_kwargs["bins"]
                 self.prime_x_out = nn.Linear(self.prime_state_width, self.prime_bins, bias=False)
-                nn.init.normal_(self.prime_x_out.weight, std=0.02 * prior_kwargs['init_scale'])
-            else: 
+                nn.init.normal_(self.prime_x_out.weight, std=0.02 * prior_kwargs["init_scale"])
+            else:
                 self.prime_loss_dims = 0
             self.gen_loss_dims = np.prod(self.z_shape)
             self.total_loss_dims = self.prime_loss_dims + self.gen_loss_dims
-            self.prior = JukeboxConditionalAutoregressive(x_cond=(self.x_cond or self.y_cond), y_cond=self.y_cond,
-                                                     encoder_dims = self.prime_loss_dims, merged_decoder=merged_decoder,
-                                                     **prior_kwargs)
+            self.prior = JukeboxConditionalAutoregressive(
+                x_cond=(self.x_cond or self.y_cond),
+                y_cond=self.y_cond,
+                encoder_dims=self.prime_loss_dims,
+                merged_decoder=config.merged_decoder[level],
+                **prior_kwargs,
+            )
 
         self.n_ctx = self.gen_loss_dims
-        self.downsamples = calculate_strides(config.strides, config.downsampling)
-        self.cond_downsample = self.downsamples[level+1] if level != self.levels - 1 else None
-        self.raw_to_tokens = np.prod(self.downsamples[:level+1])
-        self.sample_length = self.n_ctx*self.raw_to_tokens
-        # if the labels are used for training, the trainer will use it? 
-        # This is probably were its gonna get a bit complicated 
-        
+        self.downsamples = calculate_strides(config.strides_t, config.downs_t)
+        self.cond_downsample = self.downsamples[level + 1] if level != self.levels - 1 else None
+        self.raw_to_tokens = np.prod(self.downsamples[: level + 1])
+        self.sample_length = self.n_ctx * self.raw_to_tokens
+        # if the labels are used for training, the trainer will use it?
+        # This is probably were its gonna get a bit complicated
+
         # if labels:
         #     self.labels_v3 = labels_v3
         #     self.labeller = Labeller(self.y_emb.max_bow_genre_size, self.n_tokens, self.sample_length, v3=self.labels_v3)
         # else:
         #     self.labeller = EmptyLabeller()
 
-        print(f"Level:{level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample length:{self.sample_length}")
-
+        print(
+            f"Level:{level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample length:{self.sample_length}"
+        )
 
     def get_y(self, labels, start, get_indices=False):
-        # labeler does not exist this should be removed 
+        # labeler does not exist this should be removed
         # if isinstance(self.labeller, EmptyLabeller):
         #     return None
-        y = labels['y'].clone()
+        y = labels["y"].clone()
 
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
@@ -2678,8 +2741,8 @@ class JukeboxPrior(nn.Module):
     def get_z_conds(self, zs, start, end):
         if self.level != self.levels - 1:
             assert start % self.cond_downsample == end % self.cond_downsample == 0
-            z_cond = zs[self.level + 1][:,start//self.cond_downsample:end//self.cond_downsample]
-            assert z_cond.shape[1] == self.n_ctx//self.cond_downsample
+            z_cond = zs[self.level + 1][:, start // self.cond_downsample : end // self.cond_downsample]
+            assert z_cond.shape[1] == self.n_ctx // self.cond_downsample
             z_conds = [z_cond]
         else:
             z_conds = None
@@ -2690,9 +2753,9 @@ class JukeboxPrior(nn.Module):
         for i in range(len(xs)):
             x, shape, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
             bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
-            assert isinstance(x,  torch.cuda.LongTensor), x
+            assert isinstance(x, torch.cuda.LongTensor), x
             assert (0 <= x).all() and (x < bins).all()
-            #assert_shape(x, (N, *shape))
+            # assert_shape(x, (N, *shape))
             xs[i] = (xs[i] + bins_shift).view(N, -1)
 
         for i in range(len(conds)):
@@ -2701,9 +2764,9 @@ class JukeboxPrior(nn.Module):
                 # assert_shape(cond, (N, dims, self.prior_width))
                 pass
             else:
-                conds[i] =  torch.zeros((N, dims, self.prior_width), dtype=torch.float, device='cuda')
+                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device="cuda")
 
-        return  torch.cat(xs, dim=1),  torch.cat(conds, dim=1)
+        return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
     def prior_postprocess(self, z):
         N = z.shape[0]
@@ -2718,14 +2781,18 @@ class JukeboxPrior(nn.Module):
             bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
             # xs[i] = (xs[i] - bins_shift).view(N, *shape) #view(N, -1, *shape[1:])
             xs[i] = (xs[i] - bins_shift).view(N, -1, *shape[1:])
-            xs[i] =  torch.clamp(xs[i], min=0)  # If not masking loss, model may have generated lyric/midi tokens which are now shifted <0 by bin_shift
+            xs[i] = torch.clamp(
+                xs[i], min=0
+            )  # If not masking loss, model may have generated lyric/midi tokens which are now shifted <0 by bin_shift
             # assert (xs[i] < bins).all(), f'rank: {dist.get_rank()}, bins: {bins}, dims {dims}, shape {shape}, prior_shape {self.prior_shapes}, bins_shift {bins_shift}, xs[i]: {xs[i]}'
 
         return xs[-1]
 
     def x_emb(self, z_conds):
-        z_conds = z_conds[:self.cond_level - self.level]
-        assert len(z_conds) == len(self.conditioner_blocks) == self.cond_level - self.level, f"Expected {len(z_conds)} == {len(self.conditioner_blocks)} == {self.cond_level} - {self.level}"
+        z_conds = z_conds[: self.cond_level - self.level]
+        assert (
+            len(z_conds) == len(self.conditioner_blocks) == self.cond_level - self.level
+        ), f"Expected {len(z_conds)} == {len(self.conditioner_blocks)} == {self.cond_level} - {self.level}"
         x_cond = None
         for z_cond, conditioner_block in reversed(list(zip(z_conds, self.conditioner_blocks))):
             x_cond = conditioner_block(z_cond, x_cond)
@@ -2738,10 +2805,10 @@ class JukeboxPrior(nn.Module):
         if end_level == None:
             end_level = self.levels
         # Get latents
-        with  torch.no_grad():
+        with torch.no_grad():
             zs = self.encoder(x, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
         return zs
-    
+
     # same as above, the va-vae is no longer part of the prior
     def decode(self, zs, start_level=None, end_level=None, bs_chunks=1):
         if start_level == None:
@@ -2750,38 +2817,53 @@ class JukeboxPrior(nn.Module):
             end_level = self.levels
 
         assert len(zs) == end_level - start_level
-        with  torch.no_grad():
+        with torch.no_grad():
             x_out = self.decoder(zs, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
         return x_out
 
     def get_cond(self, z_conds, y):
         if y is not None:
-            assert y.shape[1] == 4 + self.y_emb.max_bow_genre_size + self.n_tokens, f"Expected {4} + {self.y_emb.max_bow_genre_size} + {self.n_tokens}, got {y.shape[1]}"
+            assert (
+                y.shape[1] == 4 + self.y_emb.max_bow_genre_size + self.n_tokens
+            ), f"Expected {4} + {self.y_emb.max_bow_genre_size} + {self.n_tokens}, got {y.shape[1]}"
             n_labels = y.shape[1] - self.n_tokens
-            y, prime = y[:,:n_labels], y[:,n_labels:]
+            y, prime = y[:, :n_labels], y[:, n_labels:]
         else:
             y, prime = None, None
         y_cond, y_pos = self.y_emb(y) if self.y_cond else (None, None)
         x_cond = self.x_emb(z_conds) if self.x_cond else y_pos
         return x_cond, y_cond, prime
 
-    def sample(self, n_samples, z=None, z_conds=None, y=None, fp16=False, temp=1.0, top_k=0, top_p=0.0,
-               chunk_size=None, sample_tokens=None):
+    def sample(
+        self,
+        n_samples,
+        z=None,
+        z_conds=None,
+        y=None,
+        fp16=False,
+        temp=1.0,
+        top_k=0,
+        top_p=0.0,
+        chunk_size=None,
+        sample_tokens=None,
+    ):
         N = n_samples
-        if z is not None: assert z.shape[0] == N, f"Expected shape ({N},**), got shape {z.shape}"
-        if y is not None: assert y.shape[0] == N, f"Expected shape ({N},**), got shape {y.shape}"
+        if z is not None:
+            assert z.shape[0] == N, f"Expected shape ({N},**), got shape {z.shape}"
+        if y is not None:
+            assert y.shape[0] == N, f"Expected shape ({N},**), got shape {y.shape}"
         if z_conds is not None:
             for z_cond in z_conds:
-                assert z_cond.shape[0] == N,  f"Expected shape ({N},**), got shape {z_cond.shape}"
+                assert z_cond.shape[0] == N, f"Expected shape ({N},**), got shape {z_cond.shape}"
 
-        no_past_context = (z is None or z.shape[1] == 0)
+        no_past_context = z is None or z.shape[1] == 0
         # if dist.get_rank() == 0:
         #     name = {True: 'Ancestral', False: 'Primed'}[no_past_context]
         #     print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
-        name = {True: 'Ancestral', False: 'Primed'}[no_past_context]
+        name = {True: "Ancestral", False: "Primed"}[no_past_context]
         print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
 
-        with  torch.no_grad():
+        with torch.no_grad():
             # Currently x_cond only uses immediately above layer
             x_cond, y_cond, prime = self.get_cond(z_conds, y)
             if self.single_enc_dec:
@@ -2792,33 +2874,63 @@ class JukeboxPrior(nn.Module):
                     z, x_cond = self.prior_preprocess([prime, z], [None, x_cond])
                 if sample_tokens is not None:
                     sample_tokens += self.n_tokens
-                z = self.prior.primed_sample(n_samples, z, x_cond, y_cond, fp16=fp16, temp=temp,
-                                             top_k=top_k, top_p=top_p, chunk_size=chunk_size, sample_tokens=sample_tokens)
+                z = self.prior.primed_sample(
+                    n_samples,
+                    z,
+                    x_cond,
+                    y_cond,
+                    fp16=fp16,
+                    temp=temp,
+                    top_k=top_k,
+                    top_p=top_p,
+                    chunk_size=chunk_size,
+                    sample_tokens=sample_tokens,
+                )
                 z = self.prior_postprocess(z)
             else:
                 encoder_kv = self.get_encoder_kv(prime, fp16=fp16, sample=True)
                 if no_past_context:
-                    z = self.prior.sample(n_samples, x_cond, y_cond, encoder_kv, fp16=fp16, temp=temp, top_k=top_k,
-                                          top_p=top_p, sample_tokens=sample_tokens)
+                    z = self.prior.sample(
+                        n_samples,
+                        x_cond,
+                        y_cond,
+                        encoder_kv,
+                        fp16=fp16,
+                        temp=temp,
+                        top_k=top_k,
+                        top_p=top_p,
+                        sample_tokens=sample_tokens,
+                    )
                 else:
-                    z = self.prior.primed_sample(n_samples, z, x_cond, y_cond, encoder_kv, fp16=fp16, temp=temp,
-                                             top_k=top_k, top_p=top_p, chunk_size=chunk_size, sample_tokens=sample_tokens)
+                    z = self.prior.primed_sample(
+                        n_samples,
+                        z,
+                        x_cond,
+                        y_cond,
+                        encoder_kv,
+                        fp16=fp16,
+                        temp=temp,
+                        top_k=top_k,
+                        top_p=top_p,
+                        chunk_size=chunk_size,
+                        sample_tokens=sample_tokens,
+                    )
             if sample_tokens is None:
-               # assert_shape(z, (N, *self.z_shape))
-               pass
+                # assert_shape(z, (N, *self.z_shape))
+                pass
         return z
 
     def get_encoder_kv(self, prime, fp16=False, sample=False):
         if self.n_tokens != 0 and self.use_tokens:
             if sample:
-                #self.prime_prior.cuda()
+                # self.prime_prior.cuda()
                 pass
             N = prime.shape[0]
             prime_acts = self.prime_prior(prime, None, None, None, fp16=fp16)
             # assert_shape(prime_acts, (N, self.prime_loss_dims, self.prime_acts_width))
-            assert prime_acts.dtype ==  torch.float, f'Expected  torch.float, got {prime_acts.dtype}'
+            assert prime_acts.dtype == torch.float, f"Expected  torch.float, got {prime_acts.dtype}"
             encoder_kv = self.prime_state_ln(self.prime_state_proj(prime_acts))
-            assert encoder_kv.dtype ==  torch.float, f'Expected  torch.float, got {encoder_kv.dtype}'
+            assert encoder_kv.dtype == torch.float, f"Expected  torch.float, got {encoder_kv.dtype}"
             if sample:
                 self.prime_prior.cpu()
                 if fp16:
@@ -2831,36 +2943,41 @@ class JukeboxPrior(nn.Module):
         if self.use_tokens:
             encoder_kv = encoder_kv.float()
             encoder_kv = self.prime_x_out(encoder_kv)
-            prime_loss = nn.functional.cross_entropy(encoder_kv.view(-1, self.prime_bins), prime_t.view(-1)) / np.log(2.)
+            prime_loss = nn.functional.cross_entropy(encoder_kv.view(-1, self.prime_bins), prime_t.view(-1)) / np.log(
+                2.0
+            )
         else:
-            prime_loss =  torch.tensor(0.0, device='cuda')
+            prime_loss = torch.tensor(0.0, device="cuda")
         return prime_loss
 
     def z_forward(self, z, z_conds=[], y=None, fp16=False, get_preds=False, get_attn_weights=False):
         """
         Arguments:
             get_attn_weights (bool or set): Makes forward prop dump
-                self-attention softmaxes to self.prior.transformer.ws. Either a
-                set of layer indices indicating which layers to store, or a
-                boolean value indicating whether to dump all.
+                self-attention softmaxes to self.prior.transformer.ws. Either a set of layer indices indicating which
+                layers to store, or a boolean value indicating whether to dump all.
         """
         assert isinstance(get_attn_weights, (bool, set))
         if get_attn_weights:
             self.prior.transformer.set_record_attn(get_attn_weights)
         x_cond, y_cond, prime = self.get_cond(z_conds, y)
         if self.copy_input:
-            prime = z[:,:self.n_tokens]
+            prime = z[:, : self.n_tokens]
         if self.single_enc_dec:
             z, x_cond = self.prior_preprocess([prime, z], [None, x_cond])
-            (prime_loss, gen_loss), preds = self.prior(z, x_cond, y_cond, fp16=fp16, get_sep_loss=True, get_preds=get_preds)
+            (prime_loss, gen_loss), preds = self.prior(
+                z, x_cond, y_cond, fp16=fp16, get_sep_loss=True, get_preds=get_preds
+            )
         else:
             encoder_kv = self.get_encoder_kv(prime, fp16=fp16)
             prime_loss = self.get_prime_loss(encoder_kv, prime)
             gen_loss, preds = self.prior(z, x_cond, y_cond, encoder_kv, fp16=fp16, get_preds=get_preds)
-        loss = (self.prime_loss_fraction*prime_loss*self.prime_loss_dims/self.total_loss_dims) + \
-                   (gen_loss*self.gen_loss_dims/self.total_loss_dims)
-        metrics=dict(bpd=gen_loss.clone().detach(), prime_loss=prime_loss.clone().detach(),
-                     gen_loss=gen_loss.clone().detach())
+        loss = (self.prime_loss_fraction * prime_loss * self.prime_loss_dims / self.total_loss_dims) + (
+            gen_loss * self.gen_loss_dims / self.total_loss_dims
+        )
+        metrics = dict(
+            bpd=gen_loss.clone().detach(), prime_loss=prime_loss.clone().detach(), gen_loss=gen_loss.clone().detach()
+        )
         if get_preds:
             metrics["preds"] = preds.clone().detach()
         if get_attn_weights:
@@ -2879,7 +2996,6 @@ class JukeboxPrior(nn.Module):
         else:
             x_out = None
         return x_out, loss, metrics
-
 
 
 class JukeboxPreTrainedModel(PreTrainedModel):
@@ -3117,6 +3233,7 @@ def split_batch(obj, n_samples, split_size):
     else:
         raise TypeError("Unknown input type")
 
+
 # Break total_length into hops/windows of size n_ctx separated by hop_length
 def get_starts(total_length, n_ctx, hop_length):
     starts = []
@@ -3126,6 +3243,7 @@ def get_starts(total_length, n_ctx, hop_length):
             start = total_length - n_ctx
         starts.append(start)
     return starts
+
 
 def get_alignment(x, zs, labels, prior, fp16, hps):
     level = hps.levels - 1  # Top level used
@@ -3211,6 +3329,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.embed_dim = config.hidden_size
 
         self.vqvae = VQVAE(config)
+        config.vqvae_z_shapes = self.vqvae.z_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
         # Model parallel
@@ -3620,7 +3739,3 @@ class JukeboxModel(JukeboxPreTrainedModel):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
-
-
-
-
