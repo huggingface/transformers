@@ -211,7 +211,6 @@ class JukeboxConfig(PretrainedConfig):
         # args for the priors, 3 priors
         n_ctx=8192,
         t_bins=128,
-        # l_bins=512,
         downs_t=(3, 2, 2),
         strides_t=(2, 2, 2),
         single_enc_dec=False,
@@ -228,21 +227,30 @@ class JukeboxConfig(PretrainedConfig):
         blocks=128,
         c_res=1,
         init_scale=[0.7, 1, 1],
-        prime_width=[1280, 128, 128],
-        prime_depth=[18, 3, 3],
         cond_depth=[3, 16, 16],
         cond_width=[128, 1024, 1024],
         cond_dilation_growth_rate=[1, 3, 3],
         cond_dilation_cycle=[None, 8, 8],
         cond_c_res=[0, 1, 1],
         cond_res_scale=False,
+        prime_width=[1280, 128, 128],
+        prime_depth=[18, 3, 3],
         prime_cond_c_res=[0, 1, 1],
         prime_heads=4,
-        prime_attn_order=2,
+        prime_m_attn=0.25,
+        prime_m_mlp=1.0,
         prime_blocks=32,
         prime_init_scale=[0.1, 0.4, 0.4],
         prime_c_res=1,
         prime_loss_fraction=[0.4, 0.0, 0.0],
+        prime_attn_order=[2,0,0],
+        prime_attn_dropout=0.0,
+        prime_resid_dropout=0.0,
+        prime_emb_dropout=0.0,
+        prime_zero_out=False,
+        prime_res_scale=False,
+        prime_pos_init=False,
+
         min_duration=23.8,
         max_duration=600.0,
         fp16_params=True,
@@ -254,6 +262,15 @@ class JukeboxConfig(PretrainedConfig):
         max_bow_genre_size=5,  # this should only be in the tokenizer
         **kwargs,
     ):
+        self.prime_zero_out=prime_zero_out
+        self.prime_res_scale=prime_res_scale
+        self.prime_pos_init=prime_pos_init
+        self.prime_resid_dropout=prime_resid_dropout
+        self.prime_attn_dropout=prime_attn_dropout
+        self.prime_m_mlp=prime_m_mlp
+        self.prime_m_attn=prime_m_attn
+        self.prime_emb_dropout=prime_emb_dropout
+        self.prime_attn_order=prime_attn_order
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
