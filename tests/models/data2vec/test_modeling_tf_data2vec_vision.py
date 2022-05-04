@@ -28,17 +28,13 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
-DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft1k",
-    # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
-]
-
-
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFData2VecVisionForImageClassification, TFData2VecVisionModel
-
+    from transformers.models.data2vec.modeling_tf_data2vec_vision import (
+        TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
 
 if is_vision_available():
     from PIL import Image
@@ -421,7 +417,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFData2VecVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
