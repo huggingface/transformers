@@ -549,7 +549,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -785,7 +785,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
