@@ -17,13 +17,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
+from transformers import is_sentencepiece_available
+
 from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
-    "tokenization_fnet": ["FNetTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_fnet"] = ["FNetTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_fnet_fast"] = ["FNetTokenizerFast"]
@@ -46,7 +50,9 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
-    from .tokenization_fnet import FNetTokenizer
+
+    if is_sentencepiece_available():
+        from .tokenization_fnet import FNetTokenizer
 
     if is_tokenizers_available():
         from .tokenization_fnet_fast import FNetTokenizerFast

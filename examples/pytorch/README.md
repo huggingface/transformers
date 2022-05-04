@@ -167,10 +167,10 @@ python xla_spawn.py --num_cores 8 \
 
 Most PyTorch example scripts have a version using the [🤗 Accelerate](https://github.com/huggingface/accelerate) library
 that exposes the training loop so it's easy for you to customize or tweak them to your needs. They all require you to
-install `accelerate` with
+install `accelerate` with the latest development version
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 Then you can easily launch any of the scripts by running

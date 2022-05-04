@@ -1344,7 +1344,7 @@ FLAX_T5_MODEL_DOCSTRING = """
 
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
-    >>> ).input_ids
+    ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
     >>> # forward pass

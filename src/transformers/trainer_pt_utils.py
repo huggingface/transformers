@@ -22,6 +22,7 @@ import math
 import os
 import sys
 import warnings
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
@@ -111,7 +112,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, (dict, BatchEncoding)):
+    elif isinstance(tensors, Mapping):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:

@@ -13,8 +13,8 @@ class FakeOriginalTokenizer:
 
 class ConvertSlowTokenizerTest(unittest.TestCase):
     def test_spm_converter_bytefallback_warning(self):
-        spm_model_file_without_bytefallback = f"{get_tests_dir()}/fixtures/test_sentencepiece.model"
-        spm_model_file_with_bytefallback = f"{get_tests_dir()}/fixtures/test_sentencepiece_with_bytefallback.model"
+        spm_model_file_without_bytefallback = get_tests_dir("fixtures/test_sentencepiece.model")
+        spm_model_file_with_bytefallback = get_tests_dir("fixtures/test_sentencepiece_with_bytefallback.model")
 
         original_tokenizer_without_bytefallback = FakeOriginalTokenizer(vocab_file=spm_model_file_without_bytefallback)
 
