@@ -149,7 +149,7 @@ Ahora necesitas una segunda función de preprocesamiento para capturar el texto 
 ...     return result
 ```
 
-Aplica la función `group_texts` sobre todo el conjunto de datos:
+Aplica la función `group_texts` sobre todo el dataset:
 
 ```py
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
