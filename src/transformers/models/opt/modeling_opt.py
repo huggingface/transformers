@@ -785,6 +785,7 @@ class OPTDecoder(OPTPretrainedModel):
         self.share_input_output_embed = config.share_input_output_embed
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.cross_self_attention = False # TODO add it on the config
+        self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.embed_dim, self.padding_idx)
 
@@ -931,6 +932,7 @@ class OPTDecoder(OPTPretrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
@@ -945,6 +947,7 @@ class OPTDecoder(OPTPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
+        
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
@@ -1199,8 +1202,8 @@ class OPTForConditionalGeneration(OPTPretrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.model = OPTModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.decoder.vocab_size)))
+        self.lm_head = nn.Linear(config.d_model, self.model.decoder.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1775,7 +1778,7 @@ class OPTForCausalLM(OPTPretrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.lm_head(outputs[0])
+        logits = self.lm_head(outputs[0]).permute(1, 0, 2)
 
         loss = None
         if labels is not None:

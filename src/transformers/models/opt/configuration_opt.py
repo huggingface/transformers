@@ -129,7 +129,7 @@ class OPTConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         share_input_output_embed=True,
-        use_cache=True,
+        use_cache=False,
         num_labels=3,
         pad_token_id=1,
         bos_token_id=0,
