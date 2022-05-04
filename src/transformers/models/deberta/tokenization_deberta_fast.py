@@ -183,7 +183,7 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
         sequence pair mask has the following format:
 
         ```
-        0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
         | first sequence    | second sequence |
         ```
 
@@ -203,4 +203,4 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
