@@ -27,8 +27,7 @@ print(f"Dataset loaded in {time.time()-t_start:.2f}s")
 t_start = time.time()
 ds = ds.map(
     tokenize,
-    batched=True,
-    batch_size=10_000,
+    num_proc=args.num_workers,
     remove_columns=[
         "repo_name",
         "path",
