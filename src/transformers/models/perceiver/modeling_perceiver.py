@@ -2069,7 +2069,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     def __init__(
         self,
         config: PerceiverConfig,
-        output_num_channels: Optional[int],
+        output_num_channels: int,
         position_encoding_type: Optional[str] = "trainable",
         # The following 2 arguments are ignored if position_encoding_type == 'none':
         output_index_dims: Optional[int] = None,
