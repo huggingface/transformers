@@ -15,6 +15,7 @@
 
 import dataclasses
 import gc
+import logging
 import math
 import os
 import random
@@ -32,14 +33,7 @@ import numpy as np
 from huggingface_hub import Repository, delete_repo, login
 from parameterized import parameterized
 from requests.exceptions import HTTPError
-from transformers import (
-    AutoTokenizer,
-    IntervalStrategy,
-    PretrainedConfig,
-    TrainingArguments,
-    is_torch_available,
-    logging,
-)
+from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -1031,26 +1025,31 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
 
-        sys.path.extend(os.path.realpath("../../../examples/pytorch/text-classification/"))
+        SRC_DIR = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
+        )
+        sys.path.append(SRC_DIR)
         import run_glue
 
-        testargs = """
-            run_glue.py
-            --model_name_or_path distilbert-base-uncased
-            --task_name mrpc
-            --do_train
-            --do_eval
-            --max_seq_len 128
-            --per_device_train_batch_size 4096
-            --learning_rate 2e-5
-            --num_train_epochs 1
-            --auto_find_batch_size 0
-            """.split()
-        with self.assertRaises(RuntimeError):
-            with patch.object(sys, "argv", testargs):
-                run_glue.main()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            testargs = f"""
+                run_glue.py
+                --model_name_or_path distilbert-base-uncased
+                --task_name mrpc
+                --do_train
+                --do_eval
+                --max_seq_len 128
+                --per_device_train_batch_size 4096
+                --learning_rate 2e-5
+                --num_train_epochs 1
+                --output_dir {tmpdir}
+                --auto_find_batch_size 0
+                """.split()
+            with self.assertRaises(RuntimeError):
+                with patch.object(sys, "argv", testargs):
+                    run_glue.main()
 
-        testargs[-1] = "--auto_find_batch_size 1"
+        testargs[-1] = "1"
         with patch.object(sys, "argv", testargs):
             run_glue.main()
 
