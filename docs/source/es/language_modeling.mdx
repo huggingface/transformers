@@ -42,7 +42,7 @@ Carga solo los primeros 5000 registros desde la biblioteca 🤗 Datasets, dado q
 >>> eli5 = load_dataset("eli5", split="train_asks[:5000]")
 ```
 
-Divide este conjunto de datos en subconjuntos para el entrenamiento y el test:
+Divide este dataset en subdatasets para el entrenamiento y el test:
 
 ```py
 eli5 = eli5.train_test_split(test_size=0.2)
