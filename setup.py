@@ -140,6 +140,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
@@ -288,7 +289,8 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
-        'sacremoses'
+        "sacremoses",
+        "rjieba"
     )
     + extras["retrieval"]
     + extras["modelcreation"]

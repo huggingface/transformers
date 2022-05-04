@@ -71,3 +71,7 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # can't train new_tokenizer via Tokenizers lib
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
+
+    # can't serialise custom PreTokenizer
+    def test_save_slow_from_fast_and_reload_fast(self):
+        pass
