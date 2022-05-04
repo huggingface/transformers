@@ -131,6 +131,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
+    "models.opt": ["OPTConfig", "OPTTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
@@ -451,6 +452,7 @@ if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
+    _import_structure["models.opt"].append("OPTTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
@@ -729,6 +731,18 @@ if is_torch_available():
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.opt"].extend(
+        [
+            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OPTForCausalLM",
+            "OPTForConditionalGeneration",
+            "OPTForQuestionAnswering",
+            "OPTForSequenceClassification",
+            "OPTModel",
+            "OPTPretrainedModel",
+            "PretrainedOPTModel",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -1805,6 +1819,7 @@ if is_tf_available():
         ]
     )
     _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"])
+    _import_structure["models.opt"].extend(["TFOPTForConditionalGeneration", "TFOPTModel", "TFOPTPretrainedModel"])
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2303,6 +2318,17 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+    _import_structure["models.opt"].extend(
+        [
+            "FlaxOPTDecoderPreTrainedModel",
+            "FlaxOPTForCausalLM",
+            "FlaxOPTForConditionalGeneration",
+            "FlaxOPTForQuestionAnswering",
+            "FlaxOPTForSequenceClassification",
+            "FlaxOPTModel",
+            "FlaxOPTPreTrainedModel",
+        ]
+    )
 
     _import_structure["models.beit"].extend(
         [
@@ -2551,6 +2577,7 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
+    from .models.opt import OPTConfig, OPTTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2840,6 +2867,7 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
+        from .models.opt import OPTTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
@@ -3068,6 +3096,16 @@ if TYPE_CHECKING:
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
+        )
+        from .models.opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OPTForCausalLM,
+            OPTForConditionalGeneration,
+            OPTForQuestionAnswering,
+            OPTForSequenceClassification,
+            OPTModel,
+            OPTPretrainedModel,
+            PretrainedOPTModel,
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3968,6 +4006,7 @@ if TYPE_CHECKING:
             TFAutoModelWithLMHead,
         )
         from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+        from .models.opt import TFOPTForConditionalGeneration, TFOPTModel, TFOPTPretrainedModel
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
@@ -4359,6 +4398,15 @@ if TYPE_CHECKING:
             FlaxBartForSequenceClassification,
             FlaxBartModel,
             FlaxBartPreTrainedModel,
+        )
+        from .models.opt import (
+            FlaxOPTDecoderPreTrainedModel,
+            FlaxOPTForCausalLM,
+            FlaxOPTForConditionalGeneration,
+            FlaxOPTForQuestionAnswering,
+            FlaxOPTForSequenceClassification,
+            FlaxOPTModel,
+            FlaxOPTPreTrainedModel,
         )
         from .models.beit import (
             FlaxBeitForImageClassification,
