@@ -428,11 +428,7 @@ class AlbertLayerGroup(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Union[
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
-        Tuple[torch.Tensor, Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]],
-    ]:
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         layer_hidden_states = ()
         layer_attentions = ()
 
