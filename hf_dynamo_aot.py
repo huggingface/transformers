@@ -4,6 +4,7 @@ import gc
 import time
 from functools import partial
 
+import numpy as np
 import pandas as pd
 import torch
 from torch.nn.utils import _stateless
@@ -18,7 +19,6 @@ from transformers import ReformerConfig
 import torchdynamo
 from torchdynamo.optimizations.training import aot_autograd_debug_strategy1
 from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-from torchdynamo.testing import clone_me, reduce_to_scalar_loss
 from torchdynamo.testing import collect_results
 from torchdynamo.testing import same
 
@@ -75,8 +75,7 @@ def forward_pass(mod, inputs, collect_outputs=True):
 def forward_and_backward_pass(mod, inputs, collect_outputs=True):
     mod.zero_grad(True)
     pred = mod(**inputs)
-    loss = reduce_to_scalar_loss(pred)
-    # loss = pred.loss.mean()
+    loss = pred.loss.mean()
     loss.backward()
     if collect_outputs:
         return collect_results(mod, pred, loss, example_inputs=())
@@ -109,6 +108,21 @@ def check_correctness(mod, train_inputs, optimize_ctx):
     return True
 
 
+synchronize = torch.cuda.synchronize
+
+
+def timed(model, model_iter_fn, train_inputs, timings=1, return_result=False):
+    synchronize()
+    torch.manual_seed(1337)
+    t0 = time.perf_counter()
+    # Dont collect outputs to correctly measure timing
+    for _ in range(timings):
+        result = model_iter_fn(model, train_inputs, collect_outputs=False)
+        synchronize()
+    t1 = time.perf_counter()
+    return (t1 - t0, result) if return_result else t1 - t0
+
+
 @torchdynamo.skip
 def bench_model(args, name, mod, train_inputs, optimize_ctx):
     with optimize_ctx:
@@ -120,28 +134,32 @@ def bench_model(args, name, mod, train_inputs, optimize_ctx):
                 m = get_cur_memory()
             out.backward()
 
-        # Profile time
-        iters = 20
-        torch.cuda.synchronize()
-        begin = time.time()
+        # Warmup
+        iters = 5
         for _ in range(iters):
-            forward_and_backward_pass(mod, train_inputs, False)
-        torch.cuda.synchronize()
-        end = time.time()
-        t = (end - begin) / iters
+            timed(mod, forward_and_backward_pass, train_inputs)
+        synchronize()
+
+        # Profile time
+        iters = 50
+        synchronize()
+        timings = []
+        for _ in range(iters):
+            timings.append(timed(mod, forward_and_backward_pass, train_inputs))
+        t = np.median(timings, axis=0)
 
     print(name, t, m)
     return t, m
 
 
-model_header, dtype_header, nh, th, mh, tp, mp, acc = (
+model_header, dtype_header, nh, th, mh, sp, mp, acc = (
     "model",
     "dtype",
     "name",
     "time (s)",
     "mem (GB)",
-    "time %",
-    "mem %",
+    "speedup",
+    "mem_compresssion",
     "is_accurate",
 )
 
@@ -199,16 +217,14 @@ def run_all(args, optimize_ctx, optimize_name):
             results.append(create_record(model_name, dtype, is_accurate, "eager", t, m))
 
             # Profile Dynamo nvfuser
-            # TODO - Move this into the torchdyanmo context manager
-            with torch.jit.fuser("fuser2"):
-                t, m = bench_model(args, optimize_name, model, train_inputs, optimize_ctx)
+            t, m = bench_model(args, optimize_name, model, train_inputs, optimize_ctx)
             results.append(create_record(model_name, dtype, is_accurate, optimize_name, t, m))
 
             # calculate relative improvements
             base_r = results[-2]
             for r in results[-2:]:
-                r[tp] = round(100 * (r[th] - base_r[th]) / base_r[th])
-                r[mp] = round(100 * (r[mh] - base_r[mh]) / base_r[mh])
+                r[sp] = round(base_r[th] / r[th], 3)
+                r[mp] = round(base_r[mh] / r[mh], 3)
             print(pd.DataFrame(results[-2:]).to_markdown(index=False, floatfmt=".3f"))
 
     print("=== Final results ===")
@@ -222,6 +238,7 @@ def main():
         action="store_true",
         help="sets model.eval() to reduce randomness",
     )
+    parser.add_argument("--nvfuser", action="store_true", help="enable nvfuser globally")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-dynamo-eager",
@@ -242,6 +259,18 @@ def main():
     args = parser.parse_args()
     optimize_ctx = NullContext()
     optimize_name = "eager"
+
+    if args.nvfuser:
+        torch._C._jit_override_can_fuse_on_cpu(False)
+        torch._C._jit_override_can_fuse_on_gpu(False)
+        torch._C._jit_set_texpr_fuser_enabled(False)
+        torch._C._jit_set_nvfuser_enabled(True)
+    else:
+        torch._C._jit_override_can_fuse_on_cpu(True)
+        torch._C._jit_override_can_fuse_on_gpu(True)
+        torch._C._jit_set_texpr_fuser_enabled(True)
+        if torch.cuda.is_available():
+            torch._C._jit_set_nvfuser_enabled(False)
 
     if args.run_dynamo_eager:
         optimize_ctx = torchdynamo.optimize("eager")
