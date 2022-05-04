@@ -12,6 +12,95 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+""" CMUDict
+    from https://github.com/keithito/tacotron 
+    from https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/FastPitch/common/text/cmudict.py d0d427d357816d565b9732b6c40275a2a46d00e7
+    Adapted for Hugging Face
+"""
+from posixpath import split
+import re
+from pathlib import Path
+from typing import Union
+from typing_extensions import NotRequired
+
+from defusedxml import NotSupportedError
+# We are not using pip3 cmudict because it is a GPL-3 Version of CMU Dict.
+# Question where should we put this in utilities? TODO Raise question
+# cmudict-0.7b.txt is the version that should be used
+class CMUDict:
+
+    valid_symbols = [
+        'AA', 'AA0', 'AA1', 'AA2', 'AE', 'AE0', 'AE1', 'AE2', 'AH', 'AH0', 'AH1', 'AH2',
+        'AO', 'AO0', 'AO1', 'AO2', 'AW', 'AW0', 'AW1', 'AW2', 'AY', 'AY0', 'AY1', 'AY2',
+        'B', 'CH', 'D', 'DH', 'EH', 'EH0', 'EH1', 'EH2', 'ER', 'ER0', 'ER1', 'ER2', 'EY',
+        'EY0', 'EY1', 'EY2', 'F', 'G', 'HH', 'IH', 'IH0', 'IH1', 'IH2', 'IY', 'IY0', 'IY1',
+        'IY2', 'JH', 'K', 'L', 'M', 'N', 'NG', 'OW', 'OW0', 'OW1', 'OW2', 'OY', 'OY0',
+        'OY1', 'OY2', 'P', 'R', 'S', 'SH', 'T', 'TH', 'UH', 'UH0', 'UH1', 'UH2', 'UW',
+        'UW0', 'UW1', 'UW2', 'V', 'W', 'Y', 'Z', 'ZH'
+    ]
+
+    '''Thin wrapper around CMUDict data. http://www.speech.cs.cmu.edu/cgi-bin/cmudict'''
+    def __init__(self, file_or_path=None, heteronyms_path=None, keep_ambiguous=True):
+        self._valid_symbol_set = set(CMUDict.valid_symbols)
+        self._alt_re = re.compile(r'\([0-9]+\)')
+        self._entries = {}
+        self.heteronyms = []
+        if file_or_path is not None:
+            self.initialize(file_or_path, heteronyms_path, keep_ambiguous)
+
+    def initialize(self, file_or_path, heteronyms_path, keep_ambiguous=True):
+        if isinstance(file_or_path, str):
+            if not Path(file_or_path).exists():
+                print("CMUdict missing")
+            with open(file_or_path, encoding='latin-1') as f:
+                entries = self._parse_cmudict(f)
+        else:
+            entries = self._parse_cmudict(file_or_path)
+
+        if not keep_ambiguous:
+            entries = {word: pron for word, pron in self._entries.items() if len(pron) == 1}
+        
+        self._entries = entries
+
+        if heteronyms_path is not None:
+            with open(heteronyms_path, encoding='utf-8') as f:
+                self.heteronyms = [l.rstrip() for l in f]
+
+    def __len__(self):
+        if len(self._entries) == 0:
+            raise ValueError("CMUDict not initialized")
+        return len(self._entries)
+
+    def lookup(self, word)->Union[str, None]:
+        '''Returns list of ARPAbet pronunciations of the given word.'''
+        if len(self._entries) == 0:
+            raise ValueError("CMUDict not initialized")
+        return self._entries.get(word.upper())
+        
+    def _parse_cmudict(self,file):
+        cmudict = {}
+        for line in file:
+            if len(line) and (line[0] >= 'A' and line[0] <= 'Z' or line[0] == "'"):
+                parts = line.split('  ')
+                word = re.sub(self._alt_re, '', parts[0])
+                pronunciation = self._get_pronunciation(parts[1])
+                if pronunciation:
+                    if word in cmudict:
+                        cmudict[word].append(pronunciation)
+                    else:
+                        cmudict[word] = [pronunciation]
+        return cmudict
+
+    def _get_pronunciation(self,s):
+        parts = s.strip().split(' ')
+        for part in parts:
+            if part not in self._valid_symbol_set:
+                return None
+        return ' '.join(parts)
+
+
 """Tokenization classes for FastPitch."""
 from typing import List, Optional
 
@@ -21,6 +110,7 @@ from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
+from ...file_utils import requires_backends
 
 logger = logging.get_logger(__name__)
 
@@ -35,7 +125,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "fast-pitch": 1024,
 }
-
 
 class FastPitchTokenizer(PreTrainedTokenizer):
     """
@@ -54,31 +143,40 @@ class FastPitchTokenizer(PreTrainedTokenizer):
     def __init__(
         self, vocab_file, unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-
-        "Initialisation"
+        # requires cmudict backend 
+        self.cmudict = CMUDict()
 
     @property
     def vocab_size(self):
         "Returns vocab size"
+        return len(self.cmudict)
 
     def get_vocab(self):
         "Returns vocab as a dict"
+        # Ask for clearification on 
+        return self.cmudict._entries 
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
+        # turn whole string in a series of tokens
+        pass 
 
     def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
+        """Converts a token (str) in an arpabet using the vocab."""
+        return self.cmudict.lookup(token)
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
+        """Converts an index arpabet in a token (str) using the vocab."""
+        return 
 
     def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
+        """Converts a sequence of tokens (string) in a single string.
+           Convert Arpabet back to single string.
+        """ 
+        # loop through and do a look up and build a string
+        # error out on empty string find out the way that is done.
+        pass 
 
     def save_vocabulary(self, save_directory):
         """
@@ -91,6 +189,7 @@ class FastPitchTokenizer(PreTrainedTokenizer):
         Returns:
             `Tuple(str)`: Paths to the files saved.
         """
+        raise NotSupportedError
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
