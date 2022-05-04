@@ -1,5 +1,7 @@
 docs/source/en/quicktour.mdx
 docs/source/es/quicktour.mdx
+docs/source/en/pipeline_tutorial.mdx
+docs/source/en/autoclass_tutorial.mdx
 docs/source/en/task_summary.mdx
 docs/source/en/model_doc/speech_to_text.mdx
 docs/source/en/model_doc/t5.mdx
