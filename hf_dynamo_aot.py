@@ -2,6 +2,7 @@ import argparse
 import copy
 import gc
 import time
+from functools import partial
 
 import pandas as pd
 import torch
@@ -15,14 +16,19 @@ from transformers import BigBirdConfig
 from transformers import ReformerConfig
 
 import torchdynamo
+from torchdynamo.optimizations.training import aot_autograd_debug_strategy1
 from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-from torchdynamo.testing import clone_me
+from torchdynamo.testing import clone_me, reduce_to_scalar_loss
 from torchdynamo.testing import collect_results
 from torchdynamo.testing import same
 
+## TODO
+# 1) Add run_only argument and refactor
+# 2) Figure out how to get a large number of configs and model automatically. Go beyond Torchbench.
+
 benchmarks = [
-    (BertConfig(), AutoModelForMaskedLM, (4, 512), []),
-    # (AutoConfig.from_pretrained("albert-base-v2"), AutoModelForMaskedLM, (8, 512), []),
+    # (BertConfig(), AutoModelForMaskedLM, (4, 512), []),
+    (AutoConfig.from_pretrained("albert-base-v2"), AutoModelForMaskedLM, (8, 512), [torch.float16, torch.bfloat16]),
     # (AutoConfig.from_pretrained("gpt2"), AutoModelForCausalLM, (4, 512), []),
     # (
     #     AutoConfig.from_pretrained("allenai/longformer-base-4096"),
@@ -69,7 +75,8 @@ def forward_pass(mod, inputs, collect_outputs=True):
 def forward_and_backward_pass(mod, inputs, collect_outputs=True):
     mod.zero_grad(True)
     pred = mod(**inputs)
-    loss = pred.loss.mean()
+    loss = reduce_to_scalar_loss(pred)
+    # loss = pred.loss.mean()
     loss.backward()
     if collect_outputs:
         return collect_results(mod, pred, loss, example_inputs=())
@@ -77,12 +84,7 @@ def forward_and_backward_pass(mod, inputs, collect_outputs=True):
 
 
 @torchdynamo.skip
-def check_correctness(args, mod, train_inputs):
-    if args.run_dynamo_eager:
-        optimize_ctx = torchdynamo.optimize("eager")
-    else:
-        optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
-
+def check_correctness(mod, train_inputs, optimize_ctx):
     torch.manual_seed(1337)
     correct_result = forward_and_backward_pass(copy.deepcopy(mod), train_inputs)
 
@@ -108,16 +110,7 @@ def check_correctness(args, mod, train_inputs):
 
 
 @torchdynamo.skip
-def bench_model(args, name, mod, train_inputs):
-    assert name in ("eager", "dynamo_aot", "dynamo_eager")
-    if name == "eager":
-        optimize_ctx = NullContext()
-    else:
-        if args.run_dynamo_eager:
-            optimize_ctx = torchdynamo.optimize("eager")
-        else:
-            optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
-
+def bench_model(args, name, mod, train_inputs, optimize_ctx):
     with optimize_ctx:
         # Profile memory
         m = None
@@ -160,7 +153,7 @@ def create_record(model_name, dtype, is_accurate, name, t, m):
         acc: is_accurate,
         nh: name,
         th: t,
-        mh: m / 2**30,
+        mh: m / 2 ** 30,
     }
 
 
@@ -168,20 +161,28 @@ numerical_diffs = []
 results = []
 
 
-def run_all(args):
+def load_model(config, model_type, dtype, args):
+    for attr in dir(config):
+        if "drop" in attr:
+            setattr(
+                config, attr, 1e-60
+            )  # So we can check for correct gradients without eliminating the dropout computation
+
+    model = model_type.from_config(config).to(device, dtype=dtype)
+    if args.use_eval_mode:
+        model.eval()
+    else:
+        model.train()
+    return model
+
+
+def run_all(args, optimize_ctx, optimize_name):
     for config, model_type, input_size, not_supported_dtypes in benchmarks:
         for dtype in [torch.float, torch.half, torch.bfloat16]:
             if dtype in not_supported_dtypes:
                 continue
-            for attr in dir(config):
-                if "drop" in attr:
-                    setattr(
-                        config, attr, 1e-60
-                    )  # So we can check for correct gradients without eliminating the dropout computation
-            model = model_type.from_config(config).to(device, dtype=dtype)
 
-            if args.use_eval_mode:
-                model.eval()
+            model = load_model(config, model_type, dtype, args)
 
             model_name = type(model).__name__
 
@@ -191,20 +192,17 @@ def run_all(args):
             train_inputs = {"input_ids": input_ids, "labels": decoder_ids}
 
             # Correctness check
-            is_accurate = check_correctness(args, model, train_inputs)
+            is_accurate = check_correctness(model, train_inputs, optimize_ctx)
 
             # Profile eager
-            t, m = bench_model(args, "eager", model, train_inputs)
+            t, m = bench_model(args, "eager", model, train_inputs, NullContext())
             results.append(create_record(model_name, dtype, is_accurate, "eager", t, m))
 
             # Profile Dynamo nvfuser
-            dynamo_str = "dynamo_aot"
-            if args.run_dynamo_eager:
-                dynamo_str = "dynamo_eager"
-
+            # TODO - Move this into the torchdyanmo context manager
             with torch.jit.fuser("fuser2"):
-                t, m = bench_model(args, dynamo_str, model, train_inputs)
-            results.append(create_record(model_name, dtype, is_accurate, dynamo_str, t, m))
+                t, m = bench_model(args, optimize_name, model, train_inputs, optimize_ctx)
+            results.append(create_record(model_name, dtype, is_accurate, optimize_name, t, m))
 
             # calculate relative improvements
             base_r = results[-2]
@@ -230,9 +228,34 @@ def main():
         action="store_true",
         help="Use Dynamo eager",
     )
+    group.add_argument(
+        "--run-dynamo-aot-eager",
+        action="store_true",
+        help="Use Dynamo with AOT Autograd with eager backend",
+    )
+    group.add_argument(
+        "--run-dynamo-aot-efficient",
+        action="store_true",
+        help="Use Dynamo eager",
+    )
 
     args = parser.parse_args()
-    run_all(args)
+    optimize_ctx = NullContext()
+    optimize_name = "eager"
+
+    if args.run_dynamo_eager:
+        optimize_ctx = torchdynamo.optimize("eager")
+        optimize_name = "dynamo_eager"
+    elif args.run_dynamo_aot_eager:
+        optimize_ctx = torchdynamo.optimize(aot_autograd_debug_strategy1)
+        optimize_name = "dynamo_aot_eager"
+    elif args.run_dynamo_aot_efficient:
+        optimize_ctx = torchdynamo.optimize(aot_autograd_speedup_strategy)
+        optimize_name = "dynamo_aot_efficient"
+
+    run = run_all
+    run = partial(run, optimize_ctx=optimize_ctx, optimize_name=optimize_name)
+    run(args)
 
 
 if __name__ == "__main__":
