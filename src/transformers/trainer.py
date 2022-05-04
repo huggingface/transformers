@@ -1205,9 +1205,10 @@ class Trainer:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
-        return find_executable_batch_size(
+        inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
-        )(
+        )
+        return inner_training_loop(
             args=args,
             resume_from_checkpoint=resume_from_checkpoint,
             trial=trial,
