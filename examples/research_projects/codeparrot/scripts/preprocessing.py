@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import multiprocessing
 import os
 import shutil
@@ -13,7 +14,7 @@ from transformers import HfArgumentParser
 
 def get_hash(example):
     """Get hash of content field."""
-    return {"hash": hash(example["content"])}
+    return {"hash": hashlib.md5(example["content"].strip().encode("utf-8")).hexdigest()}
 
 
 def line_stats(example):

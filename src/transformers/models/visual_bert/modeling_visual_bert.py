@@ -794,12 +794,12 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
             )
 
         else:
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, [batch_size, input_shape], device
+                attention_mask, (batch_size, input_shape)
             )
 
         # Prepare head mask if needed

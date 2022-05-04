@@ -1,28 +1,16 @@
 name: Model templates runner
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-    types: [assigned, opened, synchronize, reopened]
+  repository_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
 
 jobs:
   run_tests_templates:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
-
-      - name: Install Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.6
+        uses: actions/checkout@v2
 
       - name: Install dependencies
         run: |
@@ -78,7 +66,6 @@ jobs:
 
       - name: Run style changes
         run: |
-          git fetch origin main:main
           . ~/venv/bin/activate
           make style && make quality && make repo-consistency
 

@@ -561,6 +561,8 @@ if __name__ == "__main__":
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
+        # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+        models = [x.replace("models/", "models_") for x in models]
     except SyntaxError:
         Message.error_out()
         raise ValueError("Errored out.")
