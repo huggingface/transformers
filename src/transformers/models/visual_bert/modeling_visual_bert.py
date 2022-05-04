@@ -31,12 +31,8 @@ from ...modeling_outputs import (
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -798,12 +794,12 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
             )
 
         else:
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, [batch_size, input_shape], device
+                attention_mask, (batch_size, input_shape)
             )
 
         # Prepare head mask if needed

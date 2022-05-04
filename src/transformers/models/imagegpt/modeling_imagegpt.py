@@ -38,7 +38,8 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
@@ -999,7 +1000,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> samples = output[:, 1:].cpu().detach().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [n_px, n_px, 3]).astype(np.uint8) for s in samples
-        >>> ]  # convert color cluster tokens back to pixels
+        ... ]  # convert color cluster tokens back to pixels
         >>> f, axes = plt.subplots(1, batch_size, dpi=300)
 
         >>> for img, ax in zip(samples_img, axes):
