@@ -1019,6 +1019,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(a, a1, delta=1e-8)
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
+    @slow
     @require_torch_non_multi_gpu
     def test_auto_batch_size_finder(self):
 
