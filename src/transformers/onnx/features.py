@@ -198,16 +198,6 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
         ),
-        "mobilebert": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "next-sentence-prediction",
-            "sequence-classification",
-            "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=MobileBertOnnxConfig,
-        ),
         "convbert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -319,6 +309,16 @@ class FeaturesManager:
             "sequence-classification",
             "question-answering",
             onnx_config_cls=MBartOnnxConfig,
+        ),
+        "mobilebert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "next-sentence-prediction",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=MobileBertOnnxConfig,
         ),
         "m2m-100": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig
