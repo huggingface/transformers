@@ -22,26 +22,17 @@ import numpy as np
 
 from transformers import Data2VecVisionConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
+from transformers.models.data2vec.modeling_tf_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import require_tf, require_vision, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
-DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft1k",
-    # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
-]
-
-
 if is_tf_available():
     import tensorflow as tf
 
-    # from transformers import TFData2VecVisionForImageClassification, TFData2VecVisionModel
-    from transformers.models.data2vec.modeling_tf_data2vec_vision import (
-        TFData2VecVisionForImageClassification,
-        TFData2VecVisionModel,
-    )
+    from transformers import TFData2VecVisionForImageClassification, TFData2VecVisionModel
 
 
 if is_vision_available():
