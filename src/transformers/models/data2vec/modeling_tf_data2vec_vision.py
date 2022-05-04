@@ -308,8 +308,7 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
-        attention_scores = tf.divide(attention_scores, dk)
+        attention_scores = attention_scores / self.sqrt_att_head_size
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
