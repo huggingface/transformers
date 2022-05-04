@@ -29,7 +29,6 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .import_utils import requires_backends
 from .utils import (
     ExplicitEnum,
     is_accelerate_available,
@@ -38,6 +37,7 @@ from .utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
+    requires_backends
 )
 
 
