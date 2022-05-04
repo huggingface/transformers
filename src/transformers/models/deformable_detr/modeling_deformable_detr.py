@@ -2173,20 +2173,18 @@ class DeformableDetrHungarianMatcher(nn.Module):
     For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
     predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
     un-matched (and thus treated as non-objects).
+
+    Args:
+        class_cost:
+            The relative weight of the classification error in the matching cost.
+        bbox_cost:
+            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+        giou_cost:
+            The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
     def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
-        """
-        Creates the matcher.
-
-        Params:
-            class_cost: This is the relative weight of the classification error in the matching cost
-            bbox_cost:
-                This is the relative weight of the L1 error of the bounding box coordinates in the matching cost
-            giou_cost: This is the relative weight of the giou loss of the bounding box in the matching cost
-        """
         super().__init__()
-
         requires_backends(self, ["scipy"])
 
         self.class_cost = class_cost
@@ -2198,25 +2196,25 @@ class DeformableDetrHungarianMatcher(nn.Module):
     @torch.no_grad()
     def forward(self, outputs, targets):
         """
-        Performs the matching.
-
-        Params:
-            outputs: This is a dict that contains at least these entries:
-                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
-            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
-                 "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                 objects in the target) containing the class labels "boxes": Tensor of dim [num_target_boxes, 4]
-                 containing the target box coordinates
+        Args:
+            outputs (`dict`):
+                A dictionary that contains at least these entries:
+                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
+            targets (`List[dict]`):
+                A list of targets (len(targets) = batch_size), where each target is a dict containing:
+                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
+                  ground-truth
+                 objects in the target) containing the class labels
+                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            A list of size batch_size, containing tuples of (index_i, index_j) where:
-
-                - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
+            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            - index_i is the indices of the selected predictions (in order)
+            - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        bs, num_queries = outputs["logits"].shape[:2]
+        batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
         out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
@@ -2239,7 +2237,7 @@ class DeformableDetrHungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
@@ -2261,11 +2259,12 @@ def box_area(boxes: Tensor) -> Tensor:
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (Tensor[N, 4]): boxes for which the area will be computed. They
-            are expected to be in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
 
     Returns:
-        area (Tensor[N]): area for each box
+        `torch.FloatTensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -2276,11 +2275,11 @@ def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
-    lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
 
     union = area1[:, None] + area2 - inter
 
@@ -2294,7 +2293,7 @@ def generalized_box_iou(boxes1, boxes2):
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
     Returns:
-        a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
@@ -2328,7 +2327,6 @@ class NestedTensor(object):
         self.mask = mask
 
     def to(self, device):
-        # type: (Device) -> NestedTensor # noqa
         cast_tensor = self.tensors.to(device)
         mask = self.mask
         if mask is not None:
