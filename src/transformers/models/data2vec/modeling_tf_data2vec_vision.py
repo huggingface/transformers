@@ -171,11 +171,9 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
             w = bool_masked_pos[..., None]
             w = tf.cast(w, mask_tokens.dtype)
             # since TF doesn't support eager tensor assignment
-            embeddings_modified = embeddings * (1 - w) + mask_tokens * w
-        else:
-            embeddings_modified = embeddings
+            embeddings = embeddings * (1 - w) + mask_tokens * w
 
-        embeddings = tf.concat([cls_tokens, embeddings_modified], axis=1)
+        embeddings = tf.concat([cls_tokens, embeddings], axis=1)
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
