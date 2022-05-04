@@ -1136,7 +1136,6 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         ignore_keys_for_eval: Optional[List[str]] = None,
-        auto_find_batch_size: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -1152,9 +1151,6 @@ class Trainer:
             ignore_keys_for_eval (`List[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
-            auto_find_batch_size (`bool`, *optional*)
-                Whether to find a batch size that will fit into memory automatically through exponential decay,
-                avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
@@ -1210,7 +1206,7 @@ class Trainer:
             self.model_wrapped = self.model
 
         @find_executable_batch_size(
-            starting_batch_size=self._train_batch_size, auto_find_batch_size=auto_find_batch_size
+            starting_batch_size=self._train_batch_size, auto_find_batch_size=args.auto_find_batch_size
         )
         def _inner_training_loop(batch_size):
             self._train_batch_size = batch_size
