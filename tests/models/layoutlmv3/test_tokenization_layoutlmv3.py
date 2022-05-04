@@ -130,7 +130,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
+        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     @slow
