@@ -21,7 +21,7 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from transformers import OPTConfig, GPT2Tokenizer, is_torch_available
+from transformers import OPTConfig, GPT2Tokenizer, is_torch_available, pipeline
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -998,3 +998,40 @@ class OPTEmbeddingsTest(unittest.TestCase):
         logits = model(input_ids)[0]
         logits_meta = torch.load(self.path_logits_meta)
         assert torch.allclose(logits, logits_meta)
+
+class OPTGenerationTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.path_model = "/home/younes/Desktop/Work/data/opt-350-m/" # TODO add the model on the hub
+        self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p" # TODO add the logits somewhere?
+
+
+    @unittest.skip("Skipping unless we find a solution to store the model")
+    def test_generation(self):
+        model = OPTForCausalLM.from_pretrained(self.path_model)
+        model = model.eval()
+        # tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        #tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        model.config.eos_token_id = tokenizer.eos_token_id
+
+        gen = pipeline("text-generation", model=model, tokenizer=tokenizer, return_tensors=True)
+        
+        prompts = [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
+        NEXT_TOKENS = [
+            3392,
+            764,
+            5, 
+            81,
+        ]
+        GEN_OUTPUT = []
+        for prompt in prompts:
+            len_input_sentence = len(tokenizer.tokenize(prompt))
+            predicted_next_token = gen(prompt)[0]['generated_token_ids'][len_input_sentence]
+            GEN_OUTPUT.append(predicted_next_token)
+        self.assertListEqual(GEN_OUTPUT, NEXT_TOKENS)
