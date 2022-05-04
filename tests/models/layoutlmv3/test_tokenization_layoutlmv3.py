@@ -35,7 +35,8 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     test_rust_tokenizer = True
-    space_between_special_tokens = True
+    # determined by the tokenization algortihm and the way it's decoded by the fast tokenizers
+    space_between_special_tokens = False
     test_seq2seq = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
@@ -124,7 +125,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
-        bpe_tokens = ["l", "o", "w", "er", "\u0120", "n", "e", "w", "er"]
+        bpe_tokens = ['Ġlow', 'er', 'Ġ', 'n', 'e', 'w', 'er']
         tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
         self.assertListEqual(tokens, bpe_tokens)
 
@@ -367,7 +368,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_2 = tokenizer.decode(ids)
                 self.assertIsInstance(text_2, str)
 
-                output_text = "lowernewer"
+                output_text = " lower newer"
                 self.assertEqual(text_2, output_text)
 
     def test_mask_output(self):
