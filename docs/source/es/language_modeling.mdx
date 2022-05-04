@@ -178,7 +178,7 @@ Para modelados de lenguaje por enmascaramiento usa el mismo [`DataCollatorForLan
 ```
 </pt>
 <tf>
-Puedes usar el token de final de secuencia como el token de relleno, y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
+Puedes usar el token de final de secuencia como el token de relleno y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
 
 ```py
 >>> from transformers import DataCollatorForLanguageModeling
