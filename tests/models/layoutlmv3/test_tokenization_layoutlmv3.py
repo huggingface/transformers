@@ -1616,7 +1616,8 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     returned_tensor = "jax"
 
                 # Single example
-                words, boxes = self.get_words_and_boxes()
+                words = ["HuggingFace", "is", "solving", "NLP", "one", "commit", "at", "a", "time"]
+                boxes = [[i,i,i,i] for i in range(len(words))]
                 tokens = tokenizer.encode_plus(
                     words,
                     boxes=boxes,
@@ -1635,10 +1636,14 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Batch of examples
                 # For these 2 examples, 3 training examples will be created
-                words, boxes = self.get_words_and_boxes_batch()
+                words_batched = [
+                    ["HuggingFace", "is", "solving", "NLP", "one", "commit", "at", "a", "time"],
+                    ["Very", "tiny", "input"]
+                ]
+                boxes_batched = [[[i,i,i,i] for i in range(len(words_item))] for words_item in words_batched]
                 tokens = tokenizer.batch_encode_plus(
-                    words,
-                    boxes=boxes,
+                    words_batched,
+                    boxes=boxes_batched,
                     max_length=6,
                     padding=True,
                     truncation="only_first",
