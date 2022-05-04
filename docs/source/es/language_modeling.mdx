@@ -168,7 +168,7 @@ Puedes usar el token de final de secuencia como el token de relleno y asignar `m
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-Para modelados de lenguajes por enmascaramiento usa el mismo [`DataCollatorForLanguageModeling`] excepto que deberías especificar `mlm_probability` para enmascarar tokens aleatoriamente cada vez que iteras sobre los datos.
+Para modelados de lenguaje por enmascaramiento usa el mismo [`DataCollatorForLanguageModeling`] excepto que deberás especificar `mlm_probability` para enmascarar tokens aleatoriamente cada vez que iteras sobre los datos.
 
 ```py
 >>> from transformers import DataCollatorForLanguageModeling
