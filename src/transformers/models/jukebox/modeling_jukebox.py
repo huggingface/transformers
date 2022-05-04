@@ -86,6 +86,8 @@ except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
 
 # TODO check if I use it or the normal conv1d
+
+
 class Conv1D(nn.Module):
     def __init__(self, n_in, n_out, zero_out=False, init_scale=1.0):
         super(Conv1D, self).__init__()
@@ -97,8 +99,8 @@ class Conv1D(nn.Module):
             w = torch.empty(n_in, n_out)
             nn.init.normal_(w, std=0.02 * init_scale)
         b = torch.zeros(n_out)
-        self.w = nn.Parameter(w)
-        self.b = nn.Parameter(b)
+        self.weight = nn.Parameter(w)  # modified self.w
+        self.bias = nn.Parameter(b)
 
     def forward(self, x):
         size_out = (*x.size()[:-1], self.n_out)
@@ -110,14 +112,13 @@ class Conv1D(nn.Module):
 
 
 class JukeboxMLP(nn.Module):
-    def __init__(self, embed_dim, config):
+    def __init__(self,  width, n_state, resid_dropout=0.0, afn='gelu', zero_out=False, init_scale=1.0):
         # a single channel is always used in original code
         super().__init__()
-        init_scale = config.mlp_init_scale  # TODO: check if I remove it or not using noraml conv initshceme
-        self.c_fc = Conv1D(embed_dim, embed_dim, init_scale=init_scale)
-        self.c_proj = Conv1D(embed_dim, embed_dim, init_scale=init_scale)
-        self.act = ACT2FN[config.activation_function]
-        self.dropout = nn.Dropout(config.resid_pdrop)
+        self.c_fc =  Conv1D(width, n_state, init_scale=init_scale)
+        self.c_proj =Conv1D(n_state, width, zero_out, init_scale=init_scale)
+        self.act = ACT2FN[afn]
+        self.dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
     def forward(self, hidden_states):
         hidden_states = self.c_fc(hidden_states)
@@ -177,57 +178,49 @@ def get_mask(mask, q_l, kv_l, blocks, spread, device, sample, sample_t):
 class JukeboxAttention(nn.Module):
     # previously FactoredAttention
     def __init__(
-        self,
-        config,
-        width,
-        n_ctx,
-        n_state,
-        n_head,
-        mask=False,
-        zero_out=False,
-        attn_func=0,
-        blocks=None,
-        spread=None,
-        encoder_dims=None,
-        prime_len=None,
-    ):
+            self, width, n_ctx, n_state, n_head,
+            attn_dropout=0.0, resid_dropout=0.0,
+            scale=True, mask=False,
+            zero_out=False, init_scale=1.0,
+            checkpoint_attn=0,
+            attn_func=0, blocks=None, spread=None,
+            encoder_dims=None, prime_len=None):
         super().__init__()
-        self.width = width
+        self.width = width  # should have a better name
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
         self.n_state = n_state
         assert n_state % n_head == 0
         self.n_head = n_head
+        self.scale = scale
         self.mask = mask
         if attn_func == 6:
-            self.c_attn = Conv1D(width, n_state, init_scale=config.attn_init_scale)
-            self.c_enc_kv = Conv1D(width, n_state * 2, init_scale=config.attn_init_scale)
+            self.c_attn = Conv1D(width, n_state, init_scale=init_scale)
+            self.c_enc_kv = Conv1D(width, n_state * 2, init_scale=init_scale)
         else:
-            self.c_attn = Conv1D(width, n_state * 3, init_scale=config.attn_init_scale)
-        self.c_proj = Conv1D(n_state, width, zero_out, init_scale=config.attn_init_scale)
-        self.attn_dropout = nn.Dropout(config.attn_dropout) if config.attn_dropout > 0.0 else lambda x: x
-        self.resid_dropout = nn.Dropout(config.resid_dropout) if config.resid_dropout > 0.0 else lambda x: x
+            self.c_attn = Conv1D(width, n_state * 3, init_scale=init_scale)
+        self.c_proj = Conv1D(n_state, width, zero_out, init_scale=init_scale)
+        self.attn_dropout = nn.Dropout(attn_dropout) if attn_dropout > 0.0 else lambda x: x
+        self.resid_dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
         # Sequence of length l is factored as [blocks, l // blocks]
         self.attn_func = attn_func
         self.qkv, self.attn, self.attn_mask = {
-            0: (self.factored_qkv, self.dense_attn, "autoregressive"),  # Attend to all positions
-            1: (self.factored_qkv, self.block_attn, "autoregressive"),  # Attend to your block
-            2: (self.factored_qkv, self.transpose_block_attn, "autoregressive"),  # Attend to transpose block
-            3: (self.factored_qkv, self.prev_block_attn, None),  # Attend to previous block
-            4: (self.factored_qkv, self.summary_attn, "summary"),  # Attend to last position of each block
-            5: (self.factored_qkv, self.summary_spread_attn, "summary"),
+            0: (self.factored_qkv, self.dense_attn, 'autoregressive'),              # Attend to all positions
+            1: (self.factored_qkv, self.block_attn, 'autoregressive'),              # Attend to your block
+            2: (self.factored_qkv, self.transpose_block_attn, 'autoregressive'),    # Attend to transpose block
+            3: (self.factored_qkv, self.prev_block_attn, None),                     # Attend to previous block
+            4: (self.factored_qkv, self.summary_attn, 'summary'),                   # Attend to last position of each block
+            5: (self.factored_qkv, self.summary_spread_attn, 'summary'),
             6: (self.decode_qkv, self.decode_attn, None),
-            7: (self.prime_qkv, self.prime_attn, "prime"),
-        }[
-            attn_func
-        ]  # Attend to last k position of each block
+            7: (self.prime_qkv, self.prime_attn, 'prime')
+        }[attn_func]  # Attend to last k position of each block
 
         self.blocks = blocks
         self.spread = spread
         if blocks is not None:
             assert n_ctx % blocks == 0
             self.block_ctx = n_ctx // blocks
-        #   self.checkpoint_attn = checkpoint_attn  # 0: None, 1: Attn after heads split, 2: Attn
+        self.checkpoint_attn = checkpoint_attn  # 0: None, 1: Attn after heads split, 2: Attn
 
         self.sample_t = 0
         self.cache = {}
@@ -874,7 +867,7 @@ class JukeboxTransformer(nn.Module):
         attn_cycle = {0: 1, 1: 2, 2: 3, 3: 2, 4: 2, 5: 4, 6: 4, 7: 16, 8: 10, 9: 4, 10: 79, 11: 16, 12: 16}[attn_order]
         # assert n_depth % attn_cycle == 0, f'Depth {n_depth} not a multiple of cycle {attn_cycle} for attn_order {attn_order}'
 
-        attn_block = lambda d: JukeboxBlock(
+        def attn_block(d): return JukeboxBlock(
             width=width,
             n_ctx=n_ctx,
             n_head=n_head,
@@ -1708,7 +1701,8 @@ class Encoder(nn.Module):
         block_kwargs_copy = dict(**block_kwargs)
         if "reverse_decoder_dilation" in block_kwargs_copy:
             del block_kwargs_copy["reverse_decoder_dilation"]
-        level_block = lambda level, down_t, stride_t: EncoderConvBlock(
+
+        def level_block(level, down_t, stride_t): return EncoderConvBlock(
             input_emb_width if level == 0 else output_emb_width,
             output_emb_width,
             down_t,
@@ -1748,7 +1742,7 @@ class Decoder(nn.Module):
 
         self.strides_t = strides_t
 
-        level_block = lambda level, down_t, stride_t: DecoderConvBock(
+        def level_block(level, down_t, stride_t): return DecoderConvBock(
             output_emb_width, output_emb_width, down_t, stride_t, **block_kwargs
         )
         self.level_blocks = nn.ModuleList()
@@ -1997,7 +1991,7 @@ class Bottleneck(nn.Module):
     def __init__(self, l_bins, emb_width, mu, levels):
         super().__init__()
         self.levels = levels
-        level_block = lambda level: BottleneckBlock(l_bins, emb_width, mu)
+        def level_block(level): return BottleneckBlock(l_bins, emb_width, mu)
         self.level_blocks = nn.ModuleList()
         for level in range(self.levels):
             self.level_blocks.append(level_block(level))
@@ -2168,10 +2162,11 @@ class VQVAE(nn.Module):
             this_block_kwargs["depth"] *= self.multipliers[level]
             return this_block_kwargs
 
-        encoder = lambda level: Encoder(
+        def encoder(level): return Encoder(
             x_channels, emb_width, level + 1, downs_t[: level + 1], strides_t[: level + 1], **_block_kwargs(level)
         )
-        decoder = lambda level: Decoder(
+
+        def decoder(level): return Decoder(
             x_channels, emb_width, level + 1, downs_t[: level + 1], strides_t[: level + 1], **_block_kwargs(level)
         )
         self.encoders = nn.ModuleList()
@@ -2549,11 +2544,11 @@ class JukeboxPrior(nn.Module):
     def __init__(self, config, level):
         super().__init__()
         vqvae_z_shapes = config.vqvae_z_shapes
-        rescale = lambda z_shape: (z_shape[0] * config.n_ctx // vqvae_z_shapes[level][0],)
+        def rescale(z_shape): return (z_shape[0] * config.n_ctx // vqvae_z_shapes[level][0],)
         z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
         self.use_tokens = config.use_tokens[level]
         self.n_tokens = config.n_tokens[level]
-        self.prime_loss_fraction = config.prime_loss_fraction
+        self.prime_loss_fraction = config.prime_loss_fraction[level]
 
         self.copy_input = config.copy_input
         if self.copy_input:
@@ -2588,12 +2583,20 @@ class JukeboxPrior(nn.Module):
             m_attn=config.m_attn,  # m_mlp=config.m_mlp
         )
 
-        prime_kwargs = dict(
-            use_tokens=config.use_tokens[level],
-            prime_loss_fraction=config.prime_loss_fraction,
-            n_tokens=config.n_tokens[level],
-            bins=config.n_vocab,
-        )
+
+        if config.use_tokens and not config.single_enc_dec:
+            prime_kwargs = dict(
+                        bins=config.n_vocab,
+                        width=config.prime_width[level], depth=config.prime_depth[level], heads=config.prime_heads,
+                        attn_order=config.prime_attn_order[level], blocks=config.prime_blocks, spread=config.prime_spread,
+                        attn_dropout=config.prime_attn_dropout, resid_dropout=config.prime_resid_dropout,
+                        emb_dropout=config.prime_emb_dropout,
+                        zero_out=config.prime_zero_out, res_scale=config.prime_res_scale,
+                        pos_init=config.prime_pos_init, init_scale=config.prime_init_scale[level],
+                        m_attn=config.prime_m_attn, m_mlp=config.prime_m_mlp,)
+        else:
+            prime_kwargs = dict(bins=config.n_vocab)
+
 
         x_cond_kwargs = dict(
             out_width=config.width[level],
@@ -2630,7 +2633,8 @@ class JukeboxPrior(nn.Module):
         # X conditioning : conditioning on music tokens (either from audio or from previous levels )
         if self.x_cond:
             self.conditioner_blocks = nn.ModuleList()
-            conditioner_block = lambda _level: MusicTokenConditioner(
+
+            def conditioner_block(_level): return MusicTokenConditioner(
                 input_shape=z_shapes[_level],
                 bins=config.l_bins,
                 down_t=config.downs_t[_level],
