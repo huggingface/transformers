@@ -38,9 +38,11 @@ Tips:
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
 
-This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten)
+This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+[sayakpaul](https://github.com/sayakpaul) contributed Data2Vec for vision in TensorFlow.
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
+The original code (for NLP and Speech) can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
+The original code for vision can be found [here](https://github.com/facebookresearch/data2vec_vision/tree/main/beit).
 
 
 ## Data2VecTextConfig
@@ -130,3 +132,13 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 
 [[autodoc]] Data2VecVisionForSemanticSegmentation
     - forward
+
+## TFData2VecVisionModel
+
+[[autodoc]] TFData2VecVisionModel
+    - call
+
+## TFData2VecVisionForImageClassification
+
+[[autodoc]] TFData2VecVisionForImageClassification
+    - call

@@ -627,7 +627,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 decoder_input_ids,
                 decoder_attention_mask,
                 decoder_position_ids,
-                encoder_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
                 **kwargs,
             )
 

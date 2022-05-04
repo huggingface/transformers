@@ -1081,7 +1081,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> hidden_states = model(input_values).last_hidden_state
     ```
 """
@@ -1200,7 +1200,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> logits = model(input_values).logits
     >>> predicted_ids = jnp.argmax(logits, axis=-1)
 

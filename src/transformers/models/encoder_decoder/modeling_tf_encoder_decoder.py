@@ -528,7 +528,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> # forward
         >>> input_ids = tokenizer.encode(
         ...     "Hello, my dog is cute", add_special_tokens=True, return_tensors="tf"
-        >>> )  # Batch size 1
+        ... )  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
         >>> # training

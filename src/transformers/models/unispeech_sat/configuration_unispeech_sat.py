@@ -24,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/unispeech_sat-base-960h": "https://huggingface.co/facebook/unispeech_sat-base-960h/resolve/main/config.json",
+    "microsoft/unispeech-sat-base-100h-libri-ft": "https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft/resolve/main/config.json",
     # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
 }
 
@@ -34,7 +34,8 @@ class UniSpeechSatConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`UniSpeechSatModel`]. It is used to instantiate an
     UniSpeechSat model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the UniSpeechSat
-    [facebook/unispeech_sat-base-960h](https://huggingface.co/facebook/unispeech_sat-base-960h) architecture.
+    [microsoft/unispeech-sat-base-100h-libri-ft](https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -173,10 +174,10 @@ class UniSpeechSatConfig(PretrainedConfig):
     ```python
     >>> from transformers import UniSpeechSatModel, UniSpeechSatConfig
 
-    >>> # Initializing a UniSpeechSat facebook/unispeech_sat-base-960h style configuration
+    >>> # Initializing a UniSpeechSat microsoft/unispeech-sat-base-100h-libri-ft style configuration
     >>> configuration = UniSpeechSatConfig()
 
-    >>> # Initializing a model from the facebook/unispeech_sat-base-960h style configuration
+    >>> # Initializing a model from the microsoft/unispeech-sat-base-100h-libri-ft style configuration
     >>> model = UniSpeechSatModel(configuration)
 
     >>> # Accessing the model configuration

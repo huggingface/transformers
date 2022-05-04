@@ -733,7 +733,10 @@ class BeitPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
@@ -1210,14 +1213,14 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
+        >>> from transformers import AutoFeatureExtractor, BeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")

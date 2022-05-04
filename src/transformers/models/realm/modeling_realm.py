@@ -1083,7 +1083,7 @@ class RealmBertModel(RealmPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1787,7 +1787,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
-        >>> ).input_ids
+        ... ).input_ids
 
         >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
         >>> predicted_answer = tokenizer.decode(predicted_answer_ids)

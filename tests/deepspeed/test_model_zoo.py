@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    get_tests_dir,
     require_deepspeed,
     require_torch_gpu,
     slow,
@@ -70,8 +71,8 @@ ELECTRA_TINY = "hf-internal-testing/tiny-electra"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 BERT_TINY = "hf-internal-testing/tiny-bert"
 
-FIXTURE_DIRECTORY = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures")
-ROOT_DIRECTORY = os.path.join(dirname(dirname(dirname(os.path.abspath(__file__)))))
+FIXTURE_DIRECTORY = get_tests_dir("fixtures")
+ROOT_DIRECTORY = os.path.join(dirname(get_tests_dir()))
 
 # TODO: to add:
 # albert

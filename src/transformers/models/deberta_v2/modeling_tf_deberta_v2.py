@@ -38,7 +38,7 @@ from ...modeling_tf_utils import (
     get_initializer,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
@@ -97,7 +97,7 @@ class TFDebertaV2XSoftmax(tf.keras.layers.Layer):
 
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
         output = tf.where(rmask, float("-inf"), inputs)
-        output = tf.nn.softmax(output, self.axis)
+        output = stable_softmax(output, self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
 

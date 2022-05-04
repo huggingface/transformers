@@ -74,12 +74,11 @@ class OnnxConfig(ABC):
     default_fixed_num_choices = 4
     torch_onnx_minimum_version = version.parse("1.8")
     _tasks_to_common_outputs = {
-        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
-        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
-        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
-        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
-        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
         "question-answering": OrderedDict(
             {
@@ -87,7 +86,9 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
-        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
+        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
+        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
