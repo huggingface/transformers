@@ -152,7 +152,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=False,
+        add_prefix_space=True,
         trim_offsets=True,
         cls_token_box=[0, 0, 0, 0],
         sep_token_box=[1000, 1000, 1000, 1000],
