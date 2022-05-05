@@ -180,7 +180,7 @@ class JukeboxConfig(PretrainedConfig):
         hop_length=256,
         # multispec_loss_n_fft=(512, 1024, 2048),
         # multispec_loss_hop_length=(240, 120, 50),
-        # multispec_loss_window_size=(50, 120, 240), should the order be reversed? 
+        # multispec_loss_window_size=(50, 120, 240), should the order be reversed?
         multispec_loss_n_fft=(2048, 1024, 512),
         multispec_loss_hop_length=(240, 120, 50),
         multispec_loss_window_size=(1200, 600, 240),
@@ -216,7 +216,7 @@ class JukeboxConfig(PretrainedConfig):
         t_bins=128,
         downs_t=(3, 2, 2),
         strides_t=(2, 2, 2),
-        single_enc_dec=[True,False,False],
+        single_enc_dec=[True, False, False],
         labels=False,
         merged_decoder=[True, False, False],
         priors_width=[4096, 2048, 1024],
