@@ -170,9 +170,7 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """
         if self.win_function == "hamming_window":
-            window = torch.hamming_window(
-                window_length=self.sample_size, periodic=False, alpha=0.54, beta=0.46
-            )
+            window = torch.hamming_window(window_length=self.sample_size, periodic=False, alpha=0.54, beta=0.46)
         else:
             window = getattr(torch, self.win_function)()
 

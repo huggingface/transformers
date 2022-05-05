@@ -259,6 +259,7 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_different_window(self):
         import torch
+
         init_dict = self.feat_extract_tester.prepare_feat_extract_dict()
         init_dict["win_function"] = "hann_window"
 
@@ -271,6 +272,3 @@ class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
-
-
-

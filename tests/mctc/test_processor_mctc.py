@@ -20,7 +20,7 @@ import unittest
 
 from transformers import MCTCProcessor, is_speech_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
-from transformers.models.wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer, VOCAB_FILES_NAMES
+from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizer
 from transformers.testing_utils import require_torch, require_torchaudio
 
 from .test_feature_extraction_mctc import floats_list

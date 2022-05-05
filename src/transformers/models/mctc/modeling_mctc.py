@@ -191,7 +191,7 @@ class MCTCEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -288,9 +288,7 @@ class MCTCSelfAttention(nn.Module):
 
         # relative key position embeddings
         positional_embedding = self.distance_embedding.weight
-        relative_position_scores = torch.einsum(
-            "lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3)
-        )
+        relative_position_scores = torch.einsum("lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3))
 
         relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
         attention_scores = attention_scores + relative_position_scores
