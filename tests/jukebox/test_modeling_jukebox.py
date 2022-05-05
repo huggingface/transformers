@@ -12,10 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-import datetime
-import math
 import timeit
 import unittest
 
@@ -25,17 +21,16 @@ from transformers import JukeboxConfig, is_torch_available
 
 # from ..generation.test_generation_utils import GenerationTesterMixin
 # from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
 
 
 # from transformers.testing_utils import require_torch, slow, torch_device
 
 
-
 if is_torch_available():
     import torch
 
-    from transformers import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST, JukeboxModel, JukeboxTokenizer
+    from transformers import JukeboxModel, JukeboxTokenizer  # ,JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class JukeboxModelTest(ModelTesterMixin, unittest.TestCase):
