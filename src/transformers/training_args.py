@@ -345,7 +345,8 @@ class TrainingArguments:
 
             - `"full_shard"`: Shard parameters, gradients and optimizer states.
             - `"shard_grad_op"`: Shard optimizer states and gradients.
-            - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and `"shard_grad_op"`).
+            - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
+              `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
         fsdp_min_num_params (`int`, *optional*, defaults to `0`):
             FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).

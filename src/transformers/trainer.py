@@ -1134,7 +1134,8 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         if self.fsdp is not None:
             # PyTorch FSDP!
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, FullyShardedDataParallel as FSDP
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
             from torch.distributed.fsdp.wrap import default_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
@@ -1154,7 +1155,7 @@ class Trainer:
                 self.model = model = FSDP(
                     model, sharding_strategy=self.fsdp, cpu_offload=cpu_offload, auto_wrap_policy=auto_wrap_policy
                 )
-                if not FSDPOption.OFFLOAD in self.args.fsdp:
+                if FSDPOption.OFFLOAD not in self.args.fsdp:
                     model.to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
