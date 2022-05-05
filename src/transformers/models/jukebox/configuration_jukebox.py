@@ -164,7 +164,7 @@ class JukeboxConfig(PretrainedConfig):
         # Global paranmeters
         sr=16000,
         sample_length=None,
-        sample_length_in_seconds=10,
+        sample_length_in_seconds=1,
         y_bins=(120, 4111),
         use_nonrelative_specloss=True,
         copy_input=False,
@@ -222,7 +222,7 @@ class JukeboxConfig(PretrainedConfig):
         depth=[79, 72, 72],
         n_heads=[8, 1, 1],
         use_tokens=[False, True, True],
-        n_tokens=[512, 512, 512],
+        n_tokens=[512, 0, 0],
         attn_order=[10, 2, 2],
         blocks=128,
         c_res=1,
@@ -243,34 +243,35 @@ class JukeboxConfig(PretrainedConfig):
         prime_init_scale=[0.1, 0.4, 0.4],
         prime_c_res=1,
         prime_loss_fraction=[0.4, 0.0, 0.0],
-        prime_attn_order=[2,0,0],
+        prime_attn_order=[2, 0, 0],
         prime_attn_dropout=0.0,
         prime_resid_dropout=0.0,
         prime_emb_dropout=0.0,
         prime_zero_out=False,
         prime_res_scale=False,
         prime_pos_init=False,
-
         min_duration=23.8,
         max_duration=600.0,
         fp16_params=True,
-        alignment_layer=68,
-        alignment_head=2,
+        alignment_layer=[68,None,None],
+        alignment_head=[2,None,None],
         m_attn=0.25,
         n_vocab=80,
         cond_m_conv=1,
         max_bow_genre_size=5,  # this should only be in the tokenizer
+        name="AudioSamples",
         **kwargs,
     ):
-        self.prime_zero_out=prime_zero_out
-        self.prime_res_scale=prime_res_scale
-        self.prime_pos_init=prime_pos_init
-        self.prime_resid_dropout=prime_resid_dropout
-        self.prime_attn_dropout=prime_attn_dropout
-        self.prime_m_mlp=prime_m_mlp
-        self.prime_m_attn=prime_m_attn
-        self.prime_emb_dropout=prime_emb_dropout
-        self.prime_attn_order=prime_attn_order
+        self.name = name
+        self.prime_zero_out = prime_zero_out
+        self.prime_res_scale = prime_res_scale
+        self.prime_pos_init = prime_pos_init
+        self.prime_resid_dropout = prime_resid_dropout
+        self.prime_attn_dropout = prime_attn_dropout
+        self.prime_m_mlp = prime_m_mlp
+        self.prime_m_attn = prime_m_attn
+        self.prime_emb_dropout = prime_emb_dropout
+        self.prime_attn_order = prime_attn_order
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
