@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from ...utils import logging
 from ..roberta.tokenization_roberta import RobertaTokenizer
@@ -47,32 +47,30 @@ class BlenderbotTokenizer(RobertaTokenizer):
     r"""
     Construct a Blenderbot tokenizer.
 
-    :class:`~transformers.Blenderbot` is nearly identical to :class:`~transformers.RobertaTokenizer` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
-    to the beginning of sequences.
+    [`Blenderbot`] is nearly identical to [`RobertaTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    and wordpiece. The only difference is that it doesn't add BOS token to the beginning of sequences.
 
-    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`RobertaTokenizer`] for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:
 
-        - single sequence: `` X </s>``
+        - single sequence: ` X </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Will be ignored
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
 

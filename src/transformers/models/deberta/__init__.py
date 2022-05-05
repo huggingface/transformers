@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available
+from ...utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -26,21 +26,38 @@ _import_structure = {
     "tokenization_deberta": ["DebertaTokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_deberta_fast"] = ["DebertaTokenizerFast"]
+
 if is_torch_available():
     _import_structure["modeling_deberta"] = [
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DebertaForSequenceClassification",
-        "DebertaModel",
         "DebertaForMaskedLM",
-        "DebertaPreTrainedModel",
-        "DebertaForTokenClassification",
         "DebertaForQuestionAnswering",
+        "DebertaForSequenceClassification",
+        "DebertaForTokenClassification",
+        "DebertaModel",
+        "DebertaPreTrainedModel",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_deberta"] = [
+        "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFDebertaForMaskedLM",
+        "TFDebertaForQuestionAnswering",
+        "TFDebertaForSequenceClassification",
+        "TFDebertaForTokenClassification",
+        "TFDebertaModel",
+        "TFDebertaPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
     from .tokenization_deberta import DebertaTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_deberta_fast import DebertaTokenizerFast
 
     if is_torch_available():
         from .modeling_deberta import (
@@ -53,20 +70,19 @@ if TYPE_CHECKING:
             DebertaPreTrainedModel,
         )
 
+    if is_tf_available():
+        from .modeling_tf_deberta import (
+            TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDebertaForMaskedLM,
+            TFDebertaForQuestionAnswering,
+            TFDebertaForSequenceClassification,
+            TFDebertaForTokenClassification,
+            TFDebertaModel,
+            TFDebertaPreTrainedModel,
+        )
+
+
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

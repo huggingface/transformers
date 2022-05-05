@@ -1,7 +1,7 @@
 FROM google/cloud-sdk:slim
 
 # Build args.
-ARG GITHUB_REF=refs/heads/master
+ARG GITHUB_REF=refs/heads/main
 
 # TODO: This Dockerfile installs pytorch/xla 3.6 wheels. There are also 3.7
 # wheels available; see below.
@@ -53,7 +53,7 @@ RUN git clone https://github.com/huggingface/transformers.git && \
     git checkout CI && \
     cd .. && \
     pip install ./transformers && \
-    pip install -r ./transformers/examples/requirements.txt && \
+    pip install -r ./transformers/examples/pytorch/_test_requirements.txt && \
     pip install pytest
 
 RUN python -c "import torch_xla; print(torch_xla.__version__)"

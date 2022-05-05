@@ -60,31 +60,37 @@ You could run the following:
 
 
 ```bash
-export TRAIN_FILE=/path/to/dataset/wiki.train.raw
+export TRAIN_FILE=/path/to/train/file
 export LTP_RESOURCE=/path/to/ltp/tokenizer
 export BERT_RESOURCE=/path/to/bert/tokenizer
 export SAVE_PATH=/path/to/data/ref.txt
 
 python run_chinese_ref.py \
-    --file_name=path_to_train_or_eval_file \
-    --ltp=path_to_ltp_tokenizer \
-    --bert=path_to_bert_tokenizer \
-    --save_path=path_to_reference_file
+    --file_name=$TRAIN_FILE \
+    --ltp=$LTP_RESOURCE \
+    --bert=$BERT_RESOURCE \
+    --save_path=$SAVE_PATH
 ```
 
 Then you can run the script like this: 
 
 
 ```bash
+export TRAIN_FILE=/path/to/train/file
+export VALIDATION_FILE=/path/to/validation/file
+export TRAIN_REF_FILE=/path/to/train/chinese_ref/file
+export VALIDATION_REF_FILE=/path/to/validation/chinese_ref/file
+export OUTPUT_DIR=/tmp/test-mlm-wwm
+
 python run_mlm_wwm.py \
     --model_name_or_path roberta-base \
-    --train_file path_to_train_file \
-    --validation_file path_to_validation_file \
-    --train_ref_file path_to_train_chinese_ref_file \
-    --validation_ref_file path_to_validation_chinese_ref_file \
+    --train_file $TRAIN_FILE \
+    --validation_file $VALIDATION_FILE \
+    --train_ref_file $TRAIN_REF_FILE \
+    --validation_ref_file $VALIDATION_REF_FILE \
     --do_train \
     --do_eval \
-    --output_dir /tmp/test-mlm-wwm
+    --output_dir $OUTPUT_DIR
 ```
 
 **Note1:** On TPU, you should the flag `--pad_to_max_length` to make sure all your batches have the same length.

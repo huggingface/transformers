@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM-ProphetNet model configuration """
+""" XLM-ProphetNet model configuration"""
 
 
 from ...utils import logging
@@ -28,8 +28,11 @@ XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLMProphetNetConfig(ProphetNetConfig):
     """
-    This class overrides :class:`~transformers.ProphetNetConfig`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`ProphetNetConfig`]. Please check the superclass for the appropriate documentation alongside
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    XLMProphetNet
+    [microsoft/xprophetnet-large-wiki100-cased](https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased)
+    architecture.
     """
 
     model_type = "xlm-prophetnet"

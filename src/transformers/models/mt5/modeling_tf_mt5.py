@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tensorflow mT5 model. """
+""" Tensorflow mT5 model."""
 
 from ...utils import logging
 from ..t5.modeling_tf_t5 import TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
@@ -27,46 +27,50 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 class TFMT5Model(TFT5Model):
     r"""
-    This class overrides :class:`~transformers.TFT5Model`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFT5Model`]. Please check the superclass for the appropriate documentation alongside usage
+    examples.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import TFMT5Model, T5Tokenizer
-        >>> model = TFMT5Model.from_pretrained("google/mt5-small")
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-        >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer(article, return_tensors="tf")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer(summary, return_tensors="tf")
+    ```python
+    >>> from transformers import TFMT5Model, T5Tokenizer
 
-        >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
-        >>> hidden_states = outputs.last_hidden_state
-    """
+    >>> model = TFMT5Model.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, return_tensors="tf")
+    >>> with tokenizer.as_target_tokenizer():
+    ...     labels = tokenizer(summary, return_tensors="tf")
+
+    >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
+    >>> hidden_states = outputs.last_hidden_state
+    ```"""
     model_type = "mt5"
     config_class = MT5Config
 
 
 class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.TFT5ForConditionalGeneration`. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFT5ForConditionalGeneration`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import TFMT5ForConditionalGeneration, T5Tokenizer
-        >>> model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-        >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer(article, return_tensors="tf")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer(summary, return_tensors="tf")
+    ```python
+    >>> from transformers import TFMT5ForConditionalGeneration, T5Tokenizer
 
-        >>> outputs = model(**inputs,labels=labels["input_ids"])
-        >>> loss = outputs.loss
-    """
+    >>> model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, return_tensors="tf")
+    >>> with tokenizer.as_target_tokenizer():
+    ...     labels = tokenizer(summary, return_tensors="tf")
+
+    >>> outputs = model(**inputs, labels=labels["input_ids"])
+    >>> loss = outputs.loss
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config
@@ -74,19 +78,21 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
 
 class TFMT5EncoderModel(TFT5EncoderModel):
     r"""
-    This class overrides :class:`~transformers.TFT5EncoderModel`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFT5EncoderModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import TFMT5EncoderModel, T5Tokenizer
-        >>> model = TFMT5EncoderModel.from_pretrained("google/mt5-small")
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-        >>> input_ids = tokenizer(article, return_tensors="tf").input_ids
-        >>> outputs = model(input_ids)
-        >>> hidden_state = outputs.last_hidden_state
-    """
+    ```python
+    >>> from transformers import TFMT5EncoderModel, T5Tokenizer
+
+    >>> model = TFMT5EncoderModel.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> input_ids = tokenizer(article, return_tensors="tf").input_ids
+    >>> outputs = model(input_ids)
+    >>> hidden_state = outputs.last_hidden_state
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config

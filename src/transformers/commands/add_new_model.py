@@ -15,6 +15,7 @@
 import json
 import os
 import shutil
+import warnings
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
@@ -54,17 +55,22 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         self._path = path
 
     def run(self):
+        warnings.warn(
+            "The command `transformers-cli add-new-model` is deprecated and will be removed in v5 of Transformers. "
+            "It is not actively maintained anymore, so might give a result that won't pass all tests and quality "
+            "checks, you should use `transformers-cli add-new-model-like` instead."
+        )
         if not _has_cookiecutter:
             raise ImportError(
                 "Model creation dependencies are required to use the `add_new_model` command. Install them by running "
-                "the folowing at the root of your `transformers` clone:\n\n\t$ pip install -e .[modelcreation]\n"
+                "the following at the root of your `transformers` clone:\n\n\t$ pip install -e .[modelcreation]\n"
             )
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
         directories = [directory for directory in os.listdir() if "cookiecutter-template-" == directory[:22]]
         if len(directories) > 0:
             raise ValueError(
                 "Several directories starting with `cookiecutter-template-` in current working directory. "
-                "Please clean your directory by removing all folders startign with `cookiecutter-template-` or "
+                "Please clean your directory by removing all folders starting with `cookiecutter-template-` or "
                 "change your working directory."
             )
 
@@ -93,14 +99,20 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             configuration = json.load(configuration_file)
 
         lowercase_model_name = configuration["lowercase_modelname"]
-        pytorch_or_tensorflow = configuration["generate_tensorflow_and_pytorch"]
+        generate_tensorflow_pytorch_and_flax = configuration["generate_tensorflow_pytorch_and_flax"]
         os.remove(f"{directory}/configuration.json")
 
-        output_pytorch = "PyTorch" in pytorch_or_tensorflow
-        output_tensorflow = "TensorFlow" in pytorch_or_tensorflow
+        output_pytorch = "PyTorch" in generate_tensorflow_pytorch_and_flax
+        output_tensorflow = "TensorFlow" in generate_tensorflow_pytorch_and_flax
+        output_flax = "Flax" in generate_tensorflow_pytorch_and_flax
 
         model_dir = f"{path_to_transformer_root}/src/transformers/models/{lowercase_model_name}"
         os.makedirs(model_dir, exist_ok=True)
+        os.makedirs(f"{path_to_transformer_root}/tests/models/{lowercase_model_name}", exist_ok=True)
+
+        # Tests require submodules as they have parent imports
+        with open(f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/__init__.py", "w"):
+            pass
 
         shutil.move(
             f"{directory}/__init__.py",
@@ -130,7 +142,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/test_modeling_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_{lowercase_model_name}.py")
@@ -147,15 +159,32 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_tf_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_tf_{lowercase_model_name}.py")
             os.remove(f"{directory}/test_modeling_tf_{lowercase_model_name}.py")
 
+        if output_flax:
+            if not self._testing:
+                remove_copy_lines(f"{directory}/modeling_flax_{lowercase_model_name}.py")
+
+            shutil.move(
+                f"{directory}/modeling_flax_{lowercase_model_name}.py",
+                f"{model_dir}/modeling_flax_{lowercase_model_name}.py",
+            )
+
+            shutil.move(
+                f"{directory}/test_modeling_flax_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_flax_{lowercase_model_name}.py",
+            )
+        else:
+            os.remove(f"{directory}/modeling_flax_{lowercase_model_name}.py")
+            os.remove(f"{directory}/test_modeling_flax_{lowercase_model_name}.py")
+
         shutil.move(
-            f"{directory}/{lowercase_model_name}.rst",
-            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.rst",
+            f"{directory}/{lowercase_model_name}.mdx",
+            f"{path_to_transformer_root}/docs/source/en/model_doc/{lowercase_model_name}.mdx",
         )
 
         shutil.move(
@@ -196,8 +225,10 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             move(abs_path, original_file)
 
         def skip_units(line):
-            return ("generating PyTorch" in line and not output_pytorch) or (
-                "generating TensorFlow" in line and not output_tensorflow
+            return (
+                ("generating PyTorch" in line and not output_pytorch)
+                or ("generating TensorFlow" in line and not output_tensorflow)
+                or ("generating Flax" in line and not output_flax)
             )
 
         def replace_in_files(path_to_datafile):

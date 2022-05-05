@@ -13,13 +13,16 @@
 # limitations under the License.
 
 """
-This script can be used to convert a head-less TF2.x Bert model to PyTorch, as published on the official GitHub:
-https://github.com/tensorflow/models/tree/master/official/nlp/bert
+This script can be used to convert a head-less TF2.x Bert model to PyTorch, as published on the official (now
+deprecated) GitHub: https://github.com/tensorflow/models/tree/v2.3.0/official/nlp/bert
 
 TF2.x uses different variable names from the original BERT (TF 1.4) implementation. The script re-maps the TF2.x Bert
 weight names to the original names, so the model can be imported with Huggingface/transformer.
 
 You may adapt this script to include classification/MLM/NSP/etc. heads.
+
+Note: This script is only working with an older version of the TensorFlow models repository (<= v2.3.0).
+      Models trained with never versions are not compatible with this script.
 """
 import argparse
 import os
@@ -38,14 +41,14 @@ logger = logging.get_logger(__name__)
 
 def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     layer_depth = []
     for full_name, shape in init_vars:
-        # logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        # logger.info(f"Loading TF weight {name} with shape {shape}")
         name = full_name.split("/")
         if full_name == "_CHECKPOINTABLE_OBJECT_GRAPH" or name[0] in ["global_step", "save_counter"]:
             logger.info(f"Skipping non-model layer {full_name}")
@@ -126,7 +129,7 @@ def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
                     trace.append("token_type_embeddings")
                     pointer = getattr(pointer, "token_type_embeddings")
                 else:
-                    raise ValueError("Unknown embedding layer with name {full_name}")
+                    raise ValueError(f"Unknown embedding layer with name {full_name}")
                 trace.append("weight")
                 pointer = getattr(pointer, "weight")
             elif m_name == "_attention_layer":

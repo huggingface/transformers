@@ -1,0 +1,82 @@
+cff-version: "1.2.0"
+date-released: 2020-10
+message: "If you use this software, please cite it using these metadata."
+title: "Transformers: State-of-the-Art Natural Language Processing"
+url: "https://github.com/huggingface/transformers"
+authors: 
+  - family-names: Wolf
+    given-names: Thomas
+  - family-names: Debut
+    given-names: Lysandre
+  - family-names: Sanh
+    given-names: Victor
+  - family-names: Chaumond
+    given-names: Julien
+  - family-names: Delangue
+    given-names: Clement
+  - family-names: Moi
+    given-names: Anthony
+  - family-names: Cistac
+    given-names: Perric
+  - family-names: Ma
+    given-names: Clara
+  - family-names: Jernite
+    given-names: Yacine
+  - family-names: Plu
+    given-names: Julien
+  - family-names: Xu
+    given-names: Canwen
+  - family-names: "Le Scao"
+    given-names: Teven
+  - family-names: Gugger
+    given-names: Sylvain
+  - family-names: Drame
+    given-names: Mariama
+  - family-names: Lhoest
+    given-names: Quentin
+  - family-names: Rush
+    given-names: "Alexander M."
+preferred-citation:
+  type: conference-paper
+  authors:
+  - family-names: Wolf
+    given-names: Thomas
+  - family-names: Debut
+    given-names: Lysandre
+  - family-names: Sanh
+    given-names: Victor
+  - family-names: Chaumond
+    given-names: Julien
+  - family-names: Delangue
+    given-names: Clement
+  - family-names: Moi
+    given-names: Anthony
+  - family-names: Cistac
+    given-names: Perric
+  - family-names: Ma
+    given-names: Clara
+  - family-names: Jernite
+    given-names: Yacine
+  - family-names: Plu
+    given-names: Julien
+  - family-names: Xu
+    given-names: Canwen
+  - family-names: "Le Scao"
+    given-names: Teven
+  - family-names: Gugger
+    given-names: Sylvain
+  - family-names: Drame
+    given-names: Mariama
+  - family-names: Lhoest
+    given-names: Quentin
+  - family-names: Rush
+    given-names: "Alexander M."
+  booktitle: "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations"
+  month: 10
+  start: 38
+  end: 45
+  title: "Transformers: State-of-the-Art Natural Language Processing"
+  year: 2020
+  publisher: "Association for Computational Linguistics"
+  url: "https://www.aclweb.org/anthology/2020.emnlp-demos.6"
+  address: "Online"

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLUE processors and helpers """
+""" GLUE processors and helpers"""
 
 import os
 import warnings
@@ -21,9 +21,8 @@ from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
 
-from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_tf_available, logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
@@ -35,7 +34,7 @@ logger = logging.get_logger(__name__)
 DEPRECATION_WARNING = (
     "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
     "library. You can have a look at this example script for pointers: "
-    "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py"
+    "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py"
 )
 
 
@@ -48,20 +47,20 @@ def glue_convert_examples_to_features(
     output_mode=None,
 ):
     """
-    Loads a data file into a list of ``InputFeatures``
+    Loads a data file into a list of `InputFeatures`
 
     Args:
-        examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
+        examples: List of `InputExamples` or `tf.data.Dataset` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
         max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
-        label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
-        output_mode: String indicating the output mode. Either ``regression`` or ``classification``
+        label_list: List of labels. Can be obtained from the processor using the `processor.get_labels()` method
+        output_mode: String indicating the output mode. Either `regression` or `classification`
 
     Returns:
-        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-        task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-        ``InputFeatures`` which can be fed to the model.
+        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the task-specific
+        features. If the input is a list of `InputExamples`, will return a list of task-specific `InputFeatures` which
+        can be fed to the model.
 
     """
     warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
@@ -84,7 +83,7 @@ if is_tf_available():
     ) -> tf.data.Dataset:
         """
         Returns:
-            A ``tf.data.Dataset`` containing the task-specific features.
+            A `tf.data.Dataset` containing the task-specific features.
 
         """
         processor = glue_processors[task]()
@@ -122,10 +121,10 @@ def _glue_convert_examples_to_features(
         processor = glue_processors[task]()
         if label_list is None:
             label_list = processor.get_labels()
-            logger.info("Using label list %s for task %s" % (label_list, task))
+            logger.info(f"Using label list {label_list} for task {task}")
         if output_mode is None:
             output_mode = glue_output_modes[task]
-            logger.info("Using output mode %s for task %s" % (output_mode, task))
+            logger.info(f"Using output mode {output_mode} for task {task}")
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
@@ -156,8 +155,8 @@ def _glue_convert_examples_to_features(
 
     for i, example in enumerate(examples[:5]):
         logger.info("*** Example ***")
-        logger.info("guid: %s" % (example.guid))
-        logger.info("features: %s" % features[i])
+        logger.info(f"guid: {example.guid}")
+        logger.info(f"features: {features[i]}")
 
     return features
 
@@ -185,7 +184,7 @@ class MrpcProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
+        logger.info(f"LOOKING AT {os.path.join(data_dir, 'train.tsv')}")
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
 
     def get_dev_examples(self, data_dir):
@@ -206,7 +205,7 @@ class MrpcProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, i)
+            guid = f"{set_type}-{i}"
             text_a = line[3]
             text_b = line[4]
             label = None if set_type == "test" else line[0]
@@ -252,7 +251,7 @@ class MnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[8]
             text_b = line[9]
             label = None if set_type.startswith("test") else line[-1]
@@ -316,7 +315,7 @@ class ColaProcessor(DataProcessor):
         text_index = 1 if test_mode else 3
         examples = []
         for (i, line) in enumerate(lines):
-            guid = "%s-%s" % (set_type, i)
+            guid = f"{set_type}-{i}"
             text_a = line[text_index]
             label = None if test_mode else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
@@ -362,7 +361,7 @@ class Sst2Processor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, i)
+            guid = f"{set_type}-{i}"
             text_a = line[text_index]
             label = None if set_type == "test" else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
@@ -407,7 +406,7 @@ class StsbProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[7]
             text_b = line[8]
             label = None if set_type == "test" else line[-1]
@@ -456,7 +455,7 @@ class QqpProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             try:
                 text_a = line[q1_index]
                 text_b = line[q2_index]
@@ -505,7 +504,7 @@ class QnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]
@@ -551,7 +550,7 @@ class RteProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]
@@ -597,7 +596,7 @@ class WnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]

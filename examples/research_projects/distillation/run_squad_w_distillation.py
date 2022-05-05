@@ -24,8 +24,7 @@ import timeit
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
@@ -92,7 +91,7 @@ def to_list(tensor):
 
 
 def train(args, train_dataset, model, tokenizer, teacher=None):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
@@ -138,11 +137,11 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(
+        model = nn.parallel.DistributedDataParallel(
             model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
         )
 
@@ -230,20 +229,14 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                 assert end_logits_tea.size() == end_logits_stu.size()
 
                 loss_fct = nn.KLDivLoss(reduction="batchmean")
-                loss_start = (
-                    loss_fct(
-                        F.log_softmax(start_logits_stu / args.temperature, dim=-1),
-                        F.softmax(start_logits_tea / args.temperature, dim=-1),
-                    )
-                    * (args.temperature ** 2)
-                )
-                loss_end = (
-                    loss_fct(
-                        F.log_softmax(end_logits_stu / args.temperature, dim=-1),
-                        F.softmax(end_logits_tea / args.temperature, dim=-1),
-                    )
-                    * (args.temperature ** 2)
-                )
+                loss_start = loss_fct(
+                    nn.functional.log_softmax(start_logits_stu / args.temperature, dim=-1),
+                    nn.functional.softmax(start_logits_tea / args.temperature, dim=-1),
+                ) * (args.temperature**2)
+                loss_end = loss_fct(
+                    nn.functional.log_softmax(end_logits_stu / args.temperature, dim=-1),
+                    nn.functional.softmax(end_logits_tea / args.temperature, dim=-1),
+                ) * (args.temperature**2)
                 loss_ce = (loss_start + loss_end) / 2.0
 
                 loss = args.alpha_ce * loss_ce + args.alpha_squad * loss
@@ -262,9 +255,9 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
-                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
@@ -326,8 +319,8 @@ def evaluate(args, model, tokenizer, prefix=""):
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
-    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-        model = torch.nn.DataParallel(model)
+    if args.n_gpu > 1 and not isinstance(model, nn.DataParallel):
+        model = nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -735,7 +728,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )

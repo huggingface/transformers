@@ -27,7 +27,7 @@ local bertBaseCased = base.BaseTest {
   },
   command: utils.scriptCommand(
     |||
-      python -m pytest -s transformers/examples/test_xla_examples.py -v
+      python -m pytest -s transformers/examples/pytorch/test_xla_examples.py -v
       test_exit_code=$?
       echo "\nFinished running commands.\n"
       test $test_exit_code -eq 0

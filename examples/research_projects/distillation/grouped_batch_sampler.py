@@ -19,7 +19,7 @@ import copy
 from collections import defaultdict
 
 import numpy as np
-from torch.utils.data.sampler import BatchSampler, Sampler
+from torch.utils.data import BatchSampler, Sampler
 
 from utils import logger
 

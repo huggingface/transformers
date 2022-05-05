@@ -18,17 +18,11 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
-    _BaseLazyModule,
-    is_flax_available,
-    is_tf_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertConfig"],
+    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertConfig", "BertOnnxConfig"],
     "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"],
 }
 
@@ -70,11 +64,21 @@ if is_tf_available():
     ]
 
 if is_flax_available():
-    _import_structure["modeling_flax_bert"] = ["FlaxBertForMaskedLM", "FlaxBertModel"]
-
+    _import_structure["modeling_flax_bert"] = [
+        "FlaxBertForCausalLM",
+        "FlaxBertForMaskedLM",
+        "FlaxBertForMultipleChoice",
+        "FlaxBertForNextSentencePrediction",
+        "FlaxBertForPreTraining",
+        "FlaxBertForQuestionAnswering",
+        "FlaxBertForSequenceClassification",
+        "FlaxBertForTokenClassification",
+        "FlaxBertModel",
+        "FlaxBertPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
-    from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+    from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BertOnnxConfig
     from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 
     if is_tokenizers_available():
@@ -115,22 +119,20 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_bert import FlaxBertForMaskedLM, FlaxBertModel
+        from .modeling_flax_bert import (
+            FlaxBertForCausalLM,
+            FlaxBertForMaskedLM,
+            FlaxBertForMultipleChoice,
+            FlaxBertForNextSentencePrediction,
+            FlaxBertForPreTraining,
+            FlaxBertForQuestionAnswering,
+            FlaxBertForSequenceClassification,
+            FlaxBertForTokenClassification,
+            FlaxBertModel,
+            FlaxBertPreTrainedModel,
+        )
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

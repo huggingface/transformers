@@ -21,13 +21,24 @@ import re
 
 import numpy
 
-from .utils import logging
+from .utils import ExplicitEnum, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
+class TransposeType(ExplicitEnum):
+    """
+    Possible ...
+    """
+
+    NO = "no"
+    SIMPLE = "simple"
+    CONV1D = "conv1d"
+    CONV2D = "conv2d"
+
+
+def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="", tf_weight_shape=None):
     """
     Convert a TF 2.0 model variable name in a pytorch model weight name.
 
@@ -39,8 +50,8 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
-          other
+        - transpose: `TransposeType` member indicating whether and how TF2.0 and PyTorch weights matrices should be
+          transposed with regards to each other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
@@ -51,16 +62,23 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    # Some weights have a single name without "/" such as final_logits_bias in BART
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
+        transpose = TransposeType.CONV2D
+    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 3:
+        transpose = TransposeType.CONV1D
+    elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
         or "out_projs" in tf_name
-    )
+    ):
+        transpose = TransposeType.SIMPLE
+    else:
+        transpose = TransposeType.NO
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
@@ -98,10 +116,10 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
         raise
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info("Loading PyTorch weights from {}".format(pt_path))
+    logger.info(f"Loading PyTorch weights from {pt_path}")
 
     pt_state_dict = torch.load(pt_path, map_location="cpu")
-    logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
+    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
     return load_pytorch_weights_in_tf2_model(
         tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
@@ -165,7 +183,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            sw_name, start_prefix_to_remove=start_prefix_to_remove
+            sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape
         )
 
         # Find associated numpy array in pytorch model state dict
@@ -177,12 +195,21 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
                 # authorized missing keys don't have to be loaded
                 if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
-
-            raise AttributeError("{} not found in PyTorch model".format(name))
+            raise AttributeError(f"{name} not found in PyTorch model")
 
         array = pt_state_dict[name].numpy()
 
-        if transpose:
+        if transpose is TransposeType.CONV2D:
+            # Conv2D weight:
+            #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+            # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+            array = numpy.transpose(array, axes=(2, 3, 1, 0))
+        elif transpose is TransposeType.CONV1D:
+            # Conv1D weight:
+            #    PT: (num_out_channel, num_in_channel, kernel)
+            # -> TF: (kernel, num_in_channel, num_out_channel)
+            array = numpy.transpose(array, axes=(2, 1, 0))
+        elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
         if len(symbolic_weight.shape) < len(array.shape):
@@ -204,7 +231,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             raise e
 
         tf_loaded_numel += array.size
-        # logger.warning("Initialize TF weight {}".format(symbolic_weight.name))
+        # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
@@ -214,7 +241,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
-    logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
+    logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
 
     unexpected_keys = list(all_pytorch_weights)
 
@@ -276,7 +303,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     from .modeling_tf_utils import load_tf_weights
 
-    logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
+    logger.info(f"Loading TensorFlow weights from {tf_checkpoint_path}")
 
     # Instantiate and load the associated TF 2.0 model
     tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beginning
@@ -326,7 +353,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     tf_weights_map = {}
     for tf_weight in tf_weights:
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove
+            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
         )
         tf_weights_map[pt_name] = (tf_weight.numpy(), transpose)
 
@@ -345,11 +372,21 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
                 missing_keys_pt.append(pt_weight_name)
                 continue
 
-            raise AttributeError("{} not found in TF 2.0 model".format(pt_weight_name))
+            raise AttributeError(f"{pt_weight_name} not found in TF 2.0 model")
 
         array, transpose = tf_weights_map[pt_weight_name]
 
-        if transpose:
+        if transpose is TransposeType.CONV2D:
+            # Conv2D weight:
+            #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+            # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+            array = numpy.transpose(array, axes=(3, 2, 0, 1))
+        elif transpose is TransposeType.CONV1D:
+            # Conv1D weight:
+            #    TF: (kernel, num_in_channel, num_out_channel)
+            # -> PT: (num_out_channel, num_in_channel, kernel)
+            array = numpy.transpose(array, axes=(2, 1, 0))
+        elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
         if len(pt_weight.shape) < len(array.shape):
@@ -370,14 +407,26 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             e.args += (pt_weight.shape, array.shape)
             raise e
 
-        # logger.warning("Initialize PyTorch weight {}".format(pt_weight_name))
-
+        # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
+        # Make sure we have a proper numpy array
+        if numpy.isscalar(array):
+            array = numpy.array(array)
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
 
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
+
+    # Some models may have keys that are not in the state by design, removing them before needlessly warning
+    # the user.
+    if pt_model._keys_to_ignore_on_load_missing is not None:
+        for pat in pt_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+    if pt_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in pt_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(
@@ -403,6 +452,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
 
-    logger.info("Weights or buffers not loaded from TF 2.0 model: {}".format(all_tf_weights))
+    logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
 
     return pt_model

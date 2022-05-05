@@ -18,14 +18,14 @@ RetriBERT model
 
 
 import math
+from typing import Optional
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
+from torch import nn
 
-from ...file_utils import add_start_docstrings
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..bert.modeling_bert import BertModel
 from .configuration_retribert import RetriBertConfig
 
@@ -50,7 +50,7 @@ class RetriBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "retribert"
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -66,28 +66,27 @@ class RetriBertPreTrainedModel(PreTrainedModel):
 
 RETRIBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
-        config (:class:`~transformers.RetriBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`RetriBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retrieval. """,
+    """Bert Based model to embed queries or document for document retrieval.""",
     RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RetriBertConfig) -> None:
         super().__init__(config)
         self.projection_dim = config.projection_dim
 
@@ -99,7 +98,8 @@ class RetriBertModel(RetriBertPreTrainedModel):
 
         self.ce_loss = nn.CrossEntropyLoss(reduction="mean")
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def embed_sentences_checkpointed(
         self,
@@ -118,7 +118,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             head_mask = [None] * sent_encoder.config.num_hidden_layers
             extended_attention_mask: torch.Tensor = sent_encoder.get_extended_attention_mask(
-                attention_mask, input_shape, device
+                attention_mask, input_shape
             )
 
             # define function for checkpointing
@@ -174,37 +174,41 @@ class RetriBertModel(RetriBertPreTrainedModel):
         return self.project_doc(a_reps)
 
     def forward(
-        self, input_ids_query, attention_mask_query, input_ids_doc, attention_mask_doc, checkpoint_batch_size=-1
-    ):
+        self,
+        input_ids_query: torch.LongTensor,
+        attention_mask_query: Optional[torch.FloatTensor],
+        input_ids_doc: torch.LongTensor,
+        attention_mask_doc: Optional[torch.FloatTensor],
+        checkpoint_batch_size: int = -1,
+    ) -> torch.FloatTensor:
         r"""
         Args:
-            input_ids_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids_query (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the queries in a batch.
 
-                Indices can be obtained using :class:`~transformers.RetriBertTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
+                Indices can be obtained using [`RetriBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask_query (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            input_ids_doc (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                [What are attention masks?](../glossary#attention-mask)
+            input_ids_doc (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the documents in a batch.
-            attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            attention_mask_doc (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on documents padding token indices.
-            checkpoint_batch_size (:obj:`int`, `optional`, defaults to `:obj:`-1`):
+            checkpoint_batch_size (`int`, *optional*, defaults to ```-1`):
                 If greater than 0, uses gradient checkpointing to only compute sequence representation on
-                :obj:`checkpoint_batch_size` examples at a time on the GPU. All query representations are still
-                compared to all document representations in the batch.
+                `checkpoint_batch_size` examples at a time on the GPU. All query representations are still compared to
+                all document representations in the batch.
 
         Return:
-            :obj:`torch.FloatTensor`: The bidirectional cross-entropy loss obtained while trying to match each query to
-            its corresponding document and each document to its corresponding query in the batch
+            `torch.FloatTensor``: The bidirectional cross-entropy loss obtained while trying to match each query to its
+            corresponding document and each document to its corresponding query in the batch
         """
         device = input_ids_query.device
         q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)

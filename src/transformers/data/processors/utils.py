@@ -20,8 +20,7 @@ import json
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
-from ...file_utils import is_tf_available, is_torch_available
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -60,7 +59,7 @@ class InputFeatures:
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
         attention_mask: Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``: Usually ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded)
+            Mask values selected in `[0, 1]`: Usually `1` for tokens that are NOT MASKED, `0` for MASKED (padded)
             tokens.
         token_type_ids: (Optional) Segment token indices to indicate first and second
             portions of the inputs. Only some models use them.
@@ -92,15 +91,15 @@ class DataProcessor:
         raise NotImplementedError()
 
     def get_train_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the train set."""
+        """Gets a collection of [`InputExample`] for the train set."""
         raise NotImplementedError()
 
     def get_dev_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the dev set."""
+        """Gets a collection of [`InputExample`] for the dev set."""
         raise NotImplementedError()
 
     def get_test_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the test set."""
+        """Gets a collection of [`InputExample`] for the test set."""
         raise NotImplementedError()
 
     def get_labels(self):
@@ -124,7 +123,7 @@ class DataProcessor:
 
 
 class SingleSentenceClassificationProcessor(DataProcessor):
-    """ Generic processor for a single sentence classification data set."""
+    """Generic processor for a single sentence classification data set."""
 
     def __init__(self, labels=None, examples=None, mode="classification", verbose=False):
         self.labels = [] if labels is None else labels
@@ -186,7 +185,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             if column_id is not None:
                 ids.append(line[column_id])
             else:
-                guid = "%s-%s" % (split_name, i) if split_name else "%s" % i
+                guid = f"{split_name}-{i}" if split_name else str(i)
                 ids.append(guid)
 
         return self.add_examples(
@@ -196,12 +195,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
     def add_examples(
         self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
     ):
-        assert labels is None or len(texts_or_text_and_labels) == len(
-            labels
-        ), f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
-        assert ids is None or len(texts_or_text_and_labels) == len(
-            ids
-        ), f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}"
+        if labels is not None and len(texts_or_text_and_labels) != len(labels):
+            raise ValueError(
+                f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
+            )
+        if ids is not None and len(texts_or_text_and_labels) != len(ids):
+            raise ValueError(f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}")
         if ids is None:
             ids = [None] * len(texts_or_text_and_labels)
         if labels is None:
@@ -240,21 +239,21 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         return_tensors=None,
     ):
         """
-        Convert examples in a list of ``InputFeatures``
+        Convert examples in a list of `InputFeatures`
 
         Args:
             tokenizer: Instance of a tokenizer that will tokenize the examples
             max_length: Maximum example length
-            pad_on_left: If set to ``True``, the examples will be padded on the left rather than on the right (default)
+            pad_on_left: If set to `True`, the examples will be padded on the left rather than on the right (default)
             pad_token: Padding token
-            mask_padding_with_zero: If set to ``True``, the attention mask will be filled by ``1`` for actual values
-                and by ``0`` for padded values. If set to ``False``, inverts it (``1`` for padded values, ``0`` for
-                actual values)
+            mask_padding_with_zero: If set to `True`, the attention mask will be filled by `1` for actual values
+                and by `0` for padded values. If set to `False`, inverts it (`1` for padded values, `0` for actual
+                values)
 
         Returns:
-            If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-            task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-            ``InputFeatures`` which can be fed to the model.
+            If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the
+            task-specific features. If the input is a list of `InputExamples`, will return a list of task-specific
+            `InputFeatures` which can be fed to the model.
 
         """
         if max_length is None:
@@ -265,7 +264,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         all_input_ids = []
         for (ex_index, example) in enumerate(self.examples):
             if ex_index % 10000 == 0:
-                logger.info("Tokenizing example %d", ex_index)
+                logger.info(f"Tokenizing example {ex_index}")
 
             input_ids = tokenizer.encode(
                 example.text_a,
@@ -279,7 +278,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         features = []
         for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
-                logger.info("Writing example %d/%d" % (ex_index, len(self.examples)))
+                logger.info(f"Writing example {ex_index}/{len(self.examples)}")
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
             attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
@@ -293,12 +292,10 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 input_ids = input_ids + ([pad_token] * padding_length)
                 attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
 
-            assert len(input_ids) == batch_length, "Error with input length {} vs {}".format(
-                len(input_ids), batch_length
-            )
-            assert len(attention_mask) == batch_length, "Error with input length {} vs {}".format(
-                len(attention_mask), batch_length
-            )
+            if len(input_ids) != batch_length:
+                raise ValueError(f"Error with input length {len(input_ids)} vs {batch_length}")
+            if len(attention_mask) != batch_length:
+                raise ValueError(f"Error with input length {len(attention_mask)} vs {batch_length}")
 
             if self.mode == "classification":
                 label = label_map[example.label]
@@ -309,10 +306,10 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
             if ex_index < 5 and self.verbose:
                 logger.info("*** Example ***")
-                logger.info("guid: %s" % (example.guid))
-                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-                logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-                logger.info("label: %s (id = %d)" % (example.label, label))
+                logger.info(f"guid: {example.guid}")
+                logger.info(f"input_ids: {' '.join([str(x) for x in input_ids])}")
+                logger.info(f"attention_mask: {' '.join([str(x) for x in attention_mask])}")
+                logger.info(f"label: {example.label} (id = {label})")
 
             features.append(InputFeatures(input_ids=input_ids, attention_mask=attention_mask, label=label))
 

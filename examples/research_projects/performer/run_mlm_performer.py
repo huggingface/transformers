@@ -17,7 +17,7 @@ Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBER
 text file or a dataset.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=fill-mask
 """
 import logging
 import os
@@ -467,7 +467,7 @@ if __name__ == "__main__":
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level="NOTSET",
         datefmt="[%X]",
     )

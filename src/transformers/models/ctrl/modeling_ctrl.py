@@ -15,25 +15,23 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn as nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
-from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_ctrl import CTRLConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
-_TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -87,7 +85,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     return output, attention_weights
 
 
-class MultiHeadAttention(torch.nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model_size, num_heads):
         super().__init__()
         self.num_heads = num_heads
@@ -95,11 +93,11 @@ class MultiHeadAttention(torch.nn.Module):
 
         self.depth = int(d_model_size / self.num_heads)
 
-        self.Wq = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wk = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wv = torch.nn.Linear(d_model_size, d_model_size)
+        self.Wq = nn.Linear(d_model_size, d_model_size)
+        self.Wk = nn.Linear(d_model_size, d_model_size)
+        self.Wv = nn.Linear(d_model_size, d_model_size)
 
-        self.dense = torch.nn.Linear(d_model_size, d_model_size)
+        self.dense = nn.Linear(d_model_size, d_model_size)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -167,21 +165,21 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
-    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff), torch.nn.ReLU(), torch.nn.Linear(dff, d_model_size))
+    return nn.Sequential(nn.Linear(d_model_size, dff), nn.ReLU(), nn.Linear(dff, d_model_size))
 
 
-class EncoderLayer(torch.nn.Module):
+class EncoderLayer(nn.Module):
     def __init__(self, d_model_size, num_heads, dff, rate=0.1):
         super().__init__()
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
-        self.layernorm1 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
-        self.layernorm2 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm2 = nn.LayerNorm(d_model_size, eps=1e-6)
 
-        self.dropout1 = torch.nn.Dropout(rate)
-        self.dropout2 = torch.nn.Dropout(rate)
+        self.dropout1 = nn.Dropout(rate)
+        self.dropout2 = nn.Dropout(rate)
 
     def forward(
         self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
@@ -239,81 +237,78 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
 CTRL_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
-        config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
+        config ([`CTRLConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 CTRL_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
-            ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
-            sequence tokens in the vocabulary.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0].shape[-2]`
+            (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
-            If :obj:`past_key_values` is used, only input IDs that do not have their past calculated should be passed
-            as ``input_ids``.
+            If `past_key_values` is used, only input IDs that do not have their past calculated should be passed as
+            `input_ids`.
 
-            Indices can be obtained using :class:`~transformers.CTRLTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.__call__` and :meth:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using [`CTRLTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        past_key_values (:obj:`Tuple[Tuple[torch.FloatTensor]]` of length :obj:`config.n_layers`):
+            [What are input IDs?](../glossary#input-ids)
+        past_key_values (`Tuple[Tuple[torch.FloatTensor]]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
-            :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
-            have their past given to this model should not be passed as input ids as they have already been computed.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
+            their past given to this model should not be passed as input ids as they have already been computed.
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -338,7 +333,8 @@ class CTRLModel(CTRLPreTrainedModel):
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.w
@@ -354,27 +350,43 @@ class CTRLModel(CTRLPreTrainedModel):
             self.h[layer].multi_head_attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+        r"""
+        Returns:
 
+        Example:
+
+        ```python
+        >>> from transformers import CTRLTokenizer, CTRLModel
+        >>> import torch
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLModel.from_pretrained("ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 5, 1280]
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_hidden_states = (
@@ -394,19 +406,21 @@ class CTRLModel(CTRLPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # Attention mask.
         if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -438,11 +452,11 @@ class CTRLModel(CTRLPreTrainedModel):
             inputs_embeds = self.w(input_ids)
         # inputs_embeds = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
         seq_len = input_shape[-1]
-        mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(inputs_embeds.device)
+        mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(device)
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
-        pos_embeds = self.pos_encoding[position_ids, :].to(inputs_embeds.device)
+        pos_embeds = self.pos_encoding[position_ids, :].to(device)
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
 
@@ -498,7 +512,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -514,33 +529,55 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return {"input_ids": input_ids, "past_key_values": past, "use_cache": use_cache}
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
-        """
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLLMHeadModel
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Wikipedia The llama is", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> sequence_ids = model.generate(inputs["input_ids"])
+        >>> sequences = tokenizer.batch_decode(sequence_ids)
+        >>> sequences
+        ['Wikipedia The llama is a member of the family Bovidae. It is native to the Andes of Peru,']
+
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> round(outputs.loss.item(), 2)
+        9.21
+
+        >>> list(outputs.logits.shape)
+        [1, 5, 246534]
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -585,9 +622,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
-        This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
@@ -598,12 +635,12 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 @add_start_docstrings(
     """
     The CTRL Model transformer with a sequence classification head on top (linear layer).
-    :class:`~transformers.CTRLForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the
-    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
-    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
-    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
-    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
+    [`CTRLForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the position of the last
+    token. If a `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in
+    each row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last
+    value in each row of the batch).
     """,
     CTRL_START_DOCSTRING,
 )
@@ -614,36 +651,102 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         self.transformer = CTRLModel(config)
         self.classifier = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Example of single-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> import torch
+
+        >>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
+
+        >>> labels = torch.tensor(1)
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        0.35
+        ```
+
+        Example of multi-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
+
+        >>> num_labels = len(model.config.id2label)
+        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+        ...     torch.float
+        ... )
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> loss.backward()  # doctest: +IGNORE_RESULT
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -669,9 +772,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
         if self.config.pad_token_id is None:
             sequence_lengths = -1
@@ -682,21 +784,33 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[2:]
             return ((loss,) + output) if loss is not None else output

@@ -28,12 +28,12 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
-from transformers.utils.versions import require_version_examples
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
-require_version_examples("pytorch_lightning>=1.0.4")
+require_version("pytorch_lightning>=1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -167,8 +167,8 @@ class BaseTransformer(pl.LightningModule):
         effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
         return (self.dataset_size / effective_batch_size) * self.hparams.max_epochs
 
-    def setup(self, mode):
-        if mode == "test":
+    def setup(self, stage):
+        if stage == "test":
             self.dataset_size = len(self.test_dataloader().dataset)
         else:
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
@@ -266,6 +266,15 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--adafactor", action="store_true")
 
 
+class InitCallback(pl.Callback):
+    # This method is better that using a custom DDP plugging with the latest pytorch-lightning (@shamanez)
+    def on_sanity_check_start(self, trainer, pl_module):
+        if (
+            trainer.is_global_zero and trainer.global_rank == 0
+        ):  # we initialize the retriever only on master worker with RAY. In new pytorch-lightning accelorators are removed.
+            pl_module.model.rag.retriever.init_retrieval()  # better to use hook functions.
+
+
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
         lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
@@ -341,6 +350,7 @@ def generic_train(
     args: argparse.Namespace,
     early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
+    custom_ddp_plugin=None,
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
@@ -367,21 +377,22 @@ def generic_train(
     # TODO: remove with PyTorch 1.6 since pl uses native amp
     if args.fp16:
         train_params["precision"] = 16
-        train_params["amp_level"] = args.fp16_opt_level
+        # train_params["amp_level"] = args.fp16_opt_level
 
     if args.gpus > 1:
-        train_params["distributed_backend"] = "ddp"
+        train_params["accelerator"] = "auto"  # "ddp"
+        train_params["strategy"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
-    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
+    train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None) #get unwanted logs
+    train_params["devices"] = "auto"
 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
-        callbacks=[logging_callback] + extra_callbacks,
+        callbacks=[logging_callback] + extra_callbacks + [checkpoint_callback] + [InitCallback()],
+        # plugins=[custom_ddp_plugin],
         logger=logger,
-        checkpoint_callback=checkpoint_callback,
         **train_params,
     )
 

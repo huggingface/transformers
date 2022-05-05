@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_torch_available
+from ...utils import _LazyModule, is_sentencepiece_available, is_speech_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -25,13 +25,24 @@ _import_structure = {
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
     ],
-    "feature_extraction_speech_to_text": ["Speech2TextFeatureExtractor"],
 }
 
 if is_sentencepiece_available():
     _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
-    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
+if is_speech_available():
+    _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
+
+    if is_sentencepiece_available():
+        _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
+
+if is_tf_available():
+    _import_structure["modeling_tf_speech_to_text"] = [
+        "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFSpeech2TextForConditionalGeneration",
+        "TFSpeech2TextModel",
+        "TFSpeech2TextPreTrainedModel",
+    ]
 
 if is_torch_available():
     _import_structure["modeling_speech_to_text"] = [
@@ -44,11 +55,23 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
-    from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
 
     if is_sentencepiece_available():
-        from .processing_speech_to_text import Speech2TextProcessor
         from .tokenization_speech_to_text import Speech2TextTokenizer
+
+    if is_speech_available():
+        from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
+
+        if is_sentencepiece_available():
+            from .processing_speech_to_text import Speech2TextProcessor
+
+    if is_tf_available():
+        from .modeling_tf_speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeech2TextForConditionalGeneration,
+            TFSpeech2TextModel,
+            TFSpeech2TextPreTrainedModel,
+        )
 
     if is_torch_available():
         from .modeling_speech_to_text import (
@@ -59,19 +82,6 @@ if TYPE_CHECKING:
         )
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

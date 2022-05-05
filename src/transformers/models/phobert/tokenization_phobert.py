@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for PhoBERT """
+""" Tokenization classes for PhoBERT"""
 
 
 import os
@@ -69,41 +69,47 @@ class PhobertTokenizer(PreTrainedTokenizer):
     """
     Construct a PhoBERT tokenizer. Based on Byte-Pair-Encoding.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        bos_token (:obj:`st`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`st`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
     """
@@ -162,17 +168,17 @@ class PhobertTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A PhoBERT sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -186,27 +192,24 @@ class PhobertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
@@ -220,13 +223,13 @@ class PhobertTokenizer(PreTrainedTokenizer):
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            `List[int]`: List of zeros.
         """
 
         sep = [self.sep_token_id]
@@ -298,7 +301,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
@@ -306,13 +309,13 @@ class PhobertTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -346,7 +349,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
             except FileNotFoundError as fnfe:
                 raise fnfe
             except UnicodeError:
-                raise Exception("Incorrect encoding detected in {}, please " "rebuild the dataset".format(f))
+                raise Exception(f"Incorrect encoding detected in {f}, please rebuild the dataset")
             return
 
         lines = f.readlines()

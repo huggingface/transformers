@@ -10,7 +10,6 @@ from typing import List
 import pytorch_lightning as pl
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
@@ -123,8 +122,8 @@ class SummarizationDistiller(SummarizationModule):
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
             self.ce_loss_fct(
-                F.log_softmax(s_logits_slct / self.temperature, dim=-1),
-                F.softmax(t_logits_slct / self.temperature, dim=-1),
+                nn.functional.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                nn.functional.softmax(t_logits_slct / self.temperature, dim=-1),
             )
             * (self.temperature) ** 2
         )
@@ -160,10 +159,10 @@ class SummarizationDistiller(SummarizationModule):
         assert lm_logits.shape[-1] == self.model.config.vocab_size
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=pad_token_id)
             student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
         else:
-            lprobs = F.log_softmax(lm_logits, dim=-1)
+            lprobs = nn.functional.log_softmax(lm_logits, dim=-1)
             student_lm_loss, _ = label_smoothed_nll_loss(
                 lprobs, labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
@@ -230,9 +229,9 @@ class SummarizationDistiller(SummarizationModule):
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
         assert student_states.shape == teacher_states.shape, f"{student_states.shape} != {teacher_states.shape}"
         if normalize_hidden:
-            student_states = F.layer_norm(student_states, student_states.shape[1:])
-            teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
-        mse = F.mse_loss(student_states, teacher_states, reduction="none")
+            student_states = nn.functional.layer_norm(student_states, student_states.shape[1:])
+            teacher_states = nn.functional.layer_norm(teacher_states, teacher_states.shape[1:])
+        mse = nn.functional.mse_loss(student_states, teacher_states, reduction="none")
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
 

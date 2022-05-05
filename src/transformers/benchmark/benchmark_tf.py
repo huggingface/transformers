@@ -24,9 +24,8 @@ from functools import wraps
 from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
-from ..file_utils import is_py3nvml_available, is_tf_available
 from ..models.auto.modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
-from ..utils import logging
+from ..utils import is_py3nvml_available, is_tf_available, logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -227,14 +226,14 @@ class TensorFlowBenchmark(Benchmark):
 
                 return min(runtimes) / 10.0
             except ResourceExhaustedError as e:
-                self.print_fn("Doesn't fit on GPU. {}".format(e))
+                self.print_fn(f"Doesn't fit on GPU. {e}")
 
     def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         logger.info(
-            "Note that TensorFlow allocates more memory than"
-            "it might need to speed up computation."
-            "The memory reported here corresponds to the memory"
-            "reported by `nvidia-smi`, which can vary depending"
+            "Note that TensorFlow allocates more memory than "
+            "it might need to speed up computation. "
+            "The memory reported here corresponds to the memory "
+            "reported by `nvidia-smi`, which can vary depending "
             "on total available memory on the GPU that is used."
         )
         with self.args.strategy.scope():
@@ -290,5 +289,5 @@ class TensorFlowBenchmark(Benchmark):
 
                 return memory, summary
             except ResourceExhaustedError as e:
-                self.print_fn("Doesn't fit on GPU. {}".format(e))
+                self.print_fn(f"Doesn't fit on GPU. {e}")
                 return "N/A", None

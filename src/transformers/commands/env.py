@@ -15,8 +15,10 @@
 import platform
 from argparse import ArgumentParser
 
+import huggingface_hub
+
 from .. import __version__ as version
-from ..file_utils import is_tf_available, is_torch_available
+from ..utils import is_flax_available, is_tf_available, is_torch_available
 from . import BaseTransformersCLICommand
 
 
@@ -52,12 +54,30 @@ class EnvironmentCommand(BaseTransformersCLICommand):
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
 
+        flax_version = "not installed"
+        jax_version = "not installed"
+        jaxlib_version = "not installed"
+        jax_backend = "NA"
+        if is_flax_available():
+            import flax
+            import jax
+            import jaxlib
+
+            flax_version = flax.__version__
+            jax_version = jax.__version__
+            jaxlib_version = jaxlib.__version__
+            jax_backend = jax.lib.xla_bridge.get_backend().platform
+
         info = {
             "`transformers` version": version,
             "Platform": platform.platform(),
             "Python version": platform.python_version(),
-            "PyTorch version (GPU?)": "{} ({})".format(pt_version, pt_cuda_available),
-            "Tensorflow version (GPU?)": "{} ({})".format(tf_version, tf_cuda_available),
+            "Huggingface_hub version": huggingface_hub.__version__,
+            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
+            "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
+            "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
+            "Jax version": f"{jax_version}",
+            "JaxLib version": f"{jaxlib_version}",
             "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
@@ -69,4 +89,4 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def format_dict(d):
-        return "\n".join(["- {}: {}".format(prop, val) for prop, val in d.items()]) + "\n"
+        return "\n".join([f"- {prop}: {val}" for prop, val in d.items()]) + "\n"

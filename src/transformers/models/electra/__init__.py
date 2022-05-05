@@ -18,11 +18,11 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig"],
+    "configuration_electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraOnnxConfig"],
     "tokenization_electra": ["ElectraTokenizer"],
 }
 
@@ -32,6 +32,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_electra"] = [
         "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ElectraForCausalLM",
         "ElectraForMaskedLM",
         "ElectraForMultipleChoice",
         "ElectraForPreTraining",
@@ -56,9 +57,22 @@ if is_tf_available():
         "TFElectraPreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_electra"] = [
+        "FlaxElectraForCausalLM",
+        "FlaxElectraForMaskedLM",
+        "FlaxElectraForMultipleChoice",
+        "FlaxElectraForPreTraining",
+        "FlaxElectraForQuestionAnswering",
+        "FlaxElectraForSequenceClassification",
+        "FlaxElectraForTokenClassification",
+        "FlaxElectraModel",
+        "FlaxElectraPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
-    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
+    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraOnnxConfig
     from .tokenization_electra import ElectraTokenizer
 
     if is_tokenizers_available():
@@ -67,6 +81,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,
@@ -91,20 +106,20 @@ if TYPE_CHECKING:
             TFElectraPreTrainedModel,
         )
 
+    if is_flax_available():
+        from .modeling_flax_electra import (
+            FlaxElectraForCausalLM,
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
+        )
+
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
