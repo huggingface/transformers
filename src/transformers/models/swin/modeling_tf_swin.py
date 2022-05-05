@@ -17,12 +17,19 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
-from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, get_initializer
+from ...modeling_tf_utils import (
+    TFModelInputType,
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    get_initializer,
+    unpack_inputs
+)
+from ...tf_utils import shape_list
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -59,6 +66,80 @@ TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 
+class AdaptiveAveragePooling1D(tf.keras.layers.Layer):
+    """
+    Average 1D Pooling with adaptive kernel size.
+    Args:
+      output_size: An integer or tuple/list of a single integer, specifying pooled_features.
+        The new size of output channels.
+      data_format: A string,
+        one of `channels_last` (default) or `channels_first`.
+        The ordering of the dimensions in the inputs.
+        `channels_last` corresponds to inputs with shape
+        `(batch, steps, channels)` while `channels_first`
+        corresponds to inputs with shape `(batch, channels, steps)`.
+    Input shape:
+      - If `data_format='channels_last'`:
+        3D tensor with shape `(batch, steps, channels)`.
+      - If `data_format='channels_first'`:
+        3D tensor with shape `(batch, channels, steps)`.
+    Output shape:
+      - If `data_format='channels_last'`:
+        3D tensor with shape `(batch_size, pooled_steps, channels)`.
+      - If `data_format='channels_first'`:
+        3D tensor with shape `(batch_size, channels, pooled_steps)`.
+
+    Adapted from [tensorflow-addon's adaptive pooling.py](
+        https://github.com/tensorflow/addons/blob/8cec33fcaaf1cf90aec7bdd55a0fcdbb251ce5c2/tensorflow_addons/layers/adaptive_pooling.py#L90-L120
+    )
+    """
+    def __init__(
+        self,
+        output_size: Union[int, Iterable[int]],
+        reduce_function: Callable = tf.reduce_mean,
+        data_format: Optional[str] = None,
+        **kwargs,
+    ):
+        # self.data_format = conv_utils.normalize_data_format(data_format)
+        self.data_format = tf.keras.backend.image_data_format() #FIXME
+        self.reduce_function = reduce_function
+        # self.output_size = conv_utils.normalize_tuple(output_size, 1, "output_size")
+        self.output_size = (output_size,) if isinstance(output_size, int) else tuple(output_size)
+        super().__init__(**kwargs)
+
+    def call(self, inputs, *args):
+        bins = self.output_size[0]
+        if self.data_format == "channels_last":
+            splits = tf.split(inputs, bins, axis=1)
+            splits = tf.stack(splits, axis=1)
+            out_vect = self.reduce_function(splits, axis=2)
+        else:
+            splits = tf.split(inputs, bins, axis=2)
+            splits = tf.stack(splits, axis=2)
+            out_vect = self.reduce_function(splits, axis=3)
+        return out_vect
+
+    def compute_output_shape(self, input_shape):
+        input_shape = tf.TensorShape(input_shape).as_list()
+        if self.data_format == "channels_last":
+            shape = tf.TensorShape(
+                [input_shape[0], self.output_size[0], input_shape[2]]
+            )
+        else:
+            shape = tf.TensorShape(
+                [input_shape[0], input_shape[1], self.output_size[0]]
+            )
+        return shape
+
+    def get_config(self):
+        config = {
+            "output_size": self.output_size,
+            "data_format": self.data_format,
+        }
+        base_config = super().get_config()
+        return {**base_config, **config}
+
+
 @dataclass
 class TFSwinEncoderOutput(ModelOutput):
     """
@@ -72,8 +153,8 @@ class TFSwinEncoderOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -243,9 +324,10 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
         return input
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = input.new_empty(shape).bernoulli_(keep_prob)
+    random_tensor = tf.random.uniform(shape)
+    random_tensor = tf.where(random_tensor <= keep_prob, 1., 0.) #FIXME - verify these probabilities
     if keep_prob > 0.0 and scale_by_keep:
-        random_tensor.div_(keep_prob)
+        random_tensor /= keep_prob
     return input * random_tensor
 
 
@@ -254,7 +336,7 @@ class TFSwinEmbeddings(tf.keras.layers.Layer):
     Construct the patch and position embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config, use_mask_token=False, **kwargs):
+    def __init__(self, config: SwinConfig, use_mask_token: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.patch_embeddings = TFSwinPatchEmbeddings(
             image_size=config.image_size,
@@ -285,16 +367,16 @@ class TFSwinEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, pixel_values, bool_masked_pos=None, training=False):
-        embeddings, output_dimensions = self.patch_embeddings(pixel_values) #FIXME - take dict values?
+        embeddings, output_dimensions = self.patch_embeddings(pixel_values, training=training)
         embeddings = self.norm(embeddings, training=training)
         batch_size, seq_len, _ = embeddings.shape
 
         if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            mask_tokens = tf.repeat(self.mask_token, batch_size, 0)
+            mask_tokens = tf.repeat(mask_tokens, seq_len, 1)
             # replace the masked visual tokens by mask_tokens
-            mask = tf.expand_dims(bool, -1)
+            mask = tf.expand_dims(bool_masked_pos, -1)
             mask = tf.cast(mask, mask_tokens.dtype)
-            mask = bool_masked_pos
 
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
@@ -338,15 +420,15 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
             pixel_values = tf.pad(pixel_values, pad_values) #FIXME
         return pixel_values
 
-    def call(self, pixel_values):
-        _, _, height, width = pixel_values.shape
+    def call(self, pixel_values, training=False):
+        _, _, height, width = shape_list(pixel_values)
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
 
         # FIXME - how to handle different channel orders?
         pixel_values = tf.transpose(pixel_values, (0, 2, 3, 1))
 
-        embeddings = self.projection(pixel_values)
+        embeddings = self.projection(pixel_values, training=training)
 
         # FIXME - reorder channel again?
         embeddings = tf.transpose(embeddings, (0, 3, 1, 2))
@@ -388,7 +470,7 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
 
         return input_feature
 
-    def call(self, input_feature, input_dimensions):
+    def call(self, input_feature, input_dimensions, training=False):
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, _, num_channels = input_feature.shape
@@ -408,8 +490,8 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
         input_feature = tf.concat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1) #FIXME
         input_feature = tf.reshape(input_feature, (batch_size, -1, 4 * num_channels)) # batch_size height/2*width/2 4*C
 
-        input_feature = self.norm(input_feature)
-        input_feature = self.reduction(input_feature)
+        input_feature = self.norm(input_feature, training=training)
+        input_feature = self.reduction(input_feature, training=training)
 
         return input_feature
 
@@ -460,7 +542,6 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         stack_1 += self.window_size[1] - 1
         relative_coords = tf.stack([stack_0, stack_1], axis=2)
         self.relative_position_index = tf.reduce_sum(relative_coords, axis=-1)
-        # self.register_buffer("relative_position_index", relative_position_index) #FIXME !!!!
 
         self.query = tf.keras.layers.Dense(
             self.all_head_size,
@@ -515,7 +596,7 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         )
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        relative_position_bias = tf.gather(self.relative_position_bias_table, tf.reshape(self.relative_position_index, -1)) # FIXME - double check dimensions
+        relative_position_bias = tf.gather(self.relative_position_bias_table, tf.reshape(self.relative_position_index, (-1,))) # FIXME - double check dimensions
         relative_position_bias = tf.reshape(
             relative_position_bias,
             (self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)
@@ -588,6 +669,7 @@ class TFSwinAttention(tf.keras.layers.Layer):
         attention_output = self.self_output(self_outputs[0], hidden_states, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
 
 class TFSwinIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, dim, **kwargs):
@@ -662,9 +744,10 @@ class TFSwinLayer(tf.keras.layers.Layer):
                         for i in range(height_slice[0] % height, height_slice[1] % height)
                         for j in range(width_slice[0] % width, width_slice[1] % width)
                     ] #FIXME - find indices in a better way
-                    updates = tf.ones((len(indices),), dtype=img_mask.dtype) * count
-                    img_mask = tf.tensor_scatter_nd_update(img_mask, indices, updates)
-                    count += 1
+                    if indices:
+                        updates = tf.ones((len(indices),), dtype=img_mask.dtype) * count
+                        img_mask = tf.tensor_scatter_nd_update(img_mask, indices, updates)
+                    count += 1 # Increment count if no update? FIXME
 
             img_mask = tf.expand_dims(img_mask, -1) #FIXME - have dimensions at the start
             img_mask = tf.expand_dims(img_mask, 0)
@@ -688,7 +771,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
             [0, 0],
         ]) #FIXME - double check dimensions and padding
         hidden_states = tf.pad(hidden_states, pad_values)
-        pad_values = tf.reshape(pad_values, -1)
+        pad_values = tf.reshape(pad_values, (-1,))
         return hidden_states, pad_values
 
     def call(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False, training=False):
@@ -697,7 +780,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         batch_size, _, channels = hidden_states.shape
         shortcut = hidden_states
 
-        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states = self.layernorm_before(hidden_states, training=training)
         hidden_states = tf.reshape(hidden_states, (batch_size, height, width, channels))
         # pad hidden_states to multiples of window size
         hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
@@ -736,7 +819,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
 
         attention_windows = tf.reshape(attention_windows, (batch_size, height * width, channels))
 
-        hidden_states = shortcut + self.drop_path(attention_windows)
+        hidden_states = shortcut + self.drop_path(attention_windows, training=training)
 
         layer_output = self.layernorm_after(hidden_states, training=training)
         layer_output = self.intermediate(layer_output, training=training)
@@ -783,7 +866,7 @@ class TFSwinStage(tf.keras.layers.Layer):
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(layer_outputs[0], input_dimensions)
+            hidden_states = self.downsample(layer_outputs[0], input_dimensions, training=training)
         else:
             output_dimensions = (height, width, height, width)
 
@@ -824,6 +907,7 @@ class TFSwinEncoder(tf.keras.layers.Layer):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        training=False
     ):
         all_input_dimensions = ()
         all_hidden_states = () if output_hidden_states else None
@@ -854,7 +938,7 @@ class TFSwinEncoder(tf.keras.layers.Layer):
 # #                 )
 # #             else:
             #FIXME
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions, training=training)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -865,7 +949,7 @@ class TFSwinEncoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 batch_size, _, hidden_size = hidden_states.shape
                 # rearrange b (h w) c -> b c h w
-                reshaped_hidden_state = tf.reshape(batch_size, (*input_dimensions, hidden_size))
+                reshaped_hidden_state = tf.reshape(hidden_states, (batch_size, *input_dimensions, hidden_size))
                 reshaped_hidden_state = tf.transpose(reshaped_hidden_state, (0, 3, 1, 2)) #FIXME
                 all_hidden_states += (hidden_states,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
@@ -911,6 +995,10 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
         if isinstance(module, TFSwinEncoder):
             module.gradient_checkpointing = value
 
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]: #FIXME - change defaul the dummy inputs
+        return DUMMY_IMAGE_INPUTS
+
 
 class TFSwinModel(TFSwinPreTrainedModel):
     def __init__(
@@ -928,10 +1016,7 @@ class TFSwinModel(TFSwinPreTrainedModel):
         self.encoder = TFSwinEncoder(config, self.embeddings.patch_grid, name="encoder")
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layernorm')
-        self.pooler = tf.keras.layers.AveragePooling1D(pool_size=26) if add_pooling_layer else None #FIXME - double check what's being pooled and if equivalent
-
-#         # Initialize weights and apply final processing
-#         self.post_init() #FIXME
+        self.pooler = AdaptiveAveragePooling1D(output_size=(1,)) if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -944,6 +1029,7 @@ class TFSwinModel(TFSwinPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @unpack_inputs
     def call(
         self,
         pixel_values=None,
@@ -986,12 +1072,13 @@ class TFSwinModel(TFSwinPreTrainedModel):
         )
 
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        sequence_output = self.layernorm(sequence_output, training=training)
 
         pooled_output = None
         if self.pooler is not None:
+            batch_size, _, num_features = sequence_output.shape
             pooled_output = self.pooler(sequence_output)
-            pooled_output = tf.reshape(pooled_output, (1, -1))
+            pooled_output = tf.reshape(pooled_output, (batch_size, num_features))
 
         if not return_dict:
             output = (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1034,7 +1121,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.swin = TFSwinModel(config, add_pooling_layer=False, use_mask_token=True)
+        self.swin = TFSwinModel(config, add_pooling_layer=False, use_mask_token=True, name="swin")
 
         self.decoder = tf.keras.Sequential([
             tf.keras.layers.Conv2D(
@@ -1045,13 +1132,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
             PixelShuffle(config.encoder_stride) #FIXME
         ], name='decoder')
 
-        # Initialize weights and apply final processing
-        # self.post_init() #FIXME
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]: #FIXME - change defaul the dummy inputs
-        return DUMMY_IMAGE_INPUTS
-
+    @unpack_inputs
     def call(
         self,
         pixel_values=None,
@@ -1084,7 +1165,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         # Reconstruct pixel values
         #FIXME - check channel order and output dimensions
         sequence_output = tf.transpose(sequence_output, (0, 2, 3, 1))
-        reconstructed_pixel_values = self.decoder(sequence_output)
+        reconstructed_pixel_values = self.decoder(sequence_output, training=training)
         reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
         masked_im_loss = None
@@ -1094,9 +1175,18 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
             mask = tf.repeat(bool_masked_pos, self.config.patch_size, 1)
             mask = tf.repeat(mask, self.config.patch_size, 2)
             mask = tf.expand_dims(mask, 1)
+            mask = tf.cast(mask, tf.float32)
             #FIXME - make sure reduction isn't happening
-            reconstruction_loss = tf.keras.losses.mean_absolute_error(pixel_values, reconstructed_pixel_values)
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+
+            reconstruction_loss = tf.keras.losses.mean_absolute_error(
+                # Swap axes as metric calculation reduces over the final dimension
+                tf.transpose(pixel_values, (1, 2, 3, 0)),
+                tf.transpose(reconstructed_pixel_values, (1, 2, 3, 0)),
+            )
+            reconstruction_loss = tf.expand_dims(reconstruction_loss, 0)
+            total_loss = tf.reduce_sum(reconstruction_loss * mask)
+            num_masked_pixels = tf.reduce_sum(mask) + 1e-5 * self.config.num_channels
+            masked_im_loss = total_loss / num_masked_pixels
 
         if not return_dict:
             output = (reconstructed_pixel_values,) + outputs[2:]
@@ -1123,13 +1213,7 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             tf.keras.layers.Dense(config.num_labels, name='classifier') if config.num_labels > 0 else tf.identity(name='classifier')
         )
 
-        # Initialize weights and apply final processing
-        # self.post_init() #FIXME
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]: #FIXME - change default dummy inputs
-        return DUMMY_IMAGE_INPUTS
-
+    @unpack_inputs
     def call(
         self,
         pixel_values=None,
@@ -1153,7 +1237,7 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
 
         pooled_output = outputs[1]
 
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(pooled_output, training=training)
 
         loss = None if labels is None else self.hf_compute_loss(labels, logits) #FIXME
 

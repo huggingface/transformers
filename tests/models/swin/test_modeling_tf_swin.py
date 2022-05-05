@@ -23,8 +23,8 @@ from transformers import SwinConfig
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, _config_zero_init
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, _config_zero_init
 
 
 if is_tf_available():
@@ -169,13 +169,14 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
             TFSwinForImageClassification,
             TFSwinForMaskedImageModeling,
         )
-        if is_tf_available()()
+        if is_tf_available()
         else ()
     )
 
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFSwinModelTester(self)
@@ -197,8 +198,8 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Swin does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -215,7 +216,7 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -299,9 +300,10 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
             batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            )
+
+            reshaped_hidden_states = tf.reshape(reshaped_hidden_states[0], (batch_size, num_channels, height * width))
+            reshaped_hidden_states = tf.transpose(reshaped_hidden_states, (0, 2, 1))
+
             self.assertListEqual(
                 list(reshaped_hidden_states.shape[-2:]),
                 [num_patches, self.model_tester.embed_dim],
@@ -328,20 +330,6 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFSwinModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
 
 @require_vision
