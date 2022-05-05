@@ -231,33 +231,27 @@ class MCTCSelfAttention(nn.Module):
             x = x.permute(*reversed(range(len(x.shape))))
         return x.reshape(*reversed(shape)).permute(*reversed(range(len(shape))))
 
-    def relativePositionEmbeddingRotate(self, data):
+    def relative_position_embedding_rotate(self, scores):
         # NOTE: must re-evaluate whether this re-implementation was trly necessary
         # or the reason why my complete re-haul worked was due to some other part
         # of the code. Adding this and the reshape fortrain code seems very undesirable.
 
-        data = data.permute(0, 2, 3, 1)
+        scores = scores.permute(0, 2, 3, 1)
 
-        b, d0, d1, d2 = data.shape
+        b, d0, d1, d2 = scores.shape
 
-        # data = af::join(0, data, af::constant(0.0, d1, d1, d2, d3, data.type()));
-        data = torch.cat((data, torch.zeros((b, d1, d1, d2), device=data.device)), dim=1)
+        scores = torch.cat((scores, torch.zeros((b, d1, d1, d2), device=scores.device)), dim=1)
 
-        # data = af::moddims(data, af::dim4((d0 + d1) * d1, 1, d2, d3));
-        # data = data.reshape()
-        data = self.reshape_fortran(data, [b, (d0 + d1) * d1, 1, d2])
-        # data = data.numpy().reshape((d0 + d1) * d1, 1, d2,order='F')
+        scores = self.reshape_fortran(scores, [b, (d0 + d1) * d1, 1, d2])
 
-        # data = data.rows(0, (d1 + d0 - 1) * d1 - 1);
-        data = data[:, : (d1 + d0 - 1) * d1]
+        scores = scores[:, : (d1 + d0 - 1) * d1]
 
-        # data = af::moddims(data, af::dim4(d0 + d1 - 1, d1, d2, d3));
-        data = self.reshape_fortran(data, [b, d0 + d1 - 1, d1, d2])
+        scores = self.reshape_fortran(scores, [b, d0 + d1 - 1, d1, d2])
 
         n = d0 // 2
-        data = data[:, n : n + d1].transpose(1, 2)
+        scores = scores[:, n : n + d1].transpose(1, 2)
 
-        return data.permute(0, 3, 1, 2)
+        return scores.permute(0, 3, 1, 2)
 
     def forward(
         self,
@@ -290,12 +284,12 @@ class MCTCSelfAttention(nn.Module):
         positional_embedding = self.distance_embedding.weight
         relative_position_scores = torch.einsum("lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3))
 
-        relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
+        relative_position_scores = self.relative_position_embedding_rotate(relative_position_scores)
         attention_scores = attention_scores + relative_position_scores
 
-        # if attention_mask is not None:
-        #     # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
-        #     attention_scores = attention_scores + attention_mask
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)

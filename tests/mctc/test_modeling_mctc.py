@@ -402,37 +402,10 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
-    # def test_mask_feature_prob_ctc(self):
-    #     model = MCTCForCTC.from_pretrained(
-    #         "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
-    #     )
-    #     model.to(torch_device).train()
-    #     processor = MCTCProcessor.from_pretrained(
-    #         "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
-    #     )
-
-    #     batch_duration_in_seconds = [1, 3, 2, 6]
-    #     input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-    #     batch = processor(
-    #         input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-    #     )
-
-    #     logits = model(
-    #         input_features=batch["input_features"].to(torch_device),
-    #         attention_mask=batch["attention_mask"].to(torch_device),
-    #     ).logits
-
-    #     self.assertEqual(logits.shape, (4, 1498, 32))
-
-    # @unittest.skip(reason="Feed forward chunking is not implemented")
-    # def test_feed_forward_chunking(self):
-    #     pass
-
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     model = MCTCModel.from_pretrained("facebook/wav2vec2-base-960h")
-    #     self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        model = MCTCModel.from_pretrained("cwkeam/mctc-large")
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -583,38 +556,14 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
-    #     def test_mask_feature_prob_ctc(self):
-    #         model = MCTCForCTC.from_pretrained(
-    #             "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
-    #         )
-    #         model.to(torch_device).train()
-    #         processor = MCTCProcessor.from_pretrained(
-    #             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
-    #         )
-
-    #         batch_duration_in_seconds = [1, 3, 2, 6]
-    #         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-    #         batch = processor(
-    #             input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-    #         )
-
-    #         logits = model(
-    #             input_features=batch["input_features"].to(torch_device),
-    #             attention_mask=batch["attention_mask"].to(torch_device),
-    #         ).logits
-
-    #         self.assertEqual(logits.shape, (4, 1498, 32))
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
 
-
-#     @slow
-#     def test_model_from_pretrained(self):
-#         model = MCTCModel.from_pretrained("facebook/wav2vec2-base-960h")
-#         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        model = MCTCModel.from_pretrained("cwkeam/mctc-large")
+        self.assertIsNotNone(model)
 
 
 @require_torch
