@@ -54,6 +54,8 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
+        convert_rgb (`bool`, defaults to `True`):
+            Whether or not to convert `PIL.Image.Image` into `RGB` format
     """
 
     model_input_names = ["pixel_values"]
@@ -68,6 +70,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_normalize=True,
         image_mean=None,
         image_std=None,
+        do_convert_rgb=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -79,6 +82,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
         self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        self.do_convert_rgb = do_convert_rgb
 
     def __call__(
         self,
@@ -141,7 +145,9 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + center cropping + normalization)
+        # transformations (convert rgb + resizing + center cropping + normalization)
+        if self.do_convert_rgb:
+            images = [self.convert_rgb(image) for image in images]
         if self.do_resize and self.size is not None and self.resample is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_center_crop and self.crop_size is not None:
@@ -154,6 +160,20 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
+
+    def convert_rgb(self, image):
+        """
+        Converts `image` to RGB format. Note that this will trigger a conversion of `image` to a PIL Image.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image to convert.
+        """
+        self._ensure_format_supported(image)
+        if not isinstance(image, Image.Image):
+            return image
+
+        return image.convert("RGB")
 
     def center_crop(self, image, size):
         """
