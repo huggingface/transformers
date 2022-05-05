@@ -172,6 +172,10 @@ class MCTCConfig(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
+        # prevents config testing fail with exporting to json
+        self.conv_kernel = list(conv_kernel)
+        self.conv_stride = list(conv_stride)
+        
         if len(self.conv_kernel) != self.num_conv_layers:
             raise ValueError(
                 "Configuration for convolutional module is incorrect. "
@@ -180,6 +184,4 @@ class MCTCConfig(PretrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-        # prevents config testing fail with exporting to json
-        self.conv_kernel = list(conv_kernel)
-        self.conv_stride = list(conv_stride)
+        
