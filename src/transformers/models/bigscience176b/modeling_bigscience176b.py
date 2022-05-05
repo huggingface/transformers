@@ -42,7 +42,9 @@ try:
 except ImportError:
     from torch.nn import LayerNorm
 
-    print("Could not import apex - trying with torch.nn.LayerNorm instead")
+    print(
+        "Could not import apex - trying with torch.nn.LayerNorm instead - may lead to very small numerical instabilities"
+    )
 
 logger = logging.get_logger(__name__)
 
