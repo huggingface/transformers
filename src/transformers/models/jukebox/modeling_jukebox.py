@@ -2772,7 +2772,7 @@ class JukeboxPrior(nn.Module):
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
         if get_indices:
             indices = None
-            return y, indices # here the indices should be the indices of the lyrics to take into account...
+            return y, indices  # here the indices should be the indices of the lyrics to take into account...
         return y
         # Set lyric tokens
         indices = self.labeller.set_y_lyric_tokens(y, labels)
@@ -2796,7 +2796,7 @@ class JukeboxPrior(nn.Module):
         for i in range(len(xs)):
             x, shape, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
             bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
-            assert isinstance(x, torch.cuda.LongTensor), x
+            # assert isinstance(x, torch.cuda.LongTensor), x
             assert (0 <= x).all() and (x < bins).all()
             # assert_shape(x, (N, *shape))
             xs[i] = (xs[i] + bins_shift).view(N, -1)
@@ -2807,7 +2807,7 @@ class JukeboxPrior(nn.Module):
                 # assert_shape(cond, (N, dims, self.prior_width))
                 pass
             else:
-                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device="cuda")
+                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device="cpu")
 
         return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
@@ -3288,15 +3288,16 @@ def get_starts(total_length, n_ctx, hop_length):
         starts.append(start)
     return starts
 
-def save_wav(fname, aud, sr):
-            import soundfile
 
-            # clip before saving?
-            aud = torch.clamp(aud, -1, 1).cpu().numpy()
-            for i in list(range(aud.shape[0])):
-                soundfile.write(f"{fname}/item_{i}.wav", aud[i], samplerate=sr, format="wav")
-                
-                
+def save_wav(fname, aud, sr):
+    import soundfile
+
+    # clip before saving?
+    aud = torch.clamp(aud, -1, 1).cpu().numpy()
+    for i in list(range(aud.shape[0])):
+        soundfile.write(f"{fname}/item_{i}.wav", aud[i], samplerate=sr, format="wav")
+
+
 def get_alignment(x, zs, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
     n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
@@ -3323,7 +3324,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
 
         # set y offset, sample_length and lyrics tokens
         y, indices_hop = prior.get_y(labels, start, get_indices=True)
-        #assert len(indices_hop) == bs
+        # assert len(indices_hop) == bs
         for indices in indices_hop:
             assert len(indices) == n_tokens
 
