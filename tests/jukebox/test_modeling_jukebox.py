@@ -41,13 +41,13 @@ config = JukeboxConfig(
     priors_width=[128, 64, 32],
     vq_vae_codebook_dimension=256,
     vq_vae_emmbedding_width=256,
+    sr=44100,
 )
 model = JukeboxModel(config).eval()
 
 
 tokenizer = tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
-tokens = tokenizer("Alan Jackson", "rock", "old town road", 4 * 60 * 44100, 8192 * 8 * 4 * 4, 0, 1)
-inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
+
 sampling_temperature = 0.98
 lower_batch_size = 16
 max_batch_size = 16
@@ -60,6 +60,15 @@ sampling_kwargs = [
 ]
 config.hop_fraction = [0.5, 0.5, 0.125]
 config.n_samples = 1
+
+tokens = tokenizer("Alan Jackson", "rock", "old town road", 
+                    total_length  = 2*config.sample_length_in_seconds*config.sr * config.sr, 
+                    sample_length = config.sample_length_in_seconds*config.sr,
+                    offset = 0,
+                    duration = 1)
+
+inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
+
 ys = np.array([[inputs]] * 3, dtype=np.int64)
 ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
 start = timeit.default_timer()
