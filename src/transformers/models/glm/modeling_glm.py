@@ -652,7 +652,7 @@ class Transformer(torch.nn.Module):
             if not self.performer:
                 attention_mask = build_mask_matrix(query_length, sep, memory_length=memory_length)
         else:
-            attention_mask = attention_mask[:, None, None, -query_length - memory_length:]
+            attention_mask = attention_mask[:, :, :, -query_length - memory_length:]
 
         if self.relative_encoding:
             position_sequence = torch.arange(key_length - 1, -1, -1.0, device=hidden_states.device,
