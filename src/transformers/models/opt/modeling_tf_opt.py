@@ -455,40 +455,6 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             present_key_value,
         )
 
-
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel with Bart->OPT
-class TFOPTPretrainedModel(TFPreTrainedModel):
-    config_class = OPTConfig
-    base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-
 OPT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -524,6 +490,47 @@ OPT_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+@add_start_docstrings(
+    "The bare OPT Model outputting raw hidden-states without any specific head on top.",
+    OPT_START_DOCSTRING,
+)
+class TFOPTPretrainedModel(TFPreTrainedModel):
+    """
+    TFOPT Pretrained Model that inheritates from transformers.TFPreTrainedModel
+
+    Args:
+        config: OPTConfig
+    """
+    config_class = OPTConfig
+    base_model_prefix = "model"
+
+    @property
+    def dummy_inputs(self):
+        pad_token = 1
+        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
+        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
+        dummy_inputs = {
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": tf.math.not_equal(input_ids, pad_token),
+            "input_ids": input_ids,
+        }
+        return dummy_inputs
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 OPT_GENERATION_EXAMPLE = r"""
@@ -1129,7 +1136,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare OPT Model outputting raw hidden-states without any specific head on top.",
+    "The bare TF OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel with BART->OPT,Bart->OPT
