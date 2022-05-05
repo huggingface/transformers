@@ -2144,17 +2144,6 @@ else:
             "TFHubertPreTrainedModel",
         ]
     )
-    _import_structure["models.jukebox"].extend(
-        [
-            "TF_JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFJukeboxDoubleHeadsModel",
-            "TFJukeboxForSequenceClassification",
-            "TFJukeboxLMHeadModel",
-            "TFJukeboxMainLayer",
-            "TFJukeboxModel",
-            "TFJukeboxPreTrainedModel",
-        ]
-    )
     _import_structure["models.layoutlm"].extend(
         [
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2564,9 +2553,7 @@ else:
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
-    _import_structure["models.jukebox"].extend(
-        ["FlaxJukeboxLMHeadModel", "FlaxJukeboxModel", "FlaxJukeboxPreTrainedModel"]
-    )
+    
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
