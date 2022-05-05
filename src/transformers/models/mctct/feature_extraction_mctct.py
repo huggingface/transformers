@@ -194,13 +194,11 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
 
         self._apply_preemphasis_inplace(frames, self.sample_size, self.preemphasis_coeff)
 
-        # since the window is reused, it's initialized at __init__
         frames = self._windowing(frames, self.sample_size, window)
 
         dft_out = self._DFT(frames.flatten(), self.K, n_frames, self.sample_size, self.n_fft)
 
-        # msfc_features = STFT * mel frequency banks. Since fbanks are reused at each iteration,
-        # it's initialized at __init__
+        # msfc_features = STFT * mel frequency banks. 
         msfc_features = np.einsum("...tf,fm->...tm", dft_out, fbanks)
 
         # clamp feature values then log scale, as implemented in flashlight
