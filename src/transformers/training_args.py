@@ -80,6 +80,8 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
+    SGD = "SGD"
+    ADAGRAD = "Adagrad"
 
 
 @dataclass
@@ -561,7 +563,7 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    use_ipex: bool = field(default=False, metadata={"help": "Use Intel extension for PyTorch when it is available"})
+    use_ipex: bool = field(default=False, metadata={"help": "Use Intel extension for PyTorch when it is available, installation: 'https://github.com/intel/intel-extension-for-pytorch'"})
     ipex_opt_level: str = field(
         default="O1",
         metadata={
@@ -703,7 +705,6 @@ class TrainingArguments:
         default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
-    ipex_optimizer: str = field(default=None, metadata={"help": "Whether or not to use optimizer for training from IPEX.","choices": ["SGD", "Adagrad"]})
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
