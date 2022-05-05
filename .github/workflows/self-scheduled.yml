@@ -300,7 +300,7 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, run_tests_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
+    needs: [setup, run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
