@@ -2147,7 +2147,7 @@ if is_tf_available():
             "TFSwinForImageClassification",
             "TFSwinForMaskedImageModeling",
             "TFSwinModel",
-            "TFSwinPreTrainedModel"
+            "TFSwinPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(

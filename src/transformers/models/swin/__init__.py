@@ -41,7 +41,7 @@ if is_tf_available():
         "TFSwinForImageClassification",
         "TFSwinForMaskedImageModeling",
         "TFSwinModel",
-        "TFSwinPreTrainedModel"
+        "TFSwinPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -62,9 +62,8 @@ if TYPE_CHECKING:
             TFSwinForImageClassification,
             TFSwinForMaskedImageModeling,
             TFSwinModel,
-            TFSwinPreTrainedModel
+            TFSwinPreTrainedModel,
         )
-
 
 
 else:

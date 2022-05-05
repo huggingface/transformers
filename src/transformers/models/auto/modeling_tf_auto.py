@@ -424,7 +424,9 @@ class TFAutoModelForMaskedImageModeling(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
 
 
-TFAutoModelForMaskedImageModeling = auto_class_update(TFAutoModelForMaskedImageModeling, head_doc="masked image modeling")
+TFAutoModelForMaskedImageModeling = auto_class_update(
+    TFAutoModelForMaskedImageModeling, head_doc="masked image modeling"
+)
 
 
 class TFAutoModelForImageClassification(_BaseAutoModelClass):
