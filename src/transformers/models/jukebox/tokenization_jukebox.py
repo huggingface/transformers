@@ -40,7 +40,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_LYRIC_TOKENS_SIZES = {
-    "jukebox": 20,  # corresonds to the dummy-model ?
+    "jukebox": 512,  # corresonds to the dummy-model ?
 }
 
 
@@ -100,7 +100,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     max_lyric_input_size = PRETRAINED_LYRIC_TOKENS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(self, vocab_file, max_n_lyric_tokens=20, n_genres=1, unk_token="<|endoftext|>", **kwargs):
+    def __init__(self, vocab_file, max_n_lyric_tokens=512, n_genres=5, unk_token="<|endoftext|>", **kwargs):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
