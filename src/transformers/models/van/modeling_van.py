@@ -16,6 +16,7 @@
 
 import math
 from collections import OrderedDict
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -81,7 +82,7 @@ class VanDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -146,7 +147,7 @@ class VanLargeKernelAttentionLayer(nn.Module):
         super().__init__()
         self.attention = VanLargeKernelAttention(hidden_size)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         attention = self.attention(hidden_state)
         attended = hidden_state * attention
         return attended
@@ -171,7 +172,7 @@ class VanSpatialAttentionLayer(nn.Module):
         self.attention_layer = VanLargeKernelAttentionLayer(hidden_size)
         self.post_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
         hidden_state = self.pre_projection(hidden_state)
         hidden_state = self.attention_layer(hidden_state)
@@ -189,7 +190,7 @@ class VanLayerScaling(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         # unsqueezing for broadcasting
         hidden_state = self.weight.unsqueeze(-1).unsqueeze(-1) * hidden_state
         return hidden_state
@@ -218,7 +219,7 @@ class VanLayer(nn.Module):
         )
         self.mlp_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
         # attention
         hidden_state = self.pre_normomalization(hidden_state)
@@ -269,7 +270,7 @@ class VanStage(nn.Module):
         )
         self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.embeddings(hidden_state)
         hidden_state = self.layers(hidden_state)
         # rearrange b c h w -> b (h w) c
@@ -316,7 +317,12 @@ class VanEncoder(nn.Module):
                 )
             )
 
-    def forward(self, hidden_state, output_hidden_states=False, return_dict=True):
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for _, stage_module in enumerate(self.stages):
@@ -411,7 +417,12 @@ class VanModel(VanPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(self, pixel_values, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor],
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -463,7 +474,13 @@ class VanForImageClassification(VanPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
