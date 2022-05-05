@@ -100,7 +100,51 @@ class CMUDict:
                 return None
         return ' '.join(parts)
 
+class SymbolEncoder:
+    arpabet = ['@' + s for s in CMUDict.valid_symbols]
 
+    def __init__(self,symbol_set='english_basic'):
+        # Regular expression matching text enclosed in curly braces for encoding
+        self._curly_re = re.compile(r'(.*?)\{(.+?)\}(.*)')
+        # Regular expression matching words and not words
+        self._words_re = re.compile(r"([a-zA-ZÀ-ž]+['][a-zA-ZÀ-ž]{1,2}|[a-zA-ZÀ-ž]+)|([{][^}]+[}]|[^a-zA-ZÀ-ž{}]+)")
+        # Regular expression separating words enclosed in curly braces for cleaning
+        self._arpa_re = re.compile(r'{[^}]+}|\S+')
+
+        self.symbols = self._get_symbols(symbol_set=symbol_set)
+        
+    def _get_symbols(symbol_set='english_basic'):
+        """ 
+            from https://github.com/keithito/tacotron 
+            from https://github.com/NVIDIA/DeepLearningExamples/blob/3e8897f7855ff475d69699e66c8f668f6191dfa4/PyTorch/SpeechSynthesis/FastPitch/common/text/symbols.py#L14
+            Adapted For Hugging Face
+
+            Should this symbol set be read from a file? Question....
+        """
+        if symbol_set == 'english_basic':
+            _pad = '_'
+            _punctuation = '!\'(),.:;? '
+            _special = '-'
+            _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder._arpabet
+        elif symbol_set == 'english_basic_lowercase':
+            _pad = '_'
+            _punctuation = '!\'"(),.:;? '
+            _special = '-'
+            _letters = 'abcdefghijklmnopqrstuvwxyz'
+            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder._arpabet
+        elif symbol_set == 'english_expanded':
+            _punctuation = '!\'",.:;? '
+            _math = '#%&*+-/[]()'
+            _special = '_@©°½—₩€$'
+            _accented = 'áçéêëñöøćž'
+            _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+            symbols = list(_punctuation + _math + _special + _accented + _letters) + SymbolEncoder._arpabet
+        else:
+            raise Exception("{} symbol set does not exist".format(symbol_set))
+
+        return symbols
+        
 """Tokenization classes for FastPitch."""
 from typing import List, Optional
 
@@ -113,6 +157,7 @@ from ...utils import logging
 from ...file_utils import requires_backends
 
 logger = logging.get_logger(__name__)
+
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -141,42 +186,76 @@ class FastPitchTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self, vocab_file, unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
+        self,use_arpabet = True, file_or_path="./cmudict-0.7b.txt", heteronyms_path = "./heteronyms",unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
     ):
+        # use the pathes for now.
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-        # requires cmudict backend 
-        self.cmudict = CMUDict()
+        # requires cmudict backend TODO determine if we should load this at run time use as default parameters though
+        self.cmudict = CMUDict(file_or_path=file_or_path,heteronyms_path=heteronyms_path)
+
+        # tokenizer doesn't need to add a prefix space
+        self.add_prefix_space = False
+
+        # use arpabet to clean up sounds
+        self.use_arpabet = use_arpabet
+        self.symbol_encoder = SymbolEncoder()
 
     @property
     def vocab_size(self):
         "Returns vocab size"
-        return len(self.cmudict)
+        # return symbols size
+        pass
 
     def get_vocab(self):
         "Returns vocab as a dict"
-        # Ask for clearification on 
-        return self.cmudict._entries 
+        # Vocab here is the symbols and their ids
+        pass
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
-        # turn whole string in a series of tokens
-        pass 
+         # API to select preffered pronunciation from cmu dict? 
+        tokens = text.split(' ')
+        result = []
+        if self.use_arpabet:
+            for token in tokens:
+                arpabet_result = self.cmudict.lookup(token)
+                if arpabet_result == None:
+                    result.append(token)
+                else:
+                    result.append(arpabet_result[0])
+            return result
+        else:
+            return tokens
 
     def _convert_token_to_id(self, token):
-        """Converts a token (str) in an arpabet using the vocab."""
-        return self.cmudict.lookup(token)
+        """Converts a token (str) in an symbols using the vocab."""
+        # check if the token is an arpabet based one if so convert correctly
+        if self.use_arpabet:
+            pass
+        else:
+            pass
+        pass
 
     def _convert_id_to_token(self, index):
-        """Converts an index arpabet in a token (str) using the vocab."""
-        return 
+        """Converts an index id in a token (str) using the vocab."""
+        # check if id is an arpabet based one convert back to token
+        if self.use_arpabet:
+            pass # check if index is an arpa based index
+        else:
+            pass
+        pass
 
-    def convert_tokens_to_string(self, tokens):
+    def convert_tokens_to_string(self, tokens:List[str])->str:
         """Converts a sequence of tokens (string) in a single string.
            Convert Arpabet back to single string.
         """ 
-        # loop through and do a look up and build a string
-        # error out on empty string find out the way that is done.
-        pass 
+        result = []
+        if self.use_arpabet:
+            for token in tokens:
+                result.append(self.cmudict.arpabet_token_lookup(token))
+            return ' '.join(result)
+        else:
+            return ' '.join(tokens)
 
     def save_vocabulary(self, save_directory):
         """
@@ -267,9 +346,6 @@ class FastPitchTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
-            text = " " + text
         return (text, kwargs)
 
 
