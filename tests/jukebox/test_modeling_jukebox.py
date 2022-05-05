@@ -21,7 +21,7 @@ from transformers import JukeboxConfig, is_torch_available
 
 # from ..generation.test_generation_utils import GenerationTesterMixin
 # from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
+# from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
 
 
 # from transformers.testing_utils import require_torch, slow, torch_device
@@ -33,57 +33,63 @@ if is_torch_available():
     from transformers import JukeboxModel, JukeboxTokenizer  # ,JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class JukeboxModelTest(ModelTesterMixin, unittest.TestCase):
-
+class JukeboxModelTest(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
 
-    config = JukeboxConfig(
-        n_ctx=256,
-        width=[128, 64, 32],
-        depth=[2, 2, 2],
-        priors_width=[128, 64, 32],
-        vq_vae_codebook_dimension=256,
-        vq_vae_emmbedding_width=256,
-        sr=44100,
-        single_enc_dec=True,
-    )
+    # @slow
+    def test_model(self):
+        config = JukeboxConfig(
+            n_ctx=256,
+            width=[128, 64, 32],
+            depth=[2, 2, 2],
+            priors_width=[128, 64, 32],
+            vq_vae_codebook_dimension=256,
+            vq_vae_emmbedding_width=256,
+            sr=44100,
+            single_enc_dec=[True,False,False],
+            labels=True # allows the use of label conditionning. Has to be 
+            # True if the single_enc_dec is set to true apparently
+            # ntokens also have to be set to the nb of lyric tokens
+        )
 
-    model = JukeboxModel(config).eval()
+        model = JukeboxModel(config).eval()
 
-    tokenizer = tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
+        tokenizer = tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
 
-    sampling_temperature = 0.98
-    lower_batch_size = 16
-    max_batch_size = 16
-    lower_level_chunk_size = 32
-    chunk_size = 32
-    sampling_kwargs = [
-        dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-        dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-        dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
-    ]
-    config.hop_fraction = [0.5, 0.5, 0.125]
-    config.n_samples = 1
+        sampling_temperature = 0.98
+        lower_batch_size = 16
+        max_batch_size = 16
+        lower_level_chunk_size = 32
+        chunk_size = 32
+        sampling_kwargs = [
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
+        ]
+        config.hop_fraction = [0.125,0.5, 0.5]
+        config.n_samples = 1
 
-    tokens = tokenizer(
-        "Alan Jackson",
-        "rock",
-        "old town road",
-        total_length=2 * config.sample_length_in_seconds * config.sr * config.sr,
-        sample_length=config.sample_length_in_seconds * config.sr,
-        offset=0,
-        duration=1,
-    )
+        tokens = tokenizer(
+            "Alan Jackson",
+            "rock",
+            "old town road",
+            total_length=2 * config.sample_length_in_seconds * config.sr,
+            sample_length=config.sample_length_in_seconds * config.sr,
+            offset=0,
+            duration=1,
+        )
 
-    inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
+        inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
 
-    ys = np.array([[inputs]] * 3, dtype=np.int64)
-    ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
-    start = timeit.default_timer()
-    model.ancestral_sample(ys, sampling_kwargs, config)
-    print(f"time to sample : {timeit.default_timer() - start}")
-    assert True
+        ys = np.array([[inputs]] * 3, dtype=np.int64)
+        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
+        start = timeit.default_timer()
+        model.ancestral_sample(ys, sampling_kwargs, config)
+        print(f"time to sample : {timeit.default_timer() - start}")
+        # time to sample : 281.871977576
+        self.assertTrue(inputs == inputs)
 
+JukeboxModelTest().test_model()
 
 # class JukeboxModelTester:
 #     def __init__(

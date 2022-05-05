@@ -1731,7 +1731,7 @@ class Encoder(nn.Module):
         # 64, 32, ...
         iterator = zip(list(range(self.levels)), self.downs_t, self.strides_t)
         for level, down_t, stride_t in iterator:
-            level_block = self.level_blocks[level]
+            level_block = self.level_blocks[-level-1]
             x = level_block(x)
             emb, T = self.output_emb_width, T // (stride_t**down_t)
             # assert_shape(x, (N, emb, T))
@@ -1774,7 +1774,7 @@ class Decoder(nn.Module):
         # 32, 64 ...
         iterator = reversed(list(zip(list(range(self.levels)), self.downs_t, self.strides_t)))
         for level, down_t, stride_t in iterator:
-            level_block = self.level_blocks[level]
+            level_block = self.level_blocks[-level-1]
             x = level_block(x)
             emb, T = self.output_emb_width, T * (stride_t**down_t)
             # assert_shape(x, (N, emb, T))
@@ -2023,7 +2023,7 @@ class Bottleneck(nn.Module):
     def forward(self, xs):
         zs, xs_quantised, commit_losses, metrics = [], [], [], []
         for level in range(self.levels):
-            level_block = self.level_blocks[level]
+            level_block = self.level_blocks[-level-1]
             x = xs[level]
             z, x_quantised, commit_loss, metric = level_block(x, update_k=self.training)
             zs.append(z)
@@ -2160,7 +2160,7 @@ class VQVAE(nn.Module):
         self.downsamples = calculate_strides(strides_t, downs_t)
         self.hop_lengths = np.cumprod(self.downsamples)
         self.levels = levels = config.vq_vae_levels
-        self.z_shapes = [(x_shape[0] // self.hop_lengths[level],) for level in range(levels)]
+        self.z_shapes = [(x_shape[0] // self.hop_lengths[-level-1],) for level in range(levels)]
 
         if multipliers is None:
             self.multipliers = [1] * levels
@@ -2170,8 +2170,8 @@ class VQVAE(nn.Module):
 
         def _block_kwargs(level):
             this_block_kwargs = dict(block_kwargs)
-            this_block_kwargs["width"] *= self.multipliers[level]
-            this_block_kwargs["depth"] *= self.multipliers[level]
+            this_block_kwargs["width"] *= self.multipliers[-level-1]
+            this_block_kwargs["depth"] *= self.multipliers[-level-1]
             return this_block_kwargs
 
         def encoder(level):
@@ -2564,9 +2564,9 @@ class JukeboxPrior(nn.Module):
             return (z_shape[0] * config.n_ctx // vqvae_z_shapes[level][0],)
 
         z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
-        self.use_tokens = config.use_tokens[level]
-        self.n_tokens = config.n_tokens[level]
-        self.prime_loss_fraction = config.prime_loss_fraction[level]
+        self.use_tokens = config.use_tokens[-level-1]
+        self.n_tokens = config.n_tokens[-level-1]
+        self.prime_loss_fraction = config.prime_loss_fraction[-level-1]
 
         self.copy_input = config.copy_input
         if self.copy_input:
@@ -2585,10 +2585,10 @@ class JukeboxPrior(nn.Module):
         prior_kwargs = dict(
             input_shape=(config.n_ctx,),
             bins=config.l_bins,
-            width=config.width[level],
-            depth=config.depth[level],
-            heads=config.n_heads[level],
-            attn_order=config.attn_order[level],
+            width=config.width[-level-1],
+            depth=config.depth[-level-1],
+            heads=config.n_heads[-level-1],
+            attn_order=config.attn_order[-level-1],
             blocks=config.blocks,
             spread=config.spread,
             attn_dropout=config.attn_dropout,
@@ -2597,17 +2597,17 @@ class JukeboxPrior(nn.Module):
             zero_out=config.zero_out,
             res_scale=config.res_scale,
             pos_init=config.pos_init,
-            init_scale=config.init_scale[level],
+            init_scale=config.init_scale[-level-1],
             m_attn=config.m_attn,  # m_mlp=config.m_mlp
         )
 
-        if config.use_tokens and not config.single_enc_dec:
+        if config.use_tokens and not config.single_enc_dec[-level-1]:
             prime_kwargs = dict(
                 bins=config.n_vocab,
-                width=config.prime_width[level],
-                depth=config.prime_depth[level],
+                width=config.prime_width[-level-1],
+                depth=config.prime_depth[-level-1],
                 heads=config.prime_heads,
-                attn_order=config.prime_attn_order[level],
+                attn_order=config.prime_attn_order[-level-1],
                 blocks=config.prime_blocks,
                 spread=config.prime_spread,
                 attn_dropout=config.prime_attn_dropout,
@@ -2616,7 +2616,7 @@ class JukeboxPrior(nn.Module):
                 zero_out=config.prime_zero_out,
                 res_scale=config.prime_res_scale,
                 pos_init=config.prime_pos_init,
-                init_scale=config.prime_init_scale[level],
+                init_scale=config.prime_init_scale[-level-1],
                 m_attn=config.prime_m_attn,
                 m_mlp=config.prime_m_mlp,
             )
@@ -2624,21 +2624,21 @@ class JukeboxPrior(nn.Module):
             prime_kwargs = dict(bins=config.n_vocab)
 
         x_cond_kwargs = dict(
-            out_width=config.width[level],
-            init_scale=config.init_scale[level],
-            width=config.cond_width[level],
-            depth=config.cond_depth[level],
+            out_width=config.width[-level-1],
+            init_scale=config.init_scale[-level-1],
+            width=config.cond_width[-level-1],
+            depth=config.cond_depth[-level-1],
             m_conv=config.cond_m_conv,
-            dilation_growth_rate=config.cond_dilation_growth_rate[level],
-            dilation_cycle=config.cond_dilation_cycle[level],
+            dilation_growth_rate=config.cond_dilation_growth_rate[-level-1],
+            dilation_cycle=config.cond_dilation_cycle[-level-1],
             zero_out=config.cond_zero_out,
             res_scale=config.cond_res_scale,
-            checkpoint_res=config.cond_c_res[level],
+            checkpoint_res=config.cond_c_res[-level-1],
         )  # have to keep this else names wrong
 
         y_cond_kwargs = dict(
-            out_width=config.width[level],
-            init_scale=config.init_scale[level],
+            out_width=config.width[-level-1],
+            init_scale=config.init_scale[-level-1],
             y_bins=config.y_bins,
             t_bins=config.t_bins,
             sr=config.sr,
@@ -2654,7 +2654,7 @@ class JukeboxPrior(nn.Module):
         # Y conditioning
         self.y_cond = config.labels
 
-        self.single_enc_dec = config.single_enc_dec
+        self.single_enc_dec = config.single_enc_dec[-level-1]
         # X conditioning : conditioning on music tokens (either from audio or from previous levels )
         if self.x_cond:
             self.conditioner_blocks = nn.ModuleList()
@@ -2677,7 +2677,7 @@ class JukeboxPrior(nn.Module):
             self.y_emb = LabelConditioner(n_time=self.n_time, include_time_signal=not self.x_cond, **y_cond_kwargs)
 
         # Lyric conditioning
-        if config.single_enc_dec:
+        if config.single_enc_dec[-level-1]:
             # Single encoder-decoder transformer
             self.prior_shapes = [(self.n_tokens,), prior_kwargs.pop("input_shape")]
             self.prior_bins = [prime_kwargs["bins"], prior_kwargs.pop("bins")]
@@ -2728,7 +2728,7 @@ class JukeboxPrior(nn.Module):
                 x_cond=(self.x_cond or self.y_cond),
                 y_cond=self.y_cond,
                 encoder_dims=self.prime_loss_dims,
-                merged_decoder=config.merged_decoder[level],
+                merged_decoder=config.merged_decoder[-level-1],
                 **prior_kwargs,
             )
 
@@ -3302,9 +3302,9 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     else:
         padding_length = 0
 
-    hop_length = int(hps.hop_fraction[level] * prior.n_ctx)
+    hop_length = int(hps.hop_fraction[-level-1] * prior.n_ctx)
     n_head = prior.prior.transformer.n_head
-    alignment_head, alignment_layer = hps.alignment_head[level], hps.alignment_layer[level]
+    alignment_head, alignment_layer = hps.alignment_head[-level-1], hps.alignment_layer[-level-1]
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
@@ -3478,7 +3478,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 hps.sample_length % prior.raw_to_tokens == 0
             ), f"Expected sample_length {hps.sample_length} to be multiple of {prior.raw_to_tokens}"
             total_length = hps.sample_length // prior.raw_to_tokens
-            hop_length = int(hps.hop_fraction[level] * prior.n_ctx)
+            hop_length = int(hps.hop_fraction[-level-1] * prior.n_ctx)
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
             prior.cpu()
@@ -3501,7 +3501,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
             ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
                 # either use level which will be the given lovel or use the total nb of levels?
-                alignments = get_alignment(x, zs, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
+                # alignments = get_alignment(x, zs, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
+                pass #TODO this is a really dirty fix 
         return zs
 
         # Generate ancestral samples given a list of artists and genres
