@@ -162,11 +162,13 @@ Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga auto
 
 ### Model heads
 
-At this point, you have a base DistilBERT model which outputs the *hidden states*. The hidden states are passed as inputs to a model head to produce the final output. 🤗 Transformers provides a different model head for each task as long as a model supports the task (i.e., you can't use DistilBERT for a sequence-to-sequence task like translation).
+En este punto del tutorial, tenemos un modelo DistilBERT base que devuelve los *hidden states* o estados ocultos. Los *hidden states* se pasan como parámetros de entrada a la cabeza del modelo para producir la salida. 🤗 Transformers ofrece una cabeza de modelo diferente para cada tarea, siempre y cuando el modelo sea compatible para la tarea (por ejemplo, no puedes usar DistilBERT para una tarea secuencia a secuencia como la traducción).
+
 
 <frameworkcontent>
 <pt>
-For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
+
+Por ejemplo,  [`DistilBertForSequenceClassification`] es un modelo DistilBERT base con una cabeza de clasificación de secuencias. La cabeza de clasificación de secuencias es una capa superior que precede a la recolección de las salidas.
 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
@@ -174,7 +176,8 @@ For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model 
 >>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`DistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
+Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`DistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque es una capa lineal delante de la salida de los *hidden states*. 
+
 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
@@ -183,7 +186,8 @@ Easily reuse this checkpoint for another task by switching to a different model 
 ```
 </pt>
 <tf>
-For example, [`TFDistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
+
+Por ejemplo,  [`TFDistilBertForSequenceClassification`] es un modelo DistilBERT base con una cabeza de clasificación de secuencias. La cabeza de clasificación de secuencias es una capa superior que precede a la recolección de las salidas.
 
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
@@ -191,7 +195,8 @@ For example, [`TFDistilBertForSequenceClassification`] is a base DistilBERT mode
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`TFDistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
+Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`TFDistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque es una capa lineal delante de la salida de los *hidden states*. 
+
 
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
@@ -203,20 +208,20 @@ Easily reuse this checkpoint for another task by switching to a different model 
 
 ## Tokenizer
 
-The last base class you need before using a model for textual data is a [tokenizer](main_classes/tokenizer) to convert raw text to tensors. There are two types of tokenizers you can use with 🤗 Transformers:
+La ultima clase base que debes conocer antes de usar un modelo con datos textuales es la clase [tokenizer](main_classes/tokenizer), que convierte texto bruto en tensores. Hay dos tipos de *tokenizers* que puedes usar con 🤗 Transformers:
 
-- [`PreTrainedTokenizer`]: a Python implementation of a tokenizer.
-- [`PreTrainedTokenizerFast`]: a tokenizer from our Rust-based [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) library. This tokenizer type is significantly faster - especially during batch tokenization - due to it's Rust implementation. The fast tokenizer also offers additional methods like *offset mapping* which maps tokens to their original words or characters.
+- [`PreTrainedTokenizer`]:  una implementación de un *tokenizer* hecha en Python.
+- [`PreTrainedTokenizerFast`]: un *tokenizer* de nuestra library [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/), basada en Rust. Este tipo de *tokenizer* es bastante más rápido, especialmente durante la tokenización por lotes, gracias a estar implementado en Rust. Esta rápida tokenización también ofrece métodos adicionales como el *offset mapping*, que relaciona los tokens con sus palabras o caracteres originales.
 
-Both tokenizers support common methods such as encoding and decoding, adding new tokens, and managing special tokens.
+Ambos *tokenizers* son compatibles con los métodos comunes, como los de encodificación y decodificación, los métodos para añadir tokens y aquellos que manejan tokens especiales. 
 
 <Tip warning={true}>
 
-Not every model supports a fast tokenizer. Take a look at this [table](index#supported-frameworks) to check if a model has fast tokenizer support.
+No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo en específico ico es compatible con un *tokenizer* rápido.
 
 </Tip>
 
-If you trained your own tokenizer, you can create one from your *vocabulary* file:
+Si has entrenado tu propio *tokenizer*, puedes crear uno desde tu archivo de “vocabulario”:
 
 ```py
 >>> from transformers import DistilBertTokenizer
@@ -224,7 +229,8 @@ If you trained your own tokenizer, you can create one from your *vocabulary* fil
 >>> my_tokenizer = DistilBertTokenizer(vocab_file="my_vocab_file.txt", do_lower_case=False, padding_side="left")
 ```
 
-It is important to remember the vocabulary from a custom tokenizer will be different from the vocabulary generated by a pretrained model's tokenizer. You need to use a pretrained model's vocabulary if you are using a pretrained model, otherwise the inputs won't make sense. Create a tokenizer with a pretrained model's vocabulary with the [`DistilBertTokenizer`] class:
+Es importante recordar que los vocabularios que provienen de un *tokenizer* personalizado serán diferentes a los vocabularios generados por el *tokenizer* de un modelo preentrenado. Debes usar el vocabulario de un *tokenizer* preentrenado si vas a usar un modelo preentrenado, de lo contrario las entradas no tendrán sentido. Crea un *tokenizer* con el vocabulario de un modelo preentrenado usado la clase [`DistilBertTokenizer`]:
+
 
 ```py
 >>> from transformers import DistilBertTokenizer
@@ -232,7 +238,8 @@ It is important to remember the vocabulary from a custom tokenizer will be diffe
 >>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
+Crea un *tokenizer* rápido con la clase [`DistilBertTokenizerFast`]:
+
 
 ```py
 >>> from transformers import DistilBertTokenizerFast
@@ -242,15 +249,16 @@ Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
 
 <Tip>
 
-By default, [`AutoTokenizer`] will try to load a fast tokenizer. You can disable this behavior by setting `use_fast=False` in `from_pretrained`.
+Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Puedes desactivar este compartimiento cambiando el parámetro `use_fast=False` de `from_pretrained`.
+
 
 </Tip>
 
-## Feature Extractor
+## Extractor de Características 
 
-A feature extractor processes audio or image inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may also inherit from the [`ImageFeatureExtractionMixin`] class for processing image features or the [`SequenceFeatureExtractor`] class for processing audio inputs.
+Un extractor de características procesa entradas de audio e imagen. Hereda de la clase base [`~feature_extraction_utils.FeatureExtractionMixin`] y también puede heredar de la clase [`ImageFeatureExtractionMixin`] para el procesamiento de características de las imágenes o de la clase [`SequenceFeatureExtractor`] para el procesamiento de entradas de audio.
 
-Depending on whether you are working on an audio or vision task, create a feature extractor associated with the model you're using. For example, create a default [`ViTFeatureExtractor`] if you are using [ViT](model_doc/vit) for image classification:
+Dependiendo de si trabajas en una tarea de audio o de video, crea un extractor de características asociado al modelo que estes usando. Por ejemplo, crea un [`ViTFeatureExtractor`] por defecto si estas usando [ViT](model_doc/vit) para clasificación de imágenes:
 
 ```py
 >>> from transformers import ViTFeatureExtractor
@@ -278,11 +286,11 @@ ViTFeatureExtractor {
 
 <Tip>
 
-If you aren't looking for any customization, just use the `from_pretrained` method to load a model's default feature extractor parameters.
+Si no estas buscan ninguna personalización en específico, usa el método `from_pretrained` para cargar los parámetros del extractor de características por defecto del modelo.
 
 </Tip>
 
-Modify any of the [`ViTFeatureExtractor`] parameters to create your custom feature extractor:
+Modifica cualquiera de los parámetros de [`ViTFeatureExtractor`] para crear tu extractor de características personalizado:
 
 ```py
 >>> from transformers import ViTFeatureExtractor
@@ -308,7 +316,8 @@ ViTFeatureExtractor {
 }
 ```
 
-For audio inputs, you can create a [`Wav2Vec2FeatureExtractor`] and customize the parameters in a similar way:
+Para entradas de audio, puedes crear un [`Wav2Vec2FeatureExtractor`] y personalizar los parámetros de una forma similar:
+
 
 ```py
 >>> from transformers import Wav2Vec2FeatureExtractor
@@ -326,11 +335,12 @@ Wav2Vec2FeatureExtractor {
 }
 ```
 
-## Processor
+## Procesador
 
-For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a feature extractor and a tokenizer.
+Para modelos que son compatibles con tareas multimodales, 🤗 Transformers ofrece una clase *procesador* que agrupa un extractor de características y un *tokenizer* en el mismo objeto. Por ejemplo, probemos a usar el procesador [`Wav2Vec2Processor`] para una tarea de reconocimiento de voz (ASR). Un ASR transcribe el audio a text, por lo que necesitaremos un extractor de características y un *tokenizer*.
 
-Create a feature extractor to handle the audio inputs:
+Crea un extractor de características para manejar la entrada de audio:
+
 
 ```py
 >>> from transformers import Wav2Vec2FeatureExtractor
@@ -338,7 +348,7 @@ Create a feature extractor to handle the audio inputs:
 >>> feature_extractor = Wav2Vec2FeatureExtractor(padding_value=1.0, do_normalize=True)
 ```
 
-Create a tokenizer to handle the text inputs:
+Crea un *tokenizer* para manejar la entrada de texto:
 
 ```py
 >>> from transformers import Wav2Vec2CTCTokenizer
@@ -346,12 +356,12 @@ Create a tokenizer to handle the text inputs:
 >>> tokenizer = Wav2Vec2CTCTokenizer(vocab_file="my_vocab_file.txt")
 ```
 
-Combine the feature extractor and tokenizer in [`Wav2Vec2Processor`]:
+Puedes combinar el extractor de características y el *tokenizer* en el [`Wav2Vec2Processor`]:
+
 
 ```py
 >>> from transformers import Wav2Vec2Processor
 
 >>> processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 ```
-
-With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any of the models supported by 🤗 Transformers. Each of these base classes are configurable, allowing you to use the specific attributes you want. You can easily setup a model for training or modify an existing pretrained model to fine-tune.
+Con dos clases base (la configuración y el modelo) y una clase de preprocesamiento adicional (*tokenizer*, extractor de características o procesador), puedes crear cualquier de los modelos compatibles con 🤗 Transformers. Cada una de estas clases son configurares, permitiéndote usar sus atributos específicos. Puedes crear un modelo para entrenarlo de una forma fácil, o modificar un modelo preentrenado disponible para especializarlo.
