@@ -1995,17 +1995,6 @@ if is_tf_available():
             "TFHubertPreTrainedModel",
         ]
     )
-    _import_structure["models.jukebox"].extend(
-        [
-            "TF_JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFJukeboxDoubleHeadsModel",
-            "TFJukeboxForSequenceClassification",
-            "TFJukeboxLMHeadModel",
-            "TFJukeboxMainLayer",
-            "TFJukeboxModel",
-            "TFJukeboxPreTrainedModel",
-        ]
-    )
     _import_structure["models.layoutlm"].extend(
         [
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2398,9 +2387,7 @@ if is_flax_available():
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
-    _import_structure["models.jukebox"].extend(
-        ["FlaxJukeboxLMHeadModel", "FlaxJukeboxModel", "FlaxJukeboxPreTrainedModel"]
-    )
+    
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -3393,15 +3380,6 @@ if TYPE_CHECKING:
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            JukeboxDoubleHeadsModel,
-            JukeboxForCausalLM,
-            JukeboxForMaskedLM,
-            JukeboxForMultipleChoice,
-            JukeboxForQuestionAnswering,
-            JukeboxForSequenceClassification,
-            JukeboxForTokenClassification,
-            JukeboxLayer,
-            JukeboxLMHeadModel,
             JukeboxModel,
             JukeboxPreTrainedModel,
             load_tf_weights_in_jukebox,
