@@ -1110,25 +1110,7 @@ if is_torch_available():
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxForCausalLM",
-            "JukeboxForMaskedLM",
-            "JukeboxForMultipleChoice",
-            "JukeboxForQuestionAnswering",
-            "JukeboxForSequenceClassification",
-            "JukeboxForTokenClassification",
-            "JukeboxLayer",
-            "JukeboxModel",
-            "JukeboxPreTrainedModel",
-            "load_tf_weights_in_jukebox",
-        ]
-    )
-    _import_structure["models.jukebox"].extend(
-        [
-            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxDoubleHeadsModel",
-            "JukeboxForSequenceClassification",
-            "JukeboxForTokenClassification",
-            "JukeboxLMHeadModel",
+            "JukeboxAttention",
             "JukeboxModel",
             "JukeboxPreTrainedModel",
             "load_tf_weights_in_jukebox",
