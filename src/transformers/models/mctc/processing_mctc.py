@@ -24,17 +24,17 @@ class MCTCProcessor(ProcessorMixin):
     r"""
     Constructs a MCTC processor which wraps a MCTC feature extractor and a MCTC tokenizer into a single processor.
 
-    [`MCTCProcessor`] offers all the functionalities of [`MCTCFeatureExtractor`] and [`MCTCTokenizer`]. See the
+    [`MCTCProcessor`] offers all the functionalities of [`MCTCFeatureExtractor`] and [`AutoTokenizer`]. See the
     [`~MCTCProcessor.__call__`] and [`~MCTCProcessor.decode`] for more information.
 
     Args:
         feature_extractor (`MCTCFeatureExtractor`):
             An instance of [`MCTCFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`MCTCTokenizer`):
-            An instance of [`MCTCTokenizer`]. The tokenizer is a required input.
+        tokenizer (`AutoTokenizer`):
+            An instance of [`AutoTokenizer`]. The tokenizer is a required input.
     """
     feature_extractor_class = "MCTCFeatureExtractor"
-    tokenizer_class = "MCTCTokenizer"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -44,21 +44,21 @@ class MCTCProcessor(ProcessorMixin):
         """
         When used in normal mode, this method forwards all its arguments to MCTCFeatureExtractor's
         [`~MCTCFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~MCTCProcessor.as_target_processor`] this method forwards all its arguments to MCTCTokenizer's
-        [`~MCTCTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~MCTCProcessor.as_target_processor`] this method forwards all its arguments to AutoTokenizer's
+        [`~AutoTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MCTCTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
         to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MCTCTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
         docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

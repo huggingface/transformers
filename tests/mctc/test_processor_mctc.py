@@ -18,9 +18,9 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import MCTCProcessor, MCTCTokenizer, is_speech_available
+from transformers import MCTCProcessor, is_speech_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
-from transformers.models.mctc.tokenization_mctc import VOCAB_FILES_NAMES
+from transformers.models.wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer, VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_torchaudio
 
 from .test_feature_extraction_mctc import floats_list
@@ -63,7 +63,7 @@ class MCTCProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
-        return MCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return MCTCFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
@@ -81,7 +81,7 @@ class MCTCProcessorTest(unittest.TestCase):
         processor = MCTCProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, MCTCTokenizer)
+        self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, MCTCFeatureExtractor)
@@ -98,7 +98,7 @@ class MCTCProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, MCTCTokenizer)
+        self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, MCTCFeatureExtractor)

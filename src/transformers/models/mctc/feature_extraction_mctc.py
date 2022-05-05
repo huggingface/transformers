@@ -172,9 +172,11 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         if self.win_function == "hamming_window":
             window = torch.hamming_window(
                 window_length=self.sample_size, periodic=False, alpha=0.54, beta=0.46
-            ).numpy()
+            )
         else:
-            window = getattr(torch, self.win_function)().numpy()
+            window = getattr(torch, self.win_function)()
+
+        window = window.numpy()
 
         fbanks = torchaudio.functional.melscale_fbanks(
             n_freqs=self.K,
@@ -182,7 +184,9 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
             f_max=self.sampling_rate / 2.0,
             n_mels=self.feature_size,
             sample_rate=self.sampling_rate,
-        ).numpy()
+        )
+
+        fbanks = fbanks.numpy()
 
         n_frames = self._num_frames_calc(one_waveform.size, self.sample_size, self.sample_stride)
 
@@ -243,7 +247,8 @@ class MCTCFeatureExtractor(SequenceFeatureExtractor):
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s). sequences.
+        Main method to featurize and prepare for the model one or several sequence(s). sequences. It returns the
+        log-mel spectrogram of the input audio, as implemented in the original Flashlight MFSC feature extraction code.
 
         Args:
             raw_speech (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[torch.Tensor]`, `List[np.ndarray]`, `List[List[float]]`):

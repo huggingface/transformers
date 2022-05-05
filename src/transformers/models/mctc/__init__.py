@@ -24,7 +24,6 @@ from ...file_utils import _LazyModule, is_speech_available, is_tokenizers_availa
 _import_structure = {
     "configuration_mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig"],
     "processing_mctc": ["MCTCProcessor"],
-    "tokenization_mctc": ["MCTCTokenizer"],
 }
 
 if is_speech_available():
@@ -43,7 +42,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig
     from .processing_mctc import MCTCProcessor
-    from .tokenization_mctc import MCTCTokenizer
 
     if is_speech_available():
         from .feature_extraction_mctc import MCTCFeatureExtractor

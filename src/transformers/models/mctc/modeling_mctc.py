@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "MCTCConfig"
-_TOKENIZER_FOR_DOC = "MCTCTokenizer"
+_TOKENIZER_FOR_DOC = "Wav2Vec2CTCTokenizer"
 _PROCESSOR_FOR_DOC = "MCTCProcessor"
 
 # Base docstring
@@ -154,7 +154,6 @@ class MCTCEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
@@ -188,19 +187,18 @@ class MCTCEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_features)
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+        
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
 class MCTCSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -218,12 +216,8 @@ class MCTCSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        self.max_position_embeddings = config.max_position_embeddings
+        self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
@@ -292,14 +286,14 @@ class MCTCSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key":
-            positional_embedding = self.distance_embedding.weight
-            relative_position_scores = torch.einsum(
-                "lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3)
-            )
+        # relative key position embeddings
+        positional_embedding = self.distance_embedding.weight
+        relative_position_scores = torch.einsum(
+            "lh, bche -> bcle", positional_embedding, query_layer.transpose(2, 3)
+        )
 
-            relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
-            attention_scores = attention_scores + relative_position_scores
+        relative_position_scores = self.relativePositionEmbeddingRotate(relative_position_scores)
+        attention_scores = attention_scores + relative_position_scores
 
         # if attention_mask is not None:
         #     # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
@@ -351,9 +345,9 @@ class MCTCSelfOutput(nn.Module):
 
 
 class MCTCAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = MCTCSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = MCTCSelfAttention(config)
         self.output = MCTCSelfOutput(config)
         self.pruned_heads = set()
 
@@ -437,7 +431,7 @@ class MCTCLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
 
         self.intermediate = MCTCIntermediate(config)
-        self.attention = MCTCAttention(config, position_embedding_type=config.position_embedding_type)
+        self.attention = MCTCAttention(config)
         self.is_decoder = config.is_decoder
         self.output = MCTCOutput(config)
 
@@ -558,7 +552,7 @@ MCTC_INPUTS_DOCSTRING = r"""
         input_features (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MCTCTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`Wav2Vec2CTCTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
