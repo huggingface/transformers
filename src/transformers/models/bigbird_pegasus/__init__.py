@@ -21,7 +21,11 @@ from ...utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_bigbird_pegasus": ["BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdPegasusConfig"],
+    "configuration_bigbird_pegasus": [
+        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigBirdPegasusConfig",
+        "BigBirdPegasusOnnxConfig",
+    ],
 }
 
 if is_torch_available():
@@ -37,7 +41,11 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
+    from .configuration_bigbird_pegasus import (
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BigBirdPegasusConfig,
+        BigBirdPegasusOnnxConfig,
+    )
 
     if is_torch_available():
         from .modeling_bigbird_pegasus import (
