@@ -540,6 +540,42 @@ Known caveats:
   `FullyShardedDataParallelism` of fairscale. It should be used with the option `auto_wrap` if you are not
   doing this yourself: `--sharded_ddp "zero_dp_3 auto_wrap"`.
 
+### PyTorch Fully Sharded Data parallel
+
+To accelerate training huge models on larger batch sizes, we can use a fully sharded data parallel model.
+This type of data parallel paradigm enables fitting more data and larger models by sharding the optimizer states, gradients and parameters.
+To read more about it and the benefits, check out the [Fully Sharded Data Parallel blog](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/).
+We have integrated the latest PyTorch's Fully Sharded Data Parallel (FSDP) training feature.
+All you need to do is enable it through the config.
+
+**Required PyTorch version for FSDP support**: PyTorch Nightly (or 1.12.0 if you read this after it has been released)
+as the model saving with FSDP activated is only available with recent fixes.
+
+**Usage**:
+
+- Make sure you have added the distributed launcher
+`-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
+
+- **Sharding Strategy**: 
+  - FULL_SHARD : Shards optimizer states + gradients + model parameters across data parallel workers/GPUs.
+  For this, add `--fsdp full_shard` to the command line arguments. 
+  - SHARD_GRAD_OP : Shards optimizer states + gradients across data parallel workers/GPUs.
+    For this, add `--fsdp shard_grad_op` to the command line arguments.
+- To offload the parameters and gradients to the CPU, 
+add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
+-  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
+add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
+- To enable both CPU offloading and auto wrapping, 
+add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
+- If auto wrapping is enabled, please add `--fsdp_min_num_params <number>` to command line arguments.
+It specifies FSDP's minimum number of parameters for Default Auto Wrapping.
+
+**Few caveats to be aware of**
+- Mixed precision is currently not supported with FSDP as we wait for PyTorch to fix support for it.
+More details in this [issues](https://github.com/pytorch/pytorch/issues/75676).
+- FSDP currently doesn't support multiple parameter groups. 
+More details mentioned in this [issue](https://github.com/pytorch/pytorch/issues/76501)
+(`The original model parameters' .grads are not set, meaning that they cannot be optimized separately (which is why we cannot support multiple parameter groups)`).
 
 Sections that were moved:
 

@@ -582,3 +582,10 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+class FSDPOption(ExplicitEnum):
+    FULL_SHARD = "full_shard"
+    SHARD_GRAD_OP = "shard_grad_op"
+    OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"
