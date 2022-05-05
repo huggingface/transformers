@@ -112,6 +112,9 @@ class SymbolEncoder:
         self._arpa_re = re.compile(r'{[^}]+}|\S+')
 
         self.symbols = self._get_symbols(symbol_set=symbol_set)
+        # Vocab here is the symbols and their ids
+        self.symbol_to_id = {s: i for i, s in enumerate(self.symbols)}
+        self.id_to_symbol = {i: s for i, s in enumerate(self.symbols)}
         
     def _get_symbols(symbol_set='english_basic'):
         """ 
@@ -202,14 +205,13 @@ class FastPitchTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        "Returns vocab size"
-        # return symbols size
-        pass
+        "Returns vocab size which is the symbol size in our case"
+        return len(self.symbol_encoder.symbols)
 
     def get_vocab(self):
         "Returns vocab as a dict"
         # Vocab here is the symbols and their ids
-        pass
+        return self.symbol_encoder.symbol_to_id
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
