@@ -84,7 +84,7 @@ class MCTCConv1dSubsampler(nn.Module):
     """
 
     def __init__(self, config):
-        super(Conv1dSubsampler, self).__init__()
+        super(MCTCConv1dSubsampler, self).__init__()
         self.config = config
         self.glu_dim = config.conv_glu_dim
 
@@ -595,7 +595,7 @@ class MCTCEncoder(MCTCPreTrainedModel):
         self.hidden_dropout_prob = config.hidden_dropout_prob
 
         self.layer_norm = MCTCLayerNorm()
-        self.conv = Conv1dSubsampler(config)
+        self.conv = MCTCConv1dSubsampler(config)
         self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
