@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("mctc", "MCTCModel"),
+        ("mctct", "MCTCTModel"),
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("glpn", "GLPNModel"),
@@ -626,7 +626,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
-        ("mctc", "MCTCForCTC"),
+        ("mctct", "MCTCTForCTC"),
         ("wav2vec2", "Wav2Vec2ForCTC"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("unispeech", "UniSpeechForCTC"),

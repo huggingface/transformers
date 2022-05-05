@@ -22,32 +22,32 @@ from ...file_utils import _LazyModule, is_speech_available, is_tokenizers_availa
 
 
 _import_structure = {
-    "configuration_mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig"],
-    "processing_mctc": ["MCTCProcessor"],
+    "configuration_mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig"],
+    "processing_mctct": ["MCTCTProcessor"],
 }
 
 if is_speech_available():
-    _import_structure["feature_extraction_mctc"] = ["MCTCFeatureExtractor"]
+    _import_structure["feature_extraction_mctct"] = ["MCTCTFeatureExtractor"]
 
 
 if is_torch_available():
-    _import_structure["modeling_mctc"] = [
-        "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MCTCForCTC",
-        "MCTCModel",
-        "MCTCPreTrainedModel",
+    _import_structure["modeling_mctct"] = [
+        "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MCTCTForCTC",
+        "MCTCTModel",
+        "MCTCTPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig
-    from .processing_mctc import MCTCProcessor
+    from .configuration_mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig
+    from .processing_mctct import MCTCTProcessor
 
     if is_speech_available():
-        from .feature_extraction_mctc import MCTCFeatureExtractor
+        from .feature_extraction_mctct import MCTCTFeatureExtractor
 
     if is_torch_available():
-        from .modeling_mctc import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCForCTC, MCTCModel, MCTCPreTrainedModel
+        from .modeling_mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
 
 
 else:

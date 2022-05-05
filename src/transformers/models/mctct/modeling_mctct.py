@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mCTC model."""
+""" PyTorch M-CTC-T model."""
 
 
 import math
@@ -36,19 +36,19 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_mctc import MCTCConfig
+from .configuration_mctct import MCTCTConfig
 
 
 logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 1
 
-_CONFIG_FOR_DOC = "MCTCConfig"
+_CONFIG_FOR_DOC = "MCTCTConfig"
 _TOKENIZER_FOR_DOC = "Wav2Vec2CTCTokenizer"
-_PROCESSOR_FOR_DOC = "MCTCProcessor"
+_PROCESSOR_FOR_DOC = "MCTCTProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "mctc-large"
+_CHECKPOINT_FOR_DOC = "mctct-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 
 # CTC docstring
@@ -56,9 +56,9 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 
-MCTC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mctc-large",
-    # See all mCTC models at https://huggingface.co/models?filter=mctc
+MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "mctct-large",
+    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
 
 
@@ -77,14 +77,14 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-class MCTCConv1dSubsampler(nn.Module):
+class MCTCTConv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
     via gated linear units (https://arxiv.org/abs/1911.08460)
     """
 
     def __init__(self, config):
-        super(MCTCConv1dSubsampler, self).__init__()
+        super(MCTCTConv1dSubsampler, self).__init__()
         self.config = config
         self.glu_dim = config.conv_glu_dim
 
@@ -96,7 +96,7 @@ class MCTCConv1dSubsampler(nn.Module):
         if self.num_layers > 1:
             if config.conv_channels is None:
                 raise ValueError(
-                    "Need to specify `conv_channels` configuration in `MCTCConfig` to use multiple convolution layers."
+                    "Need to specify `conv_channels` configuration in `MCTCTConfig` to use multiple convolution layers."
                 )
 
             self.mid_channels = config.conv_channels
@@ -107,7 +107,7 @@ class MCTCConv1dSubsampler(nn.Module):
         self.kernel_size = config.conv_kernel
         self.stride = config.conv_stride
 
-        # NOTE: MCTC by construction only uses one convolution kernel. I've made this flexible to allow for
+        # NOTE: MCTCT by construction only uses one convolution kernel. I've made this flexible to allow for
         # multiple layers of convolutions, but not sure if this model definition should just restrict it
         # to one layer. This becomes especially relevant when considering the padding like line 1 of forward().
         self.conv_layers = nn.ModuleList(
@@ -137,7 +137,7 @@ class MCTCConv1dSubsampler(nn.Module):
         return hidden_states
 
 
-class MCTCEmbeddings(nn.Module):
+class MCTCTEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -149,7 +149,7 @@ class MCTCEmbeddings(nn.Module):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.LayerNorm = MCTCLayerNorm()
+        self.LayerNorm = MCTCTLayerNorm()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -197,7 +197,7 @@ class MCTCEmbeddings(nn.Module):
         return embeddings
 
 
-class MCTCSelfAttention(nn.Module):
+class MCTCTSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -288,7 +288,7 @@ class MCTCSelfAttention(nn.Module):
         attention_scores = attention_scores + relative_position_scores
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MCTCModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in MCTCTModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -311,7 +311,7 @@ class MCTCSelfAttention(nn.Module):
         return outputs
 
 
-class MCTCLayerNorm(nn.Module):
+class MCTCTLayerNorm(nn.Module):
     def __init__(self):
         super().__init__()
         self.singleton_weight = Parameter(torch.ones(1))
@@ -321,7 +321,7 @@ class MCTCLayerNorm(nn.Module):
         return (hidden_states * self.singleton_weight) + self.singleton_bias
 
 
-class MCTCSelfOutput(nn.Module):
+class MCTCTSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -336,11 +336,11 @@ class MCTCSelfOutput(nn.Module):
         return hidden_states
 
 
-class MCTCAttention(nn.Module):
+class MCTCTAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = MCTCSelfAttention(config)
-        self.output = MCTCSelfOutput(config)
+        self.self = MCTCTSelfAttention(config)
+        self.output = MCTCTSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -386,7 +386,7 @@ class MCTCAttention(nn.Module):
         return outputs
 
 
-class MCTCIntermediate(nn.Module):
+class MCTCTIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -401,7 +401,7 @@ class MCTCIntermediate(nn.Module):
         return hidden_states
 
 
-class MCTCOutput(nn.Module):
+class MCTCTOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
@@ -415,17 +415,17 @@ class MCTCOutput(nn.Module):
         return hidden_states
 
 
-class MCTCLayer(nn.Module):
-    def __init__(self, config: MCTCConfig):
+class MCTCTLayer(nn.Module):
+    def __init__(self, config: MCTCTConfig):
         super().__init__()
 
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
 
-        self.intermediate = MCTCIntermediate(config)
-        self.attention = MCTCAttention(config)
+        self.intermediate = MCTCTIntermediate(config)
+        self.attention = MCTCTAttention(config)
         self.is_decoder = config.is_decoder
-        self.output = MCTCOutput(config)
+        self.output = MCTCTOutput(config)
 
     def forward(
         self,
@@ -454,14 +454,14 @@ class MCTCLayer(nn.Module):
         return layer_output
 
 
-class MCTCPreTrainedModel(PreTrainedModel):
+class MCTCTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MCTCConfig
-    base_model_prefix = "mctc"
+    config_class = MCTCTConfig
+    base_model_prefix = "mctct"
     main_input_name = "input_features"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
@@ -482,7 +482,7 @@ class MCTCPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, MCTCLayerNorm):
+        elif isinstance(module, MCTCTLayerNorm):
             module.singleton_weight.data.fill_(1.0)
             module.singleton_bias.data.zero_()
         if isinstance(module, (nn.Linear, nn.Conv1d)):
@@ -524,22 +524,22 @@ class MCTCPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (MCTCEncoder)):
+        if isinstance(module, (MCTCTEncoder)):
             module.gradient_checkpointing = value
 
 
-MCTC_START_DOCSTRING = r"""
+MCTCT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`~MCTCConfig`]): Model configuration class with all the parameters of the model.
+        config ([`~MCTCTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-MCTC_INPUTS_DOCSTRING = r"""
+MCTCT_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -589,14 +589,14 @@ MCTC_INPUTS_DOCSTRING = r"""
 """
 
 
-class MCTCEncoder(MCTCPreTrainedModel):
-    def __init__(self, config: MCTCConfig):
+class MCTCTEncoder(MCTCTPreTrainedModel):
+    def __init__(self, config: MCTCTConfig):
         super().__init__(config)
         self.hidden_dropout_prob = config.hidden_dropout_prob
 
-        self.layer_norm = MCTCLayerNorm()
-        self.conv = MCTCConv1dSubsampler(config)
-        self.layers = nn.ModuleList([MCTCLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_norm = MCTCTLayerNorm()
+        self.conv = MCTCTConv1dSubsampler(config)
+        self.layers = nn.ModuleList([MCTCTLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
 
@@ -697,20 +697,20 @@ class MCTCEncoder(MCTCPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare mCTC Model transformer outputting raw hidden-states without any specific head on top.",
-    MCTC_START_DOCSTRING,
+    "The bare M-CTC-T Model transformer outputting raw hidden-states without any specific head on top.",
+    MCTCT_START_DOCSTRING,
 )
-class MCTCModel(MCTCPreTrainedModel):
+class MCTCTModel(MCTCTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.encoder = MCTCEncoder(config)
+        self.encoder = MCTCTEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -765,20 +765,20 @@ class MCTCModel(MCTCPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MCTC Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    MCTC_START_DOCSTRING,
+    """MCTCT Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    MCTCT_START_DOCSTRING,
 )
-class MCTCForCTC(MCTCPreTrainedModel):
+class MCTCTForCTC(MCTCTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.mctc = MCTCModel(config)
+        self.mctct = MCTCTModel(config)
 
         if config.vocab_size is None:
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `MCTCForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `MCTCTForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = config.hidden_size
@@ -788,7 +788,7 @@ class MCTCForCTC(MCTCPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MCTC_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -815,7 +815,7 @@ class MCTCForCTC(MCTCPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        outputs = self.mctc(
+        outputs = self.mctct(
             input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -869,7 +869,7 @@ class MCTCForCTC(MCTCPreTrainedModel):
         )
 
 
-# class MCTCClassificationHead(nn.Module):
+# class MCTCTClassificationHead(nn.Module):
 #     """Head for sentence-level classification tasks."""
 
 #     def __init__(self, config):

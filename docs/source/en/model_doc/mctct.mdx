@@ -10,11 +10,11 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# MCTC
+# MCTCT
 
 ## Overview
 
-The MCTC model was proposed in [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert. 
+The MCTCT model was proposed in [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert. 
 
 The abstract from the paper is the following:
 
@@ -30,9 +30,9 @@ performance for many languages that also transfers well to LibriSpeech.*
 
 This model was contributed by [cwkeam](<https://huggingface.co/cwkeam). The original code can be found [here](https://github.com/flashlight/wav2letter/tree/main/recipes/mling_pl).
 
-## MCTCConfig
+## MCTCTConfig
 
-[[autodoc]] MCTCConfig
+[[autodoc]] MCTCTConfig
 
 ## Wav2Vec2CTCTokenizer
 
@@ -42,14 +42,14 @@ This model was contributed by [cwkeam](<https://huggingface.co/cwkeam). The orig
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## MCTCFeatureExtractor
+## MCTCTFeatureExtractor
 
-[[autodoc]] MCTCFeatureExtractor
+[[autodoc]] MCTCTFeatureExtractor
     - __call__
 
-## MCTCProcessor
+## MCTCTProcessor
 
-[[autodoc]] MCTCProcessor
+[[autodoc]] MCTCTProcessor
     - __call__
     - from_pretrained
     - save_pretrained
@@ -63,12 +63,12 @@ This model was contributed by [cwkeam](<https://huggingface.co/cwkeam). The orig
 
 [[autodoc]] models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTrainingOutput
 
-## MCTCModel
+## MCTCTModel
 
-[[autodoc]] MCTCModel
+[[autodoc]] MCTCTModel
     - forward
 
-## MCTCForCTC
+## MCTCTForCTC
 
-[[autodoc]] MCTCForCTC
+[[autodoc]] MCTCTForCTC
     - forward

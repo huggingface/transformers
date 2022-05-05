@@ -18,21 +18,21 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import MCTCProcessor, is_speech_available
+from transformers import MCTCTProcessor, is_speech_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizer
 from transformers.testing_utils import require_torch, require_torchaudio
 
-from .test_feature_extraction_mctc import floats_list
+from .test_feature_extraction_mctct import floats_list
 
 
 if is_speech_available():
-    from transformers import MCTCFeatureExtractor
+    from transformers import MCTCTFeatureExtractor
 
 
 @require_torch
 @require_torchaudio
-class MCTCProcessorTest(unittest.TestCase):
+class MCTCTProcessorTest(unittest.TestCase):
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -66,7 +66,7 @@ class MCTCProcessorTest(unittest.TestCase):
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return MCTCFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return MCTCTFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -75,25 +75,25 @@ class MCTCProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = MCTCProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MCTCTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         processor.save_pretrained(self.tmpdirname)
-        processor = MCTCProcessor.from_pretrained(self.tmpdirname)
+        processor = MCTCTProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MCTCFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, MCTCTFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = MCTCProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = MCTCTProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = MCTCProcessor.from_pretrained(
+        processor = MCTCTProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -101,13 +101,13 @@ class MCTCProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MCTCFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, MCTCTFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = MCTCProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MCTCTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         raw_speech = floats_list((3, 1000))
 
@@ -121,7 +121,7 @@ class MCTCProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = MCTCProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MCTCTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
 
@@ -137,7 +137,7 @@ class MCTCProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = MCTCProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MCTCTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 

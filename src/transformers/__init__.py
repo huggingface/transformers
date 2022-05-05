@@ -226,7 +226,7 @@ _import_structure = {
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
-    "models.mctc": ["MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCConfig", "MCTCProcessor"],
+    "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mluke": [],
@@ -513,7 +513,7 @@ else:
 
 # Speech-specific objects
 if is_speech_available():
-    _import_structure["models.mctc"].append("MCTCFeatureExtractor")
+    _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 else:
     from .utils import dummy_speech_objects
@@ -1197,12 +1197,12 @@ if is_torch_available():
             "MBartPreTrainedModel",
         ]
     )
-    _import_structure["models.mctc"].extend(
+    _import_structure["models.mctct"].extend(
         [
-            "MCTC_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MCTCForCTC",
-            "MCTCModel",
-            "MCTCPreTrainedModel",
+            "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCTForCTC",
+            "MCTCTModel",
+            "MCTCTPreTrainedModel",
         ]
     )
     _import_structure["models.megatron_bert"].extend(
@@ -2634,7 +2634,7 @@ if TYPE_CHECKING:
     from .models.marian import MarianConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
-    from .models.mctc import MCTC_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCConfig, MCTCProcessor
+    from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
@@ -2886,7 +2886,7 @@ if TYPE_CHECKING:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
 
     if is_speech_available():
-        from .models.mctc import MCTCFeatureExtractor
+        from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
     else:
         from .utils.dummy_speech_objects import *
@@ -3447,7 +3447,7 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
-        from .models.mctc import MCTC_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCForCTC, MCTCModel, MCTCPreTrainedModel
+        from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,

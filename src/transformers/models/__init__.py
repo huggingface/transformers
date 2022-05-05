@@ -77,7 +77,7 @@ from . import (
     maskformer,
     mbart,
     mbart50,
-    mctc,
+    mctct,
     megatron_bert,
     megatron_gpt2,
     mluke,

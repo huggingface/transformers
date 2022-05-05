@@ -175,7 +175,7 @@ class MCTCTConfig(PretrainedConfig):
         # prevents config testing fail with exporting to json
         self.conv_kernel = list(conv_kernel)
         self.conv_stride = list(conv_stride)
-
+        
         if len(self.conv_kernel) != self.num_conv_layers:
             raise ValueError(
                 "Configuration for convolutional module is incorrect. "

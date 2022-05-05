@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MCTC model. """
+""" Testing suite for the PyTorch MCTCT model. """
 
 import math
 import unittest
 
 from datasets import load_dataset
 
-from transformers import MCTCConfig, is_torch_available
+from transformers import MCTCTConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
@@ -29,10 +29,10 @@ from ..test_modeling_common import ModelTesterMixin, _config_zero_init, floats_t
 if is_torch_available():
     import torch
 
-    from transformers import MCTCForCTC, MCTCModel, MCTCProcessor
+    from transformers import MCTCTForCTC, MCTCTModel, MCTCTProcessor
 
 
-class MCTCModelTester:
+class MCTCTModelTester:
     def __init__(
         self,
         parent,
@@ -112,7 +112,7 @@ class MCTCModelTester:
         return config, input_features, attention_mask
 
     def get_config(self):
-        return MCTCConfig(
+        return MCTCTConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -137,7 +137,7 @@ class MCTCModelTester:
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
-        model = MCTCModel(config=config)
+        model = MCTCTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -149,7 +149,7 @@ class MCTCModelTester:
     def create_and_check_model_for_ctc(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 2 * config.hidden_size
-        model = MCTCForCTC(config=config)
+        model = MCTCTForCTC(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -160,7 +160,7 @@ class MCTCModelTester:
     def create_and_check_batch_inference(self, config, input_features, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
-        model = MCTCModel(config=config)
+        model = MCTCTModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -184,7 +184,7 @@ class MCTCModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_features, *args):
-        model = MCTCForCTC(config=config)
+        model = MCTCTForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -215,7 +215,7 @@ class MCTCModelTester:
 
     def check_ctc_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
-        model = MCTCForCTC(config=config)
+        model = MCTCTForCTC(config=config)
         model.to(torch_device)
         model.train()
 
@@ -240,7 +240,7 @@ class MCTCModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_features, *args):
-        model = MCTCForCTC(config)
+        model = MCTCTForCTC(config)
         model.to(torch_device)
         model.train()
 
@@ -260,15 +260,15 @@ class MCTCModelTester:
 
 
 @require_torch
-class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MCTCForCTC, MCTCModel) if is_torch_available() else ()
+class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MCTCTForCTC, MCTCTModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = MCTCModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MCTCConfig, hidden_size=37)
+        self.model_tester = MCTCTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MCTCTConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -289,7 +289,7 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # MCTC has no inputs_embeds
+    # MCTCT has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
@@ -297,12 +297,12 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    # MCTC cannot resize token embeddings
+    # MCTCT cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    # MCTC has no inputs_embeds
+    # MCTCT has no inputs_embeds
     def test_model_common_attributes(self):
         pass
 
@@ -404,16 +404,16 @@ class MCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = MCTCModel.from_pretrained("cwkeam/mctc-large")
+        model = MCTCTModel.from_pretrained("cwkeam/mctct-large")
         self.assertIsNotNone(model)
 
 
 @require_torch
-class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
+class MCTCTRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            MCTCForCTC,
-            MCTCModel,
+            MCTCTForCTC,
+            MCTCTModel,
         )
         if is_torch_available()
         else ()
@@ -423,8 +423,8 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = MCTCModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MCTCConfig, hidden_size=37)
+        self.model_tester = MCTCTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MCTCTConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -449,7 +449,7 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # MCTC has no inputs_embeds
+    # MCTCT has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
@@ -457,12 +457,12 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    # MCTC cannot resize token embeddings
+    # MCTCT cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    # MCTC has no inputs_embeds
+    # MCTCT has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
@@ -562,14 +562,14 @@ class MCTCRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = MCTCModel.from_pretrained("cwkeam/mctc-large")
+        model = MCTCTModel.from_pretrained("cwkeam/mctct-large")
         self.assertIsNotNone(model)
 
 
 @require_torch
 @require_soundfile
 @slow
-class MCTCModelIntegrationTest(unittest.TestCase):
+class MCTCTModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -585,9 +585,9 @@ class MCTCModelIntegrationTest(unittest.TestCase):
         return ds[:num_samples]
 
     def test_inference_ctc_normal(self):
-        model = MCTCForCTC.from_pretrained("cwkeam/mctc-large")
+        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large")
         model.to(torch_device)
-        processor = MCTCProcessor.from_pretrained("cwkeam/mctc-large", do_lower_case=True)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
         input_speech = self._load_datasamples(1)
 
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
@@ -602,9 +602,9 @@ class MCTCModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_normal_batched(self):
-        model = MCTCForCTC.from_pretrained("cwkeam/mctc-large")
+        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large")
         model.to(torch_device)
-        processor = MCTCProcessor.from_pretrained("cwkeam/mctc-large", do_lower_case=True)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
@@ -625,8 +625,8 @@ class MCTCModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_robust_batched(self):
-        model = MCTCForCTC.from_pretrained("cwkeam/mctc-large").to(torch_device)
-        processor = MCTCProcessor.from_pretrained("cwkeam/mctc-large", do_lower_case=True)
+        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
 
         input_speech = self._load_datasamples(4)
 

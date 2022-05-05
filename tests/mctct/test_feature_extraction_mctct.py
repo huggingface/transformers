@@ -27,7 +27,7 @@ from ..test_sequence_feature_extraction_common import SequenceFeatureExtractionT
 
 
 if is_speech_available():
-    from transformers import MCTCFeatureExtractor
+    from transformers import MCTCTFeatureExtractor
 
 global_rng = random.Random()
 
@@ -48,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 @require_torchaudio
-class MCTCFeatureExtractionTester(unittest.TestCase):
+class MCTCTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -103,12 +103,12 @@ class MCTCFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class MCTCFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
-    feature_extraction_class = MCTCFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = MCTCTFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
-        self.feat_extract_tester = MCTCFeatureExtractionTester(self)
+        self.feat_extract_tester = MCTCTFeatureExtractionTester(self)
 
     def _check_zero_mean_unit_variance(self, input_vector):
         self.assertTrue(np.all(np.mean(input_vector) < 1e-3))
