@@ -28,10 +28,10 @@ MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MCTCTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~MCTCTModel`]. It is used to instantiate an M-CTC-T
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the M-CTC-T [mctct-large](https://huggingface.co/mctct-large)
-    architecture.
+    This is the configuration class to store the configuration of a [`~MCTCTModel`]. It is used to instantiate an
+    M-CTC-T model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the M-CTC-T
+    [mctct-large](https://huggingface.co/mctct-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -175,7 +175,7 @@ class MCTCTConfig(PretrainedConfig):
         # prevents config testing fail with exporting to json
         self.conv_kernel = list(conv_kernel)
         self.conv_stride = list(conv_stride)
-        
+
         if len(self.conv_kernel) != self.num_conv_layers:
             raise ValueError(
                 "Configuration for convolutional module is incorrect. "
@@ -183,5 +183,3 @@ class MCTCTConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
-
-        
