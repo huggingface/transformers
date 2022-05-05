@@ -1202,7 +1202,6 @@ else:
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxLayer",
             "JukeboxModel",
             "JukeboxPreTrainedModel",
             "load_tf_weights_in_jukebox",
