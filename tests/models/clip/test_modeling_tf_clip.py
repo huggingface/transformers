@@ -256,6 +256,62 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFCLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        # in CLIP, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.model_tester.image_size, self.model_tester.image_size)
+        patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+                output_hidden_states = outputs["hidden_states"]
+                output_attentions = outputs["attentions"]
+
+                # Check num outputs
+                self.assertEqual(len(outputs), num_out)
+
+                # Check num layers
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+
+                # Check attention outputs
+                image_size = (self.model_tester.image_size, self.model_tester.image_size)
+                patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
+                num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+                seq_len = num_patches + 1
+
+                self.assertListEqual(
+                    list(output_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
+
+                # Check hidden states
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [seq_len, self.model_tester.hidden_size],
+                )
+
 
 class TFCLIPTextModelTester:
     def __init__(
@@ -366,6 +422,54 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+                output_hidden_states = outputs["hidden_states"]
+                output_attentions = outputs["attentions"]
+
+                # Check number of outputs
+                self.assertEqual(len(outputs), num_out)
+
+                # Check number of layers
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                # Check hidden states
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+
+                # Check attention outputs
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+
+                seq_length = self.model_tester.seq_length
+                key_length = getattr(self.model_tester, "key_length", seq_length)
+
+                self.assertListEqual(
+                    list(output_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_length, key_length],
+                )
 
 
 class TFCLIPModelTester:
@@ -501,6 +605,11 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
+    @slow
+    def test_saved_model_creation_extended(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
