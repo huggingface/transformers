@@ -166,8 +166,6 @@ class MCTCConfig(PretrainedConfig):
         self.conv_glu_dim = conv_glu_dim
         self.conv_dropout = conv_dropout
         self.num_conv_layers = num_conv_layers
-        self.conv_kernel = conv_kernel
-        self.conv_stride = conv_stride
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
         self.conv_channels = conv_channels
