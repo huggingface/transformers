@@ -57,7 +57,7 @@ _CTC_EXPECTED_LOSS = 53.48
 
 
 MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mctct-large",
+    "cwkeam/mctct-large",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
 
