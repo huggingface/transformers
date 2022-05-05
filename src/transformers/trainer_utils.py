@@ -356,6 +356,7 @@ class TrainerMemoryTracker:
     stages = {
         "__init__": "init",
         "train": "train",
+        "_inner_training_loop":"train",
         "evaluate": "eval",
         "predict": "test",
     }
