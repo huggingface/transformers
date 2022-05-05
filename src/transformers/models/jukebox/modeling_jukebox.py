@@ -26,7 +26,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
@@ -38,21 +37,14 @@ else:
 import gc
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
-from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import (
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_utils import PreTrainedModel
+from ...utils import (  # replace_return_docstrings,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_jukebox import JukeboxConfig
@@ -298,7 +290,7 @@ class JukeboxAttention(nn.Module):
         return a
 
     def block_attn(self, q, k, v, sample):
-        blocks, block_ctx = (
+        _, block_ctx = (
             self.blocks,
             self.block_ctx,
         )  # block_ctx is l // blocks for complete l ie l = n_ctx. Sampling has less l
@@ -318,7 +310,7 @@ class JukeboxAttention(nn.Module):
             return self.dense_attn(q, k, v, sample).view(bs, l, d)
 
     def transpose_block_attn(self, q, k, v, sample):
-        blocks, block_ctx = (
+        _, block_ctx = (
             self.blocks,
             self.block_ctx,
         )  # block_ctx is l // blocks for complete l ie l = n_ctx. Sampling has less l
@@ -357,7 +349,7 @@ class JukeboxAttention(nn.Module):
             )
 
     def prev_block_attn(self, q, k, v, sample):
-        blocks, block_ctx = (
+        _, block_ctx = (
             self.blocks,
             self.block_ctx,
         )  # block_ctx is l // blocks for complete l ie l = n_ctx. Sampling has less l
@@ -411,7 +403,7 @@ class JukeboxAttention(nn.Module):
             return self.dense_attn(q, k, v, sample).view(bs, l, d)
 
     def summary_spread_attn(self, q, k, v, sample):
-        blocks, block_ctx, spread = (
+        blocks, _, spread = (
             self.blocks,
             self.block_ctx,
             self.spread,
@@ -930,7 +922,7 @@ class JukeboxTransformer(nn.Module):
         if record_attn:
             assert self.ws == []
             for l in self._attn_mods:
-                assert l.attn.w == None
+                assert l.attn.w is None
         else:
             self.ws = []
             for l in self._attn_mods:
@@ -1296,7 +1288,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         get_preds=False,
         sample_tokens=None,
     ):
-        assert self.training == False
+        assert self.training is False
 
         if sample_tokens is None:
             sample_tokens = self.input_dims
@@ -2843,9 +2835,9 @@ class JukeboxPrior(nn.Module):
 
     # should be removed as the vq-vae is no longer part of the prior
     def encode(self, x, start_level=None, end_level=None, bs_chunks=1):
-        if start_level == None:
+        if start_level is None:
             start_level = self.level
-        if end_level == None:
+        if end_level is None:
             end_level = self.levels
         # Get latents
         with torch.no_grad():
@@ -2854,9 +2846,9 @@ class JukeboxPrior(nn.Module):
 
     # same as above, the va-vae is no longer part of the prior
     def decode(self, zs, start_level=None, end_level=None, bs_chunks=1):
-        if start_level == None:
+        if start_level is None:
             start_level = self.level
-        if end_level == None:
+        if end_level is None:
             end_level = self.levels
 
         assert len(zs) == end_level - start_level
