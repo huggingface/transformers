@@ -781,15 +781,15 @@ class MLflowCallback(TrainerCallback):
 
         Environment:
             HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
-                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if
-                logging to a remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy whatever
-                is in [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it
-                without a remote storage will just copy the files to your artifact location.
+                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
+                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy whatever is in
+                [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
+                storage will just copy the files to your artifact location.
             MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
-                Whether to use an MLflow experiment_name under which to launch the run. Default to "None"
-                which will point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive
-                name of the experiment to be activated. If an experiment with this name does not exist, a
-                new experiment with this name is created.
+                Whether to use an MLflow experiment_name under which to launch the run. Default to "None" which will
+                point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive name of the experiment
+                to be activated. If an experiment with this name does not exist, a new experiment with this name is
+                created.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:
