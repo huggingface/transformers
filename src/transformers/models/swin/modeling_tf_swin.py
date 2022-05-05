@@ -723,17 +723,16 @@ class TFSwinLayer(tf.keras.layers.Layer):
     def get_attn_mask(self, height, width):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            # img_mask = tf.zeros((1, height, width, 1)) #FIXME - add back in these dimenstions
             img_mask = tf.zeros((height, width))
             height_slices = (
                 (0, -self.window_size),
                 (-self.window_size, -self.shift_size),
-                (-self.shift_size, -1), #FIXME - double check -1 versus None
+                (-self.shift_size, -1),
             )
             width_slices = (
                 (0, -self.window_size),
                 (-self.window_size, -self.shift_size),
-                (-self.shift_size, -1), #FIXME - double check -1 versus None
+                (-self.shift_size, -1),
             )
 
             count = 0
@@ -743,20 +742,20 @@ class TFSwinLayer(tf.keras.layers.Layer):
                         [i, j]
                         for i in range(height_slice[0] % height, height_slice[1] % height)
                         for j in range(width_slice[0] % width, width_slice[1] % width)
-                    ] #FIXME - find indices in a better way
+                    ]
                     if indices:
                         updates = tf.ones((len(indices),), dtype=img_mask.dtype) * count
                         img_mask = tf.tensor_scatter_nd_update(img_mask, indices, updates)
                     count += 1 # Increment count if no update? FIXME
 
-            img_mask = tf.expand_dims(img_mask, -1) #FIXME - have dimensions at the start
+            img_mask = tf.expand_dims(img_mask, -1)
             img_mask = tf.expand_dims(img_mask, 0)
 
             mask_windows = window_partition(img_mask, self.window_size)
             mask_windows = tf.reshape(mask_windows, (-1, self.window_size * self.window_size))
             attn_mask = tf.expand_dims(mask_windows, 1) - tf.expand_dims(mask_windows, 2)
-            attn_mask = tf.where(attn_mask != 0, attn_mask, float(-100.0))
-            attn_mask = tf.where(attn_mask == 0, attn_mask, float(0.0))
+            attn_mask = tf.where(attn_mask != 0, float(-100.0), attn_mask)
+            attn_mask = tf.where(attn_mask == 0, float(0.0), attn_mask)
         else:
             attn_mask = None
         return attn_mask
@@ -925,19 +924,6 @@ class TFSwinEncoder(tf.keras.layers.Layer):
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-#             if self.gradient_checkpointing and self.training:
-
-#                 def create_custom_forward(module):
-#                     def custom_forward(*inputs):
-#                         return module(*inputs, output_attentions)
-
-#                     return custom_forward
-
-# #                 layer_outputs = torch.utils.checkpoint.checkpoint(
-# #                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
-# #                 )
-# #             else:
-            #FIXME
             layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions, training=training)
 
             hidden_states = layer_outputs[0]
@@ -979,18 +965,6 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-#     def _init_weights(self, module): #FIXME - add in TF initialisation of weights
-#         """Initialize the weights"""
-#         if isinstance(module, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
-# #             # Slightly different from the TF version which uses truncated_normal for initialization
-# #             # cf https://github.com/pytorch/pytorch/pull/5617 #FIXME
-#             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-# #             if module.bias is not None:
-# #                 module.bias.data.zero_()
-# #         elif isinstance(module, nn.LayerNorm):
-# #             module.bias.data.zero_()
-# #             module.weight.data.fill_(1.0)
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, TFSwinEncoder):
             module.gradient_checkpointing = value
@@ -1029,6 +1003,11 @@ class TFSwinModel(TFSwinPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    def get_head_mask(self, head_mask):
+        if head_mask is not None:
+            raise NotImplementedError
+        return [None] * len(self.config.depths)
+
     @unpack_inputs
     def call(
         self,
@@ -1054,11 +1033,7 @@ class TFSwinModel(TFSwinPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if head_mask is not None:
-            raise NotImplementedError
-        else:
-            head_mask = [None] * len(self.config.depths)
-        # head_mask = self.get_head_mask(head_mask, len(self.config.depths)) #FIXME
+        head_mask = self.get_head_mask(head_mask)
         embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos, training=training)
 
         encoder_outputs = self.encoder(
