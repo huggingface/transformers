@@ -15,7 +15,6 @@
 
 import dataclasses
 import gc
-import logging
 import math
 import os
 import random
@@ -33,7 +32,14 @@ import numpy as np
 from huggingface_hub import Repository, delete_repo, login
 from parameterized import parameterized
 from requests.exceptions import HTTPError
-from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    IntervalStrategy,
+    PretrainedConfig,
+    TrainingArguments,
+    is_torch_available,
+    logging,
+)
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
