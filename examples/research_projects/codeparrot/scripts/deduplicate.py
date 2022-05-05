@@ -129,7 +129,7 @@ def find_cluster_extremes(cluster: List[tuple], dataset) -> List[tuple]:
             if jaccard_similarity(code1, code2) >= 0.85:
                 break
         else:
-            extremes.append(code1)
+            extremes.append(element1)
     return extremes
 
 
@@ -159,6 +159,8 @@ def main(dataset, output_dir, samples_per_file):
     print("Unique files in duplicate cluster: %d" % len(extreme_indices))
     print("Filtered dataset size: %d" % len(ds_filter))
 
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     for file_number, index in enumerate(range(0, len(ds_filter), samples_per_file)):
         file_path = f"{output_dir}/file-{file_number+1:012}.json"
         end_index = min(len(ds_filter), index + samples_per_file)
