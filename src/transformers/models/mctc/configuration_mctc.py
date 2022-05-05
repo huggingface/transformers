@@ -181,3 +181,7 @@ class MCTCConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
+
+        # prevents config testing fail with exporting to json
+        self.conv_kernel = list(conv_kernel)
+        self.conv_stride = list(conv_stride)
