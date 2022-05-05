@@ -323,7 +323,7 @@ class MBartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
 
             mask_dtype = common_inputs["attention_mask"].dtype
-            common_inputs["attention_mask"] = torch.cat( 
+            common_inputs["attention_mask"] = torch.cat(
                 [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
             common_inputs["past_key_values"] = [

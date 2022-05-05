@@ -212,7 +212,7 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             mask_dtype = ordered_inputs["attention_mask"].dtype
-            ordered_inputs["attention_mask"] = torch.cat( 
+            ordered_inputs["attention_mask"] = torch.cat(
                 [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
 
