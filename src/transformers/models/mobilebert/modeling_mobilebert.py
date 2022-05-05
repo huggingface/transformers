@@ -164,7 +164,7 @@ class NoNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(feat_size))
         self.weight = nn.Parameter(torch.ones(feat_size))
 
-    def forward(self, input_tensor):
+    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
         return input_tensor * self.weight + self.bias
 
 
@@ -194,7 +194,13 @@ class MobileBertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -260,13 +266,13 @@ class MobileBertSelfAttention(nn.Module):
 
     def forward(
         self,
-        query_tensor,
-        key_tensor,
-        value_tensor,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-    ):
+        query_tensor: torch.Tensor,
+        key_tensor: torch.Tensor,
+        value_tensor: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+    ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(query_tensor)
         mixed_key_layer = self.key(key_tensor)
         mixed_value_layer = self.value(value_tensor)
@@ -306,7 +312,7 @@ class MobileBertSelfOutput(nn.Module):
         if not self.use_bottleneck:
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, residual_tensor):
+    def forward(self, hidden_states: torch.Tensor, residual_tensor: torch.Tensor) -> torch.Tensor:
         layer_outputs = self.dense(hidden_states)
         if not self.use_bottleneck:
             layer_outputs = self.dropout(layer_outputs)
@@ -341,14 +347,14 @@ class MobileBertAttention(nn.Module):
 
     def forward(
         self,
-        query_tensor,
-        key_tensor,
-        value_tensor,
-        layer_input,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-    ):
+        query_tensor: torch.Tensor,
+        key_tensor: torch.Tensor,
+        value_tensor: torch.Tensor,
+        layer_input: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             query_tensor,
             key_tensor,
@@ -373,7 +379,7 @@ class MobileBertIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -386,7 +392,7 @@ class OutputBottleneck(nn.Module):
         self.LayerNorm = NORM2FN[config.normalization_type](config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, residual_tensor):
+    def forward(self, hidden_states: torch.Tensor, residual_tensor: torch.Tensor) -> torch.Tensor:
         layer_outputs = self.dense(hidden_states)
         layer_outputs = self.dropout(layer_outputs)
         layer_outputs = self.LayerNorm(layer_outputs + residual_tensor)
@@ -404,7 +410,9 @@ class MobileBertOutput(nn.Module):
         else:
             self.bottleneck = OutputBottleneck(config)
 
-    def forward(self, intermediate_states, residual_tensor_1, residual_tensor_2):
+    def forward(
+        self, intermediate_states: torch.Tensor, residual_tensor_1: torch.Tensor, residual_tensor_2: torch.Tensor
+    ) -> torch.Tensor:
         layer_output = self.dense(intermediate_states)
         if not self.use_bottleneck:
             layer_output = self.dropout(layer_output)
@@ -421,7 +429,7 @@ class BottleneckLayer(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.intra_bottleneck_size)
         self.LayerNorm = NORM2FN[config.normalization_type](config.intra_bottleneck_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         layer_input = self.dense(hidden_states)
         layer_input = self.LayerNorm(layer_input)
         return layer_input
@@ -436,7 +444,7 @@ class Bottleneck(nn.Module):
         if self.key_query_shared_bottleneck:
             self.attention = BottleneckLayer(config)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         # This method can return three different tuples of values. These different values make use of bottlenecks,
         # which are linear layers used to project the hidden states to a lower-dimensional vector, reducing memory
         # usage. These linear layer have weights that are learned during training.
@@ -469,7 +477,7 @@ class FFNOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.true_hidden_size)
         self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, residual_tensor):
+    def forward(self, hidden_states: torch.Tensor, residual_tensor: torch.Tensor) -> torch.Tensor:
         layer_outputs = self.dense(hidden_states)
         layer_outputs = self.LayerNorm(layer_outputs + residual_tensor)
         return layer_outputs
@@ -481,7 +489,7 @@ class FFNLayer(nn.Module):
         self.intermediate = MobileBertIntermediate(config)
         self.output = FFNOutput(config)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         intermediate_output = self.intermediate(hidden_states)
         layer_outputs = self.output(intermediate_output, hidden_states)
         return layer_outputs
@@ -503,11 +511,11 @@ class MobileBertLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+    ) -> Tuple[torch.Tensor]:
         if self.use_bottleneck:
             query_tensor, key_tensor, value_tensor, layer_input = self.bottleneck(hidden_states)
         else:
@@ -557,13 +565,13 @@ class MobileBertEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
@@ -599,7 +607,7 @@ class MobileBertPooler(nn.Module):
         if self.do_activate:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -621,7 +629,7 @@ class MobileBertPredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -640,7 +648,7 @@ class MobileBertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = hidden_states.matmul(torch.cat([self.decoder.weight.t(), self.dense.weight], dim=0))
         hidden_states += self.decoder.bias
@@ -652,7 +660,7 @@ class MobileBertOnlyMLMHead(nn.Module):
         super().__init__()
         self.predictions = MobileBertLMPredictionHead(config)
 
-    def forward(self, sequence_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
@@ -663,7 +671,7 @@ class MobileBertPreTrainingHeads(nn.Module):
         self.predictions = MobileBertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> Tuple[torch.Tensor]:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
@@ -841,16 +849,16 @@ class MobileBertModel(MobileBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -943,18 +951,18 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        next_sentence_label=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        next_sentence_label: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[torch.FloatTensor] = None,
+        return_dict: Optional[torch.FloatTensor] = None,
+    ) -> Union[Tuple, MobileBertForPreTrainingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1059,17 +1067,17 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1115,7 +1123,7 @@ class MobileBertOnlyNSPHead(nn.Module):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
@@ -1138,18 +1146,18 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[Tuple, NextSentencePredictorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
