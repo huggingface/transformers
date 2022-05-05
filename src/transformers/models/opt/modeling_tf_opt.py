@@ -455,6 +455,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             present_key_value,
         )
 
+
 OPT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -491,6 +492,7 @@ OPT_START_DOCSTRING = r"""
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 @add_start_docstrings(
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
@@ -502,6 +504,7 @@ class TFOPTPretrainedModel(TFPreTrainedModel):
     Args:
         config: OPTConfig
     """
+
     config_class = OPTConfig
     base_model_prefix = "model"
 

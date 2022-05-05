@@ -16,29 +16,24 @@
 import copy
 import math
 import random
-import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -153,9 +148,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         positions: Optional[Tensor] = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
-        if not ((positions is None) or (
-            self.padding_idx is None
-        )):
+        if not ((positions is None) or (self.padding_idx is None)):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
         # we cannot use incremental state here because we must be aware of
@@ -428,6 +421,7 @@ class OPTClassificationHead(nn.Module):
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
 
+
 OPT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -443,6 +437,7 @@ OPT_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 @add_start_docstrings(
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
@@ -464,6 +459,7 @@ class OPTPretrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (OPTDecoder)):
             module.gradient_checkpointing = value
@@ -478,6 +474,7 @@ class OPTPretrainedModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
+
 
 OPT_GENERATION_EXAMPLE = r"""
     Generation example:
@@ -973,7 +970,6 @@ class OPTModel(OPTPretrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->OPT
