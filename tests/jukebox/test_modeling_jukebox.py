@@ -19,6 +19,7 @@ import numpy as np
 
 from transformers import JukeboxConfig, is_torch_available
 
+
 # from ..generation.test_generation_utils import GenerationTesterMixin
 # from ..test_configuration_common import ConfigTester
 # from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
@@ -46,8 +47,8 @@ class JukeboxModelTest(unittest.TestCase):
             vq_vae_codebook_dimension=256,
             vq_vae_emmbedding_width=256,
             sr=44100,
-            single_enc_dec=[True,False,False],
-            labels=True # allows the use of label conditionning. Has to be 
+            single_enc_dec=[True, False, False],
+            labels=True  # allows the use of label conditionning. Has to be
             # True if the single_enc_dec is set to true apparently
             # ntokens also have to be set to the nb of lyric tokens
         )
@@ -66,7 +67,7 @@ class JukeboxModelTest(unittest.TestCase):
             dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
         ]
-        config.hop_fraction = [0.125,0.5, 0.5]
+        config.hop_fraction = [0.125, 0.5, 0.5]
         config.n_samples = 1
 
         tokens = tokenizer(
@@ -86,8 +87,9 @@ class JukeboxModelTest(unittest.TestCase):
         start = timeit.default_timer()
         model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
-        # time to sample : 281.871977576
+        # time to sample : 108
         self.assertTrue(inputs == inputs)
+
 
 JukeboxModelTest().test_model()
 
