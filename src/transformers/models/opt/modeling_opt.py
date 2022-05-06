@@ -51,7 +51,6 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 
-
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "",
     # See all OPT models at https://huggingface.co/models?filter=opt
