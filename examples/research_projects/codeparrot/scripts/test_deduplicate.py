@@ -21,6 +21,9 @@ class MakeDuplicateClustersTest(TestCase):
         duplicate_clusters = make_duplicate_clusters(ds)
         self.assertEqual(len(duplicate_clusters[0]), 2)
 
-    def test_main(self):
+    def test_deduplicate_dataset(self):
         ds = get_dataset()
-        ds_filter = deduplicate_dataset(ds)
+        ds_filter, duplicate_clusters = deduplicate_dataset(ds)
+        self.assertEqual(len(ds_filter), 1)
+        self.assertEqual(duplicate_clusters[0][0]["copies"], 2)
+        self.assertEqual(duplicate_clusters[0][0]["is_extreme"], True)

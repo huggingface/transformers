@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 from collections import defaultdict
-from typing import List, Optional, Set, Type
+from typing import List, Optional, Set, Type, Dict, Tuple
 
 from datasets import Dataset
 from tqdm import tqdm
@@ -67,10 +67,14 @@ class DuplicationIndex:
             else:
                 self.__duplicate_clusters[close_duplicates[0]].add(filename)
 
-    def get_duplicate_clusters(self):
+    def get_duplicate_clusters(self) -> List[List[Dict]]:
         duplicate_clusters = []
         for base, duplicates in self.__duplicate_clusters.items():
-            duplicate_clusters.append(list(duplicates) + [base])
+            cluster = list(duplicates)
+            cluster.append(base)
+            # reformat the cluster to be a list of dict
+            cluster = [{"base_index": el[0], "repo_name": el[1], "path": el[2]} for el in cluster]
+            duplicate_clusters.append(cluster)
         return duplicate_clusters
 
     def save(self, filepath) -> None:
@@ -109,40 +113,40 @@ def make_duplicate_clusters(dataset_iterator: Type[Dataset]):
 
 
 def jaccard_similarity(code1: str, code2: str) -> float:
-    """
-    Compute the Jaccard similarity of two code snippets.
-
-    """
+    """Compute the Jaccard similarity of two code snippets."""
     tokens1 = get_tokens(code1)
     tokens2 = get_tokens(code2)
     return len(tokens1 & tokens2) / len(tokens1 | tokens2)
 
 
-def find_cluster_extremes(cluster: List[tuple], dataset: Type[Dataset]) -> List[tuple]:
+def find_cluster_extremes(cluster: List[Dict], dataset: Type[Dataset]) -> List[Dict]:
     """
     Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
     """
     extremes = []
     for element1 in cluster:
-        code1 = dataset[element1[0]]["content"]
+        code1 = dataset[element1["base_index"]]["content"]
         for element2 in extremes:
-            code2 = dataset[element2[0]]["content"]
+            code2 = dataset[element2["base_index"]]["content"]
             if jaccard_similarity(code1, code2) >= 0.85:
+                element2["copies"] += 1
                 break
         else:
+            element1["is_extreme"] = True
+            element1["copies"] = 1
             extremes.append(element1)
     return extremes
 
 
-def deduplicate_dataset(dataset: Type[Dataset]) -> Type[Dataset]:
+def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[List[Dict]]]:
     dataset_iterator = iter(dataset)
     duplicate_clusters = make_duplicate_clusters(dataset_iterator)
-    duplicate_indices = set(x[0] for cluster in duplicate_clusters for x in cluster)
-    # todo: make this multiprocessing
+    duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
+    # todo: make this multiprocessing, pay attention to memory usage
     extreme_indices = set()
     for cluster in duplicate_clusters:
         for el in find_cluster_extremes(cluster, dataset):
-            extreme_indices.add(el[0])
+            extreme_indices.add(el["base_index"])
     remove_indices = duplicate_indices - extreme_indices
     ds_filter = dataset.filter(lambda x, idx: idx not in remove_indices, with_indices=True)
 
@@ -152,4 +156,4 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Type[Dataset]:
     print("Unique files in duplicate cluster: %d" % len(extreme_indices))
     print("Filtered dataset size: %d" % len(ds_filter))
 
-    return ds_filter
+    return ds_filter, duplicate_clusters

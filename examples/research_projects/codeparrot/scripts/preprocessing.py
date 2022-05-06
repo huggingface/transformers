@@ -4,11 +4,14 @@ import multiprocessing
 import os
 import shutil
 import time
+import json
+from pathlib import Path
 
 import numpy as np
 from datasets import load_dataset
 
 from arguments import PreprocessingArguments
+from minhash_deduplication import deduplicate_dataset
 from transformers import HfArgumentParser
 
 
@@ -84,40 +87,51 @@ def compress_file(file_path):
     os.unlink(file_path)
 
 
-# Settings
-parser = HfArgumentParser(PreprocessingArguments)
-args = parser.parse_args()
-if args.num_workers is None:
-    args.num_workers = multiprocessing.cpu_count()
+if __name__ == "__main__":
+    # Settings
+    parser = HfArgumentParser(PreprocessingArguments)
+    args = parser.parse_args()
+    if args.num_workers is None:
+        args.num_workers = multiprocessing.cpu_count()
 
-# Load dataset
-t_start = time.time()
-ds = load_dataset(args.dataset_name, split="train")
-print(f"Time to load dataset: {time.time()-t_start:.2f}")
+    # Load dataset
+    t_start = time.time()
+    ds = load_dataset(args.dataset_name, split="train")
+    print(f"Time to load dataset: {time.time()-t_start:.2f}")
 
-# Run preprocessing
-t_start = time.time()
-ds = ds.map(preprocess, num_proc=args.num_workers)
-print(f"Time to preprocess dataset: {time.time()-t_start:.2f}")
+    # Run preprocessing
+    t_start = time.time()
+    ds = ds.map(preprocess, num_proc=args.num_workers)
+    print(f"Time to preprocess dataset: {time.time()-t_start:.2f}")
 
-# Deduplicate hashes
-uniques = set(ds.unique("hash"))
-frac = len(uniques) / len(ds)
-print(f"Fraction of duplicates: {1-frac:.2%}")
+    # Deduplicate hashes
+    uniques = set(ds.unique("hash"))
+    frac = len(uniques) / len(ds)
+    print(f"Fraction of duplicates: {1-frac:.2%}")
 
-# Deduplicate data and apply heuristics
-t_start = time.time()
-ds_filter = ds.filter(filter, fn_kwargs={"uniques": uniques, "args": args})
-print(f"Time to filter dataset: {time.time()-t_start:.2f}")
-print(f"Size of filtered dataset: {len(ds_filter)}")
+    # Deduplicate data and apply heuristics
+    t_start = time.time()
+    ds_filter = ds.filter(filter, fn_kwargs={"uniques": uniques, "args": args})
+    print(f"Time to filter dataset: {time.time()-t_start:.2f}")
+    print(f"Size of filtered dataset: {len(ds_filter)}")
 
-# Save data in batches of samples_per_file
-if not os.path.exists(args.output_dir):
-    os.makedirs(args.output_dir)
-t_start = time.time()
-for file_number, index in enumerate(range(0, len(ds_filter), args.samples_per_file)):
-    file_path = f"{args.output_dir}/file-{file_number+1:012}.json"
-    end_index = min(len(ds_filter), index + args.samples_per_file)
-    ds_filter.select(list(range(index, end_index))).to_json(file_path)
-    compress_file(file_path)
-print(f"Time to save dataset: {time.time()-t_start:.2f}")
+    # Deduplicate with minhash and jaccard similarity
+    t_start = time.time()
+    ds_dedup, duplicate_clusters = deduplicate_dataset(ds_filter)
+
+    # Save data in batches of samples_per_file
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True)
+
+    # save duplicate_clusters in the output_dir as artifacts
+    # not sure it is the right place the save it
+    with open(output_dir / "duplicate_clusters.json", "w") as f:
+        json.dump(duplicate_clusters, f)
+
+    t_start = time.time()
+    for file_number, index in enumerate(range(0, len(ds_filter), args.samples_per_file)):
+        file_path = output_dir / f"file-{file_number+1:012}.json"
+        end_index = min(len(ds_filter), index + args.samples_per_file)
+        ds_filter.select(list(range(index, end_index))).to_json(file_path)
+        compress_file(file_path)
+    print(f"Time to save dataset: {time.time()-t_start:.2f}")
