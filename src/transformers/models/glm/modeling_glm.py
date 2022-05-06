@@ -25,28 +25,18 @@ from torch import nn
 from torch.nn import init, LayerNorm, Linear, CrossEntropyLoss
 from typing import Optional, Tuple, Union
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, gelu
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
 from ...utils import logging
 from .configuration_glm import GLMConfig
@@ -115,16 +105,6 @@ def split_tensor_along_last_dim(tensor, num_partitions,
         return tuple(chunk.contiguous() for chunk in tensor_list)
 
     return tensor_list
-
-
-def gelu_impl(x):
-    """OpenAI's gelu implementation."""
-    return 0.5 * x * (1.0 + torch.tanh(0.7978845608028654 * x *
-                                       (1.0 + 0.044715 * x * x)))
-
-
-def gelu(x):
-    return gelu_impl(x)
 
 
 class MLP(torch.nn.Module):
@@ -203,7 +183,6 @@ class VocabEmbedding(torch.nn.Module):
         # Allocate weights.
         self.weight = Parameter(torch.Tensor(self.num_embeddings,
                                              self.embedding_dim))
-        self.weight.model_parallel = True
         # And initialize.
         init.xavier_normal_(self.weight)
 
@@ -265,10 +244,9 @@ class SelfAttention(torch.nn.Module):
 
     def __init__(self, hidden_size, num_attention_heads,
                  attention_dropout_prob, output_dropout_prob,
-                 init_method, output_layer_init_method=None, relative_encoding=False,
-                 performer=False, attention_scale=1.0):
+                 init_method, output_layer_init_method=None,
+                 relative_encoding=False, attention_scale=1.0):
         super(SelfAttention, self).__init__()
-        self.performer = performer
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
             output_layer_init_method = init_method
@@ -325,11 +303,11 @@ class SelfAttention(torch.nn.Module):
 
     def forward(self, hidden_states, ltor_mask, position_embeddings=None, r_w_bias=None, r_r_bias=None, mem=None):
         # hidden_states: [b, s, h]
-        # ltor_mask: [1, 1, s, s]
+        # ltor_mask: [b,1,s,s]
 
         # Attention heads. [b, s, hp]
         query_length = hidden_states.size(1)
-
+        # self attention
         if mem is None:
             mixed_x_layer = self.query_key_value(hidden_states)
             (mixed_query_layer,
@@ -401,7 +379,7 @@ class SelfAttention(torch.nn.Module):
         return output
 
 
-class TransformerLayer(torch.nn.Module):
+class GLMBlock(torch.nn.Module):
     """A single layer transformer for GLM.
 
     We use the following notation:
@@ -439,9 +417,8 @@ class TransformerLayer(torch.nn.Module):
                  init_method,
                  output_layer_init_method=None,
                  relative_encoding=False,
-                 performer=False,
                  attention_scale=1.0):
-        super(TransformerLayer, self).__init__()
+        super(GLMBlock, self).__init__()
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
             output_layer_init_method = init_method
@@ -458,7 +435,6 @@ class TransformerLayer(torch.nn.Module):
             init_method,
             output_layer_init_method=output_layer_init_method,
             relative_encoding=relative_encoding,
-            performer=performer,
             attention_scale=attention_scale)
 
         # Layernorm on the input data.
@@ -474,7 +450,7 @@ class TransformerLayer(torch.nn.Module):
 
     def forward(self, hidden_states, ltor_mask, position_embeddings=None, r_w_bias=None, r_r_bias=None, mem=None):
         # hidden_states: [b, s, h]
-        # ltor_mask: [1, 1, s, s]
+        # ltor_mask: [b,1, s,s]
 
         # Layer norm at the begining of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
@@ -493,7 +469,7 @@ class TransformerLayer(torch.nn.Module):
         return output
 
 
-class Transformer(torch.nn.Module):
+class GLMStack(torch.nn.Module):
     """GLM transformer.
 
     This module takes input from embedding layer and it's output can
@@ -544,19 +520,17 @@ class Transformer(torch.nn.Module):
                  use_scaled_init_for_output_weights=True,
                  relative_encoding=False,
                  block_position_encoding=False,
-                 performer=False,
                  attention_scale=1.0,
                  gradient_checkpointing=False,
                  ):
-        super(Transformer, self).__init__()
+        super(GLMStack, self).__init__()
         self.hidden_size = hidden_size
         # Store activation checkpoiting flag.
         self.checkpoint_activations = checkpoint_activations
         self.checkpoint_num_layers = checkpoint_num_layers
         self.max_memory_length = max_memory_length
-        self.performer = performer
         self.gradient_checkpointing = gradient_checkpointing
-        assert not (performer and relative_encoding)
+        assert not (relative_encoding)
 
         output_layer_init_method = None
         if use_scaled_init_for_output_weights:
@@ -596,7 +570,7 @@ class Transformer(torch.nn.Module):
 
         def get_layer():
 
-            return TransformerLayer(
+            return GLMBlock(
                 hidden_size,
                 num_attention_heads,
                 attention_dropout_prob,
@@ -605,7 +579,6 @@ class Transformer(torch.nn.Module):
                 unscaled_init_method(init_method_std),
                 output_layer_init_method=output_layer_init_method,
                 relative_encoding=relative_encoding,
-                performer=performer,
                 attention_scale=attention_scale)
 
         # Transformer layers.
@@ -615,20 +588,14 @@ class Transformer(torch.nn.Module):
         # Final layer norm before output.
         self.final_layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
 
-    def forward(self, hidden_states, position_ids, attention_mask, memory_states=None, encoder_states=None,
-                return_memory=False, detach_memory=True):
+    def forward(self, hidden_states, position_ids, attention_mask, memory_states=None):
 
         batch_size, query_length = hidden_states.size()[:2]
         memory_length = 0
-
-        memory_states[0].size(1) if memory_states and memory_states[0] else 0
         key_length = query_length + memory_length
         # attention mask is the beginning postion of B region, \in [0, query_len)
         is_scalar = torch.numel(attention_mask) == 1
         is_sep = is_scalar or torch.numel(attention_mask) == batch_size
-        if self.performer:
-            assert is_scalar, 'attention_mask should be a scalar to indicate the seperation position.'
-            assert memory_length == 0, 'Do not support transformer-xl.'
         if is_sep:
             sep = attention_mask.item() if is_scalar else attention_mask
 
@@ -637,7 +604,7 @@ class Transformer(torch.nn.Module):
                 m = hidden_states.new_ones((1, seq_length, seq_length))
                 m = torch.tril(m)
                 if is_scalar:
-                    m[0, :, :sep] = 1
+                    m[0, :, :int(sep)] = 1
                 else:
                     m = m.expand(batch_size, -1, -1)
                     ids = torch.arange(seq_length, device=sep.device, dtype=sep.dtype).view(1, -1)
@@ -649,9 +616,9 @@ class Transformer(torch.nn.Module):
                 m = m.unsqueeze(1)
                 return m
 
-            if not self.performer:
-                attention_mask = build_mask_matrix(query_length, sep, memory_length=memory_length)
+            attention_mask = build_mask_matrix(query_length, sep, memory_length=memory_length)
         else:
+            # [b,1,s,s]
             attention_mask = attention_mask[:, :, :, -query_length - memory_length:]
 
         if self.relative_encoding:
@@ -672,11 +639,9 @@ class Transformer(torch.nn.Module):
         hidden_states = self.embedding_dropout(hidden_states)
 
         def check_detach(_hidden_states):
-            if detach_memory:
-                return _hidden_states.detach()
-            return _hidden_states
+            return _hidden_states.detach()
 
-        if self.max_memory_length > 0 or return_memory:
+        if self.max_memory_length > 0:
             mem_layers = [check_detach(hidden_states)]
         else:
             mem_layers = []
@@ -694,7 +659,7 @@ class Transformer(torch.nn.Module):
 
             if self.relative_encoding:
                 args += [position_embeddings, self.r_w_bias, self.r_r_bias]
-            mem_i = memory_states[i] if (memory_states and len(memory_states) > i) else None
+            mem_i = None
 
             if self.gradient_checkpointing:
                 hidden_states = torch.utils.checkpoint.checkpoint(
@@ -704,21 +669,21 @@ class Transformer(torch.nn.Module):
                 )
             else:
                 hidden_states = layer(*args, mem=mem_i)
-            if self.max_memory_length > 0 or return_memory:
+            if self.max_memory_length > 0:
                 mem_layers.append(check_detach(hidden_states))
 
         # Final layer norm.
         output = self.final_layernorm(hidden_states)
-        if self.max_memory_length > 0 or return_memory:
-            mem_layers = self.update_mems(mem_layers, memory_states, return_memory=return_memory)
+        if self.max_memory_length > 0:
+            mem_layers = self.update_mems(mem_layers, memory_states)
         return (output, mem_layers)
 
-    def update_mems(self, hiddens, mems, return_memory=False):
-        memory_length = mems[0].size(1) if mems else 0
+    def update_mems(self, hiddens, mems):
+        memory_length = 0
         query_length = hiddens[0].size(1)
         new_memory_length = memory_length + query_length
-        if not return_memory:
-            new_memory_length = min(self.max_memory_length, new_memory_length)
+
+        new_memory_length = min(self.max_memory_length, new_memory_length)
         new_mems = []
         # with torch.no_grad():
         for i in range(len(hiddens)):
@@ -850,31 +815,22 @@ class GLMModel(GLMPreTrainedModel):
         self.word_embeddings = VocabEmbedding(config)
 
         # Transformer
-        self.transformer = Transformer(config.num_layers,
-                                       config.hidden_size,
-                                       config.num_attention_heads,
-                                       config.max_sequence_length,
-                                       config.max_memory_length,
-                                       config.embedding_dropout_prob,
-                                       config.attention_dropout_prob,
-                                       config.output_dropout_prob,
-                                       config.checkpoint_activations,
-                                       config.checkpoint_num_layers,
-                                       attention_scale=config.attention_scale,
-                                       relative_encoding=config.relative_encoding,
-                                       block_position_encoding=config.block_position_encoding)
+        self.transformer = GLMStack(config.num_layers,
+                                    config.hidden_size,
+                                    config.num_attention_heads,
+                                    config.max_sequence_length,
+                                    config.max_memory_length,
+                                    config.embedding_dropout_prob,
+                                    config.attention_dropout_prob,
+                                    config.output_dropout_prob,
+                                    config.checkpoint_activations,
+                                    config.checkpoint_num_layers,
+                                    attention_scale=config.attention_scale,
+                                    relative_encoding=config.relative_encoding,
+                                    block_position_encoding=config.block_position_encoding)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def freeze_transformer(self, tune_prefix_layers=None):
-        log_str = "Freeze transformer"
-        self.word_embeddings.requires_grad_(False)
-        self.transformer.requires_grad_(False)
-        if tune_prefix_layers is not None:
-            log_str += f" tune {tune_prefix_layers} prefix layers"
-            for i in range(tune_prefix_layers):
-                self.transformer.layers[i].requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -889,8 +845,6 @@ class GLMModel(GLMPreTrainedModel):
             position_ids=None,
             attention_mask=None,
             mems=None,
-            return_memory=False,
-            detach_memory=True,
             prompt_pos=None,
             **kwargs
     ):
@@ -910,10 +864,10 @@ class GLMModel(GLMPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(0, input_shape[-1], dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
-
+        if attention_mask is None:
+            attention_mask = torch.zeros(batch_size)
         # Transformer.
-        transformer_output = self.transformer(embeddings, position_ids, attention_mask, mems,
-                                              return_memory=return_memory, detach_memory=detach_memory)
+        transformer_output = self.transformer(embeddings, position_ids, attention_mask, mems)
         logits, hidden_layers = transformer_output
         # outputs = hidden_layers
         if self.output_predict:
