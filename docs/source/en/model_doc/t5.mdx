@@ -252,10 +252,9 @@ The example above only shows a single example. You can also do batched inference
 >>> model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
 >>> task_prefix = "translate English to German: "
->>> sentences = [
-...     "The house is wonderful.",
-...     "I like to work in NYC.",
->>> ]  # use different length sentences to test batching
+>>> # use different length sentences to test batching
+>>> sentences = ["The house is wonderful.", "I like to work in NYC."]
+
 >>> inputs = tokenizer([task_prefix + sentence for sentence in sentences], return_tensors="pt", padding=True)
 
 >>> output_sequences = model.generate(

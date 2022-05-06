@@ -19,6 +19,7 @@ Fine-tuning XLNet for question answering with beam search using 🤗 Accelerate.
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -34,6 +35,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
@@ -57,7 +59,30 @@ check_min_version("4.19.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
+def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.json", metric_key_prefix: str = "eval"):
+    """
+    Save results while prefixing metric names.
+
+    Args:
+        results: (:obj:`dict`):
+            A dictionary of results.
+        output_dir: (:obj:`str`):
+            An output directory.
+        file_name: (:obj:`str`, `optional`, defaults to :obj:`all_results.json`):
+            An output file name.
+        metric_key_prefix: (:obj:`str`, `optional`, defaults to :obj:`eval`):
+            A metric name prefix.
+    """
+    # Prefix all keys with metric_key_prefix + '_'
+    for key in list(results.keys()):
+        if not key.startswith(f"{metric_key_prefix}_"):
+            results[f"{metric_key_prefix}_{key}"] = results.pop(key)
+
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        json.dump(results, f, indent=4)
 
 
 def parse_args():
@@ -171,8 +196,7 @@ def parse_args():
     )
     parser.add_argument(
         "--version_2_with_negative",
-        type=bool,
-        default=False,
+        action="store_true",
         help="If true, some of the examples do not have an answer.",
     )
     parser.add_argument(
@@ -266,11 +290,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -713,6 +733,10 @@ def main():
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Figure out how many steps we should save the Accelerator states
     if hasattr(args.checkpointing_steps, "isdigit"):
         checkpointing_steps = args.checkpointing_steps
@@ -742,34 +766,40 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
+    starting_epoch = 0
 
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
             accelerator.load_state(args.resume_from_checkpoint)
-            resume_step = None
-            path = args.resume_from_checkpoint
+            path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-        if "epoch" in path:
-            args.num_train_epochs -= int(path.replace("epoch_", ""))
-        else:
-            resume_step = int(path.replace("step_", ""))
-            args.num_train_epochs -= resume_step // len(train_dataloader)
-            resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
+        # Extract `epoch_{i}` or `step_{i}`
+        training_difference = os.path.splitext(path)[0]
 
-    for epoch in range(args.num_train_epochs):
+        if "epoch" in training_difference:
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
+            resume_step = None
+        else:
+            resume_step = int(training_difference.replace("step_", ""))
+            starting_epoch = resume_step // len(train_dataloader)
+            resume_step -= starting_epoch * len(train_dataloader)
+
+    for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
-                continue
+            if args.resume_from_checkpoint and epoch == starting_epoch:
+                if resume_step is not None and step < resume_step:
+                    completed_steps += 1
+                    continue
             outputs = model(**batch)
             loss = outputs.loss
             # We keep track of the loss at each epoch
@@ -794,7 +824,9 @@ def main():
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
                 repo.push_to_hub(
@@ -807,6 +839,9 @@ def main():
     all_end_top_log_probs = []
     all_end_top_index = []
     all_cls_logits = []
+
+    model.eval()
+
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
@@ -864,6 +899,9 @@ def main():
         all_end_top_log_probs = []
         all_end_top_index = []
         all_cls_logits = []
+
+        model.eval()
+
         for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
@@ -932,11 +970,16 @@ def main():
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        unwrapped_model.save_pretrained(
+            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+        )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+            logger.info(json.dumps(eval_metric, indent=4))
+            save_prefixed_metrics(eval_metric, args.output_dir)
 
 
 if __name__ == "__main__":

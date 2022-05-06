@@ -18,6 +18,8 @@
 
 from typing import TYPE_CHECKING
 
+from transformers.utils.import_utils import is_tf_available
+
 from ...utils import _LazyModule, is_torch_available
 
 
@@ -30,6 +32,11 @@ _import_structure = {
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecTextConfig",
         "Data2VecTextOnnxConfig",
+    ],
+    "configuration_data2vec_vision": [
+        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecVisionConfig",
+        "Data2VecVisionOnnxConfig",
     ],
 }
 
@@ -54,6 +61,21 @@ if is_torch_available():
         "Data2VecTextModel",
         "Data2VecTextPreTrainedModel",
     ]
+    _import_structure["modeling_data2vec_vision"] = [
+        "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Data2VecVisionForImageClassification",
+        "Data2VecVisionForMaskedImageModeling",
+        "Data2VecVisionForSemanticSegmentation",
+        "Data2VecVisionModel",
+        "Data2VecVisionPreTrainedModel",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_data2vec_vision"] = [
+        "TFData2VecVisionForImageClassification",
+        "TFData2VecVisionModel",
+        "TFData2VecVisionPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
@@ -61,6 +83,11 @@ if TYPE_CHECKING:
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Data2VecTextConfig,
         Data2VecTextOnnxConfig,
+    )
+    from .configuration_data2vec_vision import (
+        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecVisionConfig,
+        Data2VecVisionOnnxConfig,
     )
 
     if is_torch_available():
@@ -83,6 +110,20 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+        )
+        from .modeling_data2vec_vision import (
+            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForMaskedImageModeling,
+            Data2VecVisionForSemanticSegmentation,
+            Data2VecVisionModel,
+            Data2VecVisionPreTrainedModel,
+        )
+    if is_tf_available():
+        from .modeling_tf_data2vec_vision import (
+            TFData2VecVisionForImageClassification,
+            TFData2VecVisionModel,
+            TFData2VecVisionPreTrainedModel,
         )
 
 else:
