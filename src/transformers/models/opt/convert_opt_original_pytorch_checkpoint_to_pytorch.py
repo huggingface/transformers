@@ -22,12 +22,11 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from transformers import OPTConfig, OPTForSequenceClassification, OPTModel
+from transformers import OPTConfig, OPTModel
 from transformers.utils import logging
 
 
 FAIRSEQ_MODELS = ["opt.large", "opt.large.mnli", "opt.large.cnn", "opt_xsum/model.pt"]
-extra_arch = {"opt.large": OPTModel, "opt.large.mnli": OPTForSequenceClassification}
 # if version.parse(fairseq.__version__) < version.parse("0.9.0"):
 #     raise Exception("requires fairseq >= 0.9.0")
 
