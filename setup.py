@@ -128,7 +128,7 @@ _deps = [
     "optax>=0.0.8",
     "packaging>=20.0",
     "parameterized",
-    "Pillow>=9.1.0",
+    "pillow",
     "phonemizer",
     "protobuf",
     "psutil",

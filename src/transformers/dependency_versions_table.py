@@ -2,7 +2,7 @@
 # 1. modify the `_deps` dict in setup.py
 # 2. run `make deps_table_update``
 deps = {
-    "Pillow": "Pillow>=9.1.0",
+    "Pillow": "Pillow",
     "black": "black~=22.0",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
@@ -35,6 +35,7 @@ deps = {
     "optax": "optax>=0.0.8",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
+    "pillow": "pillow",
     "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",
