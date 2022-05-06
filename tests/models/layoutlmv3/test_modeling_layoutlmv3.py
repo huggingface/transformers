@@ -103,7 +103,9 @@ class LayoutLMv3ModelTester:
         self.range_bbox = range_bbox
 
         # LayoutLMv3's sequence length equals the number of text tokens + number of patches + 1 (we add 1 for the CLS token)
-        self.seq_length = text_seq_length + (image_size // patch_size) ** 2 + 1
+        self.text_seq_length = text_seq_length
+        self.image_seq_length = (image_size // patch_size) ** 2 + 1
+        self.seq_length = self.text_seq_length + self.image_seq_length
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
@@ -164,6 +166,8 @@ class LayoutLMv3ModelTester:
         model.to(torch_device)
         model.eval()
 
+        # text + image
+        result = model(input_ids, pixel_values=pixel_values)
         result = model(
             input_ids, bbox=bbox, pixel_values=pixel_values, attention_mask=input_mask, token_type_ids=token_type_ids
         )
@@ -171,6 +175,18 @@ class LayoutLMv3ModelTester:
         result = model(input_ids, bbox=bbox, pixel_values=pixel_values)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+        # text only
+        result = model(input_ids)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+        )
+
+        # image only
+        result = model(pixel_values=pixel_values)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size)
+        )
 
     def create_and_check_for_sequence_classification(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels

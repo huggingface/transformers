@@ -86,6 +86,8 @@ class LayoutLMv3Config(PretrainedConfig):
             Whether or not to add patch embeddings.
         input_size (`int`, *optional*, defaults to `224`):
             The size (resolution) of the images.
+        num_channels (`int`, *optional*, defaults to `3`):
+            The number of channels of the images.
         patch_size (`int`, *optional*, defaults to `16`)
             The size (resolution) of the patches.
         classifier_dropout (`float`, *optional*):
@@ -133,8 +135,10 @@ class LayoutLMv3Config(PretrainedConfig):
         rel_2d_pos_bins=64,
         max_rel_2d_pos=256,
         has_spatial_attention_bias=True,
+        text_embed=True,
         visual_embed=True,
         input_size=224,
+        num_channels=3,
         patch_size=16,
         classifier_dropout=None,
         **kwargs
@@ -166,7 +170,9 @@ class LayoutLMv3Config(PretrainedConfig):
         self.has_spatial_attention_bias = has_spatial_attention_bias
         self.rel_2d_pos_bins = rel_2d_pos_bins
         self.max_rel_2d_pos = max_rel_2d_pos
+        self.text_embed = text_embed
         self.visual_embed = visual_embed
         self.input_size = input_size
+        self.num_channels = num_channels
         self.patch_size = patch_size
         self.classifier_dropout = classifier_dropout
