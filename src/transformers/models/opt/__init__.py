@@ -32,9 +32,6 @@ if is_torch_available():
     _import_structure["modeling_opt"] = [
         "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OPTForCausalLM",
-        "OPTForConditionalGeneration",
-        "OPTForQuestionAnswering",
-        "OPTForSequenceClassification",
         "OPTModel",
         "OPTPretrainedModel",
         "PretrainedOPTModel",
@@ -65,9 +62,6 @@ if TYPE_CHECKING:
         from .modeling_opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
-            OPTForConditionalGeneration,
-            OPTForQuestionAnswering,
-            OPTForSequenceClassification,
             OPTModel,
             OPTPretrainedModel,
             PretrainedOPTModel,

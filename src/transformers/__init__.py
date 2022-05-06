@@ -1275,9 +1275,6 @@ if is_torch_available():
         [
             "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "OPTForCausalLM",
-            "OPTForConditionalGeneration",
-            "OPTForQuestionAnswering",
-            "OPTForSequenceClassification",
             "OPTModel",
             "OPTPretrainedModel",
             "PretrainedOPTModel",
@@ -3546,9 +3543,6 @@ if TYPE_CHECKING:
         from .models.opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
-            OPTForConditionalGeneration,
-            OPTForQuestionAnswering,
-            OPTForSequenceClassification,
             OPTModel,
             OPTPretrainedModel,
             PretrainedOPTModel,

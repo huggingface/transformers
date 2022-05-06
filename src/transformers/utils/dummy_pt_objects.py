@@ -2948,27 +2948,6 @@ class OPTForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class OPTForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OPTForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OPTForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class OPTModel(metaclass=DummyObject):
     _backends = ["torch"]
 
