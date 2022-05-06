@@ -82,7 +82,7 @@ def filter(example, uniques, args):
 def compress_file(file_path):
     """Compress a file with g-zip."""
     with open(file_path, "rb") as f_in:
-        with gzip.open(file_path + ".gz", "wb", compresslevel=6) as f_out:
+        with gzip.open(str(file_path) + ".gz", "wb", compresslevel=6) as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.unlink(file_path)
 
