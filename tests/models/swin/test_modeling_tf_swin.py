@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import SwinConfig
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
@@ -341,19 +343,21 @@ class TFSwinModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        pass
-        # TODO - uncomment when TF model weights pushed to hub
-        # model = TFSwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        # feature_extractor = self.default_feature_extractor
+        model = TFSwinForImageClassification.from_pretrained(
+            "microsoft/swin-tiny-patch4-window7-224",
+            # FIXME - remove once model has been reviewed and weights pushed to the hub
+            from_pt=True,
+        )
+        feature_extractor = self.default_feature_extractor
 
-        # image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        # inputs = feature_extractor(images=image, return_tensors="tf")
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
-        # # forward pass
-        # outputs = model(inputs)
+        # forward pass
+        outputs = model(inputs)
 
-        # # verify the logits
-        # expected_shape = tf.TensorShape((1, 1000))
-        # self.assertEqual(outputs.logits.shape, expected_shape)
-        # expected_slice = tf.constant([-0.0948, -0.6454, -0.0921])
-        # self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        # verify the logits
+        expected_shape = tf.TensorShape((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_slice = tf.constant([-0.0948, -0.6454, -0.0921])
+        self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

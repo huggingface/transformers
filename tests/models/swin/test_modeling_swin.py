@@ -18,8 +18,6 @@ import copy
 import inspect
 import unittest
 
-import numpy as np
-
 from transformers import SwinConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
