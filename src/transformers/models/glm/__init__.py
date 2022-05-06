@@ -33,16 +33,9 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_glm"] = [
         "GLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GLMForMaskedLM",
-        "GLMForCausalLM",
-        "GLMForMultipleChoice",
-        "GLMForQuestionAnswering",
         "GLMForSequenceClassification",
-        "GLMForTokenClassification",
-        "GLMLayer",
         "GLMModel",
-        "GLMPreTrainedModel",
-        "load_tf_weights_in_glm",
+        "GLMPreTrainedModel"
     ]
 
 
@@ -58,16 +51,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_glm import (
             GLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GLMForMaskedLM,
-            GLMForCausalLM,
-            GLMForMultipleChoice,
-            GLMForQuestionAnswering,
-            GLMForSequenceClassification,
-            GLMForTokenClassification,
-            GLMLayer,
             GLMModel,
             GLMPreTrainedModel,
-            load_tf_weights_in_glm,
+            GLMForSequenceClassification,
         )
 
 
