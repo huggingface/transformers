@@ -1250,6 +1250,7 @@ append_call_sample_docstring(
     FlaxOPTModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
+
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel with BART->OPT,Bart->OPT
 class FlaxOPTDecoderPreTrainedModel(FlaxPreTrainedModel):
     config_class = OPTConfig
