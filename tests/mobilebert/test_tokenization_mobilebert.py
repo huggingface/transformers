@@ -34,12 +34,12 @@ from transformers.testing_utils import require_tokenizers, slow
 
 from ..test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
-
+# Copied from transformers.tests.bert.test_modeling_bert.py with Bert->MobileBERT 
 @require_tokenizers
-class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BertTokenizer
-    rust_tokenizer_class = BertTokenizerFast
+    tokenizer_class = MobileBERT
+    rust_tokenizer_class = MobileBERTFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
