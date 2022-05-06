@@ -5,10 +5,11 @@ import os
 import re
 import shutil
 from collections import defaultdict
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Type
 
 from tqdm import tqdm
 
+from datasets import Dataset
 from datasketch import MinHash, MinHashLSH
 from dpu_utils.utils.iterators import ThreadedIterator
 
@@ -85,7 +86,7 @@ def compute_min_hash(element):
         return (index, data["repo_name"], data["path"]), min_hash
 
 
-def minhash_iter(dataset_iterator):
+def minhash_iter(dataset_iterator: Type[Dataset]):
     with mp.Pool() as pool:
         for data in pool.imap_unordered(
             compute_min_hash,
@@ -96,7 +97,7 @@ def minhash_iter(dataset_iterator):
                 yield data
 
 
-def make_duplicate_clusters(dataset_iterator):
+def make_duplicate_clusters(dataset_iterator: Type[Dataset]):
     """This function will be rewritten with dataset map"""
     di = DuplicationIndex()
 
@@ -107,7 +108,7 @@ def make_duplicate_clusters(dataset_iterator):
     return di.get_duplicate_clusters()
 
 
-def jaccard_similarity(code1, code2) -> float:
+def jaccard_similarity(code1: str, code2: str) -> float:
     """
     Compute the Jaccard similarity of two code snippets.
 
@@ -117,7 +118,7 @@ def jaccard_similarity(code1, code2) -> float:
     return len(tokens1 & tokens2) / len(tokens1 | tokens2)
 
 
-def find_cluster_extremes(cluster: List[tuple], dataset) -> List[tuple]:
+def find_cluster_extremes(cluster: List[tuple], dataset: Type[Dataset]) -> List[tuple]:
     """
     Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
     """
@@ -133,15 +134,7 @@ def find_cluster_extremes(cluster: List[tuple], dataset) -> List[tuple]:
     return extremes
 
 
-def compress_file(file_path):
-    """Compress a file with g-zip."""
-    with open(file_path, "rb") as f_in:
-        with gzip.open(file_path + ".gz", "wb", compresslevel=6) as f_out:
-            shutil.copyfileobj(f_in, f_out)
-    os.unlink(file_path)
-
-
-def main(dataset, output_dir, samples_per_file):
+def deduplicate_dataset(dataset: Type[Dataset]) -> Type[Dataset]:
     dataset_iterator = iter(dataset)
     duplicate_clusters = make_duplicate_clusters(dataset_iterator)
     duplicate_indices = set(x[0] for cluster in duplicate_clusters for x in cluster)
@@ -159,10 +152,4 @@ def main(dataset, output_dir, samples_per_file):
     print("Unique files in duplicate cluster: %d" % len(extreme_indices))
     print("Filtered dataset size: %d" % len(ds_filter))
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    for file_number, index in enumerate(range(0, len(ds_filter), samples_per_file)):
-        file_path = f"{output_dir}/file-{file_number+1:012}.json"
-        end_index = min(len(ds_filter), index + samples_per_file)
-        ds_filter.select(list(range(index, end_index))).to_json(file_path)
-        compress_file(file_path)
+    return ds_filter

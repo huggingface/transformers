@@ -2,7 +2,8 @@ from unittest import TestCase
 
 from datasets import Dataset
 
-from deduplicate import make_duplicate_clusters
+from minhash_deduplication import make_duplicate_clusters
+from minhash_deduplication import deduplicate_dataset
 
 
 def get_dataset():
@@ -22,7 +23,5 @@ class MakeDuplicateClustersTest(TestCase):
         self.assertEqual(len(duplicate_clusters[0]), 2)
 
     def test_main(self):
-        from deduplicate import main
-
         ds = get_dataset()
-        main(ds, "/tmp/", 1)
+        ds_filter = deduplicate_dataset(ds)
