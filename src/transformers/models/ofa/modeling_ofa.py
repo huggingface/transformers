@@ -1703,6 +1703,7 @@ class OFAModel(OFAPreTrainedModel):
             output_hidden_states (`bool`): whether to output hidden states.
 
         Returns:
+            Seq2SeqModelOutput (`ModelOutput`): model outputs with hidden states and attentions.
         """
 
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1869,6 +1870,7 @@ class OFAForConditionalGeneration(OFAPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
+            Seq2SeqModelOutput (`ModelOutput`): model outputs with hidden states and attentions.
         """
 
         if labels is not None:
