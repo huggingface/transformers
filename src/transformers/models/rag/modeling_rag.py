@@ -826,7 +826,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
@@ -1293,7 +1293,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],

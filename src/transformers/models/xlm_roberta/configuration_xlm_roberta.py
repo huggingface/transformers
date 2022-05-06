@@ -37,7 +37,8 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class XLMRobertaConfig(RobertaConfig):
     """
     This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
-    usage examples.
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    XLMRoBERTa [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
     """
 
     model_type = "xlm-roberta"
