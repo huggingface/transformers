@@ -418,7 +418,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
     @slow
     def test_summarization_fast(self):
         model = FlaxOPTForConditionalGeneration.from_pretrained("sshleifer/distilopt-cnn-6-6")
-        tokenizer = OPTTokenizer.from_pretrained("sshleifer/distilopt-cnn-6-6")
+        tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
         input_str = "This sentence is made of three parts. Each part is important on its own. One part is about animals, the other part about planes, and the last part about housing."
 
