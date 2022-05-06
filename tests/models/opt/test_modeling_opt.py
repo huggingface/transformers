@@ -821,7 +821,7 @@ class OPTStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.path_model = "Arthurz/opt-350-m"  # TODO add the model on the hub
+        self.path_model = "ArthurZ/opt-350m"  # TODO add the model on the hub
         # self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p"  # TODO add the logits somewhere?
 
     # @unittest.skip("Skipping unless we find a solution to store the model")
@@ -863,7 +863,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
 class OPTGenerationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.path_model = "Arthurz/opt-350-m"
+        self.path_model = "ArthurZ/opt-350m"
         # self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p"  # TODO add the logits somewhere?
 
     @unittest.skip("Skipping unless we find a solution to store the model")
