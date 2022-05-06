@@ -22,7 +22,6 @@ from transformers import GLMTokenizer, GLMTokenizerFast
 
 from transformers.models.glm.tokenization_glm import (
     VOCAB_FILES_NAMES,
-    WordpieceTokenizer,
     BasicTokenizer,
     GLMTokenizer,
     WordpieceTokenizer,
