@@ -772,6 +772,7 @@ class MLflowCallback(TrainerCallback):
         self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         self._initialized = False
+        self._auto_end_run = False
         self._log_artifacts = False
         self._ml_flow = mlflow
 
@@ -802,6 +803,7 @@ class MLflowCallback(TrainerCallback):
                     # Use of set_experiment() ensure that Experiment is created if not exists
                     self._ml_flow.set_experiment(experiment_name)
                 self._ml_flow.start_run(run_name=args.run_name)
+                self._auto_end_run = True
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
@@ -849,11 +851,13 @@ class MLflowCallback(TrainerCallback):
             if self._log_artifacts:
                 logger.info("Logging artifacts. This may take time.")
                 self._ml_flow.log_artifacts(args.output_dir)
+            if self._auto_end_run and self._ml_flow.active_run():
+                self._ml_flow.end_run()
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if self._ml_flow.active_run() is not None:
+        if self._auto_end_run and self._ml_flow.active_run() is not None:
             self._ml_flow.end_run()
 
 
