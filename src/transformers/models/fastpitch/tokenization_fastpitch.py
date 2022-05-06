@@ -26,9 +26,7 @@ from typing import Union
 from typing_extensions import NotRequired
 
 from defusedxml import NotSupportedError
-# We are not using pip3 cmudict because it is a GPL-3 Version of CMU Dict.
-# Question where should we put this in utilities? TODO Raise question
-# cmudict-0.7b.txt is the version that should be used
+
 class CMUDict:
 
     valid_symbols = [
@@ -46,6 +44,7 @@ class CMUDict:
         self._valid_symbol_set = set(CMUDict.valid_symbols)
         self._alt_re = re.compile(r'\([0-9]+\)')
         self._entries = {}
+        self._entries_reversed = {}
         self.heteronyms = []
         if file_or_path is not None:
             self.initialize(file_or_path, heteronyms_path, keep_ambiguous)
@@ -64,6 +63,16 @@ class CMUDict:
         
         self._entries = entries
 
+        for key in entries.keys():
+    
+            arpabet_list = self._entries[key]
+            
+            if len(arpabet_list) > 1:
+                for arpabet in arpabet_list:
+                    self._entries_reversed[arpabet] = key
+            else:
+                self._entries_reversed[arpabet_list[0]] = key
+
         if heteronyms_path is not None:
             with open(heteronyms_path, encoding='utf-8') as f:
                 self.heteronyms = [l.rstrip() for l in f]
@@ -73,12 +82,17 @@ class CMUDict:
             raise ValueError("CMUDict not initialized")
         return len(self._entries)
 
-    def lookup(self, word)->Union[str, None]:
+    def lookup(self, word:str)->Union[List[str], None]:
         '''Returns list of ARPAbet pronunciations of the given word.'''
         if len(self._entries) == 0:
             raise ValueError("CMUDict not initialized")
         return self._entries.get(word.upper())
-        
+
+    def arpabet_token_lookup(self,arpabet:str)->Union[str, None]:
+        """Returns a word for a arpabet pronunciations."""
+        entry = self._entries_reversed.get(arpabet.upper())
+        return entry
+
     def _parse_cmudict(self,file):
         cmudict = {}
         for line in file:
@@ -103,7 +117,8 @@ class CMUDict:
 class SymbolEncoder:
     arpabet = ['@' + s for s in CMUDict.valid_symbols]
 
-    def __init__(self,symbol_set='english_basic'):
+    def __init__(self,arpabet_mode:int ='',symbol_set:str='english_basic', file_or_path:str="./cmudict-0.7b.txt", heteronyms_path:str = "./heteronyms"):
+        self.cmudict = CMUDict(file_or_path=file_or_path,heteronyms_path=heteronyms_path)
         # Regular expression matching text enclosed in curly braces for encoding
         self._curly_re = re.compile(r'(.*?)\{(.+?)\}(.*)')
         # Regular expression matching words and not words
@@ -113,10 +128,92 @@ class SymbolEncoder:
 
         self.symbols = self._get_symbols(symbol_set=symbol_set)
         # Vocab here is the symbols and their ids
-        self.symbol_to_id = {s: i for i, s in enumerate(self.symbols)}
-        self.id_to_symbol = {i: s for i, s in enumerate(self.symbols)}
+        self._symbol_to_id = {s: i for i, s in enumerate(self.symbols)}
+        self._id_to_symbol = {i: s for i, s in enumerate(self.symbols)}
+    
+    def encode(self,token)->str:
+        pass 
+
+    def decode(self,token)->str:
+        pass
+
+    def _get_arpabet(self,token):
+        arpabet_suffix = ''
+        word = token
+
+        # Todo ask why you would want this 
+        # e.g tire and tire sound the same different meaning 
+        # I guess they want this to be learned from not arpa?
         
-    def _get_symbols(symbol_set='english_basic'):
+        if word.lower() in self.cmudict.heteronyms:
+            return word
+
+        if len(word) > 2 and word.endswith("'s"):
+            arpabet = self.cmudict.lookup(word)
+            if arpabet is None:
+                arpabet = self.get_arpabet(word[:-2])
+                arpabet_suffix = ' Z'
+        elif len(word) > 1 and word.endswith("s"):
+            arpabet = self.cmudict.lookup(word)
+            if arpabet is None:
+                arpabet = self.get_arpabet(word[:-1])
+                arpabet_suffix = ' Z'
+        else:
+            arpabet = self.cmudict.lookup(word)
+
+        if arpabet is None:
+            return word
+        elif arpabet[0] == '{':
+            arpabet = [arpabet[1:-1]]
+
+        # XXX arpabet might not be a list here
+        if type(arpabet) is not list:
+            print("arpabet not a list item")
+            return word
+
+        # if len(arpabet) > 1:
+        #     if self.handle_arpabet_ambiguous == 'first':
+        #         arpabet = arpabet[0]
+        #     elif self.handle_arpabet_ambiguous == 'random':
+        #         arpabet = np.random.choice(arpabet)
+        #     elif self.handle_arpabet_ambiguous == 'ignore':
+        #         return word
+        # else:
+        arpabet = arpabet[0]
+
+        arpabet = "{" + arpabet + arpabet_suffix + "}"
+
+        return arpabet
+    
+    def _arpabet_word_to_ids(self,arpabet_word:str)->int:
+        arpabet_word_encoding = ''.join(['@' + s for s in arpabet_word.split()])
+        print(arpabet_word_encoding)
+        return self._word_to_ids(arpabet_word_encoding)
+
+    def _ids_to_string(self,ids:List[int])->str:
+        result = ''
+        for symbol_id in ids:
+            if symbol_id in self._id_to_symbol:
+                s = self._id_to_symbol[symbol_id]
+                # Enclose ARPAbet back in curly braces: # This is buggy...
+                if len(s) > 1 and s[0] == '@':
+                    s = '{%s}' % s[1:]
+                result += s
+        return result.replace('}{', ' ')
+
+    def _word_to_ids(self,word:str)->List[int]:
+        """
+        Takes word converts them to character ids list
+        """
+        result:List[int] = []
+        for letter in word:
+            if letter in self._symbol_to_id:
+                s = self._symbol_to_id[letter] 
+                # print(f'{letter}->{s}')
+                result.append(s) 
+        return result
+
+    def _get_symbols(self,symbol_set='english_basic'):
         """ 
             from https://github.com/keithito/tacotron 
             from https://github.com/NVIDIA/DeepLearningExamples/blob/3e8897f7855ff475d69699e66c8f668f6191dfa4/PyTorch/SpeechSynthesis/FastPitch/common/text/symbols.py#L14
@@ -129,20 +226,20 @@ class SymbolEncoder:
             _punctuation = '!\'(),.:;? '
             _special = '-'
             _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder._arpabet
+            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder.arpabet
         elif symbol_set == 'english_basic_lowercase':
             _pad = '_'
             _punctuation = '!\'"(),.:;? '
             _special = '-'
             _letters = 'abcdefghijklmnopqrstuvwxyz'
-            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder._arpabet
+            symbols = list(_pad + _special + _punctuation + _letters) + SymbolEncoder.arpabet
         elif symbol_set == 'english_expanded':
             _punctuation = '!\'",.:;? '
             _math = '#%&*+-/[]()'
             _special = '_@©°½—₩€$'
             _accented = 'áçéêëñöøćž'
             _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-            symbols = list(_punctuation + _math + _special + _accented + _letters) + SymbolEncoder._arpabet
+            symbols = list(_punctuation + _math + _special + _accented + _letters) + SymbolEncoder.arpabet
         else:
             raise Exception("{} symbol set does not exist".format(symbol_set))
 
@@ -189,62 +286,38 @@ class FastPitchTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self,use_arpabet = True, file_or_path="./cmudict-0.7b.txt", heteronyms_path = "./heteronyms",unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
+        self,p_arpabet_dist:int,unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
     ):
+        # if p is 0-1.0 
         # use the pathes for now.
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
         # requires cmudict backend TODO determine if we should load this at run time use as default parameters though
-        self.cmudict = CMUDict(file_or_path=file_or_path,heteronyms_path=heteronyms_path)
-
         # tokenizer doesn't need to add a prefix space
         self.add_prefix_space = False
-
         # use arpabet to clean up sounds
-        self.use_arpabet = use_arpabet
         self.symbol_encoder = SymbolEncoder()
 
-    @property
-    def vocab_size(self):
-        "Returns vocab size which is the symbol size in our case"
+    def vocab_size(self) -> int:
+        "Returns vocab size which is the symbol size in our case our vocab is infinite"
         return len(self.symbol_encoder.symbols)
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict[str,int]:
         "Returns vocab as a dict"
-        # Vocab here is the symbols and their ids
         return self.symbol_encoder.symbol_to_id
 
-    def _tokenize(self, text):
+    def _tokenize(self, text)->List[str]:
         """Returns a tokenized string."""
-         # API to select preffered pronunciation from cmu dict? 
-        tokens = text.split(' ')
-        result = []
-        if self.use_arpabet:
-            for token in tokens:
-                arpabet_result = self.cmudict.lookup(token)
-                if arpabet_result == None:
-                    result.append(token)
-                else:
-                    result.append(arpabet_result[0])
-            return result
-        else:
-            return tokens
+        pass
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an symbols using the vocab."""
         # check if the token is an arpabet based one if so convert correctly
-        if self.use_arpabet:
-            pass
-        else:
-            pass
+       
         pass
 
     def _convert_id_to_token(self, index):
         """Converts an index id in a token (str) using the vocab."""
         # check if id is an arpabet based one convert back to token
-        if self.use_arpabet:
-            pass # check if index is an arpa based index
-        else:
-            pass
         pass
 
     def convert_tokens_to_string(self, tokens:List[str])->str:
@@ -349,7 +422,6 @@ class FastPitchTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         return (text, kwargs)
-
 
 class FastPitchTokenizerFast(PreTrainedTokenizerFast):
     """
