@@ -37,6 +37,7 @@ deps = {
     "optax": "optax>=0.0.8",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
+    "pillow": "pillow",
     "phonemizer": "phonemizer",
     "protobuf": "protobuf<=3.20.1",
     "psutil": "psutil",

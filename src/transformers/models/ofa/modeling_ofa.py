@@ -1701,9 +1701,6 @@ class OFAModel(OFAPreTrainedModel):
             use_cache (`bool`): whether to use cache for faster inference.
             output_attentions (`bool`): whether to output attention weights.
             output_hidden_states (`bool`): whether to output hidden states.
-
-        Returns:
-            Seq2SeqModelOutput (`ModelOutput`): model outputs with hidden states and attentions.
         """
 
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
