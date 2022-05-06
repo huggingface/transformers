@@ -230,7 +230,7 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    # @slow
+    @slow
     def test_model_from_pretrained(self):
         for model_name in GLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GLMModel.from_pretrained(model_name)
@@ -241,5 +241,7 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_ids = torch.LongTensor([input_ids])
             position_ids = torch.LongTensor([position_ids])
             attention_mask = torch.LongTensor([attention_mask])
-
+            model(input_ids=input_ids,
+                  position_ids=position_ids,
+                  attention_mask=attention_mask)
             self.assertIsNotNone(model)

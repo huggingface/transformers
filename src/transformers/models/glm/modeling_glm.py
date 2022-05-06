@@ -245,7 +245,7 @@ class SelfAttention(torch.nn.Module):
     def __init__(self, hidden_size, num_attention_heads,
                  attention_dropout_prob, output_dropout_prob,
                  init_method, output_layer_init_method=None,
-                 relative_encoding=False, attention_scale=1.0):
+                 attention_scale=1.0):
         super(SelfAttention, self).__init__()
         # Set output layer initialization if not provided.
         if output_layer_init_method is None:
@@ -256,13 +256,10 @@ class SelfAttention(torch.nn.Module):
                                                      num_attention_heads)
 
         self.num_attention_heads = num_attention_heads
-        self.relative_encoding = relative_encoding
         self.attention_scale = attention_scale
         # Strided linear layer.
         self.query_key_value = Linear(hidden_size, 3 * hidden_size)
 
-        if relative_encoding:
-            self.relative = Linear(hidden_size, hidden_size)
         # Dropout. Note that for a single iteration, this layer will generate
         # different outputs on different number of parallel partitions but
         # on average it should not be partition dependent.
@@ -325,27 +322,15 @@ class SelfAttention(torch.nn.Module):
         query_layer = self._transpose_for_scores(mixed_query_layer)
         key_layer = self._transpose_for_scores(mixed_key_layer)
         value_layer = self._transpose_for_scores(mixed_value_layer)
-        if self.relative_encoding:
-            relative_layer = self.relative(position_embeddings)
-            relative_layer = self._transpose_for_scores(relative_layer)  # 1 (bsz) x n_head x klen x d_head
-            # Raw attention scores. [b, np, qs, ks]
-            rw_head_q = query_layer + r_w_bias.unsqueeze(1)
-            ac_score = torch.matmul(rw_head_q, key_layer.transpose(-1, -2))
-            rr_head_q = query_layer + r_r_bias.unsqueeze(1)
-            bd_score = torch.matmul(rr_head_q, relative_layer.transpose(-1, -2))
-            bd_score = self._rel_shift(bd_score)
 
-            attention_scores = ac_score + bd_score
-            attention_scores = attention_scores / math.sqrt(self.hidden_size_per_attention_head)
+        if self.attention_scale > 1.0:
+            # Raw attention scores. [b, np, s, s]
+            attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_scale),
+                                            key_layer.transpose(-1, -2) / math.sqrt(
+                                                self.hidden_size_per_attention_head * self.attention_scale))
         else:
-            if self.attention_scale > 1.0:
-                # Raw attention scores. [b, np, s, s]
-                attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_scale),
-                                                key_layer.transpose(-1, -2) / math.sqrt(
-                                                    self.hidden_size_per_attention_head * self.attention_scale))
-            else:
-                attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2) / math.sqrt(
-                    self.hidden_size_per_attention_head))
+            attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2) / math.sqrt(
+                self.hidden_size_per_attention_head))
 
         # Apply the left to right attention mask.
         attention_scores = torch.mul(attention_scores, ltor_mask)
@@ -416,7 +401,6 @@ class GLMBlock(torch.nn.Module):
                  layernorm_epsilon,
                  init_method,
                  output_layer_init_method=None,
-                 relative_encoding=False,
                  attention_scale=1.0):
         super(GLMBlock, self).__init__()
         # Set output layer initialization if not provided.
@@ -434,7 +418,6 @@ class GLMBlock(torch.nn.Module):
             output_dropout_prob,
             init_method,
             output_layer_init_method=output_layer_init_method,
-            relative_encoding=relative_encoding,
             attention_scale=attention_scale)
 
         # Layernorm on the input data.
@@ -518,10 +501,8 @@ class GLMStack(torch.nn.Module):
                  layernorm_epsilon=1.0e-5,
                  init_method_std=0.02,
                  use_scaled_init_for_output_weights=True,
-                 relative_encoding=False,
                  block_position_encoding=False,
                  attention_scale=1.0,
-                 gradient_checkpointing=False,
                  ):
         super(GLMStack, self).__init__()
         self.hidden_size = hidden_size
@@ -529,8 +510,6 @@ class GLMStack(torch.nn.Module):
         self.checkpoint_activations = checkpoint_activations
         self.checkpoint_num_layers = checkpoint_num_layers
         self.max_memory_length = max_memory_length
-        self.gradient_checkpointing = gradient_checkpointing
-        assert not (relative_encoding)
 
         output_layer_init_method = None
         if use_scaled_init_for_output_weights:
@@ -538,35 +517,17 @@ class GLMStack(torch.nn.Module):
                                                           num_layers)
         # Embeddings dropout
         self.embedding_dropout = torch.nn.Dropout(embedding_dropout_prob)
-        self.relative_encoding = relative_encoding
         self.block_position_encoding = block_position_encoding
-        if relative_encoding:
-            # Relative position embedding
-            self.position_embeddings = PositionalEmbedding(hidden_size)
-            # Per attention head and per partition values.
 
-            self.hidden_size_per_attention_head = divide(hidden_size,
-                                                         num_attention_heads)
-            self.r_w_bias = torch.nn.Parameter(
-                torch.Tensor(num_attention_heads, self.hidden_size_per_attention_head))
-            self.r_w_bias.model_parallel = True
-            self.r_r_bias = torch.nn.Parameter(
-                torch.Tensor(num_attention_heads, self.hidden_size_per_attention_head))
-            self.r_r_bias.model_parallel = True
-            # Always initialize bias to zero.
-            with torch.no_grad():
-                self.r_w_bias.zero_()
-                self.r_r_bias.zero_()
+        # Position embedding (serial).
+        if block_position_encoding:
+            self.position_embeddings = torch.nn.Embedding(max_sequence_length + 1, hidden_size)
+            self.block_position_embeddings = torch.nn.Embedding(max_sequence_length + 1, hidden_size)
+            torch.nn.init.normal_(self.block_position_embeddings.weight, mean=0.0, std=init_method_std)
         else:
-            # Position embedding (serial).
-            if block_position_encoding:
-                self.position_embeddings = torch.nn.Embedding(max_sequence_length + 1, hidden_size)
-                self.block_position_embeddings = torch.nn.Embedding(max_sequence_length + 1, hidden_size)
-                torch.nn.init.normal_(self.block_position_embeddings.weight, mean=0.0, std=init_method_std)
-            else:
-                self.position_embeddings = torch.nn.Embedding(max_sequence_length, hidden_size)
-            # Initialize the position embeddings.
-            torch.nn.init.normal_(self.position_embeddings.weight, mean=0.0, std=init_method_std)
+            self.position_embeddings = torch.nn.Embedding(max_sequence_length, hidden_size)
+        # Initialize the position embeddings.
+        torch.nn.init.normal_(self.position_embeddings.weight, mean=0.0, std=init_method_std)
 
         def get_layer():
 
@@ -578,7 +539,6 @@ class GLMStack(torch.nn.Module):
                 layernorm_epsilon,
                 unscaled_init_method(init_method_std),
                 output_layer_init_method=output_layer_init_method,
-                relative_encoding=relative_encoding,
                 attention_scale=attention_scale)
 
         # Transformer layers.
@@ -621,21 +581,14 @@ class GLMStack(torch.nn.Module):
             # [b,1,s,s]
             attention_mask = attention_mask[:, :, :, -query_length - memory_length:]
 
-        if self.relative_encoding:
-            position_sequence = torch.arange(key_length - 1, -1, -1.0, device=hidden_states.device,
-                                             dtype=hidden_states.dtype)
-            position_embeddings = self.position_embeddings(position_sequence)
-            # Apply dropout
-            position_embeddings = self.embedding_dropout(position_embeddings)
-        else:
-            if self.block_position_encoding:
-                position_ids, block_position_ids = position_ids[:, 0], position_ids[:, 1]
-            position_embeddings = self.position_embeddings(position_ids)
+        if self.block_position_encoding:
+            position_ids, block_position_ids = position_ids[:, 0], position_ids[:, 1]
+        position_embeddings = self.position_embeddings(position_ids)
 
-            hidden_states = hidden_states + position_embeddings
-            if self.block_position_encoding:
-                block_position_embeddings = self.block_position_embeddings(block_position_ids)
-                hidden_states = hidden_states + block_position_embeddings
+        hidden_states = hidden_states + position_embeddings
+        if self.block_position_encoding:
+            block_position_embeddings = self.block_position_embeddings(block_position_ids)
+            hidden_states = hidden_states + block_position_embeddings
         hidden_states = self.embedding_dropout(hidden_states)
 
         def check_detach(_hidden_states):
@@ -657,11 +610,9 @@ class GLMStack(torch.nn.Module):
 
                 return custom_forward
 
-            if self.relative_encoding:
-                args += [position_embeddings, self.r_w_bias, self.r_r_bias]
             mem_i = None
 
-            if self.gradient_checkpointing:
+            if self.checkpoint_activations:
                 hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer),
                     hidden_states,
@@ -826,7 +777,6 @@ class GLMModel(GLMPreTrainedModel):
                                     config.checkpoint_activations,
                                     config.checkpoint_num_layers,
                                     attention_scale=config.attention_scale,
-                                    relative_encoding=config.relative_encoding,
                                     block_position_encoding=config.block_position_encoding)
 
         # Initialize weights and apply final processing
