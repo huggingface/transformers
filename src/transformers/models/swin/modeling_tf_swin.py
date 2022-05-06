@@ -18,6 +18,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import tensorflow as tf
@@ -804,7 +805,10 @@ class TFSwinStage(tf.keras.layers.Layer):
         # patch merging layer
         if downsample is not None:
             self.downsample = downsample(
-                input_resolution, dim=dim, norm_layer=tf.keras.layers.LayerNormalization, name="downsample"
+                input_resolution,
+                dim=dim,
+                norm_layer=partial(tf.keras.layers.LayerNormalization, epsilon=1e-5),
+                name="downsample",
             )
         else:
             self.downsample = None
