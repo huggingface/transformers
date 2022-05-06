@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    get_tests_dir,
     require_deepspeed,
     require_torch_gpu,
     slow,
@@ -41,8 +42,8 @@ if is_torch_available():
 
 set_seed(42)
 
-FIXTURE_DIRECTORY = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures")
-ROOT_DIRECTORY = os.path.join(dirname(dirname(dirname(os.path.abspath(__file__)))))
+FIXTURE_DIRECTORY = get_tests_dir("fixtures")
+ROOT_DIRECTORY = os.path.join(dirname(get_tests_dir()))
 DS_TESTS_DIRECTORY = dirname(os.path.abspath(__file__))
 
 # default torch.distributed port
