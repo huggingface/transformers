@@ -93,7 +93,7 @@ class GLMModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = ids_tensor([self.batch_size], vocab_size=2, rng=None, name=None)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -230,55 +230,16 @@ class GLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    @slow
-    def test_GLM_sample(self):
-        tokenizer = GLMTokenizer.from_pretrained("glm")
-        model = GLMModel.from_pretrained("glm")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
-        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-        token_type_ids = tokenized.token_type_ids.to(torch_device)
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-        )
-        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-        self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-        )  # token_type_ids should change output
-
-    @slow
+    # @slow
     def test_model_from_pretrained(self):
         for model_name in GLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GLMModel.from_pretrained(model_name)
             tokenizer = GLMTokenizer.from_pretrained("shunxing1234/GLM")
-            tokens = tokenizer._encode("hello world")
-            print(tokens)
+            tokens = tokenizer._encode("hello world [MASK]")
             input_ids, _, _, position_ids, attention_mask, _, _ = tokenizer.build_input_from_ids(
                 text_a_ids=tokens, tokenizer=tokenizer)
-            # model.load_weights('/mnt/projects/Sailing/checkpoints/glm_large_en/pytorch_model.bin')
-            print('input_ids', input_ids)
-            print('position_ids', position_ids)
-            print('attention_mask', attention_mask)
-            # input_ids = [101, 7592, 2088, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            # position_ids = [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            # attention_mask = 4
             input_ids = torch.LongTensor([input_ids])
             position_ids = torch.LongTensor([position_ids])
             attention_mask = torch.LongTensor([attention_mask])
-            print(model(input_ids=input_ids,
-                        position_ids=position_ids,
-                        attention_mask=attention_mask))
 
             self.assertIsNotNone(model)
