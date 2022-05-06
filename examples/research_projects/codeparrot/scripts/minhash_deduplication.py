@@ -1,11 +1,8 @@
-import gzip
 import json
 import multiprocessing as mp
-import os
 import re
-import shutil
 from collections import defaultdict
-from typing import List, Optional, Set, Type, Dict, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Type
 
 from datasets import Dataset
 from tqdm import tqdm

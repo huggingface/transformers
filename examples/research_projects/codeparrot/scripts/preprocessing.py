@@ -1,10 +1,10 @@
 import gzip
 import hashlib
+import json
 import multiprocessing
 import os
 import shutil
 import time
-import json
 from pathlib import Path
 
 import numpy as np
