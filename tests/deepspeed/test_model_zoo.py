@@ -70,16 +70,16 @@ GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
 LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
 LED_TINY = "hf-internal-testing/tiny-random-led"
 LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
-M2M_100_TINY = "stas/tiny-m2m_100" # hf tiny model is unsuitable
+M2M_100_TINY = "stas/tiny-m2m_100"  # hf tiny model is unsuitable
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 MBART_TINY = "sshleifer/tiny-mbart"
 MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
 MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
 PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
 
-#PROPHETNET_TINY = "microsoft/prophetnet-large-uncased"
+# PROPHETNET_TINY = "microsoft/prophetnet-large-uncased"
 PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
-#PROPHETNET_TINY = "/hf/transformers-ds-model-zoo-2/tiny-prophetnet"
+# PROPHETNET_TINY = "/hf/transformers-ds-model-zoo-2/tiny-prophetnet"
 
 
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
@@ -92,7 +92,6 @@ XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 
 
 # *** To Fix ***
-
 
 
 # *** tiny model issues ***
