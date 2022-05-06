@@ -108,6 +108,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/mt5/test_modeling_mt5.py",
     "models/pegasus/test_modeling_pegasus.py",
     "models/camembert/test_modeling_tf_camembert.py",
+    "models/ofa/test_modeling_ofa.py",
     "models/mt5/test_modeling_tf_mt5.py",
     "models/xlm_roberta/test_modeling_tf_xlm_roberta.py",
     "models/xlm_roberta/test_modeling_flax_xlm_roberta.py",

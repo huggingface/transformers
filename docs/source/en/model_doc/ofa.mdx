@@ -1,0 +1,59 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# OFA
+
+## Overview
+
+The OFA model was proposed in [Unifying Architectures, Tasks, and Modalities Through a Simple Sequence-to-Sequence Learning Framework](http://arxiv.org/abs/2202.03052)  by Peng Wang, An Yang, Rui Men, Junyang Lin, Shuai Bai, Zhikang Li, Jianxin Ma, Chang Zhou, Jingren Zhou, and Hongxia Yang. OFA is a unified multimodal pretrained model that unifies modalities (i.e., cross-modality, vision, language) and tasks (e.g., image generation, visual grounding, image captioning, image classification, text generation, etc.) to a simple sequence-to-sequence learning framework.
+
+The abstract from the paper is the following:
+
+*In this work, we pursue a unified paradigm for multimodal pretraining to break the scaffolds of complex task/modality-specific customization. We propose OFA, a unified multimodal pretrained model that unifies modalities (i.e., cross-modality, vision, language) and tasks (e.g., image generation, visual grounding, image captioning, image classification, text generation, etc.) to a simple sequence-to-sequence learning framework based on the encoder-decoder architecture. OFA performs pretraining and finetuning with task instructions and introduces no extra task-specific layers for finetuning. Experimental results show that OFA achieves new state-of-the-arts on a series of multimodal tasks, including image captioning (COCO test CIDEr: 149.6), text-to-image generation (COCO test FID: 10.5), VQA (test-std acc.: 80.02), SNLI-VE (test acc.: 90.20), and referring expression comprehension (RefCOCO / RefCOCO+ / RefCOCOg test acc.: 92.93 / 90.10 / 85.20). Through extensive analyses, we demonstrate that OFA reaches comparable performance with uni-modal pretrained models (e.g., BERT, MAE, MoCo v3, SimCLR v2, etc.) in uni-modal tasks, including NLU, NLG, and image classification, and it effectively transfers to unseen tasks and domains. Code shall be released soon at this [http URL](https://github.com/OFA-Sys/OFA)*
+
+
+Tips:
+
+- OFA is a model that accepts images, texts and/or bounding boxes as inputs and outputs texts, images (discrete codes), and/or bounding boxes.
+
+- OFA formalizes tasks as sequence-to-sequence transformation, and thus it can use conditional generation to perform tasks like image captioning, VQA, text-to-image generation, referring expression comprehension, etc.
+
+- OFA performs best on image captioning and referring expression comprehension.
+
+- OFA can be finetuned on either cross-modal or unimodal tasks.
+
+Relevant checkpoints can be found at https://huggingface.co/OFA-Sys
+
+This model was contributed by [JustinLin610](<https://huggingface.co/JustinLin610). The original code can be found [here](https://github.com/OFA-Sys/OFA).
+
+
+## OFAConfig
+
+[[autodoc]] OFAConfig
+
+## OFATokenizer
+
+[[autodoc]] OFATokenizer
+
+## OFATokenizerFast
+
+[[autodoc]] OFATokenizerFast
+
+## OFAModel
+
+[[autodoc]] OFAModel
+    - forward
+
+## OFAForConditionalGeneration
+
+[[autodoc]] OFAForConditionalGeneration
+    - forward
