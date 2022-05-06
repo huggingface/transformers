@@ -809,27 +809,6 @@ class FlaxOPTForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxOPTForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxOPTForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxOPTForSequenceClassification(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxOPTModel(metaclass=DummyObject):
     _backends = ["flax"]
 
