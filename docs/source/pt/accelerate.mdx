@@ -27,7 +27,7 @@ pip install accelerate
 ```
 
 Logo, devemos importar e criar um objeto [`Accelerator`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator).
-`Accelerator` detectará automáticamente o tipo de configuração distribuída que está disponível e inicializará todos os
+O `Accelerator` detectará automáticamente a configuração distribuída disponível e inicializará todos os
 componentes necessários para o treinamento. Não há necessidade portanto de especificar o dispositivo onde deve colocar seu modelo.
 
 ```py
@@ -38,7 +38,7 @@ componentes necessários para o treinamento. Não há necessidade portanto de es
 
 ## Preparando a aceleração
 
-Passe todos os objetos relevantes para o treinamento ao método [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare).
+Passe todos os objetos relevantes ao treinamento para o método [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare).
 Isto inclui os DataLoaders de treino e evaluação, um modelo e um otimizador:
 
 ```py
@@ -49,7 +49,7 @@ Isto inclui os DataLoaders de treino e evaluação, um modelo e um otimizador:
 
 ## Backward
 
-Por último, substitua o `loss.backward()` padrão em teu laço de treinamento com o método [`backward`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.backward) do 🤗 Accelerate:
+Por último, substitua o `loss.backward()` padrão em seu laço de treinamento com o método [`backward`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.backward) do 🤗 Accelerate:
 
 ```py
 >>> for epoch in range(num_epochs):
@@ -121,7 +121,7 @@ Se estiver rodando seu treinamento em um Script, execute o seguinte comando para
 accelerate config
 ```
 
-Comece seu treinamento com:
+Comece o treinamento com:
 
 ```bash
 accelerate launch train.py
