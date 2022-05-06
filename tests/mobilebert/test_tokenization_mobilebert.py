@@ -15,16 +15,13 @@
 """ Testing suite for the MobileBERT tokenizer. """
 
 
-
-
 import os
 import unittest
 
-from transformers import BertTokenizerFast
+from transformers import MobileBertTokenizer, MobileBertTokenizerFast
 from transformers.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
-    BertTokenizer,
     WordpieceTokenizer,
     _is_control,
     _is_punctuation,
@@ -34,15 +31,17 @@ from transformers.testing_utils import require_tokenizers, slow
 
 from ..test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
-# Copied from transformers.tests.bert.test_modeling_bert.py with Bert->MobileBERT 
+
+# Copied from transformers.tests.bert.test_modeling_bert.py with Bert->MobileBert and pathfix
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = MobileBERT
-    rust_tokenizer_class = MobileBERTFast
+    tokenizer_class = MobileBertTokenizer
+    rust_tokenizer_class = MobileBertTokenizerFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
+    pre_trained_model_path = "google/mobilebert-uncased"
 
     def setUp(self):
         super().setUp()
@@ -67,6 +66,11 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+        self.tokenizers_list = [
+            (tokenizer_def[0], self.pre_trained_model_path, tokenizer_def[2])  # else the 'google/' prefix is stripped
+            for tokenizer_def in self.tokenizers_list
+        ]
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
