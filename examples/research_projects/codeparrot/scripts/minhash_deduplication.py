@@ -7,9 +7,9 @@ import shutil
 from collections import defaultdict
 from typing import List, Optional, Set, Type
 
+from datasets import Dataset
 from tqdm import tqdm
 
-from datasets import Dataset
 from datasketch import MinHash, MinHashLSH
 from dpu_utils.utils.iterators import ThreadedIterator
 

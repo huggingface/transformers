@@ -2,8 +2,7 @@ from unittest import TestCase
 
 from datasets import Dataset
 
-from minhash_deduplication import make_duplicate_clusters
-from minhash_deduplication import deduplicate_dataset
+from minhash_deduplication import deduplicate_dataset, make_duplicate_clusters
 
 
 def get_dataset():
