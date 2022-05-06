@@ -120,7 +120,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForMaskedLM"),
         ("marian", "TFMarianMTModel"),
         ("bart", "TFBartForConditionalGeneration"),
-        ("opt", "TFOPTForConditionalGeneration"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("longformer", "TFLongformerForMaskedLM"),
