@@ -253,7 +253,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
+        sep_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [SEP] token.
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
@@ -285,7 +285,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         add_prefix_space=True,
         cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[1000, 1000, 1000, 1000],
+        sep_token_box=[0, 0, 0, 0],
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,

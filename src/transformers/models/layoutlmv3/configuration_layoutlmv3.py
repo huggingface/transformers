@@ -36,9 +36,9 @@ class LayoutLMv3Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the LayoutLMv3 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`LayoutLMv3Model`] or [`TFLayoutLMv3Model`].
+            the `inputs_ids` passed when calling [`LayoutLMv3Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -58,20 +58,19 @@ class LayoutLMv3Config(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv3Model`] or
-            [`TFLayoutLMv3Model`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv3Model`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever be used with. Typically set this to something
             large just in case (e.g., 1024).
-        coordinate_size (`int`, *optional*, defaults to 128):
+        coordinate_size (`int`, *optional*, defaults to `128`):
             Dimension of the coordinate embeddings.
-        shape_size (`int`, *optional*, defaults to 128):
+        shape_size (`int`, *optional*, defaults to `128`):
             Dimension of the width and height embeddings.
-        has_relative_attention_bias (`bool`, *optional*, defaults to `False`):
+        has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use a relative attention bias in the self-attention mechanism.
         rel_pos_bins (`int`, *optional*, defaults to 32):
             The number of relative position bins to be used in the self-attention mechanism.
@@ -81,7 +80,7 @@ class LayoutLMv3Config(PretrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (`int`, *optional*, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        has_spatial_attention_bias (`bool`, *optional*, defaults to `False`):
+        has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use a spatial attention bias in the self-attention mechanism.
         visual_embed (`bool`, *optional*, defaults to `True`):
             Whether or not to add patch embeddings.
@@ -110,7 +109,7 @@ class LayoutLMv3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=50265,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -121,19 +120,19 @@ class LayoutLMv3Config(PretrainedConfig):
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-5,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         max_2d_position_embeddings=1024,
-        coordinate_size=None,
-        shape_size=None,
-        has_relative_attention_bias=False,
+        coordinate_size=128,
+        shape_size=128,
+        has_relative_attention_bias=True,
         rel_pos_bins=32,
         max_rel_pos=128,
         rel_2d_pos_bins=64,
         max_rel_2d_pos=256,
-        has_spatial_attention_bias=False,
+        has_spatial_attention_bias=True,
         visual_embed=True,
         input_size=224,
         patch_size=16,

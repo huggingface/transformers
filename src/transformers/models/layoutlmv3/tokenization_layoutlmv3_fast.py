@@ -119,7 +119,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             Whether the post processing step should trim offsets to avoid including whitespaces.
         cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
+        sep_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [SEP] token.
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
@@ -155,7 +155,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=True,
         trim_offsets=True,
         cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[1000, 1000, 1000, 1000],
+        sep_token_box=[0, 0, 0, 0],
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
