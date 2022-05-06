@@ -1703,18 +1703,6 @@ class OFAModel(OFAPreTrainedModel):
             output_hidden_states (`bool`): whether to output hidden states.
 
         Returns:
-            Seq2SeqModelOutput:
-                last_hidden_state (`torch.FloatTensor` of shape `(bsz, seq_len, hidden)`): the last decoder hidden
-                states. past_key_values (`tuple(tuple(torch.FloatTensor)): past keys and values for faster inference.
-                decoder_hidden_states (`tuple(torch.FloatTensor)`): the decoder hidden states of all layers.
-                decoder_attentions (`tuple(torch.FloatTensor)): the decoder self attention weights of all layers.
-                cross_attentions (`tuple(torch.FloatTensor)): cross attention weights of all layers.
-                encoder_last_hidden_state (`torch.FloatTensor` of shape `(bsz, seq_len, embed_dim)`):
-                    the encoder last hidden state.
-                encoder_hidden_states (`torch.FloatTensor` of shape `(bsz, seq_len, embed_dim)`):
-                    the encoder states of all layers including the embeddings.
-                encoder_attentions (`torch.FloatTensor` of shape `(bsz, num_heads, seq_len, seq_len)`):
-                    the encoder attention weights of all layers.
         """
 
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1881,18 +1869,6 @@ class OFAForConditionalGeneration(OFAPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-            Seq2SeqModelOutput:
-                last_hidden_state (`torch.FloatTensor` of shape `(bsz, seq_len, hidden)`): the last decoder hidden
-                states. past_key_values (`tuple(tuple(torch.FloatTensor)): past keys and values for faster inference.
-                decoder_hidden_states (`tuple(torch.FloatTensor)`): the decoder hidden states of all layers.
-                decoder_attentions (`tuple(torch.FloatTensor)): the decoder self attention weights of all layers.
-                cross_attentions (`tuple(torch.FloatTensor)): cross attention weights of all layers.
-                encoder_last_hidden_state (`torch.FloatTensor` of shape `(bsz, seq_len, embed_dim)`):
-                    the encoder last hidden state.
-                encoder_hidden_states (`torch.FloatTensor` of shape `(bsz, seq_len, embed_dim)`):
-                    the encoder states of all layers including the embeddings.
-                encoder_attentions (`torch.FloatTensor` of shape `(bsz, num_heads, seq_len, seq_len)`):
-                    the encoder attention weights of all layers.
         """
 
         if labels is not None:
