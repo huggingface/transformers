@@ -1061,7 +1061,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         >>> embedding_layer = model.resize_token_embeddings(
         ...     len(tokenizer)
-        >>> )  # Update the model embeddings with the new vocabulary size
+        ... )  # Update the model embeddings with the new vocabulary size
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]
