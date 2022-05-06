@@ -85,7 +85,6 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("distilbert", "TFDistilBertForMaskedLM"),
         ("albert", "TFAlbertForPreTraining"),
         ("bart", "TFBartForConditionalGeneration"),
-        ("opt", "TFOPTForConditionalGeneration"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("roberta", "TFRobertaForMaskedLM"),
@@ -212,7 +211,6 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
-        ("opt", "TFOPTForConditionalGeneration"),
         ("encoder-decoder", "TFEncoderDecoderModel"),
     ]
 )
