@@ -229,9 +229,19 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
+        use_ipex (`bool`, *optional*, defaults to `False`):
+            Use Intel extension for PyTorch when it is available.
+            [IPEX installation](https://github.com/intel/intel-extension-for-pytorch).
+        ipex_opt_level (`str`, *optional*, `"O1"`):
+            For use_ipex, IPEX optimization level selected in ['O0', 'O1'].
+            See details on [IPEX documentation](https://intel.github.io/intel-extension-for-pytorch/tutorials/api_doc.html).
+        auto_kernel_selection (`bool`, *optional*, defaults to `False`):
+            For use_ipex, try to use Intel oneDNN kernel for fp32 inference.
+        jit_mode(`bool`, *optional*, defaults to `False`):
+            Try to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture. This is an experimental API and it may change.
+            NVIDIA architecture or Cooper lake CPU. This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -568,17 +578,17 @@ class TrainingArguments:
         default="O1",
         metadata={
             "help": (
-                "for use_ipex, IPEX optimization level selected in ['O0', 'O1']. "
+                "For use_ipex, IPEX optimization level selected in ['O0', 'O1']. "
                 "https://intel.github.io/intel-extension-for-pytorch/tutorials/api_doc.html"
             )
         },
     )
-    auto_kernel_selection: bool = field(default=False, metadata={"help": "Try to use Intel oneDNN kernel for fp32 inference"})
+    auto_kernel_selection: bool = field(default=False, metadata={"help": "For use_ipex, try to use Intel oneDNN kernel for fp32 inference"})
     jit_mode: bool = field(default=False, metadata={"help": "Try to use PyTorch jit trace for inference"})
     bf16: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture. This is an experimental API and it may change."
+            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture or Cooper lake CPU. This is an experimental API and it may change."
         },
     )
     fp16: bool = field(
