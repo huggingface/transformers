@@ -159,6 +159,7 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_native_cuda_amp_available = True
 
 if version.parse(torch.__version__) >= version.parse("1.10"):
+    _is_torch_generator_available = True
     _is_native_cpu_amp_available = True
 
 if is_datasets_available():
@@ -2072,9 +2073,9 @@ class Trainer:
         """
         if self.use_cuda_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = torch.amp.autocast()(dtype=self.amp_dtype)
+                ctx_manager = torch.cuda.amp.autocast()(dtype=self.amp_dtype)
             else:
-                ctx_manager = torch.amp.autocast()
+                ctx_manager = torch.cuda.amp.autocast()
         elif self.use_cpu_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
                 ctx_manager = torch.cpu.amp.autocast(dtype=self.amp_dtype)
