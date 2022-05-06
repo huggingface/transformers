@@ -45,20 +45,11 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "OPTTokenizer"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "valhalla/opt-large-sst2"
-_SEQ_CLASS_EXPECTED_LOSS = 0.0
-_SEQ_CLASS_EXPECTED_OUTPUT = "'POSITIVE'"
-
-# QuestionAsnwering docstring
-_CHECKPOINT_FOR_QA = "valhalla/opt-large-finetuned-squadv1"
-_QA_EXPECTED_LOSS = 0.59
-_QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
