@@ -86,8 +86,7 @@ class LayoutLMv2Processor(ProcessorMixin):
 
         if self.feature_extractor.apply_ocr and (word_labels is not None):
             raise ValueError(
-                "You cannot provide word labels "
-                "if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
             )
 
         if return_overflowing_tokens is True and return_offsets_mapping is False:
@@ -140,7 +139,8 @@ class LayoutLMv2Processor(ProcessorMixin):
 
         if len(images_with_overflow) != len(overflow_to_sample_mapping):
             raise ValueError(
-                f"Expected length of images to be the same as the length of `overflow_to_sample_mapping`, but got {len(images_with_overflow)} and {len(overflow_to_sample_mapping)}"
+                "Expected length of images to be the same as the length of `overflow_to_sample_mapping`, but got"
+                f" {len(images_with_overflow)} and {len(overflow_to_sample_mapping)}"
             )
 
         return images_with_overflow
