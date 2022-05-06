@@ -59,6 +59,7 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_electra"] = [
+        "FlaxElectraForCausalLM",
         "FlaxElectraForMaskedLM",
         "FlaxElectraForMultipleChoice",
         "FlaxElectraForPreTraining",
@@ -107,6 +108,7 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_electra import (
+            FlaxElectraForCausalLM,
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
             FlaxElectraForPreTraining,

@@ -37,9 +37,11 @@ class ConvBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ConvBertModel`]. It is used to instantiate an
     ConvBERT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ConvBERT
-    [conv-bert-base](https://huggingface.co/YituTech/conv-bert-base) architecture. Configuration objects inherit from
-    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
-    for more information.
+    [YituTech/conv-bert-base](https://huggingface.co/YituTech/conv-bert-base) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
