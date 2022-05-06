@@ -22,11 +22,8 @@ from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokeniz
 
 _import_structure = {
     "configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig", "OPTOnnxConfig"],
-    "tokenization_opt": ["OPTTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_opt_fast"] = ["OPTTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_opt"] = [
@@ -53,10 +50,8 @@ if is_flax_available():
 
 if TYPE_CHECKING:
     from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig, OPTOnnxConfig
-    from .tokenization_opt import OPTTokenizer
 
-    if is_tokenizers_available():
-        from .tokenization_opt_fast import OPTTokenizerFast
+
 
     if is_torch_available():
         from .modeling_opt import (

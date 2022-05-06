@@ -56,7 +56,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/bart-large"
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "OPTTokenizer"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 
 LARGE_NEGATIVE = -1e8

@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import OPTConfig, OPTTokenizer, is_tf_available
+from transformers import OPTConfig, GPT2Tokenizer, is_tf_available
 from transformers.testing_utils import require_tf, slow
 from transformers.utils import cached_property
 
@@ -414,7 +414,7 @@ class TFOPTModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def tok(self):
-        return OPTTokenizer.from_pretrained("facebook/opt-large")
+        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
 
 @slow
@@ -424,7 +424,7 @@ class FasterTFOPTModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tok(self):
-        return OPTTokenizer.from_pretrained("facebook/opt-large")
+        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
     @cached_property
     def xsum_1_1_model(self):

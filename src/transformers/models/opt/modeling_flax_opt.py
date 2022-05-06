@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "OPTTokenizer"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 
 OPT_START_DOCSTRING = r"""
