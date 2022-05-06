@@ -15,7 +15,6 @@
 """ Testing suite for the TF 2.0 Swin model. """
 
 
-import copy
 import inspect
 import unittest
 
@@ -24,11 +23,10 @@ from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_tf_available():
-    import numpy
     import tensorflow as tf
 
     from transformers.models.swin.modeling_tf_swin import (
@@ -335,8 +333,27 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFSwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        pass
+        return (
+            AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        assert False
+        pass
+        # TODO - uncomment when TF model weights pushed to hub
+        # model = TFSwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+        # feature_extractor = self.default_feature_extractor
+
+        # image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        # inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # # forward pass
+        # outputs = model(inputs)
+
+        # # verify the logits
+        # expected_shape = tf.TensorShape((1, 1000))
+        # self.assertEqual(outputs.logits.shape, expected_shape)
+        # expected_slice = tf.constant([-0.0948, -0.6454, -0.0921])
+        # self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

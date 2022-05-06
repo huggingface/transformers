@@ -1175,7 +1175,7 @@ class PixelShuffle(tf.keras.layers.Layer):
         data_format: str = "NHWC",  # FIXME -set up order of channels
         trainable: bool = True,
         name: str = None,
-        dtype: tf.Dtype = None,
+        dtype = None,
         dynamic: bool = False,
         **kwargs
     ):

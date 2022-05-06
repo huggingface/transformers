@@ -1880,6 +1880,37 @@ class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSwinForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
