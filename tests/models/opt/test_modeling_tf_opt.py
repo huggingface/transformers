@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import OPTConfig, GPT2Tokenizer, is_tf_available
+from transformers import GPT2Tokenizer, OPTConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 from transformers.utils import cached_property
 
