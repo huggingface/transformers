@@ -18,6 +18,7 @@ RetriBERT model
 
 
 import math
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint as checkpoint
@@ -85,7 +86,7 @@ RETRIBERT_START_DOCSTRING = r"""
     RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RetriBertConfig) -> None:
         super().__init__(config)
         self.projection_dim = config.projection_dim
 
@@ -173,8 +174,13 @@ class RetriBertModel(RetriBertPreTrainedModel):
         return self.project_doc(a_reps)
 
     def forward(
-        self, input_ids_query, attention_mask_query, input_ids_doc, attention_mask_doc, checkpoint_batch_size=-1
-    ):
+        self,
+        input_ids_query: torch.LongTensor,
+        attention_mask_query: Optional[torch.FloatTensor],
+        input_ids_doc: torch.LongTensor,
+        attention_mask_doc: Optional[torch.FloatTensor],
+        checkpoint_batch_size: int = -1,
+    ) -> torch.FloatTensor:
         r"""
         Args:
             input_ids_query (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
