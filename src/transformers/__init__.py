@@ -2082,7 +2082,7 @@ if is_tf_available():
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
-    _import_structure["models.opt"].extend(["TFOPTForConditionalGeneration", "TFOPTModel", "TFOPTPretrainedModel"])
+    _import_structure["models.opt"].extend(["TFOPTModel", "TFOPTPretrainedModel"])
     _import_structure["models.pegasus"].extend(
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
@@ -2420,9 +2420,6 @@ if is_flax_available():
         [
             "FlaxOPTDecoderPreTrainedModel",
             "FlaxOPTForCausalLM",
-            "FlaxOPTForConditionalGeneration",
-            "FlaxOPTForQuestionAnswering",
-            "FlaxOPTForSequenceClassification",
             "FlaxOPTModel",
             "FlaxOPTPreTrainedModel",
         ]
@@ -3537,12 +3534,7 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
-        from .models.opt import (
-            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OPTForCausalLM,
-            OPTModel,
-            OPTPretrainedModel,
-        )
+        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPretrainedModel
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -4209,7 +4201,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
-        from .models.opt import TFOPTForConditionalGeneration, TFOPTModel, TFOPTPretrainedModel
+        from .models.opt import TFOPTModel, TFOPTPretrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.rembert import (
@@ -4469,15 +4461,7 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
-        from .models.opt import (
-            FlaxOPTDecoderPreTrainedModel,
-            FlaxOPTForCausalLM,
-            FlaxOPTForConditionalGeneration,
-            FlaxOPTForQuestionAnswering,
-            FlaxOPTForSequenceClassification,
-            FlaxOPTModel,
-            FlaxOPTPreTrainedModel,
-        )
+        from .models.opt import FlaxOPTDecoderPreTrainedModel, FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,
