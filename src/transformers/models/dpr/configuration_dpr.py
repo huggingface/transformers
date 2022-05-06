@@ -35,7 +35,11 @@ class DPRConfig(PretrainedConfig):
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
 
     This is the configuration class to store the configuration of a [`DPRContextEncoder`], [`DPRQuestionEncoder`], or a
-    [`DPRReader`]. It is used to instantiate the components of the DPR model.
+    [`DPRReader`]. It is used to instantiate the components of the DPR model according to the specified arguments,
+    defining the model component architectures. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the DPRContextEncoder
+    [facebook/dpr-ctx_encoder-single-nq-base](https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base)
+    architecture.
 
     This class is a subclass of [`BertConfig`]. Please check the superclass for the documentation of all kwargs.
 

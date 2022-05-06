@@ -41,7 +41,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -398,7 +398,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
         scores += position_bias
-        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
+        weights = stable_softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
         weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
 
         # Mask heads if we want to
@@ -1165,7 +1165,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
 
         >>> # forward pass
@@ -1353,7 +1353,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         >>> # inference
         >>> inputs = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(inputs)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you
@@ -1642,7 +1642,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
-        >>> ).input_ids  # Batch size 1
+        ... ).input_ids  # Batch size 1
         >>> outputs = model(input_ids)
         ```"""
 

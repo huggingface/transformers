@@ -42,7 +42,7 @@ class RetriBertTokenizer(BertTokenizer):
     r"""
     Constructs a RetriBERT tokenizer.
 
-    [`RetroBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    [`RetriBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
     and wordpiece.
 
     Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.

@@ -14,20 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Image classification example
+# Image classification examples
 
-This directory contains a script, `run_image_classification.py`, that showcases how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT](https://huggingface.co/docs/transformers/main/en/model_doc/convnext), [ResNet](https://huggingface.co/docs/transformers/main/en/model_doc/resnet), [Swin Transformer](https://huggingface.co/docs/transformers/main/en/model_doc/swin)...) using PyTorch. It can be used to fine-tune models on both well-known datasets (like [CIFAR-10](https://huggingface.co/datasets/cifar10), [Fashion MNIST](https://huggingface.co/datasets/fashion_mnist), ...) as well as on your own custom data.
+This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT](https://huggingface.co/docs/transformers/main/en/model_doc/convnext), [ResNet](https://huggingface.co/docs/transformers/main/en/model_doc/resnet), [Swin Transformer](https://huggingface.co/docs/transformers/main/en/model_doc/swin)...) using PyTorch. They can be used to fine-tune models on both [datasets from the hub](#using-datasets-from-hub) as well as on [your own custom data](#using-your-own-data).
 
-This page includes 2 sections:
-- [Using datasets from the 🤗 hub](#using-datasets-from-hub)
-- [Using your own data](#using-your-own-data).
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/image_classification_inference_widget.png" height="400" />
 
+Try out the inference widget here: https://huggingface.co/google/vit-base-patch16-224
 
-## Using datasets from Hub
+Content:
+- [PyTorch version, Trainer](#pytorch-version-no-trainer)
+- [PyTorch version, no Trainer](#pytorch-version-trainer)
+
+## PyTorch version, Trainer
+
+Based on the script [`run_image_classification.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification.py).
+
+The script leverages the 🤗 [Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
+
+### Using datasets from Hub
 
 Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
-
-👀 See the results here: [nateraw/vit-base-beans](https://huggingface.co/nateraw/vit-base-beans).
 
 ```bash
 python run_image_classification.py \
@@ -51,9 +58,11 @@ python run_image_classification.py \
     --seed 1337
 ```
 
-To fine-tune another model, simply provide the `--model_name_or_path` argument. To train on another dataset, simply set the `--dataset_name` argument. 
+👀 See the results here: [nateraw/vit-base-beans](https://huggingface.co/nateraw/vit-base-beans).
 
-## Using your own data
+Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
+
+### Using your own data
 
 To use your own dataset, there are 2 ways: 
 - you can either provide your own folders as `--train_dir` and/or `--validation_dir` arguments
@@ -61,7 +70,7 @@ To use your own dataset, there are 2 ways:
 
 Below, we explain both in more detail.
 
-### Provide them as folders
+#### Provide them as folders
 
 If you provide your own folders with images, the script expects the following directory structure:
 
@@ -88,11 +97,11 @@ python run_image_classification.py \
 
 Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature which will automatically turn the folders into 🤗 Dataset objects.
 
-#### 💡 The above will split the train dir into training and evaluation sets
+##### 💡 The above will split the train dir into training and evaluation sets
   - To control the split amount, use the `--train_val_split` flag.
   - To provide your own validation split in its own directory, you can pass the `--validation_dir <path-to-val-root>` flag.
 
-### Upload your data to the hub, as a (possibly private) repo
+#### Upload your data to the hub, as a (possibly private) repo
 
 It's very easy (and convenient) to upload your image dataset to the hub using the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
 
@@ -117,17 +126,18 @@ dataset = load_dataset("imagefolder", data_files={"train": ["path/to/file1", "pa
 Next, push it to the hub!
 
 ```python
+# assuming you have ran the huggingface-cli login command in a terminal
 dataset.push_to_hub("name_of_your_dataset")
 
 # if you want to push to a private repo, simply pass private=True:
 dataset.push_to_hub("name_of_your_dataset", private=True)
 ```
 
-and that's it! You can now simply train your model simply by setting the `--dataset_name` argument to the name of your dataset on the hub (as explained in [Using datasets from the 🤗 hub](#using-datasets-from-hub)).
+and that's it! You can now train your model by simply setting the `--dataset_name` argument to the name of your dataset on the hub (as explained in [Using datasets from the 🤗 hub](#using-datasets-from-hub)).
 
 More on this can also be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
 
-# Sharing your model on 🤗 Hub
+### Sharing your model on 🤗 Hub
 
 0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
 
@@ -154,3 +164,46 @@ python run_image_classification.py \
     --push_to_hub_model_id <name-your-model> \
     ...
 ```
+
+## PyTorch version, no Trainer
+
+Based on the script [`run_image_classification_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification_no_trainer.py).
+
+Like `run_image_classification.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on an image classification task. The main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+
+It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+or the dataloaders directly in the script) but still run in a distributed setup, and supports mixed precision by
+the means of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
+after installing it:
+
+```bash
+pip install accelerate
+```
+
+You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you can launch training with
+
+```bash
+accelerate launch run_image_classification_trainer.py
+```
+
+This command is the same and will work for:
+
+- single/multiple CPUs
+- single/multiple GPUs
+- TPUs
+
+Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+
+Regarding using custom data with this script, we refer to [using your own data](#using-your-own-data).

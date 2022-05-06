@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import Seq2SeqLMOutput
+from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
@@ -139,8 +139,8 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`Speech2TextTokenizer`] should be used for extracting the fbank features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~Speech2TextTokenizer.__call__`]
+            [`Speech2TextFeatureExtractor`] should be used for extracting the fbank features, padding and conversion
+            into a tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
         return_dict (`bool`, *optional*):
             If set to `True`, the model will return a [`~utils.Seq2SeqLMOutput`] instead of a plain tuple.
         kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
@@ -514,6 +514,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
+        elif isinstance(encoder_outputs, tuple):
+            encoder_outputs = BaseModelOutput(*encoder_outputs)
 
         encoder_hidden_states = encoder_outputs[0]
 

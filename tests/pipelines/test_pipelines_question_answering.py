@@ -117,6 +117,21 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
 
+    @slow
+    @require_torch
+    def test_small_model_long_context_cls_slow(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="deepset/roberta-base-squad2",
+            handle_impossible_answer=True,
+            max_seq_length=512,
+        )
+        outputs = question_answerer(
+            question="What country is Paris the capital of?",
+            context="""London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games. London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games.""",
+        )
+        self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
+
     @require_tf
     def test_small_model_tf(self):
         question_answerer = pipeline(
