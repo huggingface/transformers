@@ -796,13 +796,14 @@ class MLflowCallback(TrainerCallback):
         if log_artifacts in {"TRUE", "1"}:
             self._log_artifacts = True
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
-        logger.debug(f"MLFLOW experiment_name={experiment_name}, run_name={args.run_name}")
+        logger.debug(f"MLflow experiment_name={experiment_name}, run_name={args.run_name}")
         if state.is_world_process_zero:
             if self._ml_flow.active_run() is None:
                 if experiment_name:
                     # Use of set_experiment() ensure that Experiment is created if not exists
                     self._ml_flow.set_experiment(experiment_name)
                 self._ml_flow.start_run(run_name=args.run_name)
+                logger.debug(f"MLflow run started with run_id={self._ml_flow.active_run().info.run_id}")
                 self._auto_end_run = True
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
