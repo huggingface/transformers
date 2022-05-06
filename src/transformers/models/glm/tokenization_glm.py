@@ -295,27 +295,30 @@ class GLMTokenizer(PreTrainedTokenizer):
             add_eos=True,
             mask_id=None,
             masked_lm=False):
+
+        # Prepare ids for special tokens
         if mask_id is None:
             mask_id = self.mask_token_id
-        eos_id = self.eos_token_id
-        cls_id = self.cls_token_id
-        sep_id = self.sep_token_id
-        ids = []
-        types = []
-        paddings = []
+        eos_id = self.eos_token_id  # end of sentence token
+        cls_id = self.cls_token_id  # start of sentence token
+        sep_id = self.sep_token_id  # seperator of two texts token
+        ids = []  # ids of all the tokens
+        types = []  # types of all the tokens, currently we have 0 for text a, 1 for text b,
+        paddings = []  # if-is-padding of all tokens, 1 for no, 0 for yes
+
         # CLS
         if add_cls:
             ids.append(cls_id)
             types.append(0)
             paddings.append(1)
-        # A
+        # add text a
         len_text_a = len(text_a_ids)
         ids.extend(text_a_ids)
         types.extend([0] * len_text_a)
         paddings.extend([1] * len_text_a)
-        # B
+        # add text b
         if text_b_ids is not None:
-            # SEP
+            # add SEP
             if add_sep:
                 ids.append(sep_id)
                 types.append(0)
@@ -324,19 +327,24 @@ class GLMTokenizer(PreTrainedTokenizer):
             ids.extend(text_b_ids)
             types.extend([1] * len_text_b)
             paddings.extend([1] * len_text_b)
+
         eos_length = 1 if add_eos else 0
-        # Cap the size.
+
+        # When size exceeds max_seq_length, cut the sequence
         if len(ids) >= max_seq_length - eos_length:
             max_seq_length_m1 = max_seq_length - 1
             ids = ids[0:max_seq_length_m1]
             types = types[0:max_seq_length_m1]
             paddings = paddings[0:max_seq_length_m1]
+
+        # if no text_b, we also should not put 1 at the end
         end_type = 0 if text_b_ids is None else 1
         if add_eos:
             ids.append(eos_id)
             types.append(end_type)
             paddings.append(1)
-        sep = len(ids)
+
+        sep = len(ids)  # the position where the contents ends
         target_ids = [0] * len(ids)
         loss_masks = [0] * len(ids)
         position_ids = list(range(len(ids)))
@@ -367,6 +375,7 @@ class GLMTokenizer(PreTrainedTokenizer):
             else:
                 target_ids.append(0)
                 loss_masks.append(1)
+
         # Padding.
         padding_length = max_seq_length - len(ids)
         if padding_length > 0:
@@ -529,63 +538,6 @@ class BasicTokenizer(object):
             else:
                 output.append(char)
         return "".join(output)
-
-
-class WordpieceTokenizer(object):
-    """Runs WordPiece tokenization."""
-
-    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
-        self.vocab = vocab
-        self.unk_token = unk_token
-        self.max_input_chars_per_word = max_input_chars_per_word
-
-    def tokenize(self, text):
-        """
-        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
-
-        Args:
-            text: A single token or whitespace separated tokens. This should have
-                already been passed through *BasicTokenizer*.
-
-        Returns:
-            A list of wordpiece tokens.
-        """
-
-        output_tokens = []
-        for token in whitespace_tokenize(text):
-            chars = list(token)
-            if len(chars) > self.max_input_chars_per_word:
-                output_tokens.append(self.unk_token)
-                continue
-
-            is_bad = False
-            start = 0
-            sub_tokens = []
-            while start < len(chars):
-                end = len(chars)
-                cur_substr = None
-                while start < end:
-                    substr = "".join(chars[start:end])
-                    if start > 0:
-                        substr = "##" + substr
-                    if substr in self.vocab:
-                        cur_substr = substr
-                        break
-                    end -= 1
-                if cur_substr is None:
-                    is_bad = True
-                    break
-                sub_tokens.append(cur_substr)
-                start = end
-
-            if is_bad:
-                output_tokens.append(self.unk_token)
-            else:
-                output_tokens.extend(sub_tokens)
-        return output_tokens
 
 
 class WordpieceTokenizer(object):
