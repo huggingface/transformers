@@ -51,8 +51,6 @@ def prepare_opt_inputs_dict(
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     if cross_attn_head_mask is None:
@@ -813,6 +811,9 @@ class OPTStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+
+# TODO solve the @torch.no_grad() issue
 
 
 @require_torch
