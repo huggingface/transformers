@@ -1400,47 +1400,47 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
         >>> input_ids = torch.tensor(
         ...     tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)
-        >>> ).unsqueeze(
+        ... ).unsqueeze(
         ...     0
-        >>> )  # We will predict the masked token
+        ... )  # We will predict the masked token
         >>> perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
         >>> perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
         >>> target_mapping = torch.zeros(
         ...     (1, 1, input_ids.shape[1]), dtype=torch.float
-        >>> )  # Shape [1, 1, seq_length] => let's predict one token
+        ... )  # Shape [1, 1, seq_length] => let's predict one token
         >>> target_mapping[
         ...     0, 0, -1
-        >>> ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+        ... ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
         >>> outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping)
         >>> next_token_logits = outputs[
         ...     0
-        >>> ]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+        ... ]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
 
         >>> # The same way can the XLNetLMHeadModel be used to be trained by standard auto-regressive language modeling.
         >>> input_ids = torch.tensor(
         ...     tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)
-        >>> ).unsqueeze(
+        ... ).unsqueeze(
         ...     0
-        >>> )  # We will predict the masked token
+        ... )  # We will predict the masked token
         >>> labels = torch.tensor(tokenizer.encode("cute", add_special_tokens=False)).unsqueeze(0)
         >>> assert labels.shape[0] == 1, "only one word will be predicted"
         >>> perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
         >>> perm_mask[
         ...     :, :, -1
-        >>> ] = 1.0  # Previous tokens don't see last token as is done in standard auto-regressive lm training
+        ... ] = 1.0  # Previous tokens don't see last token as is done in standard auto-regressive lm training
         >>> target_mapping = torch.zeros(
         ...     (1, 1, input_ids.shape[1]), dtype=torch.float
-        >>> )  # Shape [1, 1, seq_length] => let's predict one token
+        ... )  # Shape [1, 1, seq_length] => let's predict one token
         >>> target_mapping[
         ...     0, 0, -1
-        >>> ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+        ... ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
         >>> outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping, labels=labels)
         >>> loss = outputs.loss
         >>> next_token_logits = (
         ...     outputs.logits
-        >>> )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+        ... )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1980,7 +1980,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0
-        >>> )  # Batch size 1
+        ... )  # Batch size 1
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)

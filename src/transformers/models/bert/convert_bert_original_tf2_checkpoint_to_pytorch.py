@@ -129,7 +129,7 @@ def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
                     trace.append("token_type_embeddings")
                     pointer = getattr(pointer, "token_type_embeddings")
                 else:
-                    raise ValueError("Unknown embedding layer with name {full_name}")
+                    raise ValueError(f"Unknown embedding layer with name {full_name}")
                 trace.append("weight")
                 pointer = getattr(pointer, "weight")
             elif m_name == "_attention_layer":

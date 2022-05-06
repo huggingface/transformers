@@ -356,7 +356,7 @@ class ConfigurationVersioningTest(unittest.TestCase):
         )
         self.assertEqual(new_configuration.hidden_size, 2)
         # This checks `_configuration_file` ia not kept in the kwargs by mistake.
-        self.assertDictEqual(kwargs, {"_from_auto": True})
+        self.assertDictEqual(kwargs, {})
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers

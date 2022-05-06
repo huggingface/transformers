@@ -168,7 +168,7 @@ _import_structure = {
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
-    "models.cpm": ["CpmTokenizer"],
+    "models.cpm": [],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -197,7 +197,7 @@ _import_structure = {
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
-    "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
+    "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
@@ -320,6 +320,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
     "pipelines": [
@@ -418,7 +419,9 @@ if is_sentencepiece_available():
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
+    _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
+    _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
@@ -446,20 +449,17 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.realm"].append("RealmTokenizerFast")
-    _import_structure["models.xglm"].append("XGLMTokenizerFast")
-    _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
-    _import_structure["models.clip"].append("CLIPTokenizerFast")
-    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
-    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
+    _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
+    _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -467,6 +467,7 @@ if is_tokenizers_available():
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
     )
     _import_structure["models.electra"].append("ElectraTokenizerFast")
+    _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -483,13 +484,16 @@ if is_tokenizers_available():
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
+    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
@@ -551,6 +555,7 @@ if is_vision_available():
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.yolos"].append("YolosFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -1681,6 +1686,14 @@ if is_torch_available():
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.yolos"].extend(
+        [
+            "YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "YolosForObjectDetection",
+            "YolosModel",
+            "YolosPreTrainedModel",
+        ]
+    )
     _import_structure["models.yoso"].extend(
         [
             "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1863,6 +1876,13 @@ if is_tf_available():
             "TFCTRLLMHeadModel",
             "TFCTRLModel",
             "TFCTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec"].extend(
+        [
+            "TFData2VecVisionForImageClassification",
+            "TFData2VecVisionModel",
+            "TFData2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2301,6 +2321,7 @@ if is_flax_available():
     )
     _import_structure["models.bert"].extend(
         [
+            "FlaxBertForCausalLM",
             "FlaxBertForMaskedLM",
             "FlaxBertForMultipleChoice",
             "FlaxBertForNextSentencePrediction",
@@ -2314,6 +2335,7 @@ if is_flax_available():
     )
     _import_structure["models.big_bird"].extend(
         [
+            "FlaxBigBirdForCausalLM",
             "FlaxBigBirdForMaskedLM",
             "FlaxBigBirdForMultipleChoice",
             "FlaxBigBirdForPreTraining",
@@ -2357,6 +2379,7 @@ if is_flax_available():
     )
     _import_structure["models.electra"].extend(
         [
+            "FlaxElectraForCausalLM",
             "FlaxElectraForMaskedLM",
             "FlaxElectraForMultipleChoice",
             "FlaxElectraForPreTraining",
@@ -2399,6 +2422,7 @@ if is_flax_available():
     )
     _import_structure["models.roberta"].extend(
         [
+            "FlaxRobertaForCausalLM",
             "FlaxRobertaForMaskedLM",
             "FlaxRobertaForMultipleChoice",
             "FlaxRobertaForQuestionAnswering",
@@ -2565,7 +2589,6 @@ if TYPE_CHECKING:
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
-    from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.data2vec import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2595,7 +2618,7 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
-    from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
+    from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
@@ -2696,6 +2719,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     # Pipelines
@@ -2798,7 +2822,9 @@ if TYPE_CHECKING:
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
+        from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
+        from .models.fnet import FNetTokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
@@ -2829,6 +2855,7 @@ if TYPE_CHECKING:
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
+        from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
@@ -2901,6 +2928,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
+        from .models.yolos import YolosFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
@@ -3831,6 +3859,12 @@ if TYPE_CHECKING:
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
         )
+        from .models.yolos import (
+            YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            YolosForObjectDetection,
+            YolosModel,
+            YolosPreTrainedModel,
+        )
         from .models.yoso import (
             YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
             YosoForMaskedLM,
@@ -4001,6 +4035,11 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            TFData2VecVisionForImageClassification,
+            TFData2VecVisionModel,
+            TFData2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4340,6 +4379,7 @@ if TYPE_CHECKING:
             FlaxBeitPreTrainedModel,
         )
         from .models.bert import (
+            FlaxBertForCausalLM,
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
             FlaxBertForNextSentencePrediction,
@@ -4351,6 +4391,7 @@ if TYPE_CHECKING:
             FlaxBertPreTrainedModel,
         )
         from .models.big_bird import (
+            FlaxBigBirdForCausalLM,
             FlaxBigBirdForMaskedLM,
             FlaxBigBirdForMultipleChoice,
             FlaxBigBirdForPreTraining,
@@ -4388,6 +4429,7 @@ if TYPE_CHECKING:
             FlaxDistilBertPreTrainedModel,
         )
         from .models.electra import (
+            FlaxElectraForCausalLM,
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
             FlaxElectraForPreTraining,
@@ -4412,6 +4454,7 @@ if TYPE_CHECKING:
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
+            FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
             FlaxRobertaForQuestionAnswering,

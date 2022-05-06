@@ -59,6 +59,8 @@
     title: Converting TensorFlow Checkpoints
   - local: serialization
     title: Export 🤗 Transformers models
+  - local: big_models
+    title: Instantiating a big model
   - local: benchmarks
     title: Benchmarks
   - local: migration
@@ -380,6 +382,8 @@
       title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
+    - local: model_doc/yolos
+      title: YOLOS
     - local: model_doc/yoso
       title: YOSO
     title: Models

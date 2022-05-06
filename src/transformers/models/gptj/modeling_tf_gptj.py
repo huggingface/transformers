@@ -43,7 +43,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
 
@@ -191,7 +191,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = stable_softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 

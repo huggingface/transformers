@@ -269,7 +269,7 @@ def set_quantizer(name, mod, quantizer, k, v):
         assert hasattr(quantizer_mod, k)
         setattr(quantizer_mod, k, v)
     else:
-        logger.warn(f"{name} has no {quantizer}")
+        logger.warning(f"{name} has no {quantizer}")
 
 
 def set_quantizers(name, mod, which="both", **kwargs):
