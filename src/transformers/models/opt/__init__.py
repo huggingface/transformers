@@ -31,7 +31,6 @@ if is_torch_available():
         "OPTForCausalLM",
         "OPTModel",
         "OPTPretrainedModel",
-        "PretrainedOPTModel",
     ]
 
 if is_tf_available():
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
             OPTForCausalLM,
             OPTModel,
             OPTPretrainedModel,
-            PretrainedOPTModel,
         )
 
     if is_tf_available():

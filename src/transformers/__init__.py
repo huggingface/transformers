@@ -1276,7 +1276,6 @@ if is_torch_available():
             "OPTForCausalLM",
             "OPTModel",
             "OPTPretrainedModel",
-            "PretrainedOPTModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -3543,7 +3542,6 @@ if TYPE_CHECKING:
             OPTForCausalLM,
             OPTModel,
             OPTPretrainedModel,
-            PretrainedOPTModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,
