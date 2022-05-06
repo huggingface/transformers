@@ -17,8 +17,9 @@ import unittest
 
 import numpy as np
 
+from datasets import load_dataset
 from transformers import JukeboxConfig, is_torch_available
-
+from transformers.trainer_utils import set_seed
 
 # from ..generation.test_generation_utils import GenerationTesterMixin
 # from ..test_configuration_common import ConfigTester
@@ -39,14 +40,23 @@ class JukeboxModelTest(unittest.TestCase):
 
     # @slow
     def test_model(self):
+        set_seed(0)
+        # audio_SAMPLES = load_dataset('DummyJukeboxDataset',split="dummy_single_enc_dec")
+        # EXPECTED_OUTPUT = audio_SAMPLES[0]
         config = JukeboxConfig(
             n_ctx=256,
             width=[128, 64, 32],
             depth=[2, 2, 2],
             priors_width=[128, 64, 32],
-            vq_vae_codebook_dimension=256,
-            vq_vae_emmbedding_width=256,
+            cond_width=[128, 128, 64],
+            l_bins=128,
+            t_bin=63, # is this the embeddings dimension?
+            vq_vae_codebook_dimension=128,
+            vq_vae_emmbedding_width=128,
             sr=44100,
+            attn_order=[12, 2, 2],
+            n_heads=[2, 1, 1],
+            
             single_enc_dec=[True, False, False],
             labels=True  # allows the use of label conditionning. Has to be
             # True if the single_enc_dec is set to true apparently
@@ -85,10 +95,13 @@ class JukeboxModelTest(unittest.TestCase):
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
         start = timeit.default_timer()
-        model.ancestral_sample(ys, sampling_kwargs, config)
+        zs = model.ancestral_sample(ys, sampling_kwargs, config)
+        
+        with torch.no_grad():
+                x = model.vqvae.decode(zs, start_level=0, bs_chunks=zs[0].shape[0])
         print(f"time to sample : {timeit.default_timer() - start}")
         # time to sample : 108
-        self.assertTrue(inputs == inputs)
+        # self.assertTrue(inputs == EXPECTED_OUTPUT)
 
 
 JukeboxModelTest().test_model()
