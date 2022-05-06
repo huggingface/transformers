@@ -85,6 +85,7 @@ from . import (
     mpnet,
     mt5,
     nystromformer,
+    ofa,
     openai,
     pegasus,
     perceiver,
