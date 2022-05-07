@@ -650,19 +650,6 @@ class HFTracer(Tracer):
             for name, (_, orig) in self.patched_torch_methods.items():
                 setattr(torch, name, orig)
 
-        # TODO: keep this until necessary.
-        # This is necessary because concrete args are added as input to the traced module since
-        # https://github.com/pytorch/pytorch/pull/55888.
-        # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
-        for node in self.graph.nodes:
-            if node.op == "placeholder":
-                # Removing default values for inputs as the forward pass will fail with them.
-                if node.target in input_names:
-                    node.args = ()
-                # It is a concrete arg so it is not used and should be removed.
-                else:
-                    self.graph.erase_node(node)
-
         return self.graph
 
     def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
