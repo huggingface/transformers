@@ -517,7 +517,7 @@ class CvtEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.stages = nn.ModuleList([])
-        for stage_idx in range(config.num_stages):
+        for stage_idx in range(len(config.depth)):
             self.stages.append(CvtStage(config, stage_idx))
 
     def forward(

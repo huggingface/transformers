@@ -23,8 +23,8 @@ from transformers import CvtConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -45,7 +45,6 @@ class CvtConfigTester(ConfigTester):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "embed_dim"))
         self.parent.assertTrue(hasattr(config, "num_heads"))
-        self.parent.assertTrue(hasattr(config, "num_stages"))
 
 
 class CvtModelTester:
@@ -55,7 +54,6 @@ class CvtModelTester:
         batch_size=13,
         image_size=64,
         num_channels=3,
-        num_stages=3,
         embed_dim=[16, 48, 96],
         num_heads=[1, 3, 6],
         depth=[1, 2, 10],
@@ -81,7 +79,6 @@ class CvtModelTester:
         self.use_labels = use_labels
         self.num_labels = num_labels
         self.num_channels = num_channels
-        self.num_stages = num_stages
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.stride_kv = stride_kv
@@ -125,7 +122,7 @@ class CvtModelTester:
         result = model(pixel_values)
         image_size = to_2tuple(self.image_size)
         height, width = image_size[0], image_size[1]
-        for i in range(self.num_stages):
+        for i in range(len(self.depth)):
             height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
             width = floor(((width + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))
@@ -211,7 +208,7 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = self.model_tester.num_stages
+            expected_num_layers = len(self.model_tester.depth)
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # verify the first hidden states (first block)
