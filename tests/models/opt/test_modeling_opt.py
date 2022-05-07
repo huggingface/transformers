@@ -177,40 +177,6 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Do not use this test since it is for encoder decoders?
-
-    # def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-    #     model = OPTModel(config=config).to(torch_device).eval()
-    #     outputs = model(**inputs_dict)
-
-    #     encoder_last_hidden_state = outputs.encoder_last_hidden_state
-    #     last_hidden_state = outputs.last_hidden_state
-
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         encoder = model.get_encoder()
-    #         encoder.save_pretrained(tmpdirname)
-    #         encoder = OPTEncoder.from_pretrained(tmpdirname).to(torch_device)
-
-    #     encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-    #         0
-    #     ]
-
-    #     self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
-
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         decoder = model.get_decoder()
-    #         decoder.save_pretrained(tmpdirname)
-    #         decoder = OPTDecoder.from_pretrained(tmpdirname).to(torch_device)
-
-    #     last_hidden_state_2 = decoder(
-    #         input_ids=inputs_dict["decoder_input_ids"],
-    #         attention_mask=inputs_dict["decoder_attention_mask"],
-    #         encoder_hidden_states=encoder_last_hidden_state,
-    #         encoder_attention_mask=inputs_dict["attention_mask"],
-    #     )[0]
-
-    #     self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
-
 
 @require_torch
 class OPTHeadTests(unittest.TestCase):
