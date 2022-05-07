@@ -38,12 +38,12 @@ _CONFIG_FOR_DOC = "CvtConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
+_CHECKPOINT_FOR_DOC = "anugunj/cvt-13"
 _EXPECTED_OUTPUT_SHAPE = [1, 384, 14, 14]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
+_IMAGE_CLASS_CHECKPOINT = "anugunj/cvt-13"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
