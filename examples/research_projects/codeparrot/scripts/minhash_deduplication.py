@@ -136,6 +136,33 @@ def find_cluster_extremes(cluster: List[Dict], dataset: Type[Dataset]) -> List[D
 
 
 def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[List[Dict]]]:
+    """Deduplicate the dataset using minhash and jaccard similarity.
+    This function first generate duplicate clusters, then each cluster
+    is reduced to the extremes that are similar to the other elements in the cluster.
+    Codes are called similar if their Jaccard similarity is greater than 0.85.
+
+    Parameters
+    ----------
+    dataset : Type[Dataset]
+        The dataset to deduplicate.
+
+    Returns
+    -------
+    ds_dedup : Type[Dataset]
+        The deduplicated dataset.
+    duplicate_clusters : List[List[Dict]]
+        The list of duplicate clusters.
+        Each cluster is a list of dicts with the following keys:
+        - base_index : int
+            The index of the code in the original dataset.
+        - repo_name : str
+        - path : str
+        - copies : int
+            The number of copies of the code in the cluster. (find_cluster_extremes)
+        - is_extreme : bool
+            Whether the code is an extreme in the cluster.
+        All the codes in the cluster are removed from the dataset except the extremes.
+    """
     dataset_iterator = iter(dataset)
     duplicate_clusters = make_duplicate_clusters(dataset_iterator)
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
