@@ -118,6 +118,8 @@ if __name__ == "__main__":
     # Deduplicate with minhash and jaccard similarity
     t_start = time.time()
     ds_dedup, duplicate_clusters = deduplicate_dataset(ds_filter)
+    print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
+    print(f"Size of deduplicate dataset: {len(ds_dedup)}")
 
     # Save data in batches of samples_per_file
     output_dir = Path(args.output_dir)
