@@ -109,6 +109,27 @@ def make_duplicate_clusters(dataset_iterator: Type[Dataset]):
     return di.get_duplicate_clusters()
 
 
+def compute_minhash(example):
+    result = {}
+    minhash = get_min_hash([t for t in NON_ALPHA.split(example["content"]) if len(t.strip()) > 0])
+    result.update({"hashvalues": minhash.digest()})
+    return result
+
+
+def make_duplicate_clusters_dsmap(dataset: Type[Dataset]):
+    """This is the dataset map.
+    However, it is twice as slow as the previous one with the queue
+    """
+    dataset = dataset.map(compute_minhash, num_proc=mp.cpu_count())
+    di = DuplicationIndex()
+    for index, element in tqdm(enumerate(dataset)):
+        hashvalues = element["hashvalues"]
+        min_hash = MinHash(hashvalues=hashvalues)
+        filename = (index, element["repo_name"], element["path"])
+        di.add(filename, min_hash)
+    return di.get_duplicate_clusters()
+
+
 def jaccard_similarity(code1: str, code2: str) -> float:
     """Compute the Jaccard similarity of two code snippets."""
     tokens1 = get_tokens(code1)
@@ -163,8 +184,7 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[Lis
             Whether the code is an extreme in the cluster.
         All the codes in the cluster are removed from the dataset except the extremes.
     """
-    dataset_iterator = iter(dataset)
-    duplicate_clusters = make_duplicate_clusters(dataset_iterator)
+    duplicate_clusters = make_duplicate_clusters_dsmap(dataset)
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
     # todo: make this multiprocessing, pay attention to memory usage
     extreme_indices = set()
