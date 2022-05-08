@@ -338,9 +338,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(
                 json.dumps(
-                    {"artist": self.artists_encoder, "genre": self.genres_encoder, "lyrics": self.lyrics_encoder},
+                    {"artists": self.artists_encoder, "genres": self.genres_encoder, "lyrics": self.lyrics_encoder},
                     ensure_ascii=False,
                 )
             )
 
-        return vocab_file
+        return (vocab_file,)

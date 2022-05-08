@@ -30,7 +30,7 @@ from torch import nn
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
-    from torch.cuda.amp import autocast
+    # from torch.cuda.amp import autocast
 else:
     is_amp_available = False
 
@@ -871,7 +871,7 @@ class JukeboxTransformer(nn.Module):
             else [1, 2, 3][d % 3],  # Used by single_enc_dec model with lyrics
         }[attn_order]
 
-        attn_cycle = {0: 1, 1: 2, 2: 3, 3: 2, 4: 2, 5: 4, 6: 4, 7: 16, 8: 10, 9: 4, 10: 79, 11: 16, 12: 16}[attn_order]
+        # attn_cycle = {0: 1, 1: 2, 2: 3, 3: 2, 4: 2, 5: 4, 6: 4, 7: 16, 8: 10, 9: 4, 10: 79, 11: 16, 12: 16}[attn_order]
         # assert n_depth % attn_cycle == 0, f'Depth {n_depth} not a multiple of cycle {attn_cycle} for attn_order {attn_order}'
 
         def attn_block(d):
@@ -963,7 +963,7 @@ class JukeboxTransformer(nn.Module):
 
     def check_sample(self):
         bs, l, s, d = (4, self.n_ctx, self.encoder_dims, self.width)
-        prime = 5
+        # prime = 5
         with torch.no_grad():
             encoder_kv = torch.randn(bs, s, d).cpu()
             x = torch.randn(bs, l, d).cpu()
@@ -1048,15 +1048,15 @@ class PositionEmbedding(nn.Module):
         self.input_shape = input_shape
         self.input_dims = input_dims = np.prod(input_shape)
         self.pos_init = pos_init
-        if pos_init:
-            self.register_buffer("pos", torch.tensor(get_pos_idx(input_shape)).long())
-            self._pos_embs = nn.ModuleList()
-            for i in range(len(input_shape)):
-                emb = nn.Embedding(input_shape[i], width)
-                nn.init.normal_(emb.weight, std=0.02)
-                self._pos_embs.append(emb)
-        else:
-            self.pos_emb = nn.Parameter(get_normal(input_dims, width, std=0.01 * init_scale))
+        # if pos_init:
+        #    self.register_buffer("pos", torch.tensor(get_pos_idx(input_shape)).long())
+        #    self._pos_embs = nn.ModuleList()
+        #    for i in range(len(input_shape)):
+        #        emb = nn.Embedding(input_shape[i], width)
+        #        nn.init.normal_(emb.weight, std=0.02)
+        #        self._pos_embs.append(emb)
+        # else:
+        self.pos_emb = nn.Parameter(get_normal(input_dims, width, std=0.01 * init_scale))
 
     def forward(self):
         if self.pos_init:
@@ -1724,8 +1724,8 @@ class Encoder(nn.Module):
             self.level_blocks.append(level_block(level, down_t, stride_t))
 
     def forward(self, x):
-        N, T = x.shape[0], x.shape[-1]
-        emb = self.input_emb_width
+        # N, T = x.shape[0], x.shape[-1]
+        # emb = self.input_emb_width
         xs = []
 
         # 64, 32, ...
@@ -1733,7 +1733,7 @@ class Encoder(nn.Module):
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[-level - 1]
             x = level_block(x)
-            emb, T = self.output_emb_width, T // (stride_t**down_t)
+            # emb, T = self.output_emb_width, T // (stride_t**down_t)
             # assert_shape(x, (N, emb, T))
             xs.append(x)
 
@@ -1767,8 +1767,8 @@ class Decoder(nn.Module):
         else:
             assert len(xs) == 1
         x = xs[-1]
-        N, T = x.shape[0], x.shape[-1]
-        emb = self.output_emb_width
+        _, T = x.shape[0], x.shape[-1]
+        # emb = self.output_emb_width
         # assert_shape(x, (N, emb, T))
 
         # 32, 64 ...
@@ -1776,7 +1776,7 @@ class Decoder(nn.Module):
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[-level - 1]
             x = level_block(x)
-            emb, T = self.output_emb_width, T * (stride_t**down_t)
+            _, T = self.output_emb_width, T * (stride_t**down_t)
             # assert_shape(x, (N, emb, T))
             if level != 0 and all_levels:
                 x = x + xs[level - 1]
@@ -1847,7 +1847,7 @@ class BottleneckBlock(nn.Module):
         return x
 
     def init_k(self, x):
-        mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
+        _, emb_width, k_bins = self.mu, self.emb_width, self.k_bins  # mu,
         self.init = True
         # init k_w using random vectors from x
         y = self._tile(x)
@@ -1859,7 +1859,7 @@ class BottleneckBlock(nn.Module):
         self.k_elem = torch.ones(k_bins, device=self.k.device)
 
     def restore_k(self, num_tokens=None, threshold=1.0):
-        mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
+        _, emb_width, k_bins = self.mu, self.emb_width, self.k_bins  # mu -> _
         self.init = True
         assert self.k.shape == (k_bins, emb_width)
         self.k_sum = self.k.clone()
@@ -2160,7 +2160,7 @@ class VQVAE(nn.Module):
         self.downsamples = calculate_strides(strides_t, downs_t)
         self.hop_lengths = np.cumprod(self.downsamples)
         self.levels = levels = config.vq_vae_levels
-        self.z_shapes = [(x_shape[0] // self.hop_lengths[-level - 1],) for level in range(levels)]
+        self.z_shapes = [(int(x_shape[0] // self.hop_lengths[-level - 1]),) for level in range(levels)]
 
         if multipliers is None:
             self.multipliers = [1] * levels
@@ -2255,7 +2255,7 @@ class VQVAE(nn.Module):
     def forward(self, x, hps, loss_fn="l1"):
         metrics = {}
 
-        N = x.shape[0]
+        # N = x.shape[0]
 
         # Encode/Decode
         x_in = self.preprocess(x)
@@ -2378,7 +2378,7 @@ class MusicTokenConditioner(nn.Module):
         return x
 
     def forward(self, x, x_cond=None):
-        N = x.shape[0]
+        # N = x.shape[0]
         # assert_shape(x, (N, *self.x_shape))
         if x_cond is not None:
             # assert_shape(x_cond, (N, *self.x_shape, self.width))
@@ -2512,7 +2512,7 @@ class LabelConditioner(nn.Module):
             y.shape[-1] == 4 + self.max_bow_genre_size
         ), f"Expected shape (N,{4 + self.max_bow_genre_size}), got {y.shape}"
         # assert isinstance(y, torch.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}"
-        N = y.shape[0]
+        # N = y.shape[0]
         total_length, offset, length, artist, genre = y[:, 0:1], y[:, 1:2], y[:, 2:3], y[:, 3:4], y[:, 4:]
 
         # Start embedding of length 1
@@ -2813,7 +2813,7 @@ class JukeboxPrior(nn.Module):
             # x, shape, dims, bins, bins_shift = xs[i], self.prior_shapes[i], self.prior_dims[i], self.prior_bins[i], self.prior_bins_shift[i]
             # assert_shape(x, (N, dims))
             shape = self.prior_shapes[i]
-            bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
+            _, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])  # bins, -> _,
             # xs[i] = (xs[i] - bins_shift).view(N, *shape) #view(N, -1, *shape[1:])
             xs[i] = (xs[i] - bins_shift).view(N, -1, *shape[1:])
             xs[i] = torch.clamp(
@@ -2961,7 +2961,7 @@ class JukeboxPrior(nn.Module):
             if sample:
                 # self.prime_prior.cuda()
                 pass
-            N = prime.shape[0]
+            # N = prime.shape[0]
             prime_acts = self.prime_prior(prime, None, None, None, fp16=fp16)
             # assert_shape(prime_acts, (N, self.prime_loss_dims, self.prime_acts_width))
             assert prime_acts.dtype == torch.float, f"Expected  torch.float, got {prime_acts.dtype}"
@@ -3303,7 +3303,6 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
         padding_length = 0
 
     hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
-    n_head = prior.prior.transformer.n_head
     alignment_head, alignment_layer = hps.alignment_head[-level - 1], hps.alignment_layer[-level - 1]
     attn_layers = set([alignment_layer])
     alignment_hops = {}

@@ -37,7 +37,7 @@ class JukeBoxIntegrationTest(unittest.TestCase):
         ...
         """
 
-        tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
         tokens = tokenizer("Alan Jackson", "rock", "old town road", 4 * 60 * 44100, 8192 * 8 * 4 * 4, 0, 1)
         inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
         EXPECTED_OUTPUT = [
