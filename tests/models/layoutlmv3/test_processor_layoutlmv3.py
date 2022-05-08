@@ -79,7 +79,7 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
             "size": 224,
             "apply_ocr": True,
         }
-        
+
         self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
