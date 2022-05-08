@@ -833,8 +833,6 @@ def add_model_to_main_init(
         with_processsing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
-    re_else = re.compile(r"\s+else:")
-
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
