@@ -126,7 +126,7 @@
 # End.
 
 # To replace in: "src/transformers/__init__.py"
-# Below: "    # PyTorch model imports" if generating PyTorch
+# Below: "        # PyTorch model imports" if generating PyTorch
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
@@ -155,7 +155,7 @@
 {% endif -%}
 # End.
 
-# Below: "    # TensorFlow model imports" if generating TensorFlow
+# Below: "        # TensorFlow model imports" if generating TensorFlow
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
@@ -179,7 +179,7 @@
 {% endif -%}
 # End.
 
-# Below: "    # Flax model imports" if generating Flax
+# Below: "        # Flax model imports" if generating Flax
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
@@ -204,7 +204,7 @@
 {% endif -%}
 # End.
 
-# Below: "    Fast tokenizers models"
+# Below: "        # Fast tokenizers imports"
 # Replace with:
         from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
 # End.

@@ -845,28 +845,12 @@ def add_model_to_main_init(
     while idx < len(lines):
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        else:
-            if lines[idx].lstrip().startswith("if not is_torch_available"):
-                framework = "pt"
-            if lines[idx].lstrip().startswith("if not is_tf_available"):
-                framework = "tf"
-            if lines[idx].lstrip().startswith("if not is_flax_available"):
-                framework = "flax"
-
-            # Add the block between the framework declaration and `else:` (inclusive) if in (any) framework
-            import_block = [lines[idx]]
-            idx += 1
-
-            while re_else.search(lines[idx]) is not None:
-                import_block.append(lines[idx])
-                idx += 1
-
-            # Add `else:`, too, and enter the else block
-            import_block.append(lines[idx])
-            idx += 1
-
-            import_block = "\n".join(import_block)
-            new_lines.append(import_block)
+        elif lines[idx].lstrip().startswith("if not is_torch_available"):
+            framework = "pt"
+        elif lines[idx].lstrip().startswith("if not is_tf_available"):
+            framework = "tf"
+        elif lines[idx].lstrip().startswith("if not is_flax_available"):
+            framework = "flax"
 
         # Skip if we are in a framework not wanted.
         if framework is not None and frameworks is not None and framework not in frameworks:
