@@ -152,6 +152,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_roberta import (
+            FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
             FlaxRobertaForQuestionAnswering,
