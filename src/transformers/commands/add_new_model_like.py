@@ -767,8 +767,8 @@ def clean_frameworks_in_init(
 
     remove_pattern = "|".join(to_remove)
     re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
-    re_try = re.compile(rf"\s+try:")
-    re_else = re.compile(rf"\s+else:")
+    re_try = re.compile(r"\s+try:")
+    re_else = re.compile(r"\s+else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
@@ -830,7 +830,7 @@ def add_model_to_main_init(
         with_processsing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
-    re_else = re.compile(rf"\s+else:")
+    re_else = re.compile(r"\s+else:")
 
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
