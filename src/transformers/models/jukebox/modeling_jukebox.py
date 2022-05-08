@@ -2170,8 +2170,8 @@ class VQVAE(nn.Module):
 
         def _block_kwargs(level):
             this_block_kwargs = dict(block_kwargs)
-            this_block_kwargs["width"] *= self.multipliers[-level - 1]
-            this_block_kwargs["depth"] *= self.multipliers[-level - 1]
+            this_block_kwargs["width"] *= self.multipliers[level]
+            this_block_kwargs["depth"] *= self.multipliers[level]
             return this_block_kwargs
 
         def encoder(level):

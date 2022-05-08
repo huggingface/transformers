@@ -178,9 +178,6 @@ class JukeboxConfig(PretrainedConfig):
         activation_function="gelu_new",
         sample_hop_length=30000,
         hop_length=256,
-        # multispec_loss_n_fft=(512, 1024, 2048),
-        # multispec_loss_hop_length=(240, 120, 50),
-        # multispec_loss_window_size=(50, 120, 240), should the order be reversed?
         multispec_loss_n_fft=(2048, 1024, 512),
         multispec_loss_hop_length=(240, 120, 50),
         multispec_loss_window_size=(1200, 600, 240),
@@ -197,11 +194,12 @@ class JukeboxConfig(PretrainedConfig):
         vq_vae_multipliers=(2, 1, 1),
         vq_vae_lmu=0.99,  # for the ema?
         vq_vae_commit=0.02,
+        vq_vae_conv_block_depth=4,
+        vq_vae_conv_block_width=64,
         spectral=0.0,
         multispectral=1.0,
         # vq_vae_loss_fn = 'l1',
-        vq_vae_conv_block_depth=4,
-        vq_vae_conv_block_width=64,
+        
         vq_vae_reverse_decoder_dilation=1,
         # parameters always false/useless at inference
         nb_priors=3,
@@ -224,7 +222,7 @@ class JukeboxConfig(PretrainedConfig):
         width=[4800, 1920, 128],
         depth=[79, 72, 72],
         n_heads=[8, 1, 1],
-        use_tokens=[False, True, True],
+        use_tokens=[True, False, False],
         n_tokens=[512, 512, 512],
         attn_order=[10, 2, 2],
         blocks=128,
