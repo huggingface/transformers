@@ -130,19 +130,19 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None, ba
     vqvae_dic = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/vqvae.pth")
     up2_dic = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/top_prior.pth")
     weight_dict.append(vqvae_dic)
-    
-    for dict_name in ["up0","up1","up2"]:
+
+    for dict_name in ["up0", "up1", "up2"]:
         old_dic = torch.load(f"/Users/arthur/Work/HuggingFace/jukebox/porting/{dict_name}.pth")
         new_dic = {}
         for k in old_dic.keys():
             if k.endswith(".b"):
-                new_dic[k.replace("b","bias")] =  old_dic[k]
+                new_dic[k.replace("b", "bias")] = old_dic[k]
             elif k.endswith(".w"):
-                new_dic[k.replace("w","weight")] = old_dic[k] 
+                new_dic[k.replace("w", "weight")] = old_dic[k]
             elif dict_name != "up2" and "cond.model." in k:
-                new_dic[k.replace(".blocks.",".model.")] = old_dic[k] 
+                new_dic[k.replace(".blocks.", ".model.")] = old_dic[k]
             else:
-                new_dic[k]= old_dic[k]
+                new_dic[k] = old_dic[k]
         weight_dict.append(new_dic)
     return weight_dict
     # # define default ViT configuration

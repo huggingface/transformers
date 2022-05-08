@@ -199,7 +199,6 @@ class JukeboxConfig(PretrainedConfig):
         spectral=0.0,
         multispectral=1.0,
         # vq_vae_loss_fn = 'l1',
-        
         vq_vae_reverse_decoder_dilation=1,
         # parameters always false/useless at inference
         nb_priors=3,
