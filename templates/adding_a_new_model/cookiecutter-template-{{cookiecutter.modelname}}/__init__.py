@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available
+from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
 
 
 {%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
@@ -168,12 +168,22 @@ if TYPE_CHECKING:
     from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
     from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Tokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_{{cookiecutter.lowercase_modelname}}_fast import {{cookiecutter.camelcase_modelname}}TokenizerFast
 
 {%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForMaskedLM,
@@ -188,7 +198,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
         )
 {% else %}
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
@@ -202,7 +217,12 @@ if TYPE_CHECKING:
 {% endif %}
 {%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
             TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,

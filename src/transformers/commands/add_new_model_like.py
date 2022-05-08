@@ -767,8 +767,8 @@ def clean_frameworks_in_init(
 
     remove_pattern = "|".join(to_remove)
     re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
-    re_try = re.compile(r"\s+try:")
-    re_else = re.compile(r"\s+else:")
+    re_try = re.compile(r"\s*try:")
+    re_else = re.compile(r"\s*else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
@@ -780,6 +780,8 @@ def clean_frameworks_in_init(
     while idx < len(lines):
         # Conditional imports in try-except-else blocks
         if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
+            # Remove the preceding `try:`
+            new_lines.pop()
             idx += 1
             # Iterate until `else:`
             while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
@@ -794,6 +796,7 @@ def clean_frameworks_in_init(
             for framework in to_remove:
                 line = line.replace(f", is_{framework}_available", "")
                 line = line.replace(f"is_{framework}_available, ", "")
+                line = line.replace(f"is_{framework}_available,", "")
                 line = line.replace(f"is_{framework}_available", "")
 
             if len(line.strip()) > 0:
