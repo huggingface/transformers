@@ -226,7 +226,7 @@ class TextGenerationPipeline(Pipeline):
         records = []
         for sequence in generated_sequence:
             if return_type == ReturnType.TENSORS:
-                record = {"generated_token_ids": generated_sequence}
+                record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode text
                 text = self.tokenizer.decode(

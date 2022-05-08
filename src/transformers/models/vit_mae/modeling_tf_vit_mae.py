@@ -38,7 +38,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_vit_mae import ViTMAEConfig
 
@@ -407,7 +407,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -860,7 +860,9 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
         self.decoder_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
         self.decoder_pred = tf.keras.layers.Dense(
-            config.patch_size**2 * config.num_channels, name="decoder_pred"
+            config.patch_size**2 * config.num_channels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="decoder_pred",
         )  # encoder to decoder
         self.config = config
         self.num_patches = num_patches

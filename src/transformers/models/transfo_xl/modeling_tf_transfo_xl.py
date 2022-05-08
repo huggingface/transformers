@@ -31,7 +31,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -236,7 +236,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             attn_score = attn_score * (1.0 - attn_mask_t) - 1e30 * attn_mask_t
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = tf.nn.softmax(attn_score, axis=1)
+        attn_prob = stable_softmax(attn_score, axis=1)
         attn_prob = self.dropatt(attn_prob, training=training)
 
         # Mask heads if we want to

@@ -19,6 +19,9 @@ To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
+   
+   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
@@ -108,13 +111,13 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.2.0",
+    "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8,!=0.3.2",
-    "jaxlib>=0.1.65",
+    "jax>=0.2.8,!=0.3.2,<=0.3.6",
+    "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "nltk",
     "numpy>=1.17",
@@ -137,6 +140,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
@@ -285,10 +289,14 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "sacremoses",
+        "rjieba"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
+
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
 
 extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
 
@@ -360,7 +368,6 @@ extras["torchhub"] = deps_list(
     "protobuf",
     "regex",
     "requests",
-    "sacremoses",
     "sentencepiece",
     "torch",
     "tokenizers",
@@ -369,7 +376,6 @@ extras["torchhub"] = deps_list(
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
-    deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
@@ -378,7 +384,6 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
-    deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
@@ -386,12 +391,12 @@ install_requires = [
 setup(
     name="transformers",
     version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
-    author_email="thomas@huggingface.co",
-    description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
+    author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
+    author_email="transformers@huggingface.co",
+    description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords="NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU",
+    keywords="NLP vision speech deep learning transformer pytorch tensorflow BERT GPT-2 Wav2Vec2 ViT",
     license="Apache",
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
@@ -400,7 +405,7 @@ setup(
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.6.0",
+    python_requires=">=3.7.0",
     install_requires=install_requires,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -410,7 +415,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -84,7 +84,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
+        self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
@@ -94,7 +94,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             self.weight = self.add_weight(
                 name="weight",
                 shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(initializer_range=self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
         super().build(input_shape)
@@ -533,7 +533,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
             attn_score = attn_score - (INF * (1 - attention_mask[:, None, None]))
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=-1)
+        attn_prob = stable_softmax(attn_score, axis=-1)
         attn_prob = self.attention_dropout(attn_prob, training=training)
 
         # attention output, shape batch_size x seq_len x n_head x d_head

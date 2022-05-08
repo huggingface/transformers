@@ -826,7 +826,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
@@ -1293,7 +1293,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
@@ -1400,6 +1400,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs: Optional[int] = None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
@@ -1624,6 +1625,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             remove_invalid_values=remove_invalid_values,
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
+            renormalize_logits=renormalize_logits,
         )
 
         if num_beams == 1:

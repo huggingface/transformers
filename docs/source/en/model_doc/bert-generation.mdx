@@ -49,7 +49,7 @@ Usage:
 
 >>> input_ids = tokenizer(
 ...     "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
->>> ).input_ids
+... ).input_ids
 >>> labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
 
 >>> # train...
@@ -67,7 +67,7 @@ Usage:
 
 >>> input_ids = tokenizer(
 ...     "This is the first sentence. This is the second sentence.", add_special_tokens=False, return_tensors="pt"
->>> ).input_ids
+... ).input_ids
 
 >>> outputs = sentence_fuser.generate(input_ids)
 

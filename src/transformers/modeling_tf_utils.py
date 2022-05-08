@@ -21,6 +21,7 @@ import os
 import pickle
 import re
 import warnings
+from collections.abc import Mapping
 from typing import Dict, List, Optional, Union
 
 import h5py
@@ -39,7 +40,6 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation_tf_utils import TFGenerationMixin
 from .tf_utils import shape_list
-from .tokenization_utils_base import BatchEncoding
 from .utils import (
     DUMMY_INPUTS,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
@@ -471,7 +471,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 raise ValueError(
                     f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
                 )
-    elif isinstance(input_ids, (dict, BatchEncoding)):
+    elif isinstance(input_ids, Mapping):
         if "inputs" in input_ids:
             warnings.warn(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",

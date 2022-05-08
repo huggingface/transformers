@@ -38,7 +38,9 @@ class TapasConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TAPAS *tapas-base-finetuned-sqa* architecture.
+    defaults will yield a similar configuration to that of the TAPAS
+    [google/tapas-base-finetuned-sqa](https://huggingface.co/google/tapas-base-finetuned-sqa) architecture.
+
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 

@@ -639,7 +639,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
         assert (
             num_beams * batch_size == batch_beam_size
-        ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9

@@ -103,7 +103,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default
             else:
                 kwargs["required"] = True
-        elif field.type is bool or field.type is Optional[bool]:
+        elif field.type is bool or field.type == Optional[bool]:
             # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
@@ -140,7 +140,7 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-        if field.default is True and (field.type is bool or field.type is Optional[bool]):
+        if field.default is True and (field.type is bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
             parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
 

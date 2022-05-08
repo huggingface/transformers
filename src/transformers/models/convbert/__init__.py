@@ -21,7 +21,7 @@ from ...utils import _LazyModule, is_tf_available, is_tokenizers_available, is_t
 
 
 _import_structure = {
-    "configuration_convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig"],
+    "configuration_convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertOnnxConfig"],
     "tokenization_convbert": ["ConvBertTokenizer"],
 }
 
@@ -58,7 +58,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
+    from .configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertOnnxConfig
     from .tokenization_convbert import ConvBertTokenizer
 
     if is_tokenizers_available():

@@ -65,6 +65,7 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_bert"] = [
+        "FlaxBertForCausalLM",
         "FlaxBertForMaskedLM",
         "FlaxBertForMultipleChoice",
         "FlaxBertForNextSentencePrediction",
@@ -119,6 +120,7 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_bert import (
+            FlaxBertForCausalLM,
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
             FlaxBertForNextSentencePrediction,

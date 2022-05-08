@@ -23,17 +23,22 @@ from typing import Dict, List, Optional, Tuple, Union
 from tokenizers import normalizers
 
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
+    PaddingStrategy,
     PreTokenizedInput,
+    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
-from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, LayoutLMv2Tokenizer
+from ...utils import add_end_docstrings, logging
+from .tokenization_layoutlmv2 import (
+    LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING,
+    LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    LayoutLMv2Tokenizer,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -167,7 +172,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -312,7 +317,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 **kwargs,
             )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -380,7 +385,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return encodings[0].tokens
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],

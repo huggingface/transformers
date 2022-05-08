@@ -43,6 +43,7 @@ SRC_DIRS = [
         "audio-classification",
         "speech-pretraining",
         "image-pretraining",
+        "semantic-segmentation",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -51,9 +52,11 @@ sys.path.extend(SRC_DIRS)
 if SRC_DIRS is not None:
     import run_clm_no_trainer
     import run_glue_no_trainer
+    import run_image_classification_no_trainer
     import run_mlm_no_trainer
     import run_ner_no_trainer
     import run_qa_no_trainer as run_squad_no_trainer
+    import run_semantic_segmentation_no_trainer
     import run_summarization_no_trainer
     import run_swag_no_trainer
     import run_translation_no_trainer
@@ -104,7 +107,8 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate=1e-4
             --seed=42
             --checkpointing_steps epoch
-            """.split()
+            --with_tracking
+        """.split()
 
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
@@ -114,6 +118,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "glue_no_trainer")))
 
     def test_run_clm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -128,7 +133,8 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --num_train_epochs 2
             --output_dir {tmp_dir}
             --checkpointing_steps epoch
-            """.split()
+            --with_tracking
+        """.split()
 
         if torch.cuda.device_count() > 1:
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
@@ -139,6 +145,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 100)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "clm_no_trainer")))
 
     def test_run_mlm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -150,6 +157,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --output_dir {tmp_dir}
             --num_train_epochs=1
             --checkpointing_steps epoch
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -157,6 +165,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 42)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "mlm_no_trainer")))
 
     def test_run_ner_no_trainer(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
@@ -175,6 +184,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --num_train_epochs={epochs}
             --seed 7
             --checkpointing_steps epoch
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -183,13 +193,14 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertLess(result["train_loss"], 0.5)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa_no_trainer.py
             --model_name_or_path bert-base-uncased
-            --version_2_with_negative=False
+            --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
@@ -199,14 +210,17 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
             --checkpointing_steps epoch
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
             run_squad_no_trainer.main()
             result = get_results(tmp_dir)
+            # Because we use --version_2_with_negative the testing script uses SQuAD v2 metrics.
             self.assertGreaterEqual(result["eval_f1"], 30)
             self.assertGreaterEqual(result["eval_exact"], 30)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 
     def test_run_swag_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -221,12 +235,14 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
             run_swag_no_trainer.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.8)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "swag_no_trainer")))
 
     @slow
     def test_run_summarization_no_trainer(self):
@@ -243,6 +259,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
             --checkpointing_steps epoch
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -253,6 +270,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             self.assertGreaterEqual(result["eval_rougeL"], 7)
             self.assertGreaterEqual(result["eval_rougeLsum"], 7)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "summarization_no_trainer")))
 
     @slow
     def test_run_translation_no_trainer(self):
@@ -273,6 +291,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --source_lang en_XX
             --target_lang ro_RO
             --checkpointing_steps epoch
+            --with_tracking
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -280,3 +299,49 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "translation_no_trainer")))
+
+    @slow
+    def test_run_semantic_segmentation_no_trainer(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_semantic_segmentation_no_trainer.py
+            --dataset_name huggingface/semantic-segmentation-test-sample
+            --output_dir {tmp_dir}
+            --max_train_steps=10
+            --num_warmup_steps=2
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --checkpointing_steps epoch
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_semantic_segmentation_no_trainer.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["eval_overall_accuracy"], 0.10)
+
+    def test_run_image_classification_no_trainer(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_image_classification_no_trainer.py
+            --dataset_name huggingface/image-classification-test-sample
+            --output_dir {tmp_dir}
+            --num_warmup_steps=8
+            --learning_rate=3e-3
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --checkpointing_steps epoch
+            --with_tracking
+            --seed 42
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_image_classification_no_trainer.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.50)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))

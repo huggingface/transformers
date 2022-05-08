@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("yolos", "YolosConfig"),
         ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
@@ -59,6 +60,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Config"),
         ("plbart", "PLBartConfig"),
         ("beit", "BeitConfig"),
+        ("data2vec-vision", "Data2VecVisionConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
         ("canine", "CanineConfig"),
@@ -137,6 +139,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -162,6 +165,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("data2vec-vision", "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -229,6 +233,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("yolos", "YOLOS"),
         ("tapex", "TAPEX"),
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),
@@ -349,12 +354,18 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutxlm", "LayoutXLM"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
+        ("data2vec-vision", "Data2VecVision"),
         ("dit", "DiT"),
     ]
 )
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
-    [("openai-gpt", "openai"), ("data2vec-audio", "data2vec"), ("data2vec-text", "data2vec")]
+    [
+        ("openai-gpt", "openai"),
+        ("data2vec-audio", "data2vec"),
+        ("data2vec-text", "data2vec"),
+        ("data2vec-vision", "data2vec"),
+    ]
 )
 
 
