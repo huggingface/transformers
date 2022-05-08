@@ -238,6 +238,8 @@
       title: I-BERT
     - local: model_doc/imagegpt
       title: ImageGPT
+    - local: model_doc/jukebox
+      title: Jukebox
     - local: model_doc/layoutlm
       title: LayoutLM
     - local: model_doc/layoutlmv2
