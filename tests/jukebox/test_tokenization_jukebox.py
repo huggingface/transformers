@@ -38,6 +38,7 @@ class JukeBoxIntegrationTest(unittest.TestCase):
         """
 
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
+        tokenizer.max_n_lyric_tokens = 20
         tokens = tokenizer("Alan Jackson", "rock", "old town road", 4 * 60 * 44100, 8192 * 8 * 4 * 4, 0, 1)
         inputs, attention_masks = tokens["input_ids"], tokens["attention_masks"]
         EXPECTED_OUTPUT = [
