@@ -24,7 +24,8 @@ from transformers.trainer_utils import set_seed
 # from ..generation.test_generation_utils import GenerationTesterMixin
 # from ..test_configuration_common import ConfigTester
 # from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
-
+import librosa
+from transformers.models.jukebox.convert_jukebox import convert_openai_checkpoint
 
 # from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -43,6 +44,8 @@ class JukeboxModelTest(unittest.TestCase):
         set_seed(0)
         # audio_SAMPLES = load_dataset('DummyJukeboxDataset',split="dummy_single_enc_dec")
         # EXPECTED_OUTPUT = audio_SAMPLES[0]
+        audio_path = "/Users/arthur/Work/HuggingFace/jukebox/samples/level_0/item_0.wav"
+        EXPECTED_OUTPUT = librosa.load(audio_path, sr=44100)
         config = JukeboxConfig(
             n_ctx=256,
             width=[128, 64, 32],
@@ -56,16 +59,23 @@ class JukeboxModelTest(unittest.TestCase):
             sr=44100,
             attn_order=[12, 2, 2],
             n_heads=[2, 1, 1],
-            
+            y_bins=(120, 4111),
+            t_bins=64,
             single_enc_dec=[True, False, False],
-            labels=True  # allows the use of label conditionning. Has to be
+            labels=True,
+            n_vocab=143
+            # allows the use of label conditionning. Has to be
             # True if the single_enc_dec is set to true apparently
             # ntokens also have to be set to the nb of lyric tokens
         )
 
         model = JukeboxModel(config).eval()
-
-        tokenizer = tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
+        vq,*weights = convert_openai_checkpoint()    
+        model.vqvae.load_state_dict(vq)
+        for i in range(len(weights)):
+            model.priors[i].load_state_dict(weights[i])
+            
+        tokenizer = JukeboxTokenizer.from_pretrained("/Users/arthur/Work/HuggingFace/jukebox/vocab.json")
 
         sampling_temperature = 0.98
         lower_batch_size = 16
@@ -84,8 +94,8 @@ class JukeboxModelTest(unittest.TestCase):
             "Alan Jackson",
             "rock",
             "old town road",
-            total_length=2 * config.sample_length_in_seconds * config.sr,
-            sample_length=config.sample_length_in_seconds * config.sr,
+            total_length=config.sample_length_in_seconds * config.sr,
+            sample_length=32768,
             offset=0,
             duration=1,
         )
@@ -95,13 +105,19 @@ class JukeboxModelTest(unittest.TestCase):
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
         start = timeit.default_timer()
+        # import cProfile as profile
+        # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
         zs = model.ancestral_sample(ys, sampling_kwargs, config)
         
         with torch.no_grad():
                 x = model.vqvae.decode(zs, start_level=0, bs_chunks=zs[0].shape[0])
         print(f"time to sample : {timeit.default_timer() - start}")
         # time to sample : 108
-        # self.assertTrue(inputs == EXPECTED_OUTPUT)
+        
+        audio_path2 = "/Users/arthur/Work/HuggingFace/transformers/AudioSamples/level_0/item_0.wav"
+        OUTPUT = librosa.load(audio_path2, sr=44100)
+        
+        self.assertTrue(OUTPUT == EXPECTED_OUTPUT)
 
 
 JukeboxModelTest().test_model()
