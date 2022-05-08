@@ -32,10 +32,6 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_jukebox"] = [
         "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "JukeboxDoubleHeadsModel",
-        "JukeboxForSequenceClassification",
-        "JukeboxForTokenClassification",
-        "JukeboxLMHeadModel",
         "JukeboxModel",
         "JukeboxPreTrainedModel",
         "load_tf_weights_in_jukebox",
@@ -51,10 +47,6 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            JukeboxDoubleHeadsModel,
-            JukeboxForSequenceClassification,
-            JukeboxForTokenClassification,
-            JukeboxLMHeadModel,
             JukeboxModel,
             JukeboxPreTrainedModel,
             load_tf_weights_in_jukebox,
