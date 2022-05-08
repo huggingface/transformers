@@ -837,7 +837,8 @@ class MLflowCallback(TrainerCallback):
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
                 self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
-            if mlflow_tags := os.getenv("MLFLOW_TAGS", None):
+            mlflow_tags = os.getenv("MLFLOW_TAGS", None)
+            if mlflow_tags:
                 mlflow_tags = json.loads(mlflow_tags)
                 self._ml_flow.set_tags(mlflow_tags)
         self._initialized = True
