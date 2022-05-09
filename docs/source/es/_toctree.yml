@@ -15,3 +15,6 @@
 - sections:
   - local: multilingual
     title: Modelos multilingües para inferencia
+- sections:
+  - local: philosophy
+    title: Filosofía
