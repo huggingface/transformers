@@ -339,10 +339,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_encoder_decoder_model_standalone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
-
     # OPTForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -594,7 +590,7 @@ class OPTStandaloneDecoderModelTester:
         self.use_cache = use_cache
         self.max_position_embeddings = max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
-        self.embed_dim=embed_dim
+        self.embed_dim = embed_dim
         self.scope = None
         self.decoder_key_length = decoder_seq_length
         self.base_model_out_len = 2
@@ -626,7 +622,7 @@ class OPTStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-            embed_dim=self.embed_dim
+            embed_dim=self.embed_dim,
         )
 
         return (
@@ -793,7 +789,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_model = "ArthurZ/opt-350m"
-        
+
     def test_load_model(self):
         try:
             _ = OPTForCausalLM.from_pretrained(self.path_model)
@@ -863,4 +859,3 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_next_token = gen(prompt)[0]["generated_token_ids"][len_input_sentence]
             GEN_OUTPUT.append(predicted_next_token)
         self.assertListEqual(GEN_OUTPUT, NEXT_TOKENS)
-

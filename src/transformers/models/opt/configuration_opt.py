@@ -142,7 +142,6 @@ class OPTConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.output_projection = output_projection
         self.decoder_layernorm = decoder_layernorm
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

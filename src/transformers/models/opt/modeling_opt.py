@@ -25,10 +25,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-)
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -442,8 +439,6 @@ class OPTDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
 
 
 OPT_START_DOCSTRING = r"""
@@ -943,7 +938,7 @@ class OPTModel(OPTPretrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
