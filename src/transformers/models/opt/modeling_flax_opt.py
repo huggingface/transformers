@@ -653,8 +653,6 @@ class FlaxOPTDecoder(nn.Module):
             cross_attentions=outputs.cross_attentions,
         )
 
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModule with Bart->OPT
 class FlaxOPTModule(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -675,8 +673,6 @@ class FlaxOPTModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
         position_ids,
         decoder_position_ids,
         output_attentions: bool = False,
@@ -686,11 +682,9 @@ class FlaxOPTModule(nn.Module):
     ):
 
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            position_ids=decoder_position_ids,
-            # encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -700,14 +694,11 @@ class FlaxOPTModule(nn.Module):
         if not return_dict:
             return decoder_outputs
 
-        return FlaxSeq2SeqModelOutput(
+        return FlaxSeq2SeqModelOutput( # TODO change model output
             last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            # encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            # encoder_hidden_states=encoder_outputs.hidden_states,
-            # encoder_attentions=encoder_outputs.attentions,
         )
 
 
