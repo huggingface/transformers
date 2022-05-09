@@ -52,9 +52,9 @@ def prepare_opt_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_head, device=torch_device)
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_head, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -123,7 +123,7 @@ class OPTModelTester:
         return OPTConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            num_layers=self.num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
@@ -207,7 +207,7 @@ class OPTHeadTests(unittest.TestCase):
         config = OPTConfig(
             vocab_size=self.vocab_size,
             d_model=24,
-            num_layers=2,
+            num_hidden_layers=2,
             num_attention_heads=2,
             ffn_dim=32,
             max_position_embeddings=48,
@@ -233,7 +233,7 @@ class OPTHeadTests(unittest.TestCase):
         config = OPTConfig(
             vocab_size=self.vocab_size,
             d_model=24,
-            num_layers=2,
+            num_hidden_layers=2,
             num_attention_heads=2,
             ffn_dim=32,
             max_position_embeddings=48,
