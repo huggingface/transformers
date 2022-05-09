@@ -63,13 +63,58 @@ jobs:
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-  run_tests_gpu:
+  run_tests_single_gpu:
     name: Model tests
     strategy:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machines: [multi-gpu-docker, single-gpu-docker]
+        machines: [single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
+    steps:
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          echo "$matrix_folders"
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: python3 -m pytest -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
+
+  run_tests_multi_gpu:
+    name: Model tests
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        machines: [multi-gpu-docker]
     runs-on: ${{ matrix.machines }}
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -255,7 +300,7 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, run_tests_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
+    needs: [setup, run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
