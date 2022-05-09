@@ -27,8 +27,8 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 _re_backend = re.compile(r"is\_([a-z_]*)_available()")
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
-# Catches a line if is_foo_available
-_re_test_backend = re.compile(r"^\s*if\s+is\_[a-z_]*\_available\(\)")
+# Catches a line if not is_foo_available
+_re_test_backend = re.compile(r"^\s*if\s+not\s+is\_[a-z_]*\_available\(\)")
 # Catches a line _import_struct["bla"].append("foo")
 _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)')
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
@@ -39,6 +39,10 @@ _re_quote_object = re.compile('^\s+"([^"]+)",')
 _re_between_brackets = re.compile("^\s+\[([^\]]+)\]")
 # Catches a line with from foo import bar, bla, boo
 _re_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
+# Catches a line with try:
+_re_try = re.compile(r"^\s*try:")
+# Catches a line with else:
+_re_else = re.compile(r"^\s*else:")
 
 
 def find_backend(line):
@@ -81,9 +85,19 @@ def parse_init(init_file):
     import_dict_objects = {"none": objects}
     # Let's continue with backend-specific objects in _import_structure
     while not lines[line_index].startswith("if TYPE_CHECKING"):
-        # If the line is an if is_backend_available, we grab all objects associated.
+        # If the line is an if not is_backend_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
+        # Check if the backend declaration is inside a try block:
+        if _re_try.search(lines[line_index - 1]) is None:
+            backend = None
+
         if backend is not None:
+            line_index += 1
+
+            # Scroll until we hit the else block of try-except-else
+            while _re_else.search(lines[line_index]) is None:
+                line_index += 1
+
             line_index += 1
 
             objects = []
@@ -132,7 +146,17 @@ def parse_init(init_file):
     while line_index < len(lines):
         # If the line is an if is_backemd_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
+        # Check if the backend declaration is inside a try block:
+        if _re_try.search(lines[line_index - 1]) is None:
+            backend = None
+
         if backend is not None:
+            line_index += 1
+
+            # Scroll until we hit the else block of try-except-else
+            while _re_else.search(lines[line_index]) is None:
+                line_index += 1
+
             line_index += 1
 
             objects = []
