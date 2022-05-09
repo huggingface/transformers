@@ -13,9 +13,8 @@
 # limitations under the License.
 
 """
-This script converts a lm-head checkpoint from the "Token Dropping" implementation
-into a PyTorch-compatible BERT model. The official implementation of "Token Dropping"
-can be found in the TensorFlow Models repository:
+This script converts a lm-head checkpoint from the "Token Dropping" implementation into a PyTorch-compatible BERT
+model. The official implementation of "Token Dropping" can be found in the TensorFlow Models repository:
 
 https://github.com/tensorflow/models/tree/master/official/projects/token_dropping
 """
