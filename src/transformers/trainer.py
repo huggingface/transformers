@@ -285,8 +285,8 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Dataset] = None,
-        eval_dataset: Optional[Dataset] = None,
+        train_dataset: Union[Dataset, datasets.Dataset, None] = None,
+        eval_dataset: Union[Dataset, datasets.Dataset, None] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
@@ -777,7 +777,7 @@ class Trainer:
                 process_index=self.args.process_index,
             )
 
-    def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+    def get_eval_dataloader(self, eval_dataset: Union[Dataset, datasets.Dataset, None] = None) -> DataLoader:
         """
         Returns the evaluation [`~torch.utils.data.DataLoader`].
 
@@ -824,7 +824,7 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
+    def get_test_dataloader(self, test_dataset: Union[Dataset, datasets.Dataset]) -> DataLoader:
         """
         Returns the test [`~torch.utils.data.DataLoader`].
 
@@ -2380,7 +2380,7 @@ class Trainer:
 
     def evaluate(
         self,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Union[Dataset, datasets.Dataset, None] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
@@ -2448,7 +2448,10 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "test"
+        self,
+        test_dataset: Union[Dataset, datasets.Dataset],
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "test",
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.

@@ -21,8 +21,11 @@ from torch.utils.data import Dataset
 from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
-from .utils import logging
+from .utils import is_datasets_available, logging
 
+
+if is_datasets_available():
+    import datasets
 
 logger = logging.get_logger(__name__)
 
@@ -30,7 +33,7 @@ logger = logging.get_logger(__name__)
 class Seq2SeqTrainer(Trainer):
     def evaluate(
         self,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Union[Dataset, datasets.Dataset, None] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
         max_length: Optional[int] = None,
@@ -71,7 +74,7 @@ class Seq2SeqTrainer(Trainer):
 
     def predict(
         self,
-        test_dataset: Dataset,
+        test_dataset: Union[Dataset, datasets.Dataset],
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
         max_length: Optional[int] = None,
