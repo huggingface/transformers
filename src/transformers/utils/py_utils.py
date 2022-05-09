@@ -17,8 +17,9 @@
 from collections.abc import MutableMapping
 
 
-def flatten_dict(d: MutableMapping, parent_key: str = '', delimiter: str = '.'):
+def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
     """Flatten a nested dict into a single level dict."""
+
     def _flatten_dict(d, parent_key="", delimiter="."):
         for k, v in d.items():
             key = str(parent_key) + delimiter + str(k) if parent_key else k
@@ -26,4 +27,5 @@ def flatten_dict(d: MutableMapping, parent_key: str = '', delimiter: str = '.'):
                 yield from flatten_dict(v, key, delimiter=delimiter).items()
             else:
                 yield key, v
+
     return dict(_flatten_dict(d, parent_key, delimiter))

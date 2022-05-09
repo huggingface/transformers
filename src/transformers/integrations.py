@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .utils import is_datasets_available, logging, flatten_dict
+from .utils import flatten_dict, is_datasets_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -831,10 +831,9 @@ class MLflowCallback(TrainerCallback):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{value}" for key "{name}" as a parameter. '
-                        f"MLflow's log_param() only accepts values no longer than "
-                        f"250 characters so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. '
+                        f"MLflow's log_param() only accepts values no longer than 250 characters so we dropped this attribute. "
+                        f"You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and avoid this message."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
@@ -861,10 +860,8 @@ class MLflowCallback(TrainerCallback):
                     metrics[k] = v
                 else:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
-                        f"MLflow's log_metric() only accepts float and "
-                        f"int types so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
+                        f"MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
             self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 

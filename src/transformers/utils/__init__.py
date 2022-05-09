@@ -137,9 +137,8 @@ from .import_utils import (
     torch_required,
     torch_version,
 )
-from .py_utils import (
-    flatten_dict,
-)
+from .py_utils import flatten_dict
+
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
