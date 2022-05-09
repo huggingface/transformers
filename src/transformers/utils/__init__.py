@@ -85,6 +85,7 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_coloredlogs_available,
