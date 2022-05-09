@@ -177,7 +177,7 @@ the means of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) 
 after installing it:
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
