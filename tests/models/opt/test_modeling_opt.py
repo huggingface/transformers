@@ -563,6 +563,7 @@ class OPTStandaloneDecoderModelTester:
         decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
+        embed_dim=16,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -593,7 +594,7 @@ class OPTStandaloneDecoderModelTester:
         self.use_cache = use_cache
         self.max_position_embeddings = max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
-
+        self.embed_dim=embed_dim
         self.scope = None
         self.decoder_key_length = decoder_seq_length
         self.base_model_out_len = 2
@@ -625,6 +626,7 @@ class OPTStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            embed_dim=self.embed_dim
         )
 
         return (
