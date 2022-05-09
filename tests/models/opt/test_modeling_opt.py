@@ -148,7 +148,7 @@ class OPTModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = OPTModel(config=config).to(torch_device).eval() 
+        model = OPTModel(config=config).to(torch_device).eval()
         # previousdly OPTModel(config=config).get_decoder().to(torch_device).eval()
         # tried OPTForCausalkML
         input_ids = inputs_dict["input_ids"]
@@ -158,7 +158,7 @@ class OPTModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple() # TODO, TOO MANY VALUES TO UNPACK HERE
+        output, past_key_values = outputs.to_tuple()  # TODO, TOO MANY VALUES TO UNPACK HERE
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -220,7 +220,7 @@ class OPTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            embed_dim=24
+            embed_dim=24,
         )
         return config, input_ids, batch_size
 
@@ -369,7 +369,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
-                
+
             with torch.no_grad():
                 model(**inputs)[0]
 
@@ -542,6 +542,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
     #     config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
     #     self.assertDictEqual(expected_params, config_params)
 
+
 @require_torch
 class OPTStandaloneDecoderModelTester:
     def __init__(
@@ -584,7 +585,7 @@ class OPTStandaloneDecoderModelTester:
         self.num_hidden_layers = decoder_layers
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
-        
+
         self.num_attention_heads = decoder_attention_heads
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
@@ -796,7 +797,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             _ = OPTForCausalLM.from_pretrained(self.path_model)
         except BaseException:
             self.fail("Failed loading model")
-            
+
     @require_torch
     @torch.no_grad()
     def test_logits(self):

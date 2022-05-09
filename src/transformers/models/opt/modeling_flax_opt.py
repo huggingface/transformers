@@ -653,6 +653,7 @@ class FlaxOPTDecoder(nn.Module):
             cross_attentions=outputs.cross_attentions,
         )
 
+
 class FlaxOPTModule(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -694,7 +695,7 @@ class FlaxOPTModule(nn.Module):
         if not return_dict:
             return decoder_outputs
 
-        return FlaxSeq2SeqModelOutput( # TODO change model output
+        return FlaxSeq2SeqModelOutput(  # TODO change model output
             last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
