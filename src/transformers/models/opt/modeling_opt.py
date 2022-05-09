@@ -827,7 +827,9 @@ class OPTDecoder(OPTPretrainedModel):
                 )
 
                 if self.layer_norm:
-                    layer_outputs = self.layer_norm(layer_outputs)
+                    new_layer_output = (self.layer_norm(layer_outputs[0]),)
+                    new_layer_output += (layer_outputs[1:],)
+                    layer_outputs = new_layer_output
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -975,7 +977,11 @@ class OPTForCausalLM(OPTPretrainedModel):
         super().__init__(config)
         self.model = OPTDecoderWrapper(config)
 
-        self.lm_head = self.model.decoder.output_projection
+        if config.output_projection:
+            self.lm_head = self.model.decoder.output_projection
+        else:
+            self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+            self.lm_head.weight = nn.Parameter(self.model.decoder.embed_tokens.weight.t())
 
         # Initialize weights and apply final processing
         self.post_init()
