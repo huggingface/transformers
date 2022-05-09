@@ -18,16 +18,27 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable
 
 
 _import_structure = {
     "configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
 }
 
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_dpt"] = ["DPTFeatureExtractor"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_dpt"] = [
         "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DPTForDepthEstimation",
@@ -40,10 +51,20 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
 
-    if is_vision_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_dpt import DPTFeatureExtractor
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_dpt import (
             DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPTForDepthEstimation,
