@@ -101,13 +101,13 @@ class OPTConfig(PretrainedConfig):
         self,
         vocab_size=50272,  # TODO check the real value
         max_position_embeddings=2048,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        ffn_dim=3072,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        ffn_dim=4096,
         layerdrop=0.0,
         activation_function="gelu",
-        d_model=768,
-        embed_dim=768,
+        d_model=1024,
+        embed_dim=512,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -120,8 +120,8 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
-        output_projection=False,
-        decoder_layernorm=True,
+        output_projection=True,
+        decoder_layernorm=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
