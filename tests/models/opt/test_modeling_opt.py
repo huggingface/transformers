@@ -57,11 +57,11 @@ def prepare_opt_inputs_dict(
         cross_attn_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
+        # "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
+        # "decoder_attention_mask": attention_mask,
         "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
+        # "decoder_head_mask": decoder_head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
     }
 
