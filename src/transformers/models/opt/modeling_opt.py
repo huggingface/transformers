@@ -943,7 +943,7 @@ class OPTModel(OPTPretrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,

@@ -787,9 +787,8 @@ class OPTStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.path_model = "ArthurZ/opt-350m"  # TODO add the model on the hub
-        # self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p"  # TODO add the logits somewhere?
-
+        self.path_model = "ArthurZ/opt-350m"
+        
     def test_load_model(self):
         try:
             _ = OPTForCausalLM.from_pretrained(self.path_model)
@@ -859,3 +858,4 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_next_token = gen(prompt)[0]["generated_token_ids"][len_input_sentence]
             GEN_OUTPUT.append(predicted_next_token)
         self.assertListEqual(GEN_OUTPUT, NEXT_TOKENS)
+
