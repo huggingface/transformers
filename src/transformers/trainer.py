@@ -1114,7 +1114,7 @@ class Trainer:
                         model = torch.jit.trace(model, jit_inputs, strict=False)
                     model = torch.jit.freeze(model)
             except RuntimeError:
-                logger.info(f"fail to use PyTorch jit mode")
+                logger.info("fail to use PyTorch jit mode")
                 pass
 
         return model
