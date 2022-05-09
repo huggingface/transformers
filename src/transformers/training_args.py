@@ -230,8 +230,8 @@ class TrainingArguments:
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
         use_ipex (`bool`, *optional*, defaults to `False`):
-            Use Intel extension for PyTorch when it is available.
-            [IPEX installation](https://github.com/intel/intel-extension-for-pytorch).
+            Use Intel extension for PyTorch when it is available. [IPEX
+            installation](https://github.com/intel/intel-extension-for-pytorch).
         jit_mode(`bool`, *optional*, defaults to `False`):
             Try to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
@@ -245,9 +245,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`. `"auto"`
-            will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices will force the
-            requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
+            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
+            will force the requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
