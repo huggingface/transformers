@@ -157,10 +157,10 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
     model.bert.pooler.dense.bias.data: BertPooler = get_encoder_array("_pooler_layer/bias")
 
     # Export final model
-    model.save_pretrained("./")
+    model.save_pretrained(pytorch_dump_path)
 
     # Integration test - should load without any errors ;)
-    new_model = BertForMaskedLM.from_pretrained("./")
+    new_model = BertForMaskedLM.from_pretrained(pytorch_dump_path)
     print(new_model.eval())
 
     print("Model conversion was done sucessfully!")
@@ -181,7 +181,7 @@ if __name__ == "__main__":
         "--pytorch_dump_path",
         type=str,
         required=True,
-        help="Path to the output PyTorch model (must include filename).",
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
     convert_checkpoint_to_pytorch(args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path)
