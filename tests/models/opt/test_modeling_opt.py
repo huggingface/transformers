@@ -135,6 +135,7 @@ class OPTModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             embed_dim=self.embed_dim,
+            is_encoder_decoder=False
         )
 
     def get_pipeline_config(self):
