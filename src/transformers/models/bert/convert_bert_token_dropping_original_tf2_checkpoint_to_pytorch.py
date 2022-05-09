@@ -20,8 +20,6 @@ can be found in the TensorFlow Models repository:
 https://github.com/tensorflow/models/tree/master/official/projects/token_dropping
 """
 import argparse
-import os
-import re
 
 import tensorflow as tf
 import torch
