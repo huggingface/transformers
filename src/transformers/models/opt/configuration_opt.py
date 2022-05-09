@@ -120,6 +120,9 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
+        project_in=True,
+        project_out=True,
+        output_projection=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -138,6 +141,9 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.project_in = project_in
+        self.project_out = project_out
+        self.output_projection = output_projection
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -633,15 +633,24 @@ class OPTDecoder(OPTPretrainedModel):
             self.padding_idx,
         )
 
-        self.project_out_dim = (
-            nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
-        )
+        if config.project_out:
+            self.project_out_dim = (
+                nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
+            )
+        else:
+            self.project_out_dim = None
 
-        self.project_in_dim = (
-            nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
-        )
+        if config.project_in:
+            self.project_in_dim = (
+                nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
+            )
+        else:
+            self.project_in_dim = None
 
-        self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
+        if config.output_projection:
+            self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
+        else:
+            self.output_projection = None
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_layers)])
 
