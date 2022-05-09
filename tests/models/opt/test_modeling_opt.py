@@ -148,7 +148,9 @@ class OPTModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = OPTModel(config=config).get_decoder().to(torch_device).eval()
+        model = OPTModel(config=config).to(torch_device).eval() 
+        # previousdly OPTModel(config=config).get_decoder().to(torch_device).eval()
+        # tried OPTForCausalkML
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
         head_mask = inputs_dict["head_mask"]
@@ -156,7 +158,7 @@ class OPTModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple() # TODO, TOO MANY VALUES TO UNPACK HERE
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
