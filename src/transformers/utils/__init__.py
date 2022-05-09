@@ -83,6 +83,7 @@ from .import_utils import (
     USE_TF,
     USE_TORCH,
     DummyObject,
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_accelerate_available,
     is_apex_available,

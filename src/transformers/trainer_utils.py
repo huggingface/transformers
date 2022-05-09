@@ -615,3 +615,9 @@ def find_executable_batch_size(
         return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
 
     return functools.partial(function, batch_size=starting_batch_size)
+  
+class FSDPOption(ExplicitEnum):
+    FULL_SHARD = "full_shard"
+    SHARD_GRAD_OP = "shard_grad_op"
+    OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"

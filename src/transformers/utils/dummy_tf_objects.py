@@ -335,6 +335,13 @@ class TFAutoModelForMultipleChoice(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForNextSentencePrediction(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForPreTraining(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -736,6 +743,27 @@ class TFCTRLModel(metaclass=DummyObject):
 
 
 class TFCTRLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

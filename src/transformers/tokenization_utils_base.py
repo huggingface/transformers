@@ -1899,9 +1899,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
             # wont index sequences longer than the number of positional embeddings
+
             model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if model_max_length is not None and isinstance(model_max_length, (int, float)):
-                init_kwargs["model_max_length"] = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
+
+                model_max_length = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
+                # TODO(PVP) - uncomment following line in Transformers v5
+                # init_kwargs["model_max_length"] = model_max_length
+                # TODO(PVP) - remove in Transformers v5
+                # ---
+                init_kwargs["model_max_length"] = cls._eventually_correct_t5_max_length(
+                    pretrained_model_name_or_path, model_max_length, init_kwargs.get("model_max_length")
+                )
+                # ---
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
@@ -1982,6 +1992,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         return tokenizer
+
+    @staticmethod
+    def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+        # This method should be deleted in Transformers v5
+        # Its only purpose is to potentially throw a warning
+        # that incorrectly defined max lengths of T5's tokenizer are used
+        # which we will correct in Transformers v5.
+        return max_model_length
 
     def save_pretrained(
         self,
