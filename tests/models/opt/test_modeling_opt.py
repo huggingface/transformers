@@ -785,8 +785,8 @@ class OPTStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
 # TODO solve the @torch.no_grad() issue
 
 
-@require_torch
 @require_tokenizers
+@require_torch
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -828,6 +828,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
         assert torch.allclose(logits, logits_meta, atol=1e-4)
 
 
+@require_tokenizers
 class OPTGenerationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
