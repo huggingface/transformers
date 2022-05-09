@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .utils import is_datasets_available, logging
+from .utils import is_datasets_available, logging, flatten_dict
 
 
 logger = logging.get_logger(__name__)
@@ -802,10 +802,13 @@ class MLflowCallback(TrainerCallback):
                 Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
                 When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
                 run ID and other parameters are ignored.
+            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
+                Whether to flatten the parameters dictionary before logging. Default to `False`.
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
+        self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
         logger.debug(
             f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run}, tags={self._nested_run}"
@@ -822,6 +825,7 @@ class MLflowCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            combined_dict = flatten_dict(combined_dict) if self._flatten_params else combined_dict
             # remove params that are too long for MLflow
             for name, value in list(combined_dict.items()):
                 # internally, all values are converted to str in MLflow
