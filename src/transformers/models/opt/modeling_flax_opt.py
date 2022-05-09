@@ -223,7 +223,6 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
@@ -313,7 +312,7 @@ class FlaxOPTAttention(nn.Module):
         batch_size = hidden_states.shape[0]
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states)
         # get key, value proj
         if is_cross_attention:
             # cross_attentions
@@ -666,57 +665,49 @@ class FlaxOPTModule(nn.Module):
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
-        self.transformer = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-        self.lm_head = nn.Dense(
-            self.config.vocab_size,
-            use_bias=False,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-        )
+
+        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+
+    def _get_decoder_module(self):
+        return self.decoder
 
     def __call__(
         self,
         input_ids,
         attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
         position_ids,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_position_ids,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
 
-        outputs = self.transformer(
-            input_ids,
-            attention_mask,
-            position_ids,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            deterministic=deterministic,
-            init_cache=init_cache,
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            # encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            deterministic=deterministic,
         )
 
-        hidden_states = outputs[0]
-
-        if self.config.tie_word_embeddings:
-            shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
-        else:
-            lm_logits = self.lm_head(hidden_states)
-
         if not return_dict:
-            return (lm_logits,) + outputs[1:]
+            return decoder_outputs
 
-        return FlaxCausalLMOutputWithCrossAttentions(
-            logits=lm_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
+        return FlaxSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            # encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            # encoder_hidden_states=encoder_outputs.hidden_states,
+            # encoder_attentions=encoder_outputs.attentions,
         )
 
 
