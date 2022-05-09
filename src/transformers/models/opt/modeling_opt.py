@@ -872,6 +872,9 @@ class OPTModel(OPTPretrainedModel):
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
+    
+    def set_input_embeddings(self, value):
+        self.decoder.embed_tokens = value
 
     def get_decoder(self):
         return self.decoder
