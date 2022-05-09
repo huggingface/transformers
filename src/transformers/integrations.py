@@ -803,8 +803,8 @@ class MLflowCallback(TrainerCallback):
                 When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
                 run ID and other parameters are ignored.
         """
-        self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in {"TRUE", "1"}
-        self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in {"TRUE", "1"}
+        self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
         logger.debug(
