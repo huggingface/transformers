@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -25,7 +25,12 @@ _import_structure = {
     "tokenization_canine": ["CanineTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_canine"] = [
         "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CanineForMultipleChoice",
@@ -43,7 +48,12 @@ if TYPE_CHECKING:
     from .configuration_canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig
     from .tokenization_canine import CanineTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_canine import (
             CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
             CanineForMultipleChoice,

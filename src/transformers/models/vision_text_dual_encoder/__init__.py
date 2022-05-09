@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_flax_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
@@ -27,11 +27,21 @@ _import_structure = {
 }
 
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_vision_text_dual_encoder"] = ["VisionTextDualEncoderModel"]
 
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_vision_text_dual_encoder"] = ["FlaxVisionTextDualEncoderModel"]
 
 
@@ -39,10 +49,20 @@ if TYPE_CHECKING:
     from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
     from .processing_visiotn_text_dual_encoder import VisionTextDualEncoderProcessor
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_vision_text_dual_encoder import VisionTextDualEncoderModel
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
 
 

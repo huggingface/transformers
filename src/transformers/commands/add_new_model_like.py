@@ -766,7 +766,9 @@ def clean_frameworks_in_init(
         return
 
     remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(rf"^\s*if is_({remove_pattern})_available\(\):\s*$")
+    re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
+    re_try = re.compile(r"\s*try:")
+    re_else = re.compile(r"\s*else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
@@ -776,11 +778,15 @@ def clean_frameworks_in_init(
     new_lines = []
     idx = 0
     while idx < len(lines):
-        # Conditional imports
-        if re_conditional_imports.search(lines[idx]) is not None:
+        # Conditional imports in try-except-else blocks
+        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
+            # Remove the preceding `try:`
+            new_lines.pop()
             idx += 1
-            while is_empty_line(lines[idx]):
+            # Iterate until `else:`
+            while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
                 idx += 1
+            idx += 1
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
@@ -790,6 +796,7 @@ def clean_frameworks_in_init(
             for framework in to_remove:
                 line = line.replace(f", is_{framework}_available", "")
                 line = line.replace(f"is_{framework}_available, ", "")
+                line = line.replace(f"is_{framework}_available,", "")
                 line = line.replace(f"is_{framework}_available", "")
 
             if len(line.strip()) > 0:
@@ -836,11 +843,11 @@ def add_model_to_main_init(
     while idx < len(lines):
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        elif lines[idx].lstrip().startswith("if is_torch_available"):
+        elif lines[idx].lstrip().startswith("if not is_torch_available"):
             framework = "pt"
-        elif lines[idx].lstrip().startswith("if is_tf_available"):
+        elif lines[idx].lstrip().startswith("if not is_tf_available"):
             framework = "tf"
-        elif lines[idx].lstrip().startswith("if is_flax_available"):
+        elif lines[idx].lstrip().startswith("if not is_flax_available"):
             framework = "flax"
 
         # Skip if we are in a framework not wanted.
