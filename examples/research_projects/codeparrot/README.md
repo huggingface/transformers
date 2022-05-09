@@ -82,7 +82,7 @@ Now that the dataset, tokenizer, and model are ready we can start training the m
 First you need to configure `accelerate` and login to Weights & Biases:
 
 ```bash
-acclerate config
+accelerate config
 wandb login
 ```
 

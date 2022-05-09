@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -530,7 +530,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
             attn_score = attn_score - (INF * (1 - attention_mask[:, None, None]))
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=-1)
+        attn_prob = stable_softmax(attn_score, axis=-1)
         attn_prob = self.attention_dropout(attn_prob, training=training)
 
         # attention output, shape batch_size x seq_len x n_head x d_head

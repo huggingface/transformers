@@ -41,7 +41,9 @@ class DecoderConfig(PretrainedConfig):
 class FSMTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
-    model according to the specified arguments, defining the model architecture.
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the FSMT
+    [facebook/wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

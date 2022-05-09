@@ -34,7 +34,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -333,7 +333,7 @@ class TFCLIPAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        _attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        _attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -551,11 +551,14 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         )
 
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
-
-        diag = tf.constant(0.0, shape=(seq_length,), dtype=dtype)
+        # It is possible with an unspecified sequence length for seq_length to be
+        # a runtime value, which is unsupported by tf.constant. Per the TensorFlow
+        # docs, tf.fill can handle runtime dynamic shapes:
+        # https://www.tensorflow.org/api_docs/python/tf/fill
+        diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
-        to_mask = tf.constant(-10000.0, shape=(seq_length, seq_length), dtype=dtype)
+        to_mask = tf.cast(tf.fill((seq_length, seq_length), -10000.0), dtype)
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
@@ -1082,6 +1085,18 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
         return outputs
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        output = self.call(inputs)
+        return self.serving_output(output)
+
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -1123,7 +1138,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
         """
         Method used for serving the model.
 
@@ -1226,7 +1241,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFCLIPOutput:
         """
         Method used for serving the model.
 
@@ -1375,4 +1390,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFCLIPOutput) -> TFCLIPOutput:
+        # TODO: As is this currently fails with saved_model=True, because
+        # TensorFlow cannot trace through nested dataclasses. Reference:
+        # https://github.com/huggingface/transformers/pull/16886
         return output

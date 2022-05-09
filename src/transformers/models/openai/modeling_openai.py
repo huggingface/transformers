@@ -674,7 +674,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
         >>> tokenizer.add_special_tokens(
         ...     {"cls_token": "[CLS]"}
-        >>> )  # Add a [CLS] to the vocabulary (we should train it also!)
+        ... )  # Add a [CLS] to the vocabulary (we should train it also!)
         >>> model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]

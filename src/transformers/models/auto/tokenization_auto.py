@@ -136,6 +136,7 @@ else:
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
@@ -240,6 +241,24 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "nystromformer",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "yoso",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ]
     )
 

@@ -65,7 +65,7 @@ def get_tiny_config_from_class(configuration_class):
 
     try:
         model_slug = model_type.replace("-", "_")
-        module = importlib.import_module(f".test_modeling_{model_slug}", package=f"tests.{model_slug}")
+        module = importlib.import_module(f".test_modeling_{model_slug}", package=f"tests.models.{model_slug}")
         model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
     except (ImportError, AttributeError):
         logger.error(f"No model tester class for {configuration_class.__name__}")
