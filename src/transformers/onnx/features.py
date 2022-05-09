@@ -25,6 +25,7 @@ from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
+from ..models.mobilebert import MobileBertOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
@@ -44,6 +45,7 @@ if is_torch_available():
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForNextSentencePrediction,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -55,6 +57,7 @@ if is_tf_available():
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
         TFAutoModelForMultipleChoice,
+        TFAutoModelForNextSentencePrediction,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
@@ -108,6 +111,7 @@ class FeaturesManager:
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
             "masked-im": AutoModelForMaskedImageModeling,
+            "next-sentence-prediction": AutoModelForNextSentencePrediction,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -119,6 +123,7 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+            "next-sentence-prediction": TFAutoModelForNextSentencePrediction,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -153,6 +158,7 @@ class FeaturesManager:
             "multiple-choice",
             "token-classification",
             "question-answering",
+            "next-sentence-prediction",
             onnx_config_cls=BertOnnxConfig,
         ),
         "big-bird": supported_features_mapping(
@@ -315,6 +321,16 @@ class FeaturesManager:
             "sequence-classification",
             "question-answering",
             onnx_config_cls=MBartOnnxConfig,
+        ),
+        "mobilebert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "next-sentence-prediction",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=MobileBertOnnxConfig,
         ),
         "m2m-100": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig
