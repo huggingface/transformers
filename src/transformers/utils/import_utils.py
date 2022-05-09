@@ -399,8 +399,10 @@ def is_py3nvml_available():
 def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
+
 def is_ipex_available():
     return importlib.util.find_spec("intel_extension_for_pytorch") is not None
+
 
 def is_bitsandbytes_available():
     return importlib.util.find_spec("bitsandbytes") is not None

@@ -510,7 +510,6 @@ class Trainer:
                             "Using Bf16 with IPEX but IPEX is not installed, please refer to https://github.com/intel/intel-extension-for-pytorch."
                         )
 
-
         # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
         if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
             raise ValueError(
@@ -964,9 +963,9 @@ class Trainer:
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
         elif args.optim == OptimizerNames.SGD:
-            optimizer_cls= torch.optim.SGD
+            optimizer_cls = torch.optim.SGD
         elif args.optim == OptimizerNames.ADAGRAD:
-            optimizer_cls= torch.optim.Adagrad
+            optimizer_cls = torch.optim.Adagrad
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1097,13 +1096,13 @@ class Trainer:
 
     def torch_jit_model(self, model, training=False, dataloader=None):
         if not training:
-            jit_inputs=()
-            for _,batch in enumerate(dataloader):
-                for _,label in enumerate(batch):
+            jit_inputs = ()
+            for _, batch in enumerate(dataloader):
+                for _, label in enumerate(batch):
                     dumpy_tensor = torch.ones_like(batch[label])
-                    L1=list(jit_inputs)
+                    L1 = list(jit_inputs)
                     L1.append(dumpy_tensor)
-                    jit_inputs=tuple(L1)
+                    jit_inputs = tuple(L1)
                 break
             try:
                 if self.args.bf16:

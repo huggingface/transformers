@@ -568,7 +568,12 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    use_ipex: bool = field(default=False, metadata={"help": "Use Intel extension for PyTorch when it is available, installation: 'https://github.com/intel/intel-extension-for-pytorch'"})
+    use_ipex: bool = field(
+        default=False,
+        metadata={
+            "help": "Use Intel extension for PyTorch when it is available, installation: 'https://github.com/intel/intel-extension-for-pytorch'"
+        },
+    )
     jit_mode: bool = field(default=False, metadata={"help": "Try to use PyTorch jit trace for inference"})
     bf16: bool = field(
         default=False,
@@ -591,7 +596,10 @@ class TrainingArguments:
     )
     half_precision_backend: str = field(
         default="auto",
-        metadata={"help": "The backend to be used for half precision.", "choices": ["auto", "cuda_amp", "apex", "cpu_amp"]},
+        metadata={
+            "help": "The backend to be used for half precision.",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     bf16_full_eval: bool = field(
         default=False,
@@ -763,7 +771,10 @@ class TrainingArguments:
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
-        metadata={"help": "Deprecated. Use half_precision_backend instead", "choices": ["auto", "cuda_amp", "apex", "cpu_amp"]},
+        metadata={
+            "help": "Deprecated. Use half_precision_backend instead",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     push_to_hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -861,7 +872,9 @@ class TrainingArguments:
             self.half_precision_backend = self.fp16_backend
 
         if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
-            raise ValueError("Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU (no_cuda)")
+            raise ValueError(
+                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU (no_cuda)"
+            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
