@@ -101,13 +101,13 @@ class OPTConfig(PretrainedConfig):
         self,
         vocab_size=50272,  # TODO check the real value
         max_position_embeddings=2048,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        ffn_dim=4096,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        ffn_dim=3072,
         layerdrop=0.0,
         activation_function="gelu",
-        d_model=1024,
-        embed_dim=512,
+        d_model=768,
+        embed_dim=768,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -120,9 +120,8 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
-        project_in=True,
-        project_out=True,
-        output_projection=True,
+        output_projection=False,
+        decoder_layernorm=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -141,9 +140,8 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.project_in = project_in
-        self.project_out = project_out
         self.output_projection = output_projection
+        self.decoder_layernorm = decoder_layernorm
 
         super().__init__(
             pad_token_id=pad_token_id,

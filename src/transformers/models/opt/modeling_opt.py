@@ -611,19 +611,15 @@ class OPTDecoder(OPTPretrainedModel):
             self.padding_idx,
         )
 
-        if config.project_out:
-            self.project_out_dim = (
-                nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
-            )
-        else:
-            self.project_out_dim = None
+        self.project_out_dim = (
+            nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
+        )
 
-        if config.project_in:
-            self.project_in_dim = (
-                nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
-            )
-        else:
-            self.project_in_dim = None
+        self.project_in_dim = (
+            nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
+        )
+
+        self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
 
         if config.output_projection:
             self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
@@ -829,6 +825,9 @@ class OPTDecoder(OPTPretrainedModel):
                     use_cache=use_cache,
                     key_padding_mask=self_attn_padding_mask,
                 )
+
+                if self.layer_norm:
+                    layer_outputs = self.layer_norm(layer_outputs)
             hidden_states = layer_outputs[0]
 
             if use_cache:
