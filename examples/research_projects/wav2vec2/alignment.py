@@ -132,7 +132,7 @@ class Wav2Vec2Aligner:
                 raise ValueError("Failed to align")
             return path[::-1]
 
-        path = backtrack(trellis, emission, tokens)
+        path = backtrack(trellis, emission, tokens, blank_id)
 
         @dataclass
         class Segment:
