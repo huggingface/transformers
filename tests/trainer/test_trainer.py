@@ -59,6 +59,7 @@ from transformers.testing_utils import (
     require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
     require_wandb,
