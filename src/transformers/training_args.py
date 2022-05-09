@@ -23,7 +23,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
-from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .trainer_utils import (
+    EvaluationStrategy,
+    FSDPOption,
+    HubStrategy,
+    IntervalStrategy,
+    SchedulerType,
+    ShardedDDPOption,
+)
 from .utils import (
     ExplicitEnum,
     cached_property,
@@ -331,6 +338,18 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for `False` and `["simple"]` for `True`.
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `False`):
+            Use PyTorch Distributed Parallel Training (in distributed training only).
+
+            A list of options along the following:
+
+            - `"full_shard"`: Shard parameters, gradients and optimizer states.
+            - `"shard_grad_op"`: Shard optimizer states and gradients.
+            - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
+              `"shard_grad_op"`).
+            - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
+        fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -674,8 +693,23 @@ class TrainingArguments:
         metadata={
             "help": "Whether or not to use sharded DDP training (in distributed training only). The base option "
             "should be `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` "
-            "like this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or "
+            "like this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or `zero_dp_3` "
             "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
+        },
+    )
+    fsdp: str = field(
+        default="",
+        metadata={
+            "help": "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training only). The base option "
+            "should be `full_shard` or `shard_grad_op` and you can add CPU-offload to `full_shard` or `shard_grad_op` "
+            "like this: full_shard offload` or `shard_grad_op offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` "
+            "with the same syntax: full_shard auto_wrap` or `shard_grad_op auto_wrap`.",
+        },
+    )
+    fsdp_min_num_params: int = field(
+        default=0,
+        metadata={
+            "help": "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed)."
         },
     )
     deepspeed: Optional[str] = field(
@@ -930,6 +964,21 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
+
+        if isinstance(self.fsdp, bool):
+            self.fsdp = "full_shard" if self.fsdp else ""
+        if isinstance(self.fsdp, str):
+            self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+        if self.fsdp == [FSDPOption.OFFLOAD]:
+            raise ValueError(
+                "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
+                '`--fsdp shard_grad_op`. For example, `--fsdp "full_shard offload"`.'
+            )
+        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.sharded_ddp:
+            raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
+            warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
         if self.tpu_metrics_debug:
             warnings.warn(
