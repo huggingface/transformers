@@ -218,6 +218,7 @@ class OPTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            embed_dim=24
         )
         return config, input_ids, batch_size
 
@@ -344,7 +345,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in OPTModel:
+        for model_class in (OPTModel,):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -366,7 +367,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
-
+                
             with torch.no_grad():
                 model(**inputs)[0]
 
@@ -555,7 +556,7 @@ class OPTStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=24,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
@@ -581,8 +582,7 @@ class OPTStandaloneDecoderModelTester:
         self.num_hidden_layers = decoder_layers
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
+        
         self.num_attention_heads = decoder_attention_heads
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
@@ -611,11 +611,9 @@ class OPTStandaloneDecoderModelTester:
         config = OPTConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
-            encoder_layers=self.decoder_layers,
-            decoder_layers=self.decoder_layers,
-            decoder_ffn_dim=self.decoder_ffn_dim,
-            encoder_attention_heads=self.encoder_attention_heads,
-            decoder_attention_heads=self.decoder_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            ffn_dim=self.decoder_ffn_dim,
+            num_attention_heads=self.num_attention_heads,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             use_cache=self.use_cache,
