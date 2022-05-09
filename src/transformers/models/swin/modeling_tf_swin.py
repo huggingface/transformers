@@ -1201,7 +1201,7 @@ class PixelShuffle(tf.keras.layers.Layer):
 class TFSwinDecoder(tf.keras.layers.Layer):
     def __init__(self, config: SwinConfig, **kwargs):
         super().__init__(**kwargs)
-        self.conv2d =  tf.keras.layers.Conv2D(
+        self.conv2d = tf.keras.layers.Conv2D(
             filters=config.encoder_stride**2 * 3, kernel_size=1, strides=1, name="0"
         )
         self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
@@ -1224,7 +1224,6 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         self.swin = TFSwinModel(config, add_pooling_layer=False, use_mask_token=True, name="swin")
 
         self.decoder = TFSwinDecoder(config, name="decoder")
-
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSwinMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
