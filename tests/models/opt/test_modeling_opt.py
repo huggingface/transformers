@@ -135,7 +135,7 @@ class OPTModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             embed_dim=self.embed_dim,
-            is_encoder_decoder=False
+            is_encoder_decoder=False,
         )
 
     def get_pipeline_config(self):
@@ -539,7 +539,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
     #     config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
     #     self.assertDictEqual(expected_params, config_params)
 
-
+@require_torch
 class OPTStandaloneDecoderModelTester:
     def __init__(
         self,
@@ -796,7 +796,8 @@ class OPTEmbeddingsTest(unittest.TestCase):
             _ = OPTForCausalLM.from_pretrained(self.path_model)
         except BaseException:
             self.fail("Failed loading model")
-
+            
+    @require_torch
     @torch.no_grad()
     def test_logits(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
