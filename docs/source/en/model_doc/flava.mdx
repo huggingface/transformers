@@ -1,4 +1,4 @@
-<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -22,84 +22,76 @@ as well as vision-and-language multimodal tasks.
 
 The abstract from the paper is the following:
 
-State-of-the-art vision and vision-and-language models rely on large-scale visio-linguistic pretraining for obtaining good performance on a variety 
+*State-of-the-art vision and vision-and-language models rely on large-scale visio-linguistic pretraining for obtaining good performance on a variety 
 of downstream tasks. Generally, such models are often either cross-modal (contrastive) or multi-modal 
 (with earlier fusion) but not both; and they often only target specific modalities or tasks. A promising 
 direction would be to use a single holistic universal model, as a "foundation", that targets all modalities 
 at once -- a true vision and language foundation model should be good at vision tasks, language tasks, and 
 cross- and multi-modal vision and language tasks. We introduce FLAVA as such a model and demonstrate 
-impressive performance on a wide range of 35 tasks spanning these target modalities.
+impressive performance on a wide range of 35 tasks spanning these target modalities.*
 
 
-<!-- Tips: -->
-
-This model was contributed by [aps](https://huggingface.co/aps).
-<!-- The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).-->
+This model was contributed by [aps](https://huggingface.co/aps). The original code can be found [here](https://github.com/facebookresearch/multimodal/tree/main/examples/flava).
 
 
-## FLAVAConfig
+## FlavaConfig
 
-[[autodoc]] FLAVAConfig
-    - from_configs
+[[autodoc]] FlavaConfig
 
-## FLAVATextConfig
+## FlavaTextConfig
 
-[[autodoc]] FLAVATextConfig
+[[autodoc]] FlavaTextConfig
 
-## FLAVAImageConfig
+## FlavaImageConfig
 
-[[autodoc]] FLAVAImageConfig
+[[autodoc]] FlavaImageConfig
 
-## FLAVAMultimodalConfig
+## FlavaMultimodalConfig
 
-[[autodoc]] FLAVAMultimodalConfig
+[[autodoc]] FlavaMultimodalConfig
 
-## FLAVACodebookConfig
+## FlavaImageCodebookConfig
 
-[[autodoc]] FLAVACodebookConfig
+[[autodoc]] FlavaImageCodebookConfig
 
-## FLAVAProcessor
+## FlavaProcessor
 
-[[autodoc]] FLAVAProcessor
+[[autodoc]] FlavaProcessor
 
-## FLAVAFeatureExtractor
+## FlavaFeatureExtractor
 
-[[autodoc]] FLAVAFeatureExtractor
+[[autodoc]] FlavaFeatureExtractor
 
-## FLAVACodebookFeatureExtractor
+## FlavaForPreTraining
 
-[[autodoc]] FLAVACodebookFeatureExtractor
-
-## FLAVAForPreTraining
-
-[[autodoc]] FLAVAForPreTraining
+[[autodoc]] FlavaForPreTraining
     - forward
 
-## FLAVAModel
+## FlavaModel
 
-[[autodoc]] FLAVAModel
+[[autodoc]] FlavaModel
     - forward
     - get_text_features
     - get_image_features
 
-## FLAVACodebook
+## FlavaImageCodebook
 
-[[autodoc]] FLAVACodebook
+[[autodoc]] FlavaImageCodebook
     - forward
     - get_codebook_indices
     - get_codebook_probs
 
-## FLAVATextModel
+## FlavaTextModel
 
-[[autodoc]] FLAVATextModel
+[[autodoc]] FlavaTextModel
     - forward
 
-## FLAVAImageModel
+## FlavaImageModel
 
-[[autodoc]] FLAVAImageModel
+[[autodoc]] FlavaImageModel
     - forward
 
-## FLAVAMultimodalModel
+## FlavaMultimodalModel
 
-[[autodoc]] FLAVAMultimodalModel
+[[autodoc]] FlavaMultimodalModel
     - forward

@@ -1783,49 +1783,49 @@ class FlaubertWithLMHeadModel(metaclass=DummyObject):
 FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class FLAVACodebook(metaclass=DummyObject):
+class FlavaForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVAForPreTraining(metaclass=DummyObject):
+class FlavaImageCodebook(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVAImageModel(metaclass=DummyObject):
+class FlavaImageModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVAModel(metaclass=DummyObject):
+class FlavaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVAMultimodalModel(metaclass=DummyObject):
+class FlavaMultimodalModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVAPreTrainedModel(metaclass=DummyObject):
+class FlavaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FLAVATextModel(metaclass=DummyObject):
+class FlavaTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

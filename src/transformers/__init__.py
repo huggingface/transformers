@@ -200,11 +200,11 @@ _import_structure = {
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FLAVACodebookConfig",
-        "FLAVAConfig",
-        "FLAVAImageConfig",
-        "FLAVAMultimodalConfig",
-        "FLAVATextConfig",
+        "FlavaConfig",
+        "FlavaImageCodebookConfig",
+        "FlavaImageConfig",
+        "FlavaMultimodalConfig",
+        "FlavaTextConfig",
     ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
@@ -576,9 +576,7 @@ else:
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
-    _import_structure["models.flava"].append("FLAVAFeatureExtractor")
-    _import_structure["models.flava"].append("FLAVACodebookFeatureExtractor")
-    _import_structure["models.flava"].append("FLAVAProcessor")
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
@@ -1051,13 +1049,13 @@ else:
     _import_structure["models.flava"].extend(
         [
             "FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FLAVACodebook",
-            "FLAVAForPreTraining",
-            "FLAVAImageModel",
-            "FLAVAModel",
-            "FLAVAMultimodalModel",
-            "FLAVAPreTrainedModel",
-            "FLAVATextModel",
+            "FlavaForPreTraining",
+            "FlavaImageCodebook",
+            "FlavaImageModel",
+            "FlavaModel",
+            "FlavaMultimodalModel",
+            "FlavaPreTrainedModel",
+            "FlavaTextModel",
         ]
     )
     _import_structure["models.fnet"].extend(
@@ -2678,11 +2676,11 @@ if TYPE_CHECKING:
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FLAVACodebookConfig,
-        FLAVAConfig,
-        FLAVAImageConfig,
-        FLAVAMultimodalConfig,
-        FLAVATextConfig,
+        FlavaConfig,
+        FlavaImageCodebookConfig,
+        FlavaImageConfig,
+        FlavaMultimodalConfig,
+        FlavaTextConfig,
     )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
@@ -3004,7 +3002,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
-        from .models.flava import FLAVACodebookFeatureExtractor, FLAVAFeatureExtractor, FLAVAProcessor
+        from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
@@ -3404,13 +3402,13 @@ if TYPE_CHECKING:
         )
         from .models.flava import (
             FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FLAVACodebook,
-            FLAVAForPreTraining,
-            FLAVAImageModel,
-            FLAVAModel,
-            FLAVAMultimodalModel,
-            FLAVAPreTrainedModel,
-            FLAVATextModel,
+            FlavaForPreTraining,
+            FlavaImageCodebook,
+            FlavaImageModel,
+            FlavaModel,
+            FlavaMultimodalModel,
+            FlavaPreTrainedModel,
+            FlavaTextModel,
         )
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Meta Platforms authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import os
 
 import torch
 
-from transformers import FLAVACodebook, FLAVACodebookConfig
+from transformers import FlavaImageCodebook, FlavaImageCodebookConfig
 
 
 def rreplace(s, old, new, occurrence):
@@ -34,7 +34,15 @@ def count_parameters(state_dict):
 def upgrade_state_dict(state_dict):
     upgrade = {}
 
+    group_keys = ["group_1", "group_2", "group_3", "group_4"]
     for key, value in state_dict.items():
+        for group_key in group_keys:
+            if group_key in key:
+                key = key.replace(f"{group_key}.", f"{group_key}.group.")
+
+        if "res_path" in key:
+            key = key.replace("res_path.", "res_path.path.")
+
         if key.endswith(".w"):
             key = rreplace(key, ".w", ".weight", 1)
         if key.endswith(".b"):
@@ -46,7 +54,7 @@ def upgrade_state_dict(state_dict):
 
 
 @torch.no_grad()
-def convert_dalle_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_dalle_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, save_checkpoint=True):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -63,11 +71,11 @@ def convert_dalle_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
     encoder.load_state_dict(ckpt)
 
     if config_path is not None:
-        config = FLAVACodebookConfig.from_pretrained(config_path)
+        config = FlavaImageCodebookConfig.from_pretrained(config_path)
     else:
-        config = FLAVACodebookConfig()
+        config = FlavaImageCodebookConfig()
 
-    hf_model = FLAVACodebook(config).eval()
+    hf_model = FlavaImageCodebook(config).eval()
     state_dict = encoder.state_dict()
 
     hf_state_dict = upgrade_state_dict(state_dict)
@@ -78,13 +86,16 @@ def convert_dalle_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
 
     assert torch.allclose(hf_count, state_dict_count, atol=1e-3)
 
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+    if save_checkpoint:
+        hf_model.save_pretrained(pytorch_dump_folder_path)
+    else:
+        return hf_state_dict
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to flava checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 

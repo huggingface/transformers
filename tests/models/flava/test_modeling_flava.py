@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,12 +24,18 @@ import unittest
 import numpy as np
 
 import requests
-from transformers import FLAVACodebookConfig, FLAVAConfig, FLAVAImageConfig, FLAVAMultimodalConfig, FLAVATextConfig
+from transformers import (
+    FlavaConfig,
+    FlavaImageCodebookConfig,
+    FlavaImageConfig,
+    FlavaMultimodalConfig,
+    FlavaTextConfig,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import (
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -43,30 +49,31 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        FLAVACodebook,
-        FLAVAForPreTraining,
-        FLAVAImageModel,
-        FLAVAModel,
-        FLAVAMultimodalModel,
-        FLAVATextModel,
+        FlavaForPreTraining,
+        FlavaImageCodebook,
+        FlavaImageModel,
+        FlavaModel,
+        FlavaMultimodalModel,
+        FlavaTextModel,
     )
     from transformers.models.flava.modeling_flava import (
         FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST,
         FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        add_whole_word_masked_text,
     )
 else:
-    FLAVAModel = None
-    FLAVAForPreTraining = None
+    FlavaModel = None
+    FlavaForPreTraining = None
     torch = {}
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import FLAVACodebookFeatureExtractor, FLAVAProcessor
+    from transformers import FlavaProcessor
 
 
-class FLAVAImageModelTester:
+class FlavaImageModelTester:
     def __init__(
         self,
         parent,
@@ -115,7 +122,7 @@ class FLAVAImageModelTester:
         return config, pixel_values, bool_masked_pos
 
     def get_config(self):
-        return FLAVAImageConfig(
+        return FlavaImageConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -134,7 +141,7 @@ class FLAVAImageModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, bool_masked_pos):
-        model = FLAVAImageModel(config=config)
+        model = FlavaImageModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -154,13 +161,13 @@ class FLAVAImageModelTester:
 
 
 @require_torch
-class FLAVAImageModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as FLAVA does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (FLAVAImageModel,) if is_torch_available() else ()
+    all_model_classes = (FlavaImageModel,) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -168,8 +175,8 @@ class FLAVAImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = FLAVAImageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FLAVAImageConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = FlavaImageModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -304,12 +311,12 @@ class FLAVAImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    # skip this test as FLAVAImageModel has no base class and is
+    # skip this test as FlavaImageModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FLAVAImageModel has no base class and is
+    # skip this test as FlavaImageModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_to_base(self):
         pass
@@ -317,11 +324,11 @@ class FLAVAImageModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FLAVAImageModel.from_pretrained(model_name)
+            model = FlavaImageModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class FLAVATextModelTester:
+class FlavaTextModelTester:
     def __init__(
         self,
         parent,
@@ -392,7 +399,7 @@ class FLAVATextModelTester:
         return config, input_ids, token_type_ids, input_mask
 
     def get_config(self):
-        return FLAVATextConfig(
+        return FlavaTextConfig(
             vocab_size=self.vocab_size,
             type_vocab_size=self.type_vocab_size,
             max_position_embeddings=self.max_position_embeddings,
@@ -411,7 +418,7 @@ class FLAVATextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, input_mask):
-        model = FLAVATextModel(config=config)
+        model = FlavaTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -428,16 +435,16 @@ class FLAVATextModelTester:
 
 
 @require_torch
-class FLAVATextModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FLAVATextModel,) if is_torch_available() else ()
+    all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = FLAVATextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FLAVATextConfig, hidden_size=37)
+        self.model_tester = FlavaTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -456,12 +463,12 @@ class FLAVATextModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FLAVATextModel has no base class and is
+    # skip this test as FlavaTextModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FLAVATextModel has no base class and is
+    # skip this test as FlavaTextModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_to_base(self):
         pass
@@ -469,11 +476,11 @@ class FLAVATextModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FLAVATextModel.from_pretrained(model_name)
+            model = FlavaTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class FLAVAMultimodalModelTester:
+class FlavaMultimodalModelTester:
     def __init__(
         self,
         parent,
@@ -529,7 +536,7 @@ class FLAVAMultimodalModelTester:
         return config, hidden_states, input_mask
 
     def get_config(self):
-        return FLAVAMultimodalConfig(
+        return FlavaMultimodalConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -545,7 +552,7 @@ class FLAVAMultimodalModelTester:
         )
 
     def create_and_check_model(self, config, hidden_states, input_mask):
-        model = FLAVAMultimodalModel(config=config)
+        model = FlavaMultimodalModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -562,18 +569,18 @@ class FLAVAMultimodalModelTester:
 
 
 @require_torch
-class FLAVAMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FLAVAMultimodalModel,) if is_torch_available() else ()
+    all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = FLAVAMultimodalModelTester(self)
+        self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FLAVAMultimodalConfig, has_text_modality=False, hidden_size=37
+            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -609,12 +616,12 @@ class FLAVAMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FLAVAMultimodalModel has no base class and is
+    # skip this test as FlavaMultimodalModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FLAVAMultimodalModel has no base class and is
+    # skip this test as FlavaMultimodalModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_to_base(self):
         pass
@@ -622,18 +629,12 @@ class FLAVAMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FLAVAMultimodalModel.from_pretrained(model_name)
+            model = FlavaMultimodalModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class FLAVACodebookTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=112,
-        num_channels=3,
-    ):
+class FlavaImageCodebookTester:
+    def __init__(self, parent, batch_size=12, image_size=112, num_channels=3):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
@@ -646,10 +647,10 @@ class FLAVACodebookTester:
         return config, pixel_values
 
     def get_config(self):
-        return FLAVACodebookConfig()
+        return FlavaImageCodebookConfig()
 
     def create_and_check_model(self, config, pixel_values):
-        model = FLAVACodebook(config=config)
+        model = FlavaImageCodebook(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -666,9 +667,9 @@ class FLAVACodebookTester:
 
 
 @require_torch
-class FLAVACodebookTest(ModelTesterMixin, unittest.TestCase):
+class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FLAVACodebook,) if is_torch_available() else ()
+    all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False
@@ -676,8 +677,8 @@ class FLAVACodebookTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = FLAVACodebookTester(self)
-        self.config_tester = ConfigTester(self, config_class=FLAVACodebookConfig, has_text_modality=False)
+        self.model_tester = FlavaImageCodebookTester(self)
+        self.config_tester = ConfigTester(self, config_class=FlavaImageCodebookConfig, has_text_modality=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -719,12 +720,12 @@ class FLAVACodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
-    # skip this test as FLAVACodebook has no base class and is
+    # skip this test as FlavaImageCodebook has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FLAVACodebook has no base class and is
+    # skip this test as FlavaImageCodebook has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_to_base(self):
         pass
@@ -732,12 +733,12 @@ class FLAVACodebookTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FLAVACodebook.from_pretrained(model_name)
+            model = FlavaImageCodebook.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class FLAVAModelTester:
-    model_class = FLAVAModel
+class FlavaModelTester:
+    model_class = FlavaModel
 
     def __init__(
         self,
@@ -749,11 +750,12 @@ class FLAVAModelTester:
         layer_norm_eps=1e-12,
     ):
         self.parent = parent
-        self.image_model_tester = FLAVAImageModelTester(parent)
-        self.text_model_tester = FLAVATextModelTester(parent)
-        self.multimodal_model_tester = FLAVAMultimodalModelTester(parent)
+        self.image_model_tester = FlavaImageModelTester(parent)
+        self.text_model_tester = FlavaTextModelTester(parent)
+        self.multimodal_model_tester = FlavaMultimodalModelTester(parent)
+        self.image_codebook_tester = FlavaImageCodebookTester(parent)
         self.is_training = is_training
-        self.config_tester = ConfigTester(self, config_class=FLAVAConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
@@ -777,10 +779,11 @@ class FLAVAModelTester:
         }
 
     def get_config(self):
-        return FLAVAConfig.from_configs(
+        return FlavaConfig.from_configs(
             self.image_model_tester.get_config(),
             self.text_model_tester.get_config(),
             self.multimodal_model_tester.get_config(),
+            self.image_codebook_tester.get_config(),
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             initializer_range=self.initializer_range,
@@ -792,13 +795,7 @@ class FLAVAModelTester:
         self._test_model(config, inputs, test_text=True)
         self._test_model(config, inputs, test_image=True, test_text=True)
 
-    def _test_model(
-        self,
-        config,
-        inputs,
-        test_image=False,
-        test_text=False,
-    ):
+    def _test_model(self, config, inputs, test_image=False, test_text=False):
         model = self.model_class(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(
@@ -846,9 +843,9 @@ class FLAVAModelTester:
 
 
 @require_torch
-class FLAVAModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FLAVAModel,) if is_torch_available() else ()
-    class_for_tester = FLAVAModelTester
+class FlavaModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (FlavaModel,) if is_torch_available() else ()
+    class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -873,7 +870,7 @@ class FLAVAModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # FLAVAModel does not have input/output embeddings
+    # FlavaModel does not have input/output embeddings
     def test_model_common_attributes(self):
         pass
 
@@ -965,34 +962,34 @@ class FLAVAModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_image_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save FLAVAConfig and check if we can load FLAVAImageConfig from it
+        # Save FlavaConfig and check if we can load FlavaImageConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            image_config = FLAVAImageConfig.from_pretrained(tmp_dir_name)
+            image_config = FlavaImageConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.image_config.to_dict(), image_config.to_dict())
 
-        # Save FLAVAConfig and check if we can load FLAVATextConfig from it
+        # Save FlavaConfig and check if we can load FlavaTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = FLAVATextConfig.from_pretrained(tmp_dir_name)
+            text_config = FlavaTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-        # Save FLAVAConfig and check if we can load FLAVAMultimodalConfig from it
+        # Save FlavaConfig and check if we can load FlavaMultimodalConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            multimodal_config = FLAVAMultimodalConfig.from_pretrained(tmp_dir_name)
+            multimodal_config = FlavaMultimodalConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.multimodal_config.to_dict(), multimodal_config.to_dict())
 
-    # overwrite from common since FLAVAModel/TFFLAVAModel return FLAVAOutput/TFFLAVAOutput
+    # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FLAVAModel.from_pretrained(model_name)
+            model = FlavaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class FLAVAForPreTrainingTester(FLAVAModelTester):
-    model_class = FLAVAForPreTraining
+class FlavaForPreTrainingTester(FlavaModelTester):
+    model_class = FlavaForPreTraining
 
     def prepare_config_and_inputs_for_common(self):
         _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
@@ -1023,13 +1020,7 @@ class FLAVAForPreTrainingTester(FLAVAModelTester):
             "return_loss": True,
         }
 
-    def _test_model(
-        self,
-        config,
-        inputs,
-        test_image=False,
-        test_text=False,
-    ):
+    def _test_model(self, config, inputs, test_image=False, test_text=False):
         model = self.model_class(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(
@@ -1145,9 +1136,9 @@ class FLAVAForPreTrainingTester(FLAVAModelTester):
 
 
 @require_torch
-class FLAVAForPreTrainingTest(FLAVAModelTest):
-    all_model_classes = (FLAVAForPreTraining,) if is_torch_available() else ()
-    class_for_tester = FLAVAForPreTrainingTester
+class FlavaForPreTrainingTest(FlavaModelTest):
+    all_model_classes = (FlavaForPreTraining,) if is_torch_available() else ()
+    class_for_tester = FlavaForPreTrainingTester
     test_torchscript = False
 
 
@@ -1160,12 +1151,12 @@ def prepare_img():
 
 @require_vision
 @require_torch
-class FLAVAModelIntegrationTest(unittest.TestCase):
+class FlavaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "aps/flava-full"
-        model = FLAVAModel.from_pretrained(model_name).to(torch_device)
-        processor = FLAVAProcessor.from_pretrained(model_name)
+        model_name = "facebook/flava-full"
+        model = FlavaModel.from_pretrained(model_name).to(torch_device)
+        processor = FlavaProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(
@@ -1174,7 +1165,6 @@ class FLAVAModelIntegrationTest(unittest.TestCase):
             padding="max_length",
             max_length=77,
             return_tensors="pt",
-            return_masks=False,
         ).to(torch_device)
 
         # forward pass
@@ -1189,29 +1179,28 @@ class FLAVAModelIntegrationTest(unittest.TestCase):
 
 @require_vision
 @require_torch
-class FLAVAForPreTrainingIntegrationTest(unittest.TestCase):
+class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "aps/flava-full"
-        codebook_name = "aps/flava-codebook"
-        model = FLAVAForPreTraining.from_pretrained(model_name).to(torch_device)
-        codebook = FLAVACodebook.from_pretrained(codebook_name).to(torch_device)
-        codebook_fe = FLAVACodebookFeatureExtractor.from_pretrained(codebook_name)
-        processor = FLAVAProcessor.from_pretrained(model_name)
+        model_name = "facebook/flava-full"
+        model = FlavaForPreTraining.from_pretrained(model_name).to(torch_device)
+        processor = FlavaProcessor.from_pretrained(model_name)
         torch.manual_seed(1)
         random.seed(1)
 
         image = prepare_img()
-        mim_labels = codebook.get_codebook_indices(**codebook_fe([image, image], return_tensors="pt").to(torch_device))
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"],
             images=[image, image],
             padding="max_length",
             max_length=77,
             return_tensors="pt",
-            return_masks=True,
-        ).to(torch_device)
-        inputs["mim_labels"] = mim_labels
+            return_codebook_pixels=True,
+            return_special_tokens_mask=True,
+            return_image_mask=True,
+        )
+        inputs = add_whole_word_masked_text(inputs, processor.tokenizer)
+        inputs = inputs.to(torch_device)
 
         # forward pass
         with torch.no_grad():

@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 import json
 import os
+import random
 import shutil
 import tempfile
 import unittest
@@ -30,31 +31,23 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import FLAVAFeatureExtractor, FLAVAProcessor
-    from transformers.models.flava.feature_extraction_flava import FLAVA_IMAGE_MEAN, FLAVA_IMAGE_STD
+    from transformers import FlavaFeatureExtractor, FlavaProcessor
+    from transformers.models.flava.feature_extraction_flava import (
+        FLAVA_CODEBOOK_MEAN,
+        FLAVA_CODEBOOK_STD,
+        FLAVA_IMAGE_MEAN,
+        FLAVA_IMAGE_STD,
+    )
 
 
 @require_vision
-class FLAVAProcessorTest(unittest.TestCase):
+class FlavaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
+
+        # fmt: off
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]
+        # fmt: on
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
@@ -74,6 +67,15 @@ class FLAVAProcessorTest(unittest.TestCase):
             "mask_group_min_patches": 16,
             "mask_group_min_aspect_ratio": 0.3,
             "mask_group_max_aspect_ratio": None,
+            "codebook_do_resize": True,
+            "codebook_size": 112,
+            "codebook_resample": None,
+            "codebook_do_center_crop": True,
+            "codebook_crop_size": 112,
+            "codebook_do_map_pixels": True,
+            "codebook_do_normalize": True,
+            "codebook_image_mean": FLAVA_CODEBOOK_MEAN,
+            "codebook_image_std": FLAVA_CODEBOOK_STD,
         }
 
         self.feature_extractor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
@@ -87,7 +89,7 @@ class FLAVAProcessorTest(unittest.TestCase):
         return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return FLAVAFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return FlavaFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -108,13 +110,13 @@ class FLAVAProcessorTest(unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor_slow = FLAVAProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
+        processor_slow = FlavaProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
         processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = FLAVAProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor_slow = FlavaProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = FLAVAProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
+        processor_fast = FlavaProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
         processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = FLAVAProcessor.from_pretrained(self.tmpdirname)
+        processor_fast = FlavaProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -124,17 +126,17 @@ class FLAVAProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor_slow.feature_extractor, FLAVAFeatureExtractor)
-        self.assertIsInstance(processor_fast.feature_extractor, FLAVAFeatureExtractor)
+        self.assertIsInstance(processor_slow.feature_extractor, FlavaFeatureExtractor)
+        self.assertIsInstance(processor_fast.feature_extractor, FlavaFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = FLAVAProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = FlavaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = FLAVAProcessor.from_pretrained(
+        processor = FlavaProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -142,13 +144,13 @@ class FLAVAProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, FLAVAFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, FlavaFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = FLAVAProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         image_input = self.prepare_image_inputs()
 
@@ -158,11 +160,24 @@ class FLAVAProcessorTest(unittest.TestCase):
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
+        # With rest of the args
+        random.seed(1234)
+        input_feat_extract = feature_extractor(
+            image_input, return_image_mask=True, return_codebook_pixels=True, return_tensors="np"
+        )
+        random.seed(1234)
+        input_processor = processor(
+            images=image_input, return_image_mask=True, return_codebook_pixels=True, return_tensors="np"
+        )
+
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = FLAVAProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "lower newer"
 
@@ -177,7 +192,7 @@ class FLAVAProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = FLAVAProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -185,6 +200,21 @@ class FLAVAProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
+
+        self.assertListEqual(
+            list(inputs.keys()),
+            [
+                "input_ids",
+                "token_type_ids",
+                "attention_mask",
+                "pixel_values",
+                "codebook_pixel_values",
+                "bool_masked_pos",
+            ],
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -194,7 +224,7 @@ class FLAVAProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = FLAVAProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
