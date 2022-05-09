@@ -57,7 +57,8 @@ TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
 
-# to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
+# to_2tuple, drop_path, TFSwinPatchEmbeddings, TFSwinPatchMerging and TFSwinDropPath are tensorflow
+# implementations of PyTorch functionalities in the timm library.
 
 
 @dataclass
@@ -1197,6 +1198,21 @@ class PixelShuffle(tf.keras.layers.Layer):
         return tf.nn.depth_to_space(x, block_size=self.upscale_factor, data_format=self.data_format)
 
 
+class TFSwinDecoder(tf.keras.layers.Layer):
+    def __init__(self, config: SwinConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.conv2d =  tf.keras.layers.Conv2D(
+            filters=config.encoder_stride**2 * 3, kernel_size=1, strides=1, name="0"
+        )
+        self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
+
+    def call(self, x, training=False):
+        hidden_states = x
+        hidden_states = self.conv2d(hidden_states)
+        hidden_states = self.pixel_shuffle(hidden_states)
+        return hidden_states
+
+
 @add_start_docstrings(
     "Swin Model with a decoder on top for masked image modeling, as proposed in `SimMIM <https://arxiv.org/abs/2111.09886>`__.",
     SWIN_START_DOCSTRING,
@@ -1207,13 +1223,8 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
 
         self.swin = TFSwinModel(config, add_pooling_layer=False, use_mask_token=True, name="swin")
 
-        self.decoder = tf.keras.Sequential(
-            [
-                tf.keras.layers.Conv2D(filters=config.encoder_stride**2 * 3, kernel_size=1, strides=1),
-                PixelShuffle(config.encoder_stride),
-            ],
-            name="decoder",
-        )
+        self.decoder = TFSwinDecoder(config, name="decoder")
+
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSwinMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1245,7 +1256,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        #FIXME - rmeove once model added to hub
+        #FIXME - remove once model added to hub
 
         >>> model = TFSwinForMaskedImageModeling.from_pretrained(
         ...     "microsoft/swin-tiny-patch4-window7-224", from_pt=True
@@ -1254,7 +1265,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = tf.random.uniform((3, 5)) >= 0.5
+        >>> bool_masked_pos = tf.random.uniform((1, num_patches)) >= 0.5
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
@@ -1281,14 +1292,16 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         sequence_output = tf.reshape(sequence_output, (batch_size, num_channels, height, width))
 
         # Reconstruct pixel values
+        # B,C,H,W -> B,H,W,C
         sequence_output = tf.transpose(sequence_output, (0, 2, 3, 1))
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
+        # B,H,W,C -> B,C,H,W
         reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
         masked_im_loss = None
         if bool_masked_pos is not None:
             size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+            bool_masked_pos = tf.reshape(bool_masked_pos, (-1, size, size))
             mask = tf.repeat(bool_masked_pos, self.config.patch_size, 1)
             mask = tf.repeat(mask, self.config.patch_size, 2)
             mask = tf.expand_dims(mask, 1)
