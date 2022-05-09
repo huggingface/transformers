@@ -583,7 +583,7 @@ OPT_INPUTS_DOCSTRING = r"""
 
 class OPTDecoder(OPTPretrainedModel):
     """
-    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`OPTDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OPTDecoderLayer`]
 
     Args:
         config: OPTConfig
@@ -621,7 +621,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
 
-        self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -682,13 +682,13 @@ class OPTDecoder(OPTPretrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(num_layers, num_attention_heads)`, *optional*):
+            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (`torch.Tensor` of shape `(num_layers, num_attention_heads)`, *optional*):
+            cross_attn_head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
                 cross-attention on hidden heads. Mask values selected in `[0, 1]`:
 
@@ -1022,13 +1022,13 @@ class OPTForCausalLM(OPTPretrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(num_layers, num_attention_heads)`, *optional*):
+            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (`torch.Tensor` of shape `(num_layers, num_attention_heads)`, *optional*):
+            cross_attn_head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
