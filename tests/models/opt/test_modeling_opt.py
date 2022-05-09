@@ -86,6 +86,7 @@ class OPTModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        embed_dim=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -104,6 +105,7 @@ class OPTModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.embed_dim = embed_dim
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
@@ -132,6 +134,7 @@ class OPTModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            embed_dim=self.embed_dim,
         )
 
     def get_pipeline_config(self):
