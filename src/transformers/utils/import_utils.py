@@ -428,6 +428,10 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
+def is_accelerate_available():
+    return importlib.util.find_spec("accelerate") is not None
+
+
 def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
@@ -725,6 +729,12 @@ PYCTCDECODE_IMPORT_ERROR = """
 `pip install pyctcdecode`
 """
 
+# docstyle-ignore
+ACCELERATE_IMPORT_ERROR = """
+{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
+`pip install accelerate`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -750,6 +760,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
+        ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
     ]
 )
 
