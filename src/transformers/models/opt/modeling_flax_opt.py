@@ -240,7 +240,7 @@ class FlaxOPTAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {self.num_heads})."
             )
-
+        self.scaling = self.head_dim**-0.5
         dense = partial(
             nn.Dense,
             self.embed_dim,
@@ -313,7 +313,7 @@ class FlaxOPTAttention(nn.Module):
         batch_size = hidden_states.shape[0]
 
         # get query proj
-        query_states = self.q_proj(hidden_states)
+        query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
         if is_cross_attention:
             # cross_attentions
@@ -389,118 +389,6 @@ class FlaxOPTAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayer with Bart->OPT
-class FlaxOPTEncoderLayer(nn.Module):
-    config: OPTConfig
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self) -> None:
-        self.embed_dim = self.config.d_model
-        self.self_attn = FlaxOPTAttention(
-            config=self.config,
-            embed_dim=self.embed_dim,
-            num_heads=self.config.encoder_attention_heads,
-            dropout=self.config.attention_dropout,
-            dtype=self.dtype,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.activation_fn = ACT2FN[self.config.activation_function]
-        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
-        self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-        self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
-        )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-
-    def __call__(
-        self,
-        hidden_states: jnp.ndarray,
-        attention_mask: jnp.ndarray,
-        output_attentions: bool = True,
-        deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
-        residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
-
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->OPT
-class FlaxOPTEncoderLayerCollection(nn.Module):
-    config: OPTConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.layers = [
-            FlaxOPTEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
-        ]
-        self.layerdrop = self.config.encoder_layerdrop
-
-    def __call__(
-        self,
-        hidden_states,
-        attention_mask,
-        deterministic: bool = True,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ):
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-
-        for encoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    deterministic,
-                )
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        outputs = (hidden_states, all_hidden_states, all_attentions)
-
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayer with Bart->OPT
@@ -692,71 +580,6 @@ class FlaxOPTClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoder with Bart->OPT
-class FlaxOPTEncoder(nn.Module):
-    config: OPTConfig
-    embed_tokens: nn.Embed
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-
-        embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
-        self.max_source_positions = self.config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-        self.layers = FlaxOPTEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
-
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(position_ids + self.offset)
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
-        outputs = self.layers(
-            hidden_states,
-            attention_mask,
-            deterministic=deterministic,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return outputs
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder with Bart->OPT
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
@@ -843,62 +666,57 @@ class FlaxOPTModule(nn.Module):
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
-
-        self.encoder = FlaxOPTEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-
-    def _get_encoder_module(self):
-        return self.encoder
-
-    def _get_decoder_module(self):
-        return self.decoder
+        self.transformer = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+        )
 
     def __call__(
         self,
         input_ids,
         attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
         position_ids,
-        decoder_position_ids,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
+        init_cache: bool = False,
     ):
-        encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask,
+            position_ids,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            deterministic=deterministic,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
         )
 
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            position_ids=decoder_position_ids,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
+        hidden_states = outputs[0]
+
+        if self.config.tie_word_embeddings:
+            shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            return (lm_logits,) + outputs[1:]
 
-        return FlaxSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+        return FlaxCausalLMOutputWithCrossAttentions(
+            logits=lm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
