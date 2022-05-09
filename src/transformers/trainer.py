@@ -1081,16 +1081,13 @@ class Trainer:
 
         return model
 
-    def ipex_optimize_model(self, model, training=False, dtype=torch.float32, auto_kernel_selection=None):
+    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not training:
-            if auto_kernel_selection != None:
-                model = ipex.optimize(model, dtype=dtype, level=self.args.ipex_opt_level, auto_kernel_selection=auto_kernel_selection)
-            else:
-                model = ipex.optimize(model, dtype=dtype, level=self.args.ipex_opt_level)
+            model = ipex.optimize(model, dtype=dtype, level="O1")
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level=self.args.ipex_opt_level)
+            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
 
         return model
 
@@ -1099,7 +1096,7 @@ class Trainer:
             jit_inputs=()
             for _,batch in enumerate(dataloader):
                 for _,label in enumerate(batch):
-                    dumpy_tensor = torch.ones((batch[label].shape), dtype=torch.long)
+                    dumpy_tensor = torch.ones_like(batch[label])
                     L1=list(jit_inputs)
                     L1.append(dumpy_tensor)
                     jit_inputs=tuple(L1)
@@ -1114,7 +1111,7 @@ class Trainer:
                         model = torch.jit.trace(model, jit_inputs, strict=False)
                     model = torch.jit.freeze(model)
             except RuntimeError:
-                logger.info(f"fail to use jit mode")
+                logger.info(f"fail to use PyTorch jit mode")
                 pass
 
         return model
@@ -1124,7 +1121,7 @@ class Trainer:
             if self.use_cpu_amp:
                 model = self.ipex_optimize_model(model, training, dtype=torch.bfloat16)
             else:
-                model = self.ipex_optimize_model(model, training, dtype=torch.float32, auto_kernel_selection=self.args.auto_kernel_selection)
+                model = self.ipex_optimize_model(model, training, dtype=torch.float32)
         if self.args.jit_mode:
             model = self.torch_jit_model(model, training, dataloader)
 
