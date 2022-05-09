@@ -28,7 +28,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    CausalLMOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -886,7 +885,7 @@ class OPTModel(OPTPretrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
@@ -906,7 +905,7 @@ class OPTModel(OPTPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
         # different to other models, OPT automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -929,7 +928,7 @@ class OPTModel(OPTPretrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # If the user passed a tuple for encoder_outputs, we wrap it in a CausalLMOutput when return_dict=True
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutputWithPastAndCrossAttentions when return_dict=True
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -945,11 +944,11 @@ class OPTModel(OPTPretrainedModel):
             return_dict=return_dict,
         )
 
-        return CausalLMOutput(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
         )
 
