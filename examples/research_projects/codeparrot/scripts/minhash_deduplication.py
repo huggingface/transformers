@@ -4,6 +4,7 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
 
+import numpy as np
 from datasets import Dataset
 from tqdm import tqdm
 
@@ -112,7 +113,10 @@ def make_duplicate_clusters(dataset_iterator: Type[Dataset]):
 def compute_minhash(example):
     result = {}
     minhash = get_min_hash([t for t in NON_ALPHA.split(example["content"]) if len(t.strip()) > 0])
-    result.update({"hashvalues": minhash.digest()})
+    if minhash is not None:
+        result.update({"hashvalues": minhash.digest()})
+    else:
+        result.update({"hashvalues": np.array([], dtype=np.uint64)})
     return result
 
 
@@ -124,9 +128,10 @@ def make_duplicate_clusters_dsmap(dataset: Type[Dataset]):
     di = DuplicationIndex()
     for index, element in tqdm(enumerate(dataset)):
         hashvalues = element["hashvalues"]
-        min_hash = MinHash(hashvalues=hashvalues)
-        filename = (index, element["repo_name"], element["path"])
-        di.add(filename, min_hash)
+        if len(hashvalues) > 0:
+            min_hash = MinHash(hashvalues=hashvalues)
+            filename = (index, element["repo_name"], element["path"])
+            di.add(filename, min_hash)
     return di.get_duplicate_clusters()
 
 
@@ -188,7 +193,7 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[Lis
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
     # todo: make this multiprocessing, pay attention to memory usage
     extreme_indices = set()
-    for cluster in duplicate_clusters:
+    for cluster in tqdm(duplicate_clusters):
         for el in find_cluster_extremes(cluster, dataset):
             extreme_indices.add(el["base_index"])
     remove_indices = duplicate_indices - extreme_indices
