@@ -52,9 +52,9 @@ def prepare_opt_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -123,7 +123,7 @@ class OPTModelTester:
         return OPTConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            num_layers=self.num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
@@ -177,40 +177,6 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Do not use this test since it is for encoder decoders?
-
-    # def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-    #     model = OPTModel(config=config).to(torch_device).eval()
-    #     outputs = model(**inputs_dict)
-
-    #     encoder_last_hidden_state = outputs.encoder_last_hidden_state
-    #     last_hidden_state = outputs.last_hidden_state
-
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         encoder = model.get_encoder()
-    #         encoder.save_pretrained(tmpdirname)
-    #         encoder = OPTEncoder.from_pretrained(tmpdirname).to(torch_device)
-
-    #     encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-    #         0
-    #     ]
-
-    #     self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
-
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         decoder = model.get_decoder()
-    #         decoder.save_pretrained(tmpdirname)
-    #         decoder = OPTDecoder.from_pretrained(tmpdirname).to(torch_device)
-
-    #     last_hidden_state_2 = decoder(
-    #         input_ids=inputs_dict["decoder_input_ids"],
-    #         attention_mask=inputs_dict["decoder_attention_mask"],
-    #         encoder_hidden_states=encoder_last_hidden_state,
-    #         encoder_attention_mask=inputs_dict["attention_mask"],
-    #     )[0]
-
-    #     self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
-
 
 @require_torch
 class OPTHeadTests(unittest.TestCase):
@@ -241,7 +207,7 @@ class OPTHeadTests(unittest.TestCase):
         config = OPTConfig(
             vocab_size=self.vocab_size,
             d_model=24,
-            num_layers=2,
+            num_hidden_layers=2,
             num_attention_heads=2,
             ffn_dim=32,
             max_position_embeddings=48,
@@ -267,7 +233,7 @@ class OPTHeadTests(unittest.TestCase):
         config = OPTConfig(
             vocab_size=self.vocab_size,
             d_model=24,
-            num_layers=2,
+            num_hidden_layers=2,
             num_attention_heads=2,
             ffn_dim=32,
             max_position_embeddings=48,
@@ -508,11 +474,11 @@ class FastIntegrationTests(unittest.TestCase):
 class OPTModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return GPT2Tokenizer.from_pretrained("facebook/opt-large")
+        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
     @slow
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("facebook/opt-large").to(torch_device)
+        model = OPTModel.from_pretrained("ArthurZ/350-m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
@@ -567,11 +533,11 @@ class OPTModelIntegrationTests(unittest.TestCase):
     #     assert_tensors_close(batched_logits[1], logits2, atol=1e-3)
     #     assert_tensors_close(expected_slice, logits_arr, atol=1e-3)
 
-    def test_xsum_config_generation_params(self):
-        config = OPTConfig.from_pretrained("facebook/opt-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
-        self.assertDictEqual(expected_params, config_params)
+    # def test_xsum_config_generation_params(self):
+    #     config = OPTConfig.from_pretrained("facebook/opt-large-xsum")
+    #     expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+    #     config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+    #     self.assertDictEqual(expected_params, config_params)
 
 
 class OPTStandaloneDecoderModelTester:

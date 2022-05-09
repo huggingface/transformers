@@ -63,7 +63,9 @@ def rename_key(dct, old, new):
 
 def load_xsum_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
-    sd = torch.load(checkpoint_path, map_location="cpu")["model"]
+    sd = torch.load(checkpoint_path, map_location="cpu")
+    if "model" in sd.keys():
+        sd = torch.load(checkpoint_path, map_location="cpu")["model"]
     sd.pop("decoder.version")
     return sd
 

@@ -48,7 +48,7 @@ class OPTConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`OPTModel`] or [`TFOPTModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        num_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.
         ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
@@ -95,19 +95,19 @@ class OPTConfig(PretrainedConfig):
     ```"""
     model_type = "opt"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_hidden_layers": "num_layers"}
+    attribute_map = {"hidden_size": "d_model", "num_hidden_layers": "num_hidden_layers"}
 
     def __init__(
         self,
         vocab_size=50272,  # TODO check the real value
         max_position_embeddings=2048,
-        num_layers=24,
-        num_attention_heads=16,
-        ffn_dim=4096,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        ffn_dim=3072,
         layerdrop=0.0,
         activation_function="gelu",
-        d_model=1024,
-        embed_dim=512,
+        d_model=768,
+        embed_dim=768,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -120,6 +120,8 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
+        output_projection=False,
+        decoder_layernorm=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -129,7 +131,7 @@ class OPTConfig(PretrainedConfig):
         self.ffn_dim = ffn_dim
         self.share_input_output_embed = share_input_output_embed
         self.d_model = d_model
-        self.num_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -138,6 +140,8 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.output_projection = output_projection
+        self.decoder_layernorm = decoder_layernorm
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -186,7 +190,7 @@ class OPTOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 ]
             )
             if self.use_past:
-                num_encoder_layers, _ = self.num_layers
+                num_encoder_layers, _ = self.num_hidden_layers
                 for i in range(num_encoder_layers):
                     common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
                     common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
@@ -209,7 +213,7 @@ class OPTOnnxConfig(OnnxSeq2SeqConfigWithPast):
         else:
             common_outputs = super(OnnxConfigWithPast, self).outputs
             if self.use_past:
-                num_encoder_layers, _ = self.num_layers
+                num_encoder_layers, _ = self.num_hidden_layers
                 for i in range(num_encoder_layers):
                     common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
                     common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
@@ -263,12 +267,12 @@ class OPTOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
             common_inputs["past_key_values"] = []
             # If the number of encoder and decoder layers are present in the model configuration, both are considered
-            num_encoder_layers, num_layers = self.num_layers
-            min_num_layers = min(num_encoder_layers, num_layers)
-            max_num_layers = max(num_encoder_layers, num_layers) - min_num_layers
-            remaining_side_name = "encoder" if num_encoder_layers > num_layers else "decoder"
+            num_encoder_layers, num_hidden_layers = self.num_hidden_layers
+            min_num_hidden_layers = min(num_encoder_layers, num_hidden_layers)
+            max_num_hidden_layers = max(num_encoder_layers, num_hidden_layers) - min_num_hidden_layers
+            remaining_side_name = "encoder" if num_encoder_layers > num_hidden_layers else "decoder"
 
-            for _ in range(min_num_layers):
+            for _ in range(min_num_hidden_layers):
                 common_inputs["past_key_values"].append(
                     (
                         torch.zeros(decoder_shape),
@@ -279,7 +283,7 @@ class OPTOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 )
             # TODO: test this.
             shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
-            for _ in range(min_num_layers, max_num_layers):
+            for _ in range(min_num_hidden_layers, max_num_hidden_layers):
                 common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
         return common_inputs
 
@@ -303,7 +307,7 @@ class OPTOnnxConfig(OnnxSeq2SeqConfigWithPast):
             batch, seqlen = common_inputs["input_ids"].shape
             # Not using the same length for past_key_values
             past_key_values_length = seqlen + 2
-            num_encoder_layers, _ = self.num_layers
+            num_encoder_layers, _ = self.num_hidden_layers
             num_encoder_attention_heads, _ = self.num_attention_heads
             past_shape = (
                 batch,
