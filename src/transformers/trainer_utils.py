@@ -36,6 +36,7 @@ from .utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
+    requires_backends,
 )
 
 
@@ -355,6 +356,7 @@ class TrainerMemoryTracker:
     stages = {
         "__init__": "init",
         "train": "train",
+        "_inner_training_loop": "train",
         "evaluate": "eval",
         "predict": "test",
     }
@@ -582,6 +584,37 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+def find_executable_batch_size(
+    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+):
+    """
+    Args:
+    A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
+    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    its first argument.
+        function (`callable`, *optional*)
+            A function to wrap
+        starting_batch_size (`int`, *optional*)
+            The batch size to try and fit into memory
+        auto_find_batch_size (`bool`, *optional*)
+            If False, will just execute `function`
+    """
+    if function is None:
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            auto_find_batch_size=auto_find_batch_size,
+        )
+
+    if auto_find_batch_size:
+        requires_backends(find_executable_batch_size, "accelerate")
+        import accelerate.memory_utils as mem_utils
+
+        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+
+    return functools.partial(function, batch_size=starting_batch_size)
 
 
 class FSDPOption(ExplicitEnum):
