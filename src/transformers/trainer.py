@@ -1707,7 +1707,7 @@ class Trainer:
                 self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             # Best model is a sharded checkpoint
-            load_result = load_sharded_checkpoint(self.state.best_model_checkpoint, strict=False)
+            load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
             self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
