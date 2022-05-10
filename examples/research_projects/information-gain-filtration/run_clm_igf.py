@@ -1,5 +1,5 @@
 # Copyright 2022 - Intel Corp. All rights reserved.
-# Authors: Mayank Kumar Raunak, Javier Turek
+# Authors: Mayank Kumar Raunak, Javier Turek, Nicole Beckage
 
 """
 Implementation of a new method for fine-tuning transformer models that we call 
