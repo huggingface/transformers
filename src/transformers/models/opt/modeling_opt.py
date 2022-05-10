@@ -135,174 +135,6 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         )
 
 
-class OLD_OPTAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.1,
-        is_decoder: bool = True,
-        bias: bool = True,
-        add_zero_attn=False,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        self.add_zero_attn = add_zero_attn
-
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        # hidden_states = hidden_states.permute(1, 0, 2)
-
-        is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        # uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-        # all previous decoder key/value_states. Further calls to uni-directional self-attention
-        # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-        # if encoder bi-directional self-attention `past_key_value` is always `None`
-        past_key_value = (key_states, value_states)
-
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-
-        if attention_mask is not None:
-            if attention_mask.dtype == torch.uint8:
-                # warnings.warn("Byte tensor for attn_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead.")
-                attention_mask = attention_mask.to(torch.bool)
-            else:
-                assert (
-                    attention_mask.is_floating_point() or attention_mask.dtype == torch.bool
-                ), f"Only float, byte, and bool types are supported for attn_mask, not {attention_mask.dtype}"
-            # ensure attn_mask's dim is 3
-            if attention_mask.dim() == 2:
-                correct_2d_size = (tgt_len, src_len)
-                if attention_mask.shape != correct_2d_size:
-                    raise RuntimeError(
-                        f"The shape of the 2D attn_mask is {attention_mask.shape}, but should be {correct_2d_size}."
-                    )
-                attention_mask = attention_mask.unsqueeze(0)
-            elif attention_mask.dim() == 3:
-                correct_3d_size = (bsz * self.num_heads, tgt_len, src_len)
-                if attention_mask.shape != correct_3d_size:
-                    raise RuntimeError(
-                        f"The shape of the 3D attn_mask is {attention_mask.shape}, but should be {correct_3d_size}."
-                    )
-            elif attention_mask.dim() == 4:
-                attention_mask = attention_mask[0, 0, :, :]  # consider only one mask since they should be all the same
-            else:
-                raise RuntimeError(f"attn_mask's dimension {attention_mask.dim()} is not supported")
-
-        if attention_mask is not None:
-            attn_weights = torch.baddbmm(attention_mask, query_states, key_states.transpose(-2, -1))
-        else:
-            attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
-            )
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
 class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -311,17 +143,15 @@ class OPTAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.1,
-        is_decoder: bool = True,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
         bias: bool = True,
-        add_zero_attn=False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        self.add_zero_attn = add_zero_attn
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -346,15 +176,12 @@ class OPTAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
-        # hidden_states = hidden_states.permute(1, 0, 2)
-
         is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
@@ -381,11 +208,15 @@ class OPTAttention(nn.Module):
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        # uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-        # all previous decoder key/value_states. Further calls to uni-directional self-attention
-        # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-        # if encoder bi-directional self-attention `past_key_value` is always `None`
-        past_key_value = (key_states, value_states)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -393,43 +224,20 @@ class OPTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-
-        if attention_mask is not None:
-            if attention_mask.dtype == torch.uint8:
-                # warnings.warn("Byte tensor for attn_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead.")
-                attention_mask = attention_mask.to(torch.bool)
-            else:
-                assert (
-                    attention_mask.is_floating_point() or attention_mask.dtype == torch.bool
-                ), f"Only float, byte, and bool types are supported for attn_mask, not {attention_mask.dtype}"
-            # ensure attn_mask's dim is 3
-            if attention_mask.dim() == 2:
-                correct_2d_size = (tgt_len, src_len)
-                if attention_mask.shape != correct_2d_size:
-                    raise RuntimeError(
-                        f"The shape of the 2D attn_mask is {attention_mask.shape}, but should be {correct_2d_size}."
-                    )
-                attention_mask = attention_mask.unsqueeze(0)
-            elif attention_mask.dim() == 3:
-                correct_3d_size = (bsz * self.num_heads, tgt_len, src_len)
-                if attention_mask.shape != correct_3d_size:
-                    raise RuntimeError(
-                        f"The shape of the 3D attn_mask is {attention_mask.shape}, but should be {correct_3d_size}."
-                    )
-            elif attention_mask.dim() == 4:
-                attention_mask = attention_mask[0, 0, :, :]  # consider only one mask since they should be all the same
-            else:
-                raise RuntimeError(f"attn_mask's dimension {attention_mask.dim()} is not supported")
-
-        if attention_mask is not None:
-            attn_weights = torch.baddbmm(attention_mask, query_states, key_states.transpose(-2, -1))
-        else:
-            attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
             )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -501,7 +309,6 @@ class OPTDecoderLayer(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        key_padding_mask: Optional[Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -520,24 +327,12 @@ class OPTDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        # self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        # hidden_states, self_attn_weights, present_key_value = self.self_attn(
-        #     hidden_states=hidden_states,
-        #     attention_mask=attention_mask,
-        #     self_attn_padding_mask=self_attn_padding_mask,
-        #     layer_head_mask=layer_head_mask,
-        #     output_attentions=output_attentions,
-        #     past_key_value=past_key_value,
-        # )
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
-            key_padding_mask=key_padding_mask,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -608,17 +403,6 @@ class OPTPretrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (OPTDecoder)):
             module.gradient_checkpointing = value
-
-    @property
-    @add_start_docstrings_to_model_forward(OPT_START_DOCSTRING)
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
 
 
 OPT_GENERATION_EXAMPLE = r"""
@@ -775,7 +559,6 @@ class OPTDecoder(OPTPretrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        self_attn_padding_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -848,8 +631,6 @@ class OPTDecoder(OPTPretrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # past_key_values_length
-
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
@@ -858,9 +639,6 @@ class OPTDecoder(OPTPretrainedModel):
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-
-        if self_attn_padding_mask is None and (self.cross_self_attention or input_ids.eq(self.padding_idx).any()):
-            self_attn_padding_mask = input_ids.eq(self.padding_idx)
 
         # embed positions
         positions = self.embed_positions(input_ids)
@@ -871,7 +649,6 @@ class OPTDecoder(OPTPretrainedModel):
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        # hidden_states = hidden_states.permute(1, 0, 2)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -927,7 +704,6 @@ class OPTDecoder(OPTPretrainedModel):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    key_padding_mask=self_attn_padding_mask,
                 )
 
                 if self.layer_norm:
@@ -1039,8 +815,11 @@ class OPTModel(OPTPretrainedModel):
 
 
 class OPTForCausalLM(OPTPretrainedModel):
+    _keys_to_ignore_on_load_missing = [r"lm_head\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
+
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
