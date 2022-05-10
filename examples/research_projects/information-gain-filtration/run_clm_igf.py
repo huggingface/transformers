@@ -25,14 +25,16 @@ Last, a plot is generated to compare the performance of IGF to standard fine-tun
 
 # Prerequisite libraries:
 
-import joblib
+import argparse
+from typing import Optional
+
 import numpy as np
 import torch
-from transformers import GPT2LMHeadModel
-from typing import Optional
 from torch.utils.data import DataLoader, RandomSampler
+
+import joblib
 from igf.igf import *
-import argparse
+from transformers import GPT2LMHeadModel
 
 
 def generate_n_pairs(
