@@ -35,16 +35,17 @@ from .mpu_utils import split_tensor_along_last_dim
 from .scaled_softmax import ScaledSoftmax  # to define it locally?
 
 
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+# try:
+#     from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 
-    print("successfully imported apex!")
-except ImportError:
-    from torch.nn import LayerNorm
+#     print("successfully imported apex!")
+# except ImportError:
+#     from torch.nn import LayerNorm
 
-    print(
-        "Could not import apex - trying with torch.nn.LayerNorm instead - may lead to very small numerical instabilities"
-    )
+#     print(
+#         "Could not import apex - trying with torch.nn.LayerNorm instead - may lead to very small numerical instabilities"
+#     )
+from torch.nn import LayerNorm
 
 logger = logging.get_logger(__name__)
 
@@ -60,13 +61,20 @@ BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Utility functions below:
 
-def attention_mask_func(attention_scores, attention_mask):
-    # Make use of floats
+def attention_mask_func(attention_scores, attention_mask, causal_mask):
     if attention_mask.dtype == torch.bool:
-        return attention_scores.masked_fill_(attention_mask, -10000.0)
+        attention_mask_bool = ~attention_mask
     else:
-        values_to_attend = 1.0 - attention_mask
-        return (values_to_attend * attention_scores) - 10000.0 * attention_mask
+        attention_mask_bool = (1 - attention_mask).bool()
+    
+    query_length, key_length, n_heads = attention_scores.size(2), attention_scores.size(3), attention_scores.size(1)
+    padded_causal_mask = (attention_mask_bool[:, None, key_length - query_length : key_length, None] + ~causal_mask[:, :, key_length - query_length : key_length, : key_length]).bool()
+    # Make use of floats
+    if padded_causal_mask.dtype == torch.bool:
+        return attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0)
+    else:
+        values_to_attend = 1.0 - padded_causal_mask
+        return (values_to_attend * attention_scores) - 10000.0 * padded_causal_mask 
 
 # def attention_mask_func(attention_scores, attention_mask):
 #     return attention_scores.masked_fill_(attention_mask, -10000.0)
@@ -112,6 +120,8 @@ class BigScience176BAttention(nn.Module):
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         self.masked_softmax_fusion = config.masked_softmax_fusion
 
+        
+
         if dtype == torch.float16:
             self.fp16 = True
             self.bf16 = False
@@ -140,9 +150,8 @@ class BigScience176BAttention(nn.Module):
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
+            config.seq_length,
         )
-
-        self.mask_func = attention_mask_func
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
         # TODO : Try a custom class
@@ -221,14 +230,18 @@ class BigScience176BAttention(nn.Module):
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
 
-        if use_cache and attention_mask is not None:
-            with torch.no_grad():
-                if layer_past is not None:
-                    attention_mask = attention_mask[
-                        ..., : attention_scores.size(3) - 1, : attention_scores.size(3)
-                    ]
-                else:
-                    attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
+        ### Hardcoding causal mask for inference
+        
+        # if use_cache and attention_mask is not None:
+        #     with torch.no_grad():
+        #         if layer_past is not None:
+        #             print(attention_mask)
+        #             print(attention_mask.shape)
+        #             attention_mask = attention_mask[
+        #                 ..., attention_scores.size(3) - 1, : attention_scores.size(3)
+        #             ].unsqueeze(2)
+        #         else:
+        #             attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
 
         # ===========================
         # Attention probs and dropout
@@ -236,18 +249,7 @@ class BigScience176BAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
 
-        # softmax across tp ranks: see here https://github.com/pytorch/pytorch/issues/76232
-        # aggregated_tensors = []
-        # slices = self.num_heads / self.pretraining_tp
-        # for i in range(self.pretraining_tp):
-        #     input_ = attention_scores[:, int(i * slices) : int((i + 1) * slices), :]
-        #     mask_output = self.mask_func(input_, attention_mask) if attention_mask is not None else input_
-        #     aggregated_tensors.append(torch.nn.Softmax(dim=-1)(mask_output))
-
-        # attention_probs = torch.cat(aggregated_tensors, dim=1)
-        # mask_output = (
-        #     self.mask_func(attention_scores, attention_mask) if attention_mask is not None else attention_scores
-        # )
+        
         # attention_probs = torch.nn.Softmax(dim=-1)(mask_output)
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
         attention_probs = self.attention_dropout(attention_probs)
@@ -358,6 +360,7 @@ class BigScience176BMLP(nn.Module):
 
 
 class BigScience176BBlock(nn.Module):
+
     def __init__(self, config, layer_number=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -487,6 +490,7 @@ class BigScience176BBlock(nn.Module):
 
 
 class BigScience176BPreTrainedModel(PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -667,7 +671,6 @@ DEPARALLELIZE_DOCSTRING = r"""
     BIGSCIENCE176B_START_DOCSTRING,
 )
 class BigScience176BModel(BigScience176BPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -896,7 +899,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
     BIGSCIENCE176B_START_DOCSTRING,
 )
 class BigScience176BLMHeadModel(BigScience176BPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

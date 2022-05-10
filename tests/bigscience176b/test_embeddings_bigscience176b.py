@@ -329,14 +329,14 @@ class BigScienceEmbeddingTest(unittest.TestCase):
             3478,
         ]
 
-        a = torch.randn(1, 1, 20, 20)
-        ATTN_MASK = (torch.triu(a, diagonal=1) != 0).to(device)
+        # a = torch.randn(1, 1, 20, 20)
+        # ATTN_MASK = (torch.triu(a, diagonal=1) != 0).to(device)
 
         MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
         MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
 
-        logits = model(tensor_ids.to(device), attention_mask=ATTN_MASK)
+        logits = model(tensor_ids.to(device))
         output_dict = {
             "min": logits.last_hidden_state.min(dim=-1).values[0][0].item(),
             "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),
@@ -352,9 +352,9 @@ class BigScienceEmbeddingTest(unittest.TestCase):
     @torch.no_grad()
     # @unittest.skip("demonstrating skipping")
     def test_logits(self):
-        # cuda_available = torch.cuda.is_available()
-        cuda_available = False
-        device = torch.device("cuda:0" if cuda_available else "cpu")
+        cuda_available = torch.cuda.is_available()
+        # cuda_available = False
+        device = torch.device("cuda:3" if cuda_available else "cpu")
         model = BigScience176BLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
@@ -381,14 +381,11 @@ class BigScienceEmbeddingTest(unittest.TestCase):
             3478,
         ]
 
-        a = torch.randn(1, 1, 20, 20)
-        ATTN_MASK = (torch.triu(a, diagonal=1) != 0).to(device)
-
         MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
 
         tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(device)
-        output = model(tensor_ids, attention_mask=ATTN_MASK).logits
+        output = model(tensor_ids).logits
 
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
         if cuda_available:
@@ -397,7 +394,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         else:
             self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
             self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
-
-
+        
 if __name__ == "__main__":
     unittest.main()

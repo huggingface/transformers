@@ -17,7 +17,6 @@
 import torch
 import torch.nn as nn
 
-
 class ScaledSoftmax(nn.Module):
     """
     fused operation: scaling + mask + softmax
@@ -31,7 +30,6 @@ class ScaledSoftmax(nn.Module):
         softmax_in_fp32: if true, softmax in performed at fp32 precision.
         scale: scaling factor used in input tensor scaling.
     """
-
     # custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
@@ -42,6 +40,7 @@ class ScaledSoftmax(nn.Module):
         mask_func,
         softmax_in_fp32,
         scale,
+        max_positions,
     ):
         super(ScaledSoftmax, self).__init__()
         self.input_in_fp16 = input_in_fp16
@@ -55,7 +54,16 @@ class ScaledSoftmax(nn.Module):
         self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
-        assert self.scale is None or softmax_in_fp32, "softmax should be in fp32 when scaled"
+        self.register_buffer(
+            "causal_mask",
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                1, 1, max_positions, max_positions
+            ),
+        )
+
+        assert (
+            self.scale is None or softmax_in_fp32
+        ), "softmax should be in fp32 when scaled"
 
     def forward(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
@@ -63,7 +71,7 @@ class ScaledSoftmax(nn.Module):
 
         if self.scale is not None:
             input = input * self.scale
-        mask_output = self.mask_func(input, mask) if mask is not None else input
+        mask_output = self.mask_func(input, mask, self.causal_mask) if mask is not None else input
         probs = torch.nn.Softmax(dim=-1)(mask_output)
 
         if self.input_in_float16 and self.softmax_in_fp32:
