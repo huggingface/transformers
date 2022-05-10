@@ -136,5 +136,6 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    yolos,
     yoso,
 )

@@ -28,7 +28,11 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+<<<<<<< HEAD
         ("mctct", "MCTCTModel"),
+=======
+        ("yolos", "YolosModel"),
+>>>>>>> 6d80c92c77593dc674052b5a46431902e6adfe88
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("glpn", "GLPNModel"),
@@ -387,6 +391,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
+        ("yolos", "YolosForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
     ]
 )

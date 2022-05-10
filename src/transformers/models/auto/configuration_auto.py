@@ -30,6 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("mctct", "MCTCTConfig"),
+        ("yolos", "YolosConfig"),
         ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
         ("decision_transformer", "DecisionTransformerConfig"),
@@ -140,6 +141,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
         ("mctct", "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -234,6 +236,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("mctct", "MCTCT"),
+        ("yolos", "YOLOS"),
         ("tapex", "TAPEX"),
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),
