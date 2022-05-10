@@ -904,6 +904,17 @@ class TrainingArguments:
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation (`--fp16_full_eval`) can only be used on CUDA devices."
             )
 
+        if (
+            is_torch_available()
+            and (self.device.type != "cuda")
+            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (self.device.type != "cpu")
+            and (self.bf16 or self.bf16_full_eval)
+        ):
+            raise ValueError(
+                "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
+            )
+
         if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():

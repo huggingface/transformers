@@ -160,7 +160,6 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_native_cuda_amp_available = True
 
 if version.parse(torch.__version__) >= version.parse("1.10"):
-    _is_torch_generator_available = True
     _is_native_cpu_amp_available = True
 
 if is_datasets_available():
@@ -470,7 +469,7 @@ class Trainer:
                             args.half_precision_backend = "apex"
                 elif args.device == torch.device("cpu"):
                     if args.fp16:
-                        raise ValueError("Tried to use `fp16` but is not supported on cpu")
+                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                     else:
                         if _is_native_cpu_amp_available:
                             args.half_precision_backend = "cpu_amp"
@@ -496,13 +495,7 @@ class Trainer:
                     self.scaler = GradScaler()
                 else:
                     self.scaler = torch.cuda.amp.GradScaler()
-            elif args.half_precision_backend == "apex":
-                if not is_apex_available():
-                    raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
-                    )
-                self.use_apex = True
-            else:
+            elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
                 if args.use_ipex:
@@ -510,6 +503,12 @@ class Trainer:
                         raise ImportError(
                             "Using Bf16 with IPEX but IPEX is not installed, please refer to https://github.com/intel/intel-extension-for-pytorch."
                         )
+            else:
+                if not is_apex_available():
+                    raise ImportError(
+                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                    )
+                self.use_apex = True
 
         # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
         if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
@@ -2093,16 +2092,15 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if self.use_cuda_amp:
+        if self.use_cuda_amp or self.use_cpu_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = torch.cuda.amp.autocast()(dtype=self.amp_dtype)
+                ctx_manager = (
+                    torch.cpu.amp.autocast(dtype=self.amp_dtype)
+                    if self.use_cpu_amp
+                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                )
             else:
                 ctx_manager = torch.cuda.amp.autocast()
-        elif self.use_cpu_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = torch.cpu.amp.autocast(dtype=self.amp_dtype)
-            else:
-                ctx_manager = torch.cpu.amp.autocast()
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
