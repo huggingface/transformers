@@ -101,6 +101,7 @@ from .trainer_pt_utils import (
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
+    UNUSED_COLUMNS_LOGGING_MESSAGE,
     BestRun,
     EvalLoopOutput,
     EvalPrediction,
@@ -109,6 +110,7 @@ from .trainer_utils import (
     HubStrategy,
     IntervalStrategy,
     PredictionOutput,
+    RemoveColumnsCollator,
     ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
@@ -599,9 +601,7 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
-        if not self.args.remove_unused_columns:
-            return dataset
+    def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
@@ -609,14 +609,20 @@ class Trainer:
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += ["label", "label_ids"]
 
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+        if not self.args.remove_unused_columns:
+            return dataset
+        self._set_signature_columns_if_needed()
+
         ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
         if len(ignored_columns) > 0:
-            dset_description = "" if description is None else f"in the {description} set "
+            dset_description = "" if description is None else f"in the {description} set"
             logger.info(
-                f"The following columns {dset_description} don't have a corresponding argument in "
-                f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
-                f" If {', '.join(ignored_columns)} are not expected by `{self.model.__class__.__name__}.forward`, "
-                f" you can safely ignore this message."
+                UNUSED_COLUMNS_LOGGING_MESSAGE.format(
+                    dset_description=dset_description,
+                    model_name=self.model.__class__.__name__,
+                    ignored_columns=", ".join(ignored_columns),
+                )
             )
 
         columns = [k for k in self._signature_columns if k in dataset.column_names]
@@ -628,6 +634,23 @@ class Trainer:
             return dataset
         else:
             return dataset.remove_columns(ignored_columns)
+
+    def _get_collator_with_removed_columns(
+        self, data_collator: Callable, description: Optional[str] = None
+    ) -> Callable:
+        """Wrap the data collator in a callable removing unused columns."""
+        if not self.args.remove_unused_columns:
+            return data_collator
+        self._set_signature_columns_if_needed()
+
+        remove_columns_collator = RemoveColumnsCollator(
+            data_collator=data_collator,
+            signature_columns=self._signature_columns,
+            logger=logger,
+            description=description,
+            model_name=self.model.__class__.__name__,
+        )
+        return remove_columns_collator
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if self.train_dataset is None or not has_length(self.train_dataset):
@@ -715,8 +738,11 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
+        data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
+        elif isinstance(train_dataset, torch.utils.data.IterableDataset):
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -731,7 +757,7 @@ class Trainer:
             return DataLoader(
                 train_dataset,
                 batch_size=self.args.per_device_train_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -742,7 +768,7 @@ class Trainer:
             train_dataset,
             batch_size=self._train_batch_size,
             sampler=train_sampler,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
@@ -791,9 +817,12 @@ class Trainer:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        data_collator = self.data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+        elif isinstance(eval_dataset, torch.utils.data.IterableDataset):
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -807,7 +836,7 @@ class Trainer:
             return DataLoader(
                 eval_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -818,7 +847,7 @@ class Trainer:
             eval_dataset,
             sampler=eval_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
@@ -835,8 +864,12 @@ class Trainer:
                 The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the `model.forward()`
                 method are automatically removed. It must implement `__len__`.
         """
+        data_collator = self.data_collator
+
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
+        elif isinstance(test_dataset, torch.utils.data.IterableDataset):
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="test")
 
         if isinstance(test_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -850,7 +883,7 @@ class Trainer:
             return DataLoader(
                 test_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -862,7 +895,7 @@ class Trainer:
             test_dataset,
             sampler=test_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             pin_memory=self.args.dataloader_pin_memory,
         )
