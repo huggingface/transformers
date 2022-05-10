@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Crea una arquitectura personalizada
 
-Una [`AutoClass`](model_doc/auto) infiere automáticamente la arquitectura del modelo y descarga la configuración y los pesos del modelo preentrenado. Normalmente, recomendamos usar una `AutoClass` para producir un código agnóstico a puntos de guardado o checkpoints. Sin embargo, los usuarios que quieren más control sobre los parámetros específicos de los modelos pueden crear su propio modelo 🤗 Transformers personalizado a partir de varias clases base. Esto puede ser particularmente útil para alguien que esté interesado en estudiar, entrenar o experimentar con modelos 🤗 Transformers. En esta guía vamos a profundizar en la creación de modelos personalizados sin usar `AutoClass`. Aprenderemos a:
+Una [`AutoClass`](model_doc/auto) infiere, automáticamente, la arquitectura del modelo y descarga la configuración y los pesos del modelo preentrenado. Normalmente, recomendamos usar una `AutoClass` para producir un código agnóstico a puntos de guardado o checkpoints. Sin embargo, los usuarios que quieran más control sobre los parámetros específicos de los modelos pueden crear su propio modelo 🤗 Transformers personalizado a partir de varias clases base. Esto puede ser particularmente útil para alguien que esté interesado en estudiar, entrenar o experimentar con modelos 🤗 Transformers. En esta guía vamos a profundizar en la creación de modelos personalizados sin usar `AutoClass`. Aprenderemos a:
 
 - Cargar y personalizar una configuración para un modelo.
 - Crear una arquitectura para un modelo.
@@ -51,10 +51,10 @@ DistilBertConfig {
 }
 ```
 
-[`DistilBertConfig`] muestra todos los atributos por defecto que se han usado para construir un modelo [`DistilBertModel`] base. Todos ellos son personalizables, lo que deja espacio para la experimentación. Por ejemplo, puedes personalizar un modelo predeterminado para:
+[`DistilBertConfig`] muestra todos los atributos por defecto que se han usado para construir un modelo [`DistilBertModel`] base. Todos ellos son personalizables, lo que deja espacio para poder experimentar. Por ejemplo, puedes personalizar un modelo predeterminado para:
 
-- Probar una función de activación diferente con el parámetro `activation`.
-- Usar un valor de abandono (también conocido como _dropout_) más alto para las probabilidades de las capas de atención con el parámetro `attention_dropout`.
+- Probar una función de activación diferente, usando el parámetro `activation`.
+- Usar un valor de abandono (también conocido como _dropout_) más alto para las probabilidades de las capas de atención, usando el parámetro `attention_dropout`.
 
 ```py
 >>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
@@ -79,19 +79,19 @@ DistilBertConfig {
 }
 ```
 
-Los atributos de los modelos preentrenados pueden ser modificados en la función [`~PretrainedConfig.from_pretrained`]:
+Los atributos de los modelos preentrenados pueden ser modificados con la función [`~PretrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-Una vez que estés satisfecho con la configuración de tu modelo, puedes guardarlo con la función [`~PretrainedConfig.save_pretrained`]. Tu configuración se guardará en un archivo JSON dentro del directorio que le especifiques como parámetro.
+Cuando estés satisfecho con la configuración de tu modelo, puedes guardarlo con la función [`~PretrainedConfig.save_pretrained`]. Tu configuración se guardará en un archivo JSON dentro del directorio que le especifiques como parámetro.
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-Para volver a usar el archivo de configuración, puedes cargarlo con [`~PretrainedConfig.from_pretrained`]:
+Para volver a usar el archivo de configuración, puedes cargarlo usando [`~PretrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
@@ -105,7 +105,7 @@ También puedes guardar los archivos de configuración como un diccionario; o in
 
 ## Modelo
 
-El siguiente paso será crear un [modelo](main_classes/models). El modelo, al que a veces también nos referimos como arquitectura, es el encargado de definir cada capa y qué operaciones se realizan. Los atributos como `num_hidden_layers` de la configuración se usan para definir la arquitectura. Todos los modelos comparten una clase base, [`PreTrainedModel`], y algunos métodos comunes que se pueden usar para redimensionar los _embeddings_ o para recortar _heads_ de auto-atención. Además, todos los modelos son subclases de [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) o [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module), lo que significa que son compatibles con su respectivo framework. 
+El siguiente paso será crear un [modelo](main_classes/models). El modelo, al que a veces también nos referimos como arquitectura, es el encargado de definir cada capa y qué operaciones se realizan. Los atributos como `num_hidden_layers` de la configuración se usan para definir la arquitectura. Todos los modelos comparten una clase base, [`PreTrainedModel`], y algunos métodos comunes que se pueden usar para redimensionar los _embeddings_ o para recortar cabezas de auto-atención (también llamadas _self-attention heads_). Además, todos los modelos son subclases de [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) o [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module), lo que significa que son compatibles con su respectivo framework. 
 
 <frameworkcontent>
 <pt>
@@ -119,15 +119,15 @@ Carga los atributos de tu configuración personalizada en el modelo de la siguie
 >>> model = DistilBertModel(my_config)
 ```
   
-Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápidos, consumiendo solo una fracción de los recursos que un entrenamiento completo requeriría. 
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
 
-Crea un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
+Puedes crear un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
-Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
+Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
@@ -144,9 +144,9 @@ Carga los atributos de tu configuración personalizada en el modelo de la siguie
 >>> tf_model = TFDistilBertModel(my_config)
 ```
 
-Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápidos, consumiendo solo una fracción de los recursos que un entrenamiento completo requeriría. 
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo solo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
 
-Crea un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
+Puedes crear un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
@@ -176,7 +176,7 @@ Por ejemplo,  [`DistilBertForSequenceClassification`] es un modelo DistilBERT ba
 >>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`DistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque es una capa lineal delante de la salida de los *hidden states*. 
+Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de un modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`DistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque consta de una capa lineal delante de la salida de los *hidden states*. 
 
 
 ```py
@@ -195,7 +195,7 @@ Por ejemplo,  [`TFDistilBertForSequenceClassification`] es un modelo DistilBERT 
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`TFDistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque es una capa lineal delante de la salida de los *hidden states*. 
+Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de un modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`TFDistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque consta de una capa lineal delante de la salida de los *hidden states*. 
 
 
 ```py
@@ -208,16 +208,16 @@ Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilme
 
 ## Tokenizer
 
-La ultima clase base que debes conocer antes de usar un modelo con datos textuales es la clase [tokenizer](main_classes/tokenizer), que convierte texto bruto en tensores. Hay dos tipos de *tokenizers* que puedes usar con 🤗 Transformers:
+La ultima clase base que debes conocer antes de usar un modelo con datos textuales es la clase [tokenizer](main_classes/tokenizer), que convierte el texto bruto en tensores. Hay dos tipos de *tokenizers* que puedes usar con 🤗 Transformers:
 
 - [`PreTrainedTokenizer`]:  una implementación de un *tokenizer* hecha en Python.
-- [`PreTrainedTokenizerFast`]: un *tokenizer* de nuestra library [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/), basada en Rust. Este tipo de *tokenizer* es bastante más rápido, especialmente durante la tokenización por lotes, gracias a estar implementado en Rust. Esta rápida tokenización también ofrece métodos adicionales como el *offset mapping*, que relaciona los tokens con sus palabras o caracteres originales.
+- [`PreTrainedTokenizerFast`]: un *tokenizer* de nuestra librería [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/), basada en Rust. Este tipo de *tokenizer* es bastante más rápido, especialmente durante la tokenización por lotes, gracias a estar implementado en Rust. Esta rápida tokenización también ofrece métodos adicionales como el *offset mapping*, que relaciona los tokens con sus palabras o caracteres originales.
 
 Ambos *tokenizers* son compatibles con los métodos comunes, como los de encodificación y decodificación, los métodos para añadir tokens y aquellos que manejan tokens especiales. 
 
 <Tip warning={true}>
 
-No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo en específico ico es compatible con un *tokenizer* rápido.
+No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo en específico es compatible con un *tokenizer* rápido.
 
 </Tip>
 
@@ -258,7 +258,7 @@ Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Pued
 
 Un extractor de características procesa entradas de audio e imagen. Hereda de la clase base [`~feature_extraction_utils.FeatureExtractionMixin`] y también puede heredar de la clase [`ImageFeatureExtractionMixin`] para el procesamiento de características de las imágenes o de la clase [`SequenceFeatureExtractor`] para el procesamiento de entradas de audio.
 
-Dependiendo de si trabajas en una tarea de audio o de video, crea un extractor de características asociado al modelo que estes usando. Por ejemplo, crea un [`ViTFeatureExtractor`] por defecto si estas usando [ViT](model_doc/vit) para clasificación de imágenes:
+Dependiendo de si trabajas en una tarea de audio o de video, puedes crear un extractor de características asociado al modelo que estes usando. Por ejemplo, podrías crear un [`ViTFeatureExtractor`] por defecto si estas usando [ViT](model_doc/vit) para clasificación de imágenes:
 
 ```py
 >>> from transformers import ViTFeatureExtractor
@@ -286,11 +286,11 @@ ViTFeatureExtractor {
 
 <Tip>
 
-Si no estas buscan ninguna personalización en específico, usa el método `from_pretrained` para cargar los parámetros del extractor de características por defecto del modelo.
+Si no estas buscando ninguna personalización en específico, usa el método `from_pretrained` para cargar los parámetros del extractor de características por defecto del modelo.
 
 </Tip>
 
-Modifica cualquiera de los parámetros de [`ViTFeatureExtractor`] para crear tu extractor de características personalizado:
+Puedes modificar cualquier parámetro de [`ViTFeatureExtractor`] para crear tu extractor de características personalizado:
 
 ```py
 >>> from transformers import ViTFeatureExtractor
@@ -316,7 +316,7 @@ ViTFeatureExtractor {
 }
 ```
 
-Para entradas de audio, puedes crear un [`Wav2Vec2FeatureExtractor`] y personalizar los parámetros de una forma similar:
+Para las entradas de audio, puedes crear un [`Wav2Vec2FeatureExtractor`] y personalizar los parámetros de una forma similar:
 
 
 ```py
@@ -337,7 +337,7 @@ Wav2Vec2FeatureExtractor {
 
 ## Procesador
 
-Para modelos que son compatibles con tareas multimodales, 🤗 Transformers ofrece una clase *procesador* que agrupa un extractor de características y un *tokenizer* en el mismo objeto. Por ejemplo, probemos a usar el procesador [`Wav2Vec2Processor`] para una tarea de reconocimiento de voz (ASR). Un ASR transcribe el audio a text, por lo que necesitaremos un extractor de características y un *tokenizer*.
+Para modelos que son compatibles con tareas multimodales, 🤗 Transformers ofrece una clase *procesador* que agrupa un extractor de características y un *tokenizer* en el mismo objeto. Por ejemplo, probemos a usar el procesador [`Wav2Vec2Processor`] para una tarea de reconocimiento de voz (ASR). Un ASR transcribe el audio a texto, por lo que necesitaremos un extractor de características y un *tokenizer*.
 
 Crea un extractor de características para manejar la entrada de audio:
 
