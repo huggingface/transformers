@@ -477,7 +477,7 @@ class TrainerUtilsTest(unittest.TestCase):
             default_data_collator, ["col1", "col2"], logger, "model", "training"
         )
 
-        self.assertTrue("col3" not in remove_columns_collator(data_batch))
+        self.assertNotIn("col3", remove_columns_collator(data_batch))
         # check that the logging message is printed out only once
         remove_columns_collator(data_batch)
         remove_columns_collator(data_batch)
