@@ -579,8 +579,8 @@ class JukeboxAttention(nn.Module):
             self.cache["value"] = value
         else:
             old_key, old_value = key, value
-            key = torch.cat([self.cache["key"], key], dim=1)
-            value = torch.cat([self.cache["value"], value], dim=1)
+            key = torch.cat([self.cache["key"], old_key], dim=1)
+            value = torch.cat([self.cache["value"], old_value], dim=1)
             del self.cache["key"]
             del self.cache["value"]
             del old_key
@@ -2787,7 +2787,7 @@ class JukeboxPrior(nn.Module):
     def prior_preprocess(self, xs, conds):
         N = xs[0].shape[0]
         for i in range(len(xs)):
-            x, shape, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
+            x, _, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
             bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
             # assert isinstance(x, torch.cuda.LongTensor), x
             assert (0 <= x).all() and (x < bins).all()
@@ -2795,7 +2795,7 @@ class JukeboxPrior(nn.Module):
             xs[i] = (xs[i] + bins_shift).view(N, -1)
 
         for i in range(len(conds)):
-            cond, shape, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
+            cond, _, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
             if cond is not None:
                 # assert_shape(cond, (N, dims, self.prior_width))
                 pass
