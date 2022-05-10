@@ -17,12 +17,7 @@ import unittest
 
 import numpy as np
 
-# from ..generation.test_generation_utils import GenerationTesterMixin
-# from ..test_configuration_common import ConfigTester
-# from ..test_modeling_common import ModelTesterMixin  # , floats_tensor, ids_tensor, random_attention_mask
-import librosa
 from transformers import JukeboxConfig, is_torch_available
-from transformers.models.jukebox.convert_jukebox import convert_openai_checkpoint
 from transformers.trainer_utils import set_seed
 
 
@@ -68,11 +63,6 @@ class JukeboxModelTest(unittest.TestCase):
             # ntokens also have to be set to the nb of lyric tokens
         )
 
-        # model= JukeboxModel(config).eval()
-        # vq, *weights = convert_openai_checkpoint()
-        # model.vqvae.load_state_dict(vq)
-        # for i in range(len(weights)):
-        #     model.priors[i].load_state_dict(weights[i])
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-dummy").eval()
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
 
@@ -556,8 +546,6 @@ class JukeboxModelTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
-
-JukeboxModelTest().test_model()
 
 # class JukeboxModelTester:
 #     def __init__(
