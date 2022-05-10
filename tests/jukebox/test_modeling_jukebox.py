@@ -44,10 +44,7 @@ class JukeboxModelTest(unittest.TestCase):
     # @slow
     def test_model(self):
         set_seed(0)
-        # audio_SAMPLES = load_dataset('DummyJukeboxDataset',split="dummy_single_enc_dec")
-        # EXPECTED_OUTPUT = audio_SAMPLES[0]
-        audio_path = "/Users/arthur/Work/HuggingFace/jukebox/samples/level_0/item_0.wav"
-        EXPECTED_OUTPUT, _ = librosa.load(audio_path, sr=44100)
+
         config = JukeboxConfig(
             n_ctx=256,
             width=[128, 64, 32],
@@ -71,12 +68,12 @@ class JukeboxModelTest(unittest.TestCase):
             # ntokens also have to be set to the nb of lyric tokens
         )
 
-        model = JukeboxModel(config).eval()
-        vq, *weights = convert_openai_checkpoint()
-        model.vqvae.load_state_dict(vq)
-        for i in range(len(weights)):
-            model.priors[i].load_state_dict(weights[i])
-
+        # model= JukeboxModel(config).eval()
+        # vq, *weights = convert_openai_checkpoint()
+        # model.vqvae.load_state_dict(vq)
+        # for i in range(len(weights)):
+        #     model.priors[i].load_state_dict(weights[i])
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-dummy").eval()
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
 
         # Checks
@@ -495,67 +492,18 @@ class JukeboxModelTest(unittest.TestCase):
 
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
-
+        
+        
         start = timeit.default_timer()
         # import cProfile as profile
         # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
         zs = model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
         print(zs)
-        top_50_expected_zs = torch.Tensor(
-            [
-                97,
-                118,
-                22,
-                66,
-                99,
-                112,
-                2,
-                41,
-                8,
-                84,
-                53,
-                33,
-                96,
-                102,
-                100,
-                55,
-                94,
-                44,
-                71,
-                16,
-                117,
-                114,
-                121,
-                79,
-                84,
-                85,
-                8,
-                30,
-                96,
-                84,
-                48,
-                115,
-                68,
-                4,
-                5,
-                54,
-                81,
-                100,
-                2,
-                13,
-                88,
-                3,
-                100,
-                36,
-                60,
-                15,
-                110,
-                13,
-                91,
-                88,
-            ]
-        )
+        top_50_expected_zs = torch.Tensor([ 33,  90,  94,  17,  88,  88,  31,  65, 127, 112,  26,  58, 107,   5,
+            89,  53,  80,  48,  98,  68,   1,  33,  80,  80, 126,   2,  53,   8,
+            16,  45,  35,  64,  75,  10,  16,  11,  65,  39,  85,  17, 112,  44,
+            68,  63,  16, 127,  35,  90,  51,  27])
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
