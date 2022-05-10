@@ -77,12 +77,7 @@ MBART_TINY = "sshleifer/tiny-mbart"
 MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
 MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
 PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-
-# PROPHETNET_TINY = "microsoft/prophetnet-large-uncased"
 PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
-# PROPHETNET_TINY = "/hf/transformers-ds-model-zoo-2/tiny-prophetnet"
-
-
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
