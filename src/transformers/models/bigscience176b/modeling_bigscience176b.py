@@ -375,6 +375,7 @@ class BigScience176BBlock(nn.Module):
         self.bias_dropout_fusion = config.bias_dropout_fusion
         self.hidden_dropout = config.hidden_dropout
 
+    # alibi tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l)
     @staticmethod
     def _build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
         # Based on https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742

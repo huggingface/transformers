@@ -120,7 +120,7 @@ class BigScience176BConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=250880,
-        seq_length=20,  # 2048,
+        seq_length=20,  # TODO remove it in the future
         hidden_size=64,  # 1024,
         n_layer=2,  # 24,
         n_head=8,  # 16,
