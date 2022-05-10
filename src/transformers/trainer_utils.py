@@ -624,14 +624,6 @@ class FSDPOption(ExplicitEnum):
     AUTO_WRAP = "auto_wrap"
 
 
-UNUSED_COLUMNS_LOGGING_MESSAGE = (
-    "The following columns {dset_description} don't have a corresponding argument in "
-    "`{model_name}.forward` and have been ignored: {ignored_columns}."
-    " If {ignored_columns} are not expected by `{model_name}.forward`, "
-    " you can safely ignore this message."
-)
-
-
 class RemoveColumnsCollator:
     """Wrap the data collator to remove unused columns."""
 
@@ -656,11 +648,10 @@ class RemoveColumnsCollator:
             if len(ignored_columns) > 0:
                 dset_description = "" if self.description is None else f"in the {self.description} set"
                 self.logger.info(
-                    UNUSED_COLUMNS_LOGGING_MESSAGE.format(
-                        dset_description=dset_description,
-                        model_name=self.model_name,
-                        ignored_columns=", ".join(ignored_columns),
-                    )
+                    f"The following columns {dset_description} don't have a corresponding argument in "
+                    f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                    f" If {', '.join(ignored_columns)} are not expected by `{self.model_name}.forward`, "
+                    " you can safely ignore this message."
                 )
                 self.message_logged = True
         return {k: v for k, v in feature.items() if k in self.signature_columns}

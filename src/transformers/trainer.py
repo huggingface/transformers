@@ -101,7 +101,6 @@ from .trainer_pt_utils import (
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
-    UNUSED_COLUMNS_LOGGING_MESSAGE,
     BestRun,
     EvalLoopOutput,
     EvalPrediction,
@@ -618,11 +617,10 @@ class Trainer:
         if len(ignored_columns) > 0:
             dset_description = "" if description is None else f"in the {description} set"
             logger.info(
-                UNUSED_COLUMNS_LOGGING_MESSAGE.format(
-                    dset_description=dset_description,
-                    model_name=self.model.__class__.__name__,
-                    ignored_columns=", ".join(ignored_columns),
-                )
+                f"The following columns {dset_description} don't have a corresponding argument in "
+                f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                f" If {', '.join(ignored_columns)} are not expected by `{self.model.__class__.__name__}.forward`, "
+                " you can safely ignore this message."
             )
 
         columns = [k for k in self._signature_columns if k in dataset.column_names]
@@ -741,7 +739,7 @@ class Trainer:
         data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
-        elif isinstance(train_dataset, torch.utils.data.IterableDataset):
+        else:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -821,7 +819,7 @@ class Trainer:
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
-        elif isinstance(eval_dataset, torch.utils.data.IterableDataset):
+        else:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
@@ -868,7 +866,7 @@ class Trainer:
 
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
-        elif isinstance(test_dataset, torch.utils.data.IterableDataset):
+        else:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="test")
 
         if isinstance(test_dataset, torch.utils.data.IterableDataset):
