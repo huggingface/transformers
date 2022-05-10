@@ -492,18 +492,67 @@ class JukeboxModelTest(unittest.TestCase):
 
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
-        
-        
+
         start = timeit.default_timer()
         # import cProfile as profile
         # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
         zs = model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
         print(zs)
-        top_50_expected_zs = torch.Tensor([ 33,  90,  94,  17,  88,  88,  31,  65, 127, 112,  26,  58, 107,   5,
-            89,  53,  80,  48,  98,  68,   1,  33,  80,  80, 126,   2,  53,   8,
-            16,  45,  35,  64,  75,  10,  16,  11,  65,  39,  85,  17, 112,  44,
-            68,  63,  16, 127,  35,  90,  51,  27])
+        top_50_expected_zs = torch.Tensor(
+            [
+                33,
+                90,
+                94,
+                17,
+                88,
+                88,
+                31,
+                65,
+                127,
+                112,
+                26,
+                58,
+                107,
+                5,
+                89,
+                53,
+                80,
+                48,
+                98,
+                68,
+                1,
+                33,
+                80,
+                80,
+                126,
+                2,
+                53,
+                8,
+                16,
+                45,
+                35,
+                64,
+                75,
+                10,
+                16,
+                11,
+                65,
+                39,
+                85,
+                17,
+                112,
+                44,
+                68,
+                63,
+                16,
+                127,
+                35,
+                90,
+                51,
+                27,
+            ]
+        )
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
