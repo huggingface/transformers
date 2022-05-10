@@ -658,16 +658,9 @@ if is_torch_available():
     _import_structure["models.glm"].extend(
         [
             "GLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GLMForMaskedLM",
-            "GLMForCausalLM",
-            "GLMForMultipleChoice",
-            "GLMForQuestionAnswering",
             "GLMForSequenceClassification",
-            "GLMForTokenClassification",
-            "GLMLayer",
             "GLMModel",
             "GLMPreTrainedModel",
-            "load_tf_weights_in_glm",
         ]
     )
     _import_structure["models.albert"].extend(
