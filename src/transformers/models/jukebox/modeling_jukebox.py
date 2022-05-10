@@ -57,7 +57,7 @@ _CONFIG_FOR_DOC = "JukeboxConfig"
 _TOKENIZER_FOR_DOC = "JukeboxTokenizer"
 
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/jukebox-dummy",
+    "ArthurZ/jukebox-dummy",
     # See all Jukebox models at https://huggingface.co/models?filter=jukebox
 ]
 
@@ -118,6 +118,8 @@ class JukeboxMLP(nn.Module):
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
+        
 
 
 class LayerNorm(FusedLayerNorm):
@@ -1774,7 +1776,7 @@ class Decoder(nn.Module):
         # 32, 64 ...
         iterator = reversed(list(zip(list(range(self.levels)), self.downs_t, self.strides_t)))
         for level, down_t, stride_t in iterator:
-            level_block = self.level_blocks[-level - 1]
+            level_block = self.level_blocks[level]
             x = level_block(x)
             _, T = self.output_emb_width, T * (stride_t**down_t)
             # assert_shape(x, (N, emb, T))
@@ -2757,6 +2759,7 @@ class JukeboxPrior(nn.Module):
 
         # y = labels["y"].clone()
         y = labels.clone()
+        
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
 
@@ -3478,7 +3481,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ), f"Expected sample_length {hps.sample_length} to be multiple of {prior.raw_to_tokens}"
             total_length = hps.sample_length // prior.raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
-            zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
+            
+            # TODO either mask them or ddo better
+            if level != len(sample_levels)-1:
+                labels_level = labels[level][0][:4+hps.max_bow_genre_size].unsqueeze(0)
+                zs = self.sample_level(zs, labels_level, sampling_kwargs[level], level, total_length, hop_length, hps)
+            else:    
+                zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
             prior.cpu()
             empty_cache()
