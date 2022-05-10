@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("glm", "GLMConfig"),
         ("yolos", "YolosConfig"),
         ("tapex", "BartConfig"),
         ("dpt", "DPTConfig"),
@@ -139,6 +140,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("glm", "GLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -233,6 +235,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("glm", "GLM"),
         ("yolos", "YOLOS"),
         ("tapex", "TAPEX"),
         ("dpt", "DPT"),
