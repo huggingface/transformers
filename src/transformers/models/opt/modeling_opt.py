@@ -25,7 +25,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -51,22 +51,6 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt350m",
     # See all OPT models at https://huggingface.co/models?filter=opt
 ]
-
-
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
 
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
@@ -663,7 +647,7 @@ class OPTDecoder(OPTPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -846,12 +830,11 @@ class OPTDecoder(OPTPretrainedModel):
                 for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -863,9 +846,8 @@ class OPTModel(OPTPretrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
 
-        # padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-
         self.decoder = OPTDecoder(config)
+        # padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -883,7 +865,7 @@ class OPTModel(OPTPretrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
@@ -891,33 +873,14 @@ class OPTModel(OPTPretrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
-        # different to other models, OPT automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError(
-                    "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
-                    "passed, `input_ids` cannot be `None`. Please pass either "
-                    "`input_ids` or `decoder_input_ids` or `decoder_inputs_embeds`."
-                )
-
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -930,10 +893,9 @@ class OPTModel(OPTPretrainedModel):
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -942,28 +904,12 @@ class OPTModel(OPTPretrainedModel):
             return_dict=return_dict,
         )
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
         )
-
-
-# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->OPT
-class OPTDecoderWrapper(OPTPretrainedModel):
-    """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
-    used in combination with the [`EncoderDecoderModel`] framework.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.decoder = OPTDecoder(config)
-
-    def forward(self, *args, **kwargs):
-        return self.decoder(*args, **kwargs)
 
 
 class OPTForCausalLM(OPTPretrainedModel):
@@ -972,7 +918,7 @@ class OPTForCausalLM(OPTPretrainedModel):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
-        self.model = OPTDecoderWrapper(config)
+        self.model = OPTModel(config)
 
         if config.output_projection:
             self.lm_head = self.model.decoder.output_projection
@@ -1001,7 +947,7 @@ class OPTForCausalLM(OPTPretrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1015,7 +961,7 @@ class OPTForCausalLM(OPTPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1128,13 +1074,12 @@ class OPTForCausalLM(OPTPretrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithCrossAttentions(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
