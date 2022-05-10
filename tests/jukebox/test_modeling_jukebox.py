@@ -169,6 +169,12 @@ class JukeboxModelTest(unittest.TestCase):
         zs = model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
         print(zs)
+        top_50_expected_zs = torch.Tensor([ 97, 118,  22,  66,  99, 112,   2,  41,   8,  84,  53,  33,  96, 102,
+        100,  55,  94,  44,  71,  16, 117, 114, 121,  79,  84,  85,   8,  30,
+        96,  84,  48, 115,  68,   4,   5,  54,  81, 100,   2,  13,  88,   3,
+        100,  36,  60,  15, 110,  13,  91,  88])
+        
+        self.assertTrue(torch.allclose(zs[0][0][0:50],top_50_expected_zs.long(),atol=1e-4))
         # with torch.no_grad():
         #        x = model.vqvae.decode(zs, start_level=0, bs_chunks=zs[0].shape[0])
         # expected_zs = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/zs.pth")
