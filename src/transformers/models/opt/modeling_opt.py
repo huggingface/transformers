@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch OPT model."""
-import copy
 import math
 import random
 from typing import Dict, List, Optional, Tuple, Union
@@ -598,12 +597,6 @@ class OPTDecoder(OPTPretrainedModel):
         )
 
         self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
-
-        if config.output_projection:
-            self.output_projection = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
-        else:
-            self.output_projection = None
-
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
@@ -914,17 +907,11 @@ class OPTModel(OPTPretrainedModel):
 
 class OPTForCausalLM(OPTPretrainedModel):
     def __init__(self, config):
-        config = copy.deepcopy(config)
-        config.is_decoder = True
-        config.is_encoder_decoder = False
         super().__init__(config)
         self.model = OPTModel(config)
 
-        if config.output_projection:
-            self.lm_head = self.model.decoder.output_projection
-        else:
-            self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-            self.lm_head.weight = nn.Parameter(self.model.decoder.embed_tokens.weight.t())
+        # the lm_head weight is automatically tied to the embed tokens weight
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
