@@ -47,7 +47,7 @@ if is_tf_available():
     import tensorflow as tf
 
 
-def seed_worker():
+def seed_worker(_):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
