@@ -35,7 +35,8 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class CamembertConfig(RobertaConfig):
     """
     This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
-    usage examples.
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
     """
 
     model_type = "camembert"

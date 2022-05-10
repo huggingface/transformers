@@ -493,8 +493,8 @@ def pipeline(
 
     if task is None and model is None:
         raise RuntimeError(
-            "Impossible to instantiate a pipeline without either a task or a model"
-            "being specified."
+            "Impossible to instantiate a pipeline without either a task or a model "
+            "being specified. "
             "Please provide a task class or a model"
         )
 
