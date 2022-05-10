@@ -61,6 +61,8 @@
     title: Export 🤗 Transformers models
   - local: performance
     title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
+  - local: big_models
+    title: Instantiating a big model
   - local: parallelism
     title: Model Parallelism
   - local: benchmarks
@@ -378,6 +380,8 @@
       title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
+    - local: model_doc/yolos
+      title: YOLOS
     - local: model_doc/yoso
       title: YOSO
     title: Models
