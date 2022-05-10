@@ -599,6 +599,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("ibert", "IBertForMultipleChoice"),
+        ("deberta-v2", "DebertaV2ForMultipleChoice"),
     ]
 )
 
