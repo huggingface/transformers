@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("glm", "GLMModel"),
         ("yolos", "YolosModel"),
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
@@ -425,6 +426,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("glm", "GLMForSequenceClassification"),
         ("tapex", "BartForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
