@@ -198,7 +198,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
 
         dft_out = self._DFT(frames.flatten(), self.K, n_frames, self.sample_size, self.n_fft)
 
-        # msfc_features = STFT * mel frequency banks. 
+        # msfc_features = STFT * mel frequency banks.
         msfc_features = np.einsum("...tf,fm->...tm", dft_out, fbanks)
 
         # clamp feature values then log scale, as implemented in flashlight
