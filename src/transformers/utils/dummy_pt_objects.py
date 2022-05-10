@@ -1406,6 +1406,13 @@ class DebertaV2ForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class DebertaV2ForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DebertaV2ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4695,6 +4702,30 @@ class XLNetPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_xlnet(*args, **kwargs):
     requires_backends(load_tf_weights_in_xlnet, ["torch"])
+
+
+YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class YolosForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class YolosModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class YolosPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = None

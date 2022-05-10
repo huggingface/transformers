@@ -2030,7 +2030,7 @@ class TFGenerationMixin:
             if not use_xla:
                 input_ids = tf.reshape(generated.concat(), (-1, batch_size))
                 input_ids = tf.transpose(input_ids[: current_pos[0]])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=current_pos[0])
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, current_pos[0])
 
             # argmax
             next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
@@ -2301,8 +2301,8 @@ class TFGenerationMixin:
             if not use_xla:
                 input_ids = tf.reshape(generated.concat(), (-1, batch_size))
                 input_ids = tf.transpose(input_ids[:cur_len])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=cur_len)
-            next_tokens_scores = logits_warper(input_ids, next_tokens_scores)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len)
+            next_tokens_scores = logits_warper(input_ids, next_tokens_scores, cur_len)
 
             # sample
             if seed is not None:
@@ -2726,7 +2726,7 @@ class TFGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(
-                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len=cur_len
+                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)

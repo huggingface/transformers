@@ -127,6 +127,10 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gptj", "FlaxGPTJForCausalLM"),
         ("xglm", "FlaxXGLMForCausalLM"),
         ("bart", "FlaxBartForCausalLM"),
+        ("bert", "FlaxBertForCausalLM"),
+        ("roberta", "FlaxRobertaForCausalLM"),
+        ("big_bird", "FlaxBigBirdForCausalLM"),
+        ("electra", "FlaxElectraForCausalLM"),
     ]
 )
 
