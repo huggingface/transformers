@@ -64,7 +64,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -1690,7 +1690,9 @@ class Trainer:
         if os.path.exists(best_model_path):
             if self.deepspeed:
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
-                deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
+                    self, num_training_steps=self.args.max_steps
+                )
                 self.model = deepspeed_engine.module
                 self.model_wrapped = deepspeed_engine
                 self.deepspeed = deepspeed_engine
