@@ -119,8 +119,6 @@ class JukeboxMLP(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
-        
-
 
 class LayerNorm(FusedLayerNorm):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -2759,7 +2757,7 @@ class JukeboxPrior(nn.Module):
 
         # y = labels["y"].clone()
         y = labels.clone()
-        
+
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
 
@@ -3481,12 +3479,12 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ), f"Expected sample_length {hps.sample_length} to be multiple of {prior.raw_to_tokens}"
             total_length = hps.sample_length // prior.raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
-            
+
             # TODO either mask them or ddo better
-            if level != len(sample_levels)-1:
-                labels_level = labels[level][0][:4+hps.max_bow_genre_size].unsqueeze(0)
+            if level != len(sample_levels) - 1:
+                labels_level = labels[level][0][: 4 + hps.max_bow_genre_size].unsqueeze(0)
                 zs = self.sample_level(zs, labels_level, sampling_kwargs[level], level, total_length, hop_length, hps)
-            else:    
+            else:
                 zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
             prior.cpu()
