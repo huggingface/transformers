@@ -42,7 +42,4 @@ class GenericTester(unittest.TestCase):
             "task_specific_params.summarization_xsum.num_beams": 6,
         }
 
-        self.assertEqual(
-            flatten_dict(input_dict),
-            expected_dict,
-        )
+        self.assertEqual(flatten_dict(input_dict), expected_dict)
