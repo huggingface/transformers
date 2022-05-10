@@ -22,7 +22,7 @@ import pickle
 import re
 import warnings
 from collections.abc import Mapping
-from typing import Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -891,6 +891,47 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Finally, return the epoch number from the checkpoint. This isn't a property of the model, so we can't
         # set it directly, but the user can pass it to fit().
         return {"epoch": extra_data["epoch"]}
+
+    def prepare_tf_dataset(
+        self,
+        dataset: Any,
+        collate_fn: Callable,
+        collate_fn_args: dict,
+        batch_size: int,
+        shuffle: bool,
+        drop_remainder: Optional[bool] = None,
+        prefetch: bool = True,
+    ):
+        try:
+            from datasets import Dataset
+        except ImportError:
+            raise ImportError("Called a datasets-specific method but datasets cannot be imported!")
+        assert isinstance(dataset, Dataset)
+        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_labels = find_labels(self.__class__)
+        unwanted_columns = [
+            feature
+            for feature in self.features
+            if feature not in model_inputs and feature not in ("label_ids", "label")
+        ]
+        dataset = dataset.remove_columns(unwanted_columns)
+        output_signature, _ = dataset._get_output_signature(
+            dataset, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+        )
+        output_columns = list(output_signature.keys())
+        feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
+        label_cols = [col for col in output_columns if col in model_labels]
+        tf_dataset = dataset.to_tf_dataset(
+            columns=feature_cols,
+            label_cols=label_cols,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            drop_remainder=drop_remainder,
+            collate_fn=collate_fn,
+            collate_fn_args=collate_fn_args,
+            prefetch=prefetch,
+        )
+        return tf_dataset
 
     def compile(
         self,
