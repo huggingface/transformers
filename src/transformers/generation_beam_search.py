@@ -340,15 +340,18 @@ class BeamSearchScorer(BeamScorer):
             assert pad_token_id is not None, "`pad_token_id` has to be defined"
             decoded.fill_(pad_token_id)
         # fill with hypotheses and eos_token_id if the latter fits in
+        added_non_generated_tokens = 0
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
+                added_non_generated_tokens += 1
 
         return UserDict(
             {
                 "sequences": decoded,
                 "sequence_scores": best_scores,
+                "added_non_generated_tokens": added_non_generated_tokens,
             }
         )
 
@@ -785,6 +788,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
         # prepare for adding eos
         sent_lengths_max = sent_lengths.max().item() + 1
+
         sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
@@ -797,6 +801,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             decoded[i, : sent_lengths[i]] = hypo
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
+
         return UserDict(
             {
                 "sequences": decoded,

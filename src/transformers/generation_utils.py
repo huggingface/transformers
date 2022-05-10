@@ -820,6 +820,7 @@ class GenerationMixin:
         # adjust for beam indices
         beam_sequence_indices = torch.tensor(beam_indices, device=sequences.device) * self.config.vocab_size
         # compute real indices
+        import ipdb; ipdb.set_trace()
         indices = sequences[:, cut_idx:] + beam_sequence_indices
         # gather scores and run
         transition_scores = scores.gather(0, indices)
@@ -2263,6 +2264,8 @@ class GenerationMixin:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
             if return_dict_in_generate and output_scores:
+                if cur_len > 6:
+                    # Need to add beam indices to beam scorer
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
 
             # increase cur_len
@@ -2294,6 +2297,10 @@ class GenerationMixin:
                     (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
                 beam_indices = sum(beam_indices, ())
+
+                if sequence_outputs["added_non_generated_tokens"] // num_return_sequences == 1:
+                    scores = scores[:-1]
+                    beam_indices = tuple((b[:-1] for b in beam_indices))
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
@@ -3293,6 +3300,7 @@ class GenerationMixin:
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
+
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
