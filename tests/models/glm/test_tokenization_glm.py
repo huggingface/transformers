@@ -18,11 +18,10 @@ import json
 import os
 import unittest
 
-from transformers import GLMTokenizer, GLMTokenizerFast
+from transformers import GLMTokenizer
 
 from transformers.models.glm.tokenization_glm import (
     VOCAB_FILES_NAMES,
-    BasicTokenizer,
     GLMTokenizer,
     WordpieceTokenizer,
     _is_control,
@@ -37,7 +36,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class GLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = GLMTokenizer
-    rust_tokenizer_class = GLMTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
@@ -45,27 +43,7 @@ class GLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
@@ -78,47 +56,6 @@ class GLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
-
-    # def test_rust_and_python_full_tokenizers(self):
-    #     if not self.test_rust_tokenizer:
-    #         return
-    #
-    #     tokenizer = self.get_tokenizer()
-    #     rust_tokenizer = self.get_rust_tokenizer()
-    #
-    #     sequence = "UNwant\u00E9d,running"
-    #
-    #     tokens = tokenizer.tokenize(sequence)
-    #     rust_tokens = rust_tokenizer.tokenize(sequence)
-    #     self.assertListEqual(tokens, rust_tokens)
-    #
-    #     ids = tokenizer.encode(sequence, add_special_tokens=False)
-    #     rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-    #     self.assertListEqual(ids, rust_ids)
-    #
-    #     rust_tokenizer = self.get_rust_tokenizer()
-    #     ids = tokenizer.encode(sequence)
-    #     rust_ids = rust_tokenizer.encode(sequence)
-    #     self.assertListEqual(ids, rust_ids)
-    #
-    #     # With lower casing
-    #     tokenizer = self.get_tokenizer(do_lower_case=True)
-    #     rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
-    #
-    #     sequence = "UNwant\u00E9d,running"
-    #
-    #     tokens = tokenizer.tokenize(sequence)
-    #     rust_tokens = rust_tokenizer.tokenize(sequence)
-    #     self.assertListEqual(tokens, rust_tokens)
-    #
-    #     ids = tokenizer.encode(sequence, add_special_tokens=False)
-    #     rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-    #     self.assertListEqual(ids, rust_ids)
-    #
-    #     rust_tokenizer = self.get_rust_tokenizer()
-    #     ids = tokenizer.encode(sequence)
-    #     rust_ids = rust_tokenizer.encode(sequence)
-    #     self.assertListEqual(ids, rust_ids)
 
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
