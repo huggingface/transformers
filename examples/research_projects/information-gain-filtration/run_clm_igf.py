@@ -2,19 +2,19 @@
 # Authors: Mayank Kumar Raunak, Javier Turek, Nicole Beckage
 
 """
-Implementation of a new method for fine-tuning transformer models that we call 
+Implementation of a new method for fine-tuning transformer models that we call
 Information Gain Filtration 'IGF' on WikiText data set and compared the results
 with the standard fine-tuning method
 
 Steps followed in the code:
 
 1) Generate a objective dataset of pairs (X, IG(X)). IG(X)--Informativeness of context 'X'.
-Our IG (information gain) model is learning to predict the ‘informativeness’ of a particular 
-context. Informativeness is the change in metric between the model’s accuracy on an 
+Our IG (information gain) model is learning to predict the ‘informativeness’ of a particular
+context. Informativeness is the change in metric between the model’s accuracy on an
 objective set before and after seeing that context. For casual language modeling, the
 metric is perplexity.
 
-2) A secondary learner is trained to infer a function approximation for IG using the dataset 
+2) A secondary learner is trained to infer a function approximation for IG using the dataset
 created in (1).
 
 3) The learner created in (2) is used to inform the fine-tuning process and filter out low informative samples.
@@ -26,14 +26,23 @@ Last, a plot is generated to compare the performance of IGF to standard fine-tun
 # Prerequisite libraries:
 
 import argparse
-from typing import Optional
+import random
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler
 
 import joblib
-from igf.igf import *
+from igf.igf import (
+    SecondaryLearner,
+    collect_objective_set,
+    compute_perplexity,
+    generate_datasets,
+    load_gpt2,
+    recopy_gpt2,
+    set_seed,
+    train_secondary_learner,
+)
 from transformers import GPT2LMHeadModel
 
 
@@ -189,8 +198,6 @@ def finetune(
 
     observed_qs = []
     test_perps = []
-    repeats = []
-    val_perps = []
 
     # Compute the performance of the transformer model at the beginning
     real_perp = compute_perplexity(model, test_dataset, context_len)
