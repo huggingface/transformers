@@ -8,10 +8,10 @@ import random
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
-from transformers import (AdamW, GPT2LMHeadModel, get_linear_schedule_with_warmup)
+from transformers import AdamW, GPT2LMHeadModel, get_linear_schedule_with_warmup
 import torch
 import torch.nn as nn
-from torch.utils.data import (DataLoader, RandomSampler)
+from torch.utils.data import DataLoader, RandomSampler
 from tqdm import tqdm
 from scipy.stats import ttest_ind
 import logging
@@ -70,7 +70,7 @@ def compute_perplexity(model, test_data, context_len):
     return perplexity
 
 
-def load_gpt2(model_name='gpt2'):
+def load_gpt2(model_name="gpt2"):
     """
     load original gpt2 and save off for quicker loading
 
@@ -83,7 +83,7 @@ def load_gpt2(model_name='gpt2'):
     """
 
     model = GPT2LMHeadModel.from_pretrained(model_name, output_hidden_states=True)
-    torch.save(model.state_dict(), model_name + 'local.pt')
+    torch.save(model.state_dict(), model_name + "local.pt")
     return model
 
 
@@ -105,12 +105,13 @@ def recopy_gpt2(orig_model, device, max_steps):
     model = copy.deepcopy(orig_model)
     model.to(device)
 
-    no_decay = ['bias', 'LayerNorm.weight']
+    no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-         'weight_decay': 0.0},
-        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-         'weight_decay': 0.0}
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
     lm_optimizer = AdamW(optimizer_grouped_parameters, lr=5e-5, eps=1e-8)
     lm_scheduler = get_linear_schedule_with_warmup(lm_optimizer, 0, max_steps)
@@ -141,15 +142,17 @@ def intermittent_save(contexts, real_perps, past_perps, filename):
     joblib.dump(data_final, filename)
 
 
-def collect_objective_set(model,
-                          orig_perp,
-                          context_len,
-                          train_data,
-                          objective_set,
-                          max_steps,
-                          device,
-                          filename='dev.jbl',
-                          recopy_model=recopy_gpt2):
+def collect_objective_set(
+    model,
+    orig_perp,
+    context_len,
+    train_data,
+    objective_set,
+    max_steps,
+    device,
+    filename="dev.jbl",
+    recopy_model=recopy_gpt2,
+):
 
     """
     Collect individual IGF values from pre-trained transformer model
@@ -179,7 +182,7 @@ def collect_objective_set(model,
 
     # Initialize the transformer model
     orig_model = copy.deepcopy(model)
-    orig_model.to(device='cpu')
+    orig_model.to(device="cpu")
     torch.cuda.empty_cache()
 
     # Compute perplexity of initial transformer model for comparison
@@ -190,7 +193,7 @@ def collect_objective_set(model,
         context = torch.zeros((1, context_len), dtype=torch.long, device=device)
         story = random.choice(train_data)
         start = random.randint(0, len(story[0]) - context_len - 1)
-        context[0, :] = story[0][start:start + context_len]
+        context[0, :] = story[0][start : start + context_len]
         lm_optimizer.zero_grad()
         outputs = model(context, labels=context)
         lm_loss = outputs[0]
@@ -219,11 +222,9 @@ def collect_objective_set(model,
     intermittent_save(contexts, real_perps, past_perps, filename)
 
 
-def generate_datasets(context_len,
-                      file='data/tokenized_stories_train_wikitext103.jbl',
-                      number=100,
-                      min_len=1026,
-                      trim=True):
+def generate_datasets(
+    context_len, file="data/tokenized_stories_train_wikitext103.jbl", number=100, min_len=1026, trim=True
+):
     """
     Generate objective set and training set
 
@@ -246,13 +247,13 @@ def generate_datasets(context_len,
     # secondary learner
 
     data = joblib.load(file)
-    print('data loaded')
+    print("data loaded")
     objective_set = []
     if trim:
         for i, example in enumerate(data):
             if len(example[0]) > min_len:
                 start = random.randint(0, len(example[0]) - context_len - 1)
-                objective_set.append(example[0, start:start + context_len])
+                objective_set.append(example[0, start : start + context_len])
             if len(objective_set) >= number:
                 break
         train_data = []
@@ -264,16 +265,13 @@ def generate_datasets(context_len,
         train_data = data[number:]
 
     joblib.dump(objective_set, "objective_set.jbl")
-    print('objective set saved')
+    print("objective set saved")
     return train_data, objective_set
 
 
-def train_secondary_learner(secondary_learner,
-                            train_dataset,
-                            max_epochs,
-                            batch_size,
-                            eval_freq=50,
-                            igf_model_path='secondary_learner.pt'):
+def train_secondary_learner(
+    secondary_learner, train_dataset, max_epochs, batch_size, eval_freq=50, igf_model_path="secondary_learner.pt"
+):
 
     """
     Train the secondary learner (igf_model)
@@ -290,7 +288,7 @@ def train_secondary_learner(secondary_learner,
         Trained secondary learner
 
     """
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # We will use the first 512 pairs from our dataset as a test set for
     # our secondary learner and the rest to train
     test_dataset = train_dataset[:512]
@@ -300,7 +298,7 @@ def train_secondary_learner(secondary_learner,
 
     # secondary learner model set up
     loss = nn.MSELoss()
-    test_loss = nn.MSELoss(reduction='sum')
+    test_loss = nn.MSELoss(reduction="sum")
     secondary_learner.to(device)
     q_optimizer = torch.optim.Adam(secondary_learner.parameters(), lr=0.00001)
     secondary_learner.train()
@@ -308,7 +306,7 @@ def train_secondary_learner(secondary_learner,
     # TODO in original code this is written as number of actual batches seen
     # not number of items seen but other places it is number of items instead.
     # improve consistency! changed this to epochs for clarity
-    best_test_loss = float('inf')
+    best_test_loss = float("inf")
     # Iterate through batches until we've used max_steps batches
     for epoch in range(int(max_epochs)):
         tr_q_loss = 0.0
@@ -346,8 +344,18 @@ def train_secondary_learner(secondary_learner,
                         actual.append(i.item())
 
                 q_loss2 /= len(test_dataset)
-                print('Epoch: ', epoch, 'step: ', step, 'Avg. q:', sum_q2 / len(test_dataset),
-                      "Train Loss: ", tr_loss, "Test Loss: ", q_loss2)
+                print(
+                    "Epoch: ",
+                    epoch,
+                    "step: ",
+                    step,
+                    "Avg. q:",
+                    sum_q2 / len(test_dataset),
+                    "Train Loss: ",
+                    tr_loss,
+                    "Test Loss: ",
+                    q_loss2,
+                )
                 if q_loss2 < best_test_loss:
                     joblib.dump((predicted, actual), "pred_vs_actual.jbl")
                     torch.save(secondary_learner.state_dict(), igf_model_path)
@@ -362,7 +370,6 @@ class SecondaryLearner(nn.Module):
     Our secondary learner
     """
 
-
     def __init__(self, model):
         """
         We use a simple convolutional network as our secondary learner
@@ -375,12 +382,7 @@ class SecondaryLearner(nn.Module):
         self.embeddings = model.transformer.wte
         self.embeddings.weight = copy.deepcopy(model.transformer.wte.weight)
         self.conv = nn.Conv1d(self.embeddings.weight.size(1), 256, 3, padding=1)
-        self.fc = nn.Sequential(
-            nn.Linear(256, 32),
-            nn.Dropout(p=0.1),
-            nn.Linear(32, 32),
-            nn.Linear(32, 1)
-        )
+        self.fc = nn.Sequential(nn.Linear(256, 32), nn.Dropout(p=0.1), nn.Linear(32, 32), nn.Linear(32, 1))
 
     def forward(self, context):
         """
