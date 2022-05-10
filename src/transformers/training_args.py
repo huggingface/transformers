@@ -234,6 +234,8 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
+        jit_mode(`bool`, *optional*, defaults to `False`):
+            Try to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture. This is an experimental API and it may change.
@@ -583,6 +585,7 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    jit_mode: bool = field(default=False, metadata={"help": "Try to use PyTorch jit trace for inference"})
     bf16: bool = field(
         default=False,
         metadata={
