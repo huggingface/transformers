@@ -38,6 +38,7 @@ from .generic import (
     TensorType,
     cached_property,
     find_labels,
+    flatten_dict,
     is_tensor,
     to_numpy,
     to_py_obj,
@@ -137,7 +138,6 @@ from .import_utils import (
     torch_required,
     torch_version,
 )
-from .py_utils import flatten_dict
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
