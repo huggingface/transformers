@@ -80,8 +80,6 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
-    SGD = "SGD"
-    ADAGRAD = "Adagrad"
 
 
 @dataclass
@@ -232,8 +230,6 @@ class TrainingArguments:
         use_ipex (`bool`, *optional*, defaults to `False`):
             Use Intel extension for PyTorch when it is available. [IPEX
             installation](https://github.com/intel/intel-extension-for-pytorch).
-        jit_mode(`bool`, *optional*, defaults to `False`):
-            Try to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or using CPU (no_cuda). This is an experimental API and it may change.
@@ -574,7 +570,6 @@ class TrainingArguments:
             "help": "Use Intel extension for PyTorch when it is available, installation: 'https://github.com/intel/intel-extension-for-pytorch'"
         },
     )
-    jit_mode: bool = field(default=False, metadata={"help": "Try to use PyTorch jit trace for inference"})
     bf16: bool = field(
         default=False,
         metadata={
