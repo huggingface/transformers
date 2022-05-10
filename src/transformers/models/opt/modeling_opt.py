@@ -48,7 +48,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "opt350-m",
+    "facebook/opt350m",
     # See all OPT models at https://huggingface.co/models?filter=opt
 ]
 
