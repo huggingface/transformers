@@ -42,9 +42,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_mctct"] = ["MCTCTFeatureExtractor"]
-
-    if is_sentencepiece_available():
-        _import_structure["processing_mctct"] = ["MCTCTProcessor"]
+    _import_structure["processing_mctct"] = ["MCTCTProcessor"]
 
 
 try:
