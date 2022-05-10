@@ -58,9 +58,16 @@ BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Utility functions below:
 
-
 def attention_mask_func(attention_scores, attention_mask):
-    return attention_scores.masked_fill_(attention_mask, -10000.0)
+    # Make use of floats
+    if attention_mask.dtype == torch.bool:
+        return attention_scores.masked_fill_(attention_mask, -10000.0)
+    else:
+        values_to_attend = 1.0 - attention_mask
+        return (values_to_attend * attention_scores) - 10000.0 * attention_mask
+
+# def attention_mask_func(attention_scores, attention_mask):
+#     return attention_scores.masked_fill_(attention_mask, -10000.0)
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -191,7 +198,7 @@ class BigScience176BAttention(nn.Module):
         key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
 
         # alibi
-        matmul_result = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
+        matmul_result = alibi[: output_size[0] * output_size[1], :, :output_size[3]]
 
         # Raw attention scores. [b * np, sq, sk]
         beta = 1.0 / self.layer_number
@@ -212,12 +219,12 @@ class BigScience176BAttention(nn.Module):
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
 
-        if use_cache:
+        if use_cache and attention_mask is not None:
             with torch.no_grad():
                 if layer_past is not None:
                     attention_mask = attention_mask[
-                        ..., attention_scores.size(3) - 1, : attention_scores.size(3)
-                    ].unsqueeze(2)
+                        ..., : attention_scores.size(3) - 1, : attention_scores.size(3)
+                    ]
                 else:
                     attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
 
@@ -356,6 +363,7 @@ class BigScience176BBlock(nn.Module):
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
         self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
+        # self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
         self.self_attention = BigScience176BAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
