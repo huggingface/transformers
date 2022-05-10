@@ -136,14 +136,17 @@ class VisualBertModelTester:
             visual_token_type_ids = ids_tensor([self.batch_size, self.visual_seq_length], self.type_vocab_size)
 
         config = self.get_config()
-        return config, {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            },
+        )
 
     def prepare_config_and_inputs_for_pretraining(self):
         masked_lm_labels = None
@@ -196,15 +199,18 @@ class VisualBertModelTester:
             labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
-        return config, {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask,
-            "labels": labels,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+                "labels": labels,
+            },
+        )
 
     def prepare_config_and_inputs_for_vqa(self):
         vqa_labels = None
