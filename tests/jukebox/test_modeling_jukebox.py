@@ -80,6 +80,60 @@ class JukeboxModelTest(unittest.TestCase):
         
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
         
+        # Checks 
+        
+        import random
+        seed = 0
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        
+        sample = model.priors[2].sample(1,y=torch.Tensor([[44100.0,0,44100.0]+514*[0]]).long(),chunk_size=32)
+
+
+        expected_samples = torch.Tensor([[121,  67,  16, 111,  54,  84,   0,   0,  41,   0,  14,   0,   0,  49,
+            20,  12,   5,   0,  58,  83,   0,  61,   0,  29,   0,  36,  42,  62,
+            75,   0,  88,  51,   0,   0,  20, 110,  39,  20,  85,   0,   0,   0,
+            76,   0,  32,  17,  99,   0, 127, 103,  78,   0,   0, 125,  82,   0,
+            38,  74,   0,  41,  38,   0,   0, 127,  45,   0,   2,  99,   0,  88,
+            84,  86,   5,  70,   0,   0,   0,   0,  23,   0,   0,   5,   0,   0,
+            3,  28,  47,   1,  32,   0,   9,  98, 111,   0,  66,   0,   0,   0,
+            59,  48,   0, 123,  61,  37,  13, 121,  24, 122, 101,   0,  68,  13,
+            31,   0,  57,   0,  24,  13,  85,   0,   0,  68,   0, 105,   0, 105,
+            0,  50,   0,   0,  64,   0,  14, 103,   0,   0,   0,  77,  26,  33,
+            0,  79,  55,  57,   0,  37,   0,   0,  79,  53,   0, 111,  83,  58,
+            41,  70,   1,  28, 109,  56,   0,  98,  80,   0, 100,  62, 126,   0,
+            0,  23,   0,   0,  43, 114,  23,  44,   0,  68,  53,   0,   0,  84,
+            0,   0,   0,   4, 123,   0,   0,  99,  36,  78,   0,   0,  45,  16,
+            75, 111,  95,  62,  36,   0,  52,  92,  33,  71,   3,   0, 110,   0,
+            0,   0, 124,   0,   0,   0,   2,   0, 101, 125,   0,   0,   0,   3,
+            0,   0, 123,   0,   0,  85,   0,  99,   0,  36, 107,  77,   0,   4,
+            41,  73,   0,  66,  43,  19,   0,   0, 124,   0,  55,  32,   0,   0,
+            0,   0,  90,  96]])
+        
+        self.assertTrue(np.allclose(sample,expected_samples))
+        
+        with torch.no_grad():
+            x = model.vqvae.decode([sample], start_level=1,end_level=2, bs_chunks=sample.shape[0])
+
+        expected_x = torch.Tensor([0.0595, 0.0952, 0.0354, 0.1182, 0.0312, 0.1063, 0.0306, 0.1336, 0.0369,
+        0.0902, 0.0332, 0.1230, 0.0322, 0.1036, 0.0332, 0.1352, 0.0382, 0.0941,
+        0.0302, 0.1226, 0.0313, 0.1077, 0.0316, 0.1375, 0.0392, 0.0961, 0.0303,
+        0.1233, 0.0342, 0.1067, 0.0334, 0.1359, 0.0404, 0.0963, 0.0309, 0.1218,
+        0.0319, 0.1069, 0.0323, 0.1373, 0.0398, 0.0952, 0.0310, 0.1237, 0.0348,
+        0.1058, 0.0336, 0.1370, 0.0410, 0.0954, 0.0306, 0.1224, 0.0331, 0.1081,
+        0.0323, 0.1365, 0.0410, 0.0982, 0.0331, 0.1223, 0.0368, 0.1070, 0.0338,
+        0.1359, 0.0416, 0.0976, 0.0328, 0.1214, 0.0346, 0.1087, 0.0328, 0.1364,
+        0.0393, 0.0973, 0.0333, 0.1236, 0.0361, 0.1074, 0.0337, 0.1361, 0.0409,
+        0.0967, 0.0322, 0.1222, 0.0342, 0.1090, 0.0320, 0.1374, 0.0398, 0.0985,
+        0.0331, 0.1231, 0.0362, 0.1074, 0.0335, 0.1360, 0.0410, 0.0971, 0.0325,
+        0.1220])
+        
+        first_100 = x.squeeze(-1)[0][0:100]
+        self.assertTrue(torch.allclose(first_100,expected_x,atol=1e-4))
 
         sampling_temperature = 0.98
         lower_batch_size = 16
@@ -108,20 +162,25 @@ class JukeboxModelTest(unittest.TestCase):
 
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
+        
         start = timeit.default_timer()
         # import cProfile as profile
         # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
-        model.ancestral_sample(ys, sampling_kwargs, config)
+        zs = model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
+        print(zs)
         # with torch.no_grad():
         #        x = model.vqvae.decode(zs, start_level=0, bs_chunks=zs[0].shape[0])
-
+        # expected_zs = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/zs.pth")
         # time to sample : 108
+        
+        # zs[0][0][0:10]
+        # tensor([113,  69,  85, 126,  57,  53,  51,  62,  87,  28])
+        # self.assertTrue([np.allclose(zs[i],expected_zs[i]) for i in range(len(zs))])
+        # audio_path2 = "/Users/arthur/Work/HuggingFace/transformers/AudioSamples/level_0/item_0.wav"
+        # OUTPUT,_ = librosa.load(audio_path2, sr=44100)
 
-        audio_path2 = "/Users/arthur/Work/HuggingFace/transformers/AudioSamples/level_0/item_0.wav"
-        OUTPUT,_ = librosa.load(audio_path2, sr=44100)
-
-        self.assertTrue(np.allclose(OUTPUT,EXPECTED_OUTPUT))
+        # self.assertTrue(np.allclose(OUTPUT,EXPECTED_OUTPUT))
 
 
 JukeboxModelTest().test_model()
