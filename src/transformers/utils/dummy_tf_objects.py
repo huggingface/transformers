@@ -335,6 +335,13 @@ class TFAutoModelForMultipleChoice(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForNextSentencePrediction(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForPreTraining(metaclass=DummyObject):
     _backends = ["tf"]
 
