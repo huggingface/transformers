@@ -16,15 +16,17 @@
 
 
 import argparse
+from pathlib import Path
 
 import torch
 
-from transformers.utils import logging
 from transformers import JukeboxConfig, JukeboxModel
-from pathlib import Path
+from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
@@ -53,22 +55,20 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None, ba
             else:
                 new_dic[k] = old_dic[k]
         weight_dict.append(new_dic)
-    
+
     return weight_dict
     config = JukeboxConfig.from_pretrained(model_name)
     model = JukeboxModel(config)
-    
+
     vq, *weights = weight_dict
     model.vqvae.load_state_dict(vq)
     for i in range(len(weights)):
         model.priors[i].load_state_dict(weights[i])
-    
-    
-    
+
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    
+
     return weight_dict
 
 
