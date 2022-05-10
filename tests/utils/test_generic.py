@@ -18,7 +18,7 @@ import unittest
 from transformers.utils import flatten_dict
 
 
-class GenericsTester(unittest.TestCase):
+class GenericTester(unittest.TestCase):
     def test_flatten_dict(self):
         input_dict = {
             "task_specific_params": {
