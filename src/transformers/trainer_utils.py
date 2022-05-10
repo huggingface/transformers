@@ -54,12 +54,14 @@ def seed_worker():
     set_seed(worker_seed)
 
 
-def enable_determinism_for_distributed_training():
+def enable_full_determinism(seed: int):
     """
     Helper function for reproducible behavior during distributed training. See
     - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
     - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
     """
+    # set seed first
+    set_seed(seed)
 
     if is_torch_available():
         #  Enable PyTorch deterministic mode. This potentially requires either the environment
@@ -77,7 +79,7 @@ def enable_determinism_for_distributed_training():
         tf.config.experimental.enable_op_determinism()
 
 
-def set_seed(seed: int, enable_determinism: bool = True):
+def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
@@ -92,8 +94,6 @@ def set_seed(seed: int, enable_determinism: bool = True):
         # ^^ safe to call this function even if cuda is not available
     if is_tf_available():
         tf.random.set_seed(seed)
-    if enable_determinism:
-        enable_determinism_for_distributed_training()
 
 
 class EvalPrediction:
