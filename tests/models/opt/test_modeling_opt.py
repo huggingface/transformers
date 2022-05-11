@@ -303,8 +303,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
         except BaseException:
             self.fail("Failed loading model")
 
-    @require_torch
-    @torch.no_grad()
     def test_logits(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
@@ -338,9 +336,12 @@ class OPTEmbeddingsTest(unittest.TestCase):
 class OPTGenerationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.path_model = "ArthurZ/opt-350m"
-        # self.path_logits_meta = "/home/younes/Desktop/Work/metaseq-conversion/logits_metaseq_gpt2_tokenizer.p"  # TODO add the logits somewhere?
-
+        self.all_model_path = [ 
+            "facebook/opt-125m",
+            "facebook/opt-350m",
+            "facebook/opt-1.3b"
+        ]
+        
     def test_generation(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
