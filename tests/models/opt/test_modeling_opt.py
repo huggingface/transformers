@@ -140,8 +140,7 @@ class OPTModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = OPTModel(config=config).to(torch_device).eval()
-        # previousdly OPTModel(config=config).get_decoder().to(torch_device).eval()
-        # tried OPTForCausalkML
+        
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
         head_mask = inputs_dict["head_mask"]
@@ -176,127 +175,6 @@ class OPTModelTester:
 
 
 @require_torch
-class OPTHeadTests(unittest.TestCase):
-    vocab_size = 99
-
-    def _get_config_and_data(self):
-        input_ids = torch.tensor(
-            [
-                [71, 82, 18, 33, 46, 91, 2],
-                [68, 34, 26, 58, 30, 82, 2],
-                [5, 97, 17, 39, 94, 40, 2],
-                [76, 83, 94, 25, 70, 78, 2],
-                [87, 59, 41, 35, 48, 66, 2],
-                [55, 13, 16, 58, 5, 2, 1],  # note padding
-                [64, 27, 31, 51, 12, 75, 2],
-                [52, 64, 86, 17, 83, 39, 2],
-                [48, 61, 9, 24, 71, 82, 2],
-                [26, 1, 60, 48, 22, 13, 2],
-                [21, 5, 62, 28, 14, 76, 2],
-                [45, 98, 37, 86, 59, 48, 2],
-                [70, 70, 50, 9, 28, 0, 2],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        batch_size = input_ids.shape[0]
-        config = OPTConfig(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-            embed_dim=24,
-        )
-        return config, input_ids, batch_size
-
-    @timeout_decorator.timeout(1)
-    def test_lm_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
-        lm_model = OPTForCausalLM(config)
-        lm_model.to(torch_device)
-        outputs = lm_model(input_ids=input_ids, labels=lm_labels)
-        expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(outputs["logits"].shape, expected_shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
-    def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
-        config = OPTConfig(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
-        lm_model = OPTForCausalLM(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        generated_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
-
-    @slow
-    def test_tokenization(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-large")
-        examples = [" Hello world", " DomDramg"]  # need leading spaces for equality
-        fairseq_results = [
-            torch.tensor([0, 20920, 232, 2]),
-            torch.tensor([0, 11349, 495, 4040, 571, 2]),
-        ]
-        for ex, desired_result in zip(examples, fairseq_results):
-            opt_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
-            assert_tensors_close(desired_result.long(), opt_toks, prefix=ex)
-
-    def test_generate_fp16(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        attention_mask = input_ids.ne(1).to(torch_device)
-        model = OPTForCausalLM(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
-        model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-
-    def test_dummy_inputs(self):
-        config, *_ = self._get_config_and_data()
-        model = OPTForCausalLM(config).eval().to(torch_device)
-        model(**model.dummy_inputs)
-
-    def test_resize_tokens_embeddings_more(self):
-        config, input_ids, _ = self._get_config_and_data()
-
-        def _get_embs(m):
-            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
-
-        model = OPTForCausalLM(config).eval().to(torch_device)
-        input, output = _get_embs(model)
-        self.assertTrue(torch.eq(input, output).all())
-        new_vocab_size = 45
-        model.resize_token_embeddings(new_vocab_size)
-        input_new, output_new = _get_embs(model)
-        self.assertEqual(input_new.shape, (new_vocab_size, config.d_model))
-        self.assertEqual(output_new.shape, (new_vocab_size, config.d_model))
-        self.assertTrue(torch.eq(input_new, output_new).all())
-
-
-@require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
@@ -325,7 +203,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # OPTForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
