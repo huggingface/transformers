@@ -66,6 +66,9 @@ class OPTConfig(PretrainedConfig):
             details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        # TODO docstring help 
+        decoder_start_token_id=2,
+        do_layer_norm_before=True,
 
     Example:
 
