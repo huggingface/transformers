@@ -32,6 +32,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+
     from transformers import GPT2Tokenizer, OPTForCausalLM, OPTModel
 
 
@@ -74,7 +75,7 @@ class OPTModelTester:
         pad_token_id=1,
         bos_token_id=0,
         embed_dim=16,
-        word_embed_proj_dim=16
+        word_embed_proj_dim=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -125,7 +126,7 @@ class OPTModelTester:
             pad_token_id=self.pad_token_id,
             embed_dim=self.embed_dim,
             is_encoder_decoder=False,
-            word_embed_proj_dim=self.word_embed_proj_dim
+            word_embed_proj_dim=self.word_embed_proj_dim,
         )
 
     def get_pipeline_config(self):
@@ -139,7 +140,7 @@ class OPTModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = OPTModel(config=config).to(torch_device).eval()
-        
+
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
         head_mask = inputs_dict["head_mask"]
