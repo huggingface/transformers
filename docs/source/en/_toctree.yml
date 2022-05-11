@@ -216,6 +216,8 @@
       title: Encoder Decoder Models
     - local: model_doc/flaubert
       title: FlauBERT
+    - local: model_doc/flava
+      title: FLAVA
     - local: model_doc/fnet
       title: FNet
     - local: model_doc/fsmt
