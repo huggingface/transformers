@@ -447,7 +447,7 @@ class TrainingArguments:
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
         full_determinism (`bool`, *optional*, defaults to `False`)
-            If True, enable_full_determinism is called instead of set_seed to ensure reproducible results in
+            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training
     """
 
