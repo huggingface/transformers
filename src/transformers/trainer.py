@@ -607,13 +607,14 @@ class Trainer:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
             self._signature_columns = list(signature.parameters.keys())
+            # Labels may be named label or label_ids, the default data collator handles that.
+            self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return dataset
         self._set_signature_columns_if_needed()
-        # Labels may be named label or label_ids, the default data collator handles that.
-        signature_columns = self._signature_columns + ["label", "label_ids"]
+        signature_columns = self._signature_columns
 
         ignored_columns = list(set(dataset.column_names) - set(signature_columns))
         if len(ignored_columns) > 0:
@@ -642,7 +643,7 @@ class Trainer:
         if not self.args.remove_unused_columns:
             return data_collator
         self._set_signature_columns_if_needed()
-        signature_columns = self._signature_columns + self.label_names
+        signature_columns = self._signature_columns
 
         remove_columns_collator = RemoveColumnsCollator(
             data_collator=data_collator,
