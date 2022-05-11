@@ -109,7 +109,7 @@ class OPTConfig(PretrainedConfig):
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         output_projection=True,
-        decoder_layernorm=False,  # think we can delete this - to check
+        do_layer_norm_before = True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -129,7 +129,7 @@ class OPTConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.output_projection = output_projection
-        self.decoder_layernorm = decoder_layernorm
+        self.do_layer_norm_before = do_layer_norm_before
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

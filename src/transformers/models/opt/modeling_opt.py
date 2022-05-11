@@ -291,6 +291,7 @@ class OPTDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
         )
+        self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
@@ -329,7 +330,8 @@ class OPTDecoderLayer(nn.Module):
         # TODO(ArthurZ) could you add a flag to the config "do_layer_norm_before = True/False" to
         # differentiate  between 350m and all other checkpoitns
         # Before
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if self.do_layer_norm_before: 
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
@@ -340,14 +342,16 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         # After
-#        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.do_layer_norm_before: 
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Fully Connected
         hidden_states_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
         residual = hidden_states
         # Before
-        hidden_states = self.final_layer_norm(hidden_states)
+        if self.do_layer_norm_before: 
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
 
@@ -356,7 +360,8 @@ class OPTDecoderLayer(nn.Module):
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
         # After
-#        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.do_layer_norm_before: 
+            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
