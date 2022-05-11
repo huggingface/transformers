@@ -269,6 +269,7 @@ def export(
     opset: int,
     output: Path,
     tokenizer: "PreTrainedTokenizer" = None,
+    cuda: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -284,6 +285,8 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        cuda (`bool`):
+            Whether export on CUDA device(only works for PyTorch). The exportation will be done on CPU by default.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -294,6 +297,9 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+
+    if isinstance(model, TFPreTrainedModel) and cuda:
+        raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
@@ -317,7 +323,7 @@ def export(
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
+        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer, cuda=cuda)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
         return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
 
