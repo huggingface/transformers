@@ -162,6 +162,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
+        pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
         **kwargs
@@ -169,12 +170,15 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
             **kwargs,
         )
         self.add_bos_token = add_bos_token
@@ -245,7 +249,6 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return word
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        import ipdb; ipdb.set_trace()
         if self.add_bos_token:
             bos_token_ids = [self.bos_token_id]
         else:
