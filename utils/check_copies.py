@@ -42,7 +42,7 @@ LOCALIZED_READMES = {
         "end_prompt": "1. Want to contribute a new model?",
         "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
     },
-    "glm": {
+    "README_zh-hans.md": {
         "start_prompt": "🤗 Transformers 目前支持如下的架构",
         "end_prompt": "1. 想要贡献新的模型？",
         "format_model_list": "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
