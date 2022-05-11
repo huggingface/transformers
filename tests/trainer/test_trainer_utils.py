@@ -41,6 +41,8 @@ if is_torch_available():
         SequentialDistributedSampler,
         ShardSampler,
         get_parameter_names,
+        numpy_pad_and_concatenate,
+        torch_pad_and_concatenate,
     )
 
     class TstLayer(nn.Module):
@@ -458,6 +460,18 @@ class TrainerUtilsTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as cm:
             mock_training_loop_function()
             self.assertEqual("CUDA out of memory", cm.args[0])
+
+    def test_pad_and_concatenate_with_1d(self):
+        """Tests whether pad_and_concatenate works with scalars."""
+        array1 = 1.0
+        array2 = 2.0
+        result = numpy_pad_and_concatenate(array1, array2)
+        self.assertTrue(np.array_equal(np.array([1.0, 2.0]), result))
+
+        tensor1 = torch.tensor(1.0)
+        tensor2 = torch.tensor(2.0)
+        result = torch_pad_and_concatenate(tensor1, tensor2)
+        self.assertTrue(torch.equal(result, torch.Tensor([1.0, 2.0])))
 
     def test_remove_columns_collator(self):
         class MockLogger:
