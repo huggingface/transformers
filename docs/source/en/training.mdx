@@ -296,6 +296,7 @@ Create the default learning rate scheduler from [`Trainer`]:
 
 >>> num_epochs = 3
 >>> num_training_steps = num_epochs * len(train_dataloader)
+>>> num_eval_steps = len(eval_dataloader)
 >>> lr_scheduler = get_scheduler(
 ...     name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
 ... )
@@ -347,6 +348,7 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 
 ```py
 >>> metric = load_metric("accuracy")
+>>> progress_bar = tqdm(range(num_eval_steps))
 >>> model.eval()
 >>> for batch in eval_dataloader:
 ...     batch = {k: v.to(device) for k, v in batch.items()}
@@ -356,6 +358,7 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 ...     logits = outputs.logits
 ...     predictions = torch.argmax(logits, dim=-1)
 ...     metric.add_batch(predictions=predictions, references=batch["labels"])
+...     progress_bar.update(1)
 
 >>> metric.compute()
 ```
