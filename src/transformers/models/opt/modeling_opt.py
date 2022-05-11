@@ -352,7 +352,6 @@ class OPTDecoderLayer(nn.Module):
         hidden_states_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
         residual = hidden_states
-        # Before
         if self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.fc1(hidden_states)
