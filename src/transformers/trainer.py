@@ -978,6 +978,10 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizerNames.SGD:
+            optimizer_cls = torch.optim.SGD
+        elif args.optim == OptimizerNames.ADAGRAD:
+            optimizer_cls = torch.optim.Adagrad
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
