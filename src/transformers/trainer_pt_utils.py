@@ -56,12 +56,13 @@ logger = logging.get_logger(__name__)
 
 
 def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
-    if isinstance(tensor_or_array, np.ndarray):
+    if isinstance(tensor_or_array, torch.Tensor):
+        if hasattr(torch, "atleast_1d"):
+            tensor_or_array = torch.atleast_1d(tensor_or_array)
+        elif tensor_or_array.ndim < 1:
+            tensor_or_array = tensor_or_array[None]
+    else:
         tensor_or_array = np.atleast_1d(tensor_or_array)
-    elif hasattr(torch, "atleast_1d"):
-        tensor_or_array = torch.atleast_1d(tensor_or_array)
-    elif tensor_or_array.ndim < 1:
-        tensor_or_array = tensor_or_array[None]
     return tensor_or_array
 
 
