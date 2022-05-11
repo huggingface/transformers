@@ -978,6 +978,10 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizerNames.SGD:
+            optimizer_cls = torch.optim.SGD
+        elif args.optim == OptimizerNames.ADAGRAD:
+            optimizer_cls = torch.optim.Adagrad
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1705,7 +1709,7 @@ class Trainer:
                 # If the model is on the GPU, it still works!
                 load_result = self.model.load_state_dict(state_dict, strict=False)
                 self._issue_warnings_after_load(load_result)
-        elif os.path.exists(best_model_path, os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
+        elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             # Best model is a sharded checkpoint
             load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
             self._issue_warnings_after_load(load_result)
