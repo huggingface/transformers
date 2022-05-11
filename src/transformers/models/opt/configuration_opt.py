@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OPT model configuration"""
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -40,7 +38,7 @@ class OPTConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50272):
             Vocabulary size of the OPT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OPTModel`] 
+            `inputs_ids` passed when calling [`OPTModel`]
         d_model (`int`, *optional*, defaults to 768):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -111,7 +109,7 @@ class OPTConfig(PretrainedConfig):
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         output_projection=True,
-        decoder_layernorm=True,
+        decoder_layernorm=False,  # think we can delete this - to check
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -140,4 +138,3 @@ class OPTConfig(PretrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
