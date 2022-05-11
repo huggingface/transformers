@@ -1275,25 +1275,34 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Examples:
 
-        ```python
-        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering
-        >>> from PIL import Image
-        >>> import torch
+        Passing the doctests requires installation of detectron2, torchvision and tesseract. Run the following to install them:
+        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        `python -m pip install torchvision tesseract`
 
+        Inference Example (Note the result is quite bad without further fine-tuning)
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
+        >>> from PIL import Image
+        >>> from datasets import load_dataset
+
+        >>> set_seed(88)
         >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
         >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
-        >>> question = "what's his name?"
-
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
+        >>> question = "When is coffee break?"
         >>> encoding = processor(image, question, return_tensors="pt")
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
-
-        >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
-        >>> loss = outputs.loss
-        >>> start_scores = outputs.start_logits
-        >>> end_scores = outputs.end_logits
+        
+        >>> outputs = model(**encoding)
+        >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
+        >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
+        >>> predicted_start_idx, predicted_end_idx
+        (154, 287)
+        >>> predicted_answer = processor.tokenizer.decode(encoding.input_ids.squeeze()[predicted_start_idx:predicted_end_idx+1])
+        >>> predicted_answer
+        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
