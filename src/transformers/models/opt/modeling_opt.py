@@ -81,7 +81,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def make_positions(tensor, padding_idx: int, onnx_trace: bool = False):
+def make_positions(attention_mask, padding_idx: int):
     """Replace non-padding symbols with their position numbers.
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
@@ -111,11 +111,10 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
 
     def forward(
         self,
-        input: Tensor,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+        attention_mask: Tensor,
         positions: Optional[Tensor] = None,
     ):
-        """Input is expected to be of size [bsz x seqlen]."""
+        """attention_masks is expected to be of size [bsz x seqlen]."""
         if not ((positions is None) or (self.padding_idx is None)):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
@@ -123,7 +122,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         # padding.
 
         if positions is None:
-            positions = make_positions(input, self.padding_idx, onnx_trace=self.onnx_trace)
+            positions = make_positions(attention_mask, self.padding_idx)
         return F.embedding(
             positions,
             self.weight,
@@ -292,8 +291,7 @@ class OPTDecoderLayer(nn.Module):
             is_decoder=True,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN["relu"]
-        # self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = ACT2FN[config.activation_function]
 
         self.activation_dropout = config.activation_dropout
 
@@ -411,15 +409,15 @@ OPT_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import GPT2Tokenizer, OPTForCausalLM
 
-    >>> model = OPTForCausalLM.from_pretrained("facebook/opt-large-cnn")
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-large-cnn")
+    >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
     >>> TEXTS_TO_GENERATE = "Hey, are you consciours? Can you talk to me?" "Hi there, my name is Barack"
     >>> inputs = tokenizer([TEXTS_TO_GENERATE], max_length=1024, return_tensors="pt")
 
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
-    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    >>> # Generate 
+    >>> generate_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
+    >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     'I'm not conscious.<\s>'
     ```
 """
@@ -445,8 +443,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            OPT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_inputs`] and modify
             to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
@@ -502,13 +499,12 @@ class OPTDecoder(OPTPretrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.share_input_output_embed = config.share_input_output_embed
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.cross_self_attention = False  # TODO add it on the config
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.embed_dim, self.padding_idx)
 
         if self.padding_idx is not None:
-            num_embeddings = config.max_position_embeddings + self.padding_idx + 1
+            num_embeddings = config.max_position_embeddings + 2
         self.embed_positions = OPTLearnedPositionalEmbedding(
             num_embeddings,
             config.d_model,
@@ -641,7 +637,7 @@ class OPTDecoder(OPTPretrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_ids)
+        positions = self.embed_positions(attention_mask)
 
         if self.project_in_dim is not None:
             inputs_embeds = self.project_in_dim(inputs_embeds)
@@ -791,8 +787,6 @@ class OPTModel(OPTPretrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutputWithPastAndCrossAttentions when return_dict=True
-
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=input_ids,
@@ -922,8 +916,8 @@ class OPTForCausalLM(OPTPretrainedModel):
         >>> from transformers import OPTTokenizer, OPTForCausalLM
 
         # this needs fixing
-        >>> tokenizer = OPTTokenizer.from_pretrained("")
-        >>> model = OPTForCausalLM.from_pretrained("")
+        >>> tokenizer = OPTTokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
