@@ -414,7 +414,7 @@ OPT_GENERATION_EXAMPLE = r"""
     Generation example:
 
     ```python
-    >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
     >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
     >>> tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
