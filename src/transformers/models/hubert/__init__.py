@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -25,7 +25,12 @@ _import_structure = {
     "configuration_hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_hubert"] = [
         "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HubertForCTC",
@@ -35,7 +40,12 @@ if is_torch_available():
     ]
 
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_hubert"] = [
         "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFHubertForCTC",
@@ -47,7 +57,12 @@ if TYPE_CHECKING:
     from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .configuration_hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
@@ -56,7 +71,12 @@ if TYPE_CHECKING:
             HubertPreTrainedModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_hubert import (
             TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFHubertForCTC,

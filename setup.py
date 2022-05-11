@@ -19,7 +19,7 @@ To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
-   
+
    If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
@@ -96,12 +96,13 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
+    "accelerate>=0.7.1",
     "black~=22.0",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.6.0",
+    "deepspeed>=0.6.4",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -140,6 +141,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
@@ -288,7 +290,8 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
-        'sacremoses'
+        "sacremoses",
+        "rjieba"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
