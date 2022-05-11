@@ -363,6 +363,8 @@ def validate_model_outputs(
     session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
+    if issubclass(type(reference_model), PreTrainedModel):
+        reference_model.to("cpu")
     ref_outputs = reference_model(**reference_model_inputs)
     ref_outputs_dict = {}
 
