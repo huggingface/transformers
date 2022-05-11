@@ -788,13 +788,16 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> from transformers import AutoProcessor, AutoModel
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
-        >>> image = dataset[0]["image"]
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
 
-        >>> encoding = processor(image, return_tensors="pt")
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
 
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
@@ -999,15 +1002,15 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> from transformers import AutoProcessor, AutoModelForTokenClassification
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", revision="no_ocr")
-        >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
+        >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
-        >>> boxes = example["boxes"]
-        >>> word_labels = [0, 1]
+        >>> boxes = example["bboxes"]
+        >>> word_labels = example["ner_tags"]
 
         >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
 
@@ -1111,14 +1114,17 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
-        >>> image = dataset[0]["image"]
+        >>> example = dataset[0]
+        >>> image = example["image"]
         >>> question = "what's his name?"
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
 
-        >>> encoding = processor(image, question, return_tensors="pt")
+        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
@@ -1228,13 +1234,16 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
-        >>> image = dataset[0]["image"]
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
 
-        >>> encoding = processor(image, return_tensors="pt")
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
         >>> sequence_label = torch.tensor([1])
 
         >>> outputs = model(**encoding, labels=sequence_label)
