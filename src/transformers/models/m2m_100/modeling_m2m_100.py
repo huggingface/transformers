@@ -1299,7 +1299,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
