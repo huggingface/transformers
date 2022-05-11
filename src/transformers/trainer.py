@@ -1689,6 +1689,11 @@ class Trainer:
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         if os.path.exists(best_model_path):
             if self.deepspeed:
+
+                if self.model_wrapped is not None:
+                    self.model_wrapped.destroy()
+                    self.model_wrapped = None
+
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
                 deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                     self, num_training_steps=self.args.max_steps
