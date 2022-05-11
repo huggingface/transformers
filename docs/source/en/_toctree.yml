@@ -192,6 +192,8 @@
       title: CPM
     - local: model_doc/ctrl
       title: CTRL
+    - local: model_doc/cvt
+      title: CvT
     - local: model_doc/data2vec
       title: Data2Vec
     - local: model_doc/deberta
