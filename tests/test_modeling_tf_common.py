@@ -1531,7 +1531,6 @@ class TFModelTesterMixin:
                 for tensor in test_batch.values():
                     self.assertTrue(isinstance(tensor, tf.Tensor))
                     self.assertEqual(len(tensor), len(input_dataset))  # Assert we didn't lose any data
-                    breakpoint()
                     model(test_batch, training=False)
 
             if "labels" in inspect.signature(model_class.call).parameters.keys():
