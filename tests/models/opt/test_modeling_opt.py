@@ -46,10 +46,6 @@ def prepare_opt_inputs_dict(
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
-    if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
