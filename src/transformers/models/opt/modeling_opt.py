@@ -331,7 +331,7 @@ class OPTDecoderLayer(nn.Module):
         # Self Attention
         if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-            
+
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
@@ -513,7 +513,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
 
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2 
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
 
