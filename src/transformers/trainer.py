@@ -1696,16 +1696,13 @@ class Trainer:
 
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
                 deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                    self, num_training_steps=self.args.max_steps
+                    self, num_training_steps=self.args.max_steps, resume_from_checkpoint=self.state.best_model_checkpoint
                 )
                 self.model = deepspeed_engine.module
                 self.model_wrapped = deepspeed_engine
                 self.deepspeed = deepspeed_engine
                 self.optimizer = optimizer
                 self.lr_scheduler = lr_scheduler
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-                )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
