@@ -306,7 +306,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
     def test_logits(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
-        # tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
         tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
