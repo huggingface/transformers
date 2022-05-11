@@ -45,7 +45,7 @@ jobs:
           rm -rf reports
 
       - name: Fetch the tests to run
-        # TODO: add `git-python` in docker image
+        # TODO: add `git-python` in the docker images
         run: |
           pip install --upgrade git-python
           python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
