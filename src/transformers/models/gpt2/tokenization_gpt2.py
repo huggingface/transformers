@@ -163,6 +163,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
+        add_bos_token=False,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -176,6 +177,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        self.add_bos_token = add_bos_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -241,6 +243,20 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         word = " ".join(word)
         self.cache[token] = word
         return word
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        import ipdb; ipdb.set_trace()
+        if self.add_bos_token:
+            bos_token_ids = [self.bos_token_id]
+        else:
+            bos_token_ids = []
+
+        output = bos_token_ids + token_ids_0
+
+        if token_ids_1 is None:
+            return output
+
+        return output + bos_token_ids + token_ids_1
 
     def _tokenize(self, text):
         """Tokenize a string."""
