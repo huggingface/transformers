@@ -87,8 +87,8 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
-    SGD = "SGD"
-    ADAGRAD = "Adagrad"
+    SGD = "sgd"
+    ADAGRAD = "adagrad"
 
 
 @dataclass
