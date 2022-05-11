@@ -887,7 +887,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         loss_fct = CrossEntropyLoss()
         if num_choices is not None:
             logits = logits.view(-1, num_choices)
-        assert (labels is not None, "labels must not None!")
+        # assert (labels is not None, "labels must not None!")
         loss = loss_fct(logits, labels)
         # loss = F.cross_entropy(logits.contiguous().float(), labels.long())
         return SequenceClassifierOutput(loss=loss,
