@@ -344,12 +344,7 @@ class OPTGenerationTest(unittest.TestCase):
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
-        NEXT_TOKENS = [
-            3392,
-            764,
-            5,
-            81,
-        ]
+        NEXT_TOKENS = [3392, 764, 5, 81]
         GEN_OUTPUT = []
 
         tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
