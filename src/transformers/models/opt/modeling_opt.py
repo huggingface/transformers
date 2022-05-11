@@ -115,7 +115,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
             self.max_positions = self.num_embeddings
 
     def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
-        """attention_masks is expected to be of size [bsz x seqlen]."""
+        # attention_masks is expected to be of size [batch_size x seq_len].
         if not ((positions is None) or (self.padding_idx is None)):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
