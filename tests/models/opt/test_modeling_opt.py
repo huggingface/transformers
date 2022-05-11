@@ -276,7 +276,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("ArthurZ/350-m").to(torch_device)
+        model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
@@ -295,7 +295,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.path_model = "ArthurZ/opt-350m"
+        self.path_model = "facebook/opt-350m"
 
     def test_load_model(self):
         try:
@@ -336,19 +336,9 @@ class OPTEmbeddingsTest(unittest.TestCase):
 class OPTGenerationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        # self.all_model_path = ["facebook/opt-125m", "facebook/opt-350m", "facebook/opt-1.3b"]
-        self.path_model = "ArthurZ/opt-350m"
+        self.all_model_path = ["facebook/opt-125m", "facebook/opt-350m"]
 
     def test_generation(self):
-        model = OPTForCausalLM.from_pretrained(self.path_model)
-        model = model.eval()
-        # tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-        tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-        # tokenizer.add_special_tokens({'pad_token': '<pad>'})
-        model.config.eos_token_id = tokenizer.eos_token_id
-
-        gen = pipeline("text-generation", model=model, tokenizer=tokenizer, return_tensors=True)
-
         prompts = [
             "Today is a beautiful day and I want to",
             "In the city of",
@@ -362,8 +352,18 @@ class OPTGenerationTest(unittest.TestCase):
             81,
         ]
         GEN_OUTPUT = []
-        for prompt in prompts:
-            len_input_sentence = len(tokenizer.tokenize(prompt))
-            predicted_next_token = gen(prompt)[0]["generated_token_ids"][len_input_sentence]
-            GEN_OUTPUT.append(predicted_next_token)
-        self.assertListEqual(GEN_OUTPUT, NEXT_TOKENS)
+        
+        tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+        for model in self.all_model_path:
+            model = OPTForCausalLM.from_pretrained(self.path_model)
+            model = model.eval()
+            model.config.eos_token_id = tokenizer.eos_token_id
+
+            gen = pipeline("text-generation", model=model, tokenizer=tokenizer, return_tensors=True)
+
+            
+            for prompt in prompts:
+                len_input_sentence = len(tokenizer.tokenize(prompt))
+                predicted_next_token = gen(prompt)[0]["generated_token_ids"][len_input_sentence]
+                GEN_OUTPUT.append(predicted_next_token)
+            self.assertListEqual(GEN_OUTPUT, NEXT_TOKENS)
