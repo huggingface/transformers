@@ -611,15 +611,17 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         words = text if text_pair is None else text_pair
-        assert boxes is not None, "You must provide corresponding bounding boxes"
+        if boxes is None:
+            raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
-            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide words and boxes for an equal amount of examples")
             for words_example, boxes_example in zip(words, boxes):
-                assert len(words_example) == len(
-                    boxes_example
-                ), "You must provide as many words as there are bounding boxes"
+                if len(words_example) != len(boxes_example):
+                    raise ValueError("You must provide as many words as there are bounding boxes")
         else:
-            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide as many words as there are bounding boxes")
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
