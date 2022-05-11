@@ -18,9 +18,9 @@ import collections
 import functools
 import inspect
 import math
+import operator
 import random
 import warnings
-from copy import deepcopy
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
@@ -104,6 +104,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "t5",
     "roberta",
     "vit",
+    "swin",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "layoutlm",
     # "xlnet",
@@ -280,6 +281,10 @@ def torch_tensor_index_select(self, dim, index):
     return torch_tensor_index_select(self, dim, index)
 
 
+def torch_roll(input, shifts, dims=None):
+    return input
+
+
 def torch_nn_conv2d(self, input):
     h_in, w_in = input.shape[-2:]
     shape = None
@@ -325,6 +330,21 @@ def torch_nn_bcewithlogitsloss(self, input, target):
     return torch.empty(shape, device="meta")
 
 
+def torch_tensor_getitem(self, indices):
+    if not isinstance(self, torch.Tensor):
+        return operator.getitem(self, indices)
+    if not isinstance(indices, (tuple, list)):
+        indices = [indices]
+
+    def map_fn(x):
+        if isinstance(x, torch.Tensor):
+            return torch.zeros_like(x, device="cpu")
+        return x
+
+    indices = list(map(map_fn, indices))
+    return torch.empty_like(torch.empty_like(self, device="cpu")[indices], device="meta")
+
+
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: embedding_override,
     torch.nn.LayerNorm: torch_nn_layernorm_override,
@@ -342,6 +362,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.mul: torch_tensor_mul_override,
     torch.matmul: torch_matmul_override,
     torch.Tensor.repeat: torch_tensor_repeat_override,
+    torch.roll: torch_roll,
     # TODO: those might not be needed.
     # torch.index_select: torch_index_select,
     # torch.Tensor.index_select: torch_tensor_index_select,
@@ -349,6 +370,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
+    # operator.getitem: torch_tensor_getitem,
 }
 
 
@@ -393,6 +415,9 @@ class HFProxy(Proxy):
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
+
+    def __setitem__(self, indices, values):
+        return self.tracer.create_proxy("call_method", "__setitem__", (self, indices, values), {})
 
     def __contains__(self, key):
         # To handle cases such as :
@@ -795,13 +820,13 @@ def symbolic_trace(
     tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
-
     # Copy all the original attributes to the traced GraphModule.
-    regular_module_attributes = dir(nn.Module())
-    for name in dir(model):
-        attr = getattr(model, name)
-        if name.startswith("_") or name in regular_module_attributes:
-            continue
-        setattr(traced, name, deepcopy(attr))
+    # from copy import deepcopy
+    # regular_module_attributes = dir(nn.Module())
+    # for name in dir(model):
+    #     attr = getattr(model, name)
+    #     if name.startswith("_") or name in regular_module_attributes:
+    #         continue
+    #     setattr(traced, name, deepcopy(attr))
 
     return traced
