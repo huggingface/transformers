@@ -95,20 +95,16 @@ class OPTConfig(PretrainedConfig):
         layerdrop=0.0,
         activation_function="relu",
         d_model=768,
-        word_embed_proj_dim=768,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        scale_embedding=False,
-        share_input_output_embed=True,
-        use_cache=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        decoder_start_token_id=2,
-        forced_eos_token_id=2,
         do_layer_norm_before=True,
+        use_cache=True,
+        word_embed_proj_dim=None,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -116,7 +112,7 @@ class OPTConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else d_model
         self.ffn_dim = ffn_dim
-        self.share_input_output_embed = share_input_output_embed
+        self.share_input_output_embed = True
         self.d_model = d_model
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
@@ -126,13 +122,12 @@ class OPTConfig(PretrainedConfig):
         self.init_std = init_std
         self.layerdrop = layerdrop
         self.use_cache = use_cache
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = False # scale factor will be sqrt(d_model) if True
         self.do_layer_norm_before = do_layer_norm_before
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )

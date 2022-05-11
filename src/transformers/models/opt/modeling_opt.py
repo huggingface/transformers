@@ -767,7 +767,6 @@ class OPTDecoder(OPTPretrainedModel):
 class OPTModel(OPTPretrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
-
         self.decoder = OPTDecoder(config)
         # padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
@@ -840,7 +839,6 @@ class OPTForCausalLM(OPTPretrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
