@@ -517,6 +517,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
 
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2 
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
 
