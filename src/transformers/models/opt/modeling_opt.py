@@ -515,9 +515,7 @@ class OPTDecoder(OPTPretrainedModel):
             num_embeddings = config.max_position_embeddings + 2
 
         self.embed_positions = OPTLearnedPositionalEmbedding(
-            num_embeddings,
-            config.d_model,
-            self.padding_idx,
+            num_embeddings, config.d_model, self.padding_idx
         )
 
         if config.word_embed_proj_dim != config.d_model:
