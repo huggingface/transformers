@@ -50,7 +50,7 @@ else:
 
 if TYPE_CHECKING:
     from .processing_layoutxlm import LayoutXLMProcessor
-    
+
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()

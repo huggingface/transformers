@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tokenizers_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -27,13 +33,20 @@ _import_structure = {
     "tokenization_layoutlmv3": ["LayoutLMv3Tokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_layoutlmv3_fast"] = ["LayoutLMv3TokenizerFast"]
 
-if is_vision_available():
-    _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
-
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_layoutlmv3"] = [
         "LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMv3ForQuestionAnswering",
@@ -43,18 +56,34 @@ if is_torch_available():
         "LayoutLMv3PreTrainedModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
+
+
 if TYPE_CHECKING:
     from .configuration_layoutlmv3 import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv3Config
     from .processing_layoutlmv3 import LayoutLMv3Processor
     from .tokenization_layoutlmv3 import LayoutLMv3Tokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_layoutlmv3_fast import LayoutLMv3TokenizerFast
 
-    if is_vision_available():
-        from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
-
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_layoutlmv3 import (
             LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv3ForQuestionAnswering,
@@ -63,6 +92,15 @@ if TYPE_CHECKING:
             LayoutLMv3Model,
             LayoutLMv3PreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
+
 else:
     import sys
 
