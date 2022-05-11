@@ -904,7 +904,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         prefetch: bool = True,
     ):
         if collate_fn is None:
-            collate_fn = DefaultDataCollator(return_tensors='tf')
+            collate_fn = DefaultDataCollator(return_tensors="tf")
         if collate_fn_args is None:
             collate_fn_args = dict()
         try:
@@ -916,7 +916,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         model_labels = find_labels(self.__class__)
         unwanted_columns = [
             feature
-            for feature in self.features
+            for feature in dataset.features
             if feature not in model_inputs and feature not in ("label_ids", "label")
         ]
         dataset = dataset.remove_columns(unwanted_columns)

@@ -1524,7 +1524,7 @@ class TFModelTesterMixin:
             if isinstance(test_batch, tf.Tensor):
                 self.assertEqual(len(test_batch), len(input_dataset))  # Assert we didn't lose any data
             else:
-                self.assertEqual(len(test_batch), len(input_dataset))  # Assert we have all our columns
+                self.assertEqual(len(test_batch), len(input_dataset.features))  # Assert we have all our columns
                 for tensor in test_batch.values():
                     self.assertTrue(isinstance(tensor, tf.Tensor))
                     self.assertEqual(len(tensor), len(input_dataset))  # Assert we didn't lose any data
@@ -1540,8 +1540,10 @@ class TFModelTesterMixin:
                 self.assertGreater(len(test_batch_labels), 0)  # Assert the labels are present
                 feature_columns = 1 if isinstance(test_batch, tf.Tensor) else len(test_batch)
                 label_columns = 1 if isinstance(test_batch_labels, tf.Tensor) else len(test_batch_labels)
-                self.assertEqual(feature_columns + label_columns, len(input_dataset))  # Assert we didn't lose any cols
-                model.train_on_batch(test_batch)
+                # Assert we didn't lose any columns
+                self.assertEqual(feature_columns + label_columns, len(input_dataset.features))
+                model.compile(optimizer="sgd", run_eagerly=True)
+                model.train_on_batch(test_batch, test_batch_labels)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
