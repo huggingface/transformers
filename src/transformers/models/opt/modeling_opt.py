@@ -698,7 +698,6 @@ class OPTDecoder(OPTPretrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        print(input)
                         return module(*inputs, output_attentions,None)
 
                     return custom_forward
@@ -818,6 +817,9 @@ class OPTModel(OPTPretrainedModel):
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            return decoder_outputs
+        
         return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
