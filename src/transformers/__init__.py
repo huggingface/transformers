@@ -3033,10 +3033,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
-        from .utils.dummy_scatter_objects import *
-
-    if is_torch_available():
-
         from .models.glm import (
             GLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             GLMForSequenceClassification,
