@@ -108,14 +108,13 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
-        output_projection=True,
         do_layer_norm_before=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
-        self.word_embed_proj_dim = word_embed_proj_dim
+        self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else d_model
         self.ffn_dim = ffn_dim
         self.share_input_output_embed = share_input_output_embed
         self.d_model = d_model
@@ -128,7 +127,6 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.output_projection = output_projection
         self.do_layer_norm_before = do_layer_norm_before
         super().__init__(
             pad_token_id=pad_token_id,
