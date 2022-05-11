@@ -51,7 +51,7 @@ def seed_worker(_):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2 ** 32
+    worker_seed = torch.initial_seed() % 2**32
     set_seed(worker_seed)
 
 
