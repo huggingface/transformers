@@ -1204,12 +1204,28 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         self.conv2d = tf.keras.layers.Conv2D(
             filters=config.encoder_stride**2 * 3, kernel_size=1, strides=1, name="0"
         )
-        self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
+        self._block_size = config.encoder_stride
+        self.pixel_shuffle = PixelShuffle(self._block_size, name="1")
 
     def call(self, x, training=False):
         hidden_states = x
+        # B,C,H,W -> B,H,W,C
+        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
         hidden_states = self.conv2d(hidden_states)
+        batch_size, _, _, num_input_channels = hidden_states.shape
+        block_size_squared = self._block_size**2
+        output_depth = int(num_input_channels / block_size_squared)
+        # When the number of output channels > 2, PyTorch's PixelShuffle and
+        # TF's depth_to_space differ in their output as the order of channels selected for combining
+        # differs. To match, the order of channels for tf.depth_to_space  c.f.
+        # https://stackoverflow.com/questions/68272502/tf-depth-to-space-not-same-as-torchs-pixelshuffle-when-output-channels-1
+        permutation = tf.constant(
+            [[i + j * block_size_squared for i in range(block_size_squared) for j in range(output_depth)]]
+        )
+        hidden_states = tf.gather(params=hidden_states, indices=tf.tile(permutation, [batch_size, 1]), batch_dims=-1)
         hidden_states = self.pixel_shuffle(hidden_states)
+        # B,H,W,C -> B,C,H,W
+        hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
         return hidden_states
 
 
@@ -1291,11 +1307,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         sequence_output = tf.reshape(sequence_output, (batch_size, num_channels, height, width))
 
         # Reconstruct pixel values
-        # B,C,H,W -> B,H,W,C
-        sequence_output = tf.transpose(sequence_output, (0, 2, 3, 1))
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
-        # B,H,W,C -> B,C,H,W
-        reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
         masked_im_loss = None
         if bool_masked_pos is not None:
