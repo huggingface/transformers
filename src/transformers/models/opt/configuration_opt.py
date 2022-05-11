@@ -112,7 +112,6 @@ class OPTConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else d_model
         self.ffn_dim = ffn_dim
-        self.share_input_output_embed = True
         self.d_model = d_model
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
@@ -122,7 +121,6 @@ class OPTConfig(PretrainedConfig):
         self.init_std = init_std
         self.layerdrop = layerdrop
         self.use_cache = use_cache
-        self.scale_embedding = False # scale factor will be sqrt(d_model) if True
         self.do_layer_norm_before = do_layer_norm_before
 
         super().__init__(
