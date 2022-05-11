@@ -921,7 +921,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         ]
         dataset = dataset.remove_columns(unwanted_columns)
         output_signature, _ = dataset._get_output_signature(
-            dataset, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+            dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args,
         )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
