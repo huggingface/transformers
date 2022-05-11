@@ -16,7 +16,6 @@
 
 import collections
 import math
-import random
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -26,8 +25,6 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 
-from transformers import PreTrainedTokenizerBase
-from transformers.tokenization_utils_base import BatchEncoding
 from transformers.utils.doc import add_code_sample_docstrings
 
 from ...activations import ACT2FN
@@ -246,186 +243,6 @@ class FlavaForPreTrainingOutput(ModelOutput):
             "multimodal_masked_output",
         ]
         return tuple(self[k] if k not in transformer_outputs else getattr(self, k).to_tuple() for k in self.keys())
-
-
-def add_masked_text(
-    examples: BatchEncoding,
-    tokenizer: PreTrainedTokenizerBase,
-    mlm_probability: float = 0.15,
-    ce_ignore_index: int = -100,
-) -> Dict[str, Any]:
-    """
-    Adds `input_ids_masked` and `mlm_labels` keys to the given examples object based on the mask generation logic in
-    BERT paper. This function is to be used with FLAVA for unimodal Masked Language Modeling (MLM) pretraining loss
-    calculation. For multimodal MLM, please refer to `add_whole_word_masked_text` instead.
-
-    For the function to properly work, please set argument `return_special_tokens_mask=True` when calling the
-    [`FlavaProcessor`] for the example processing.
-
-    Args:
-        examples ([`BatchEncoding`]): Examples object returned from [`FlavaProcessor`].
-        tokenizer (PreTrainedTokenizerBase):
-            tokenizer used to tokenizer the text. Usually [`BertTokenizer`] for FLAVA. Can be accessed from
-            [`FlavaProcessor`] object through `tokenizer` attribute.
-        mlm_probability (float, *optional*, defaults to 0.15): Probability of MLM masking.
-        ce_ignore_index (int, *optional*, defaults to -100.): Index to ignore when calculating cross entropy loss.
-    """
-    input_ids = examples["input_ids"]
-    special_tokens_mask = examples.pop("special_tokens_mask", None)
-    mlm_labels = input_ids.clone()
-    input_ids_masked = input_ids.clone()
-
-    if mlm_probability > 0:
-        # We sample a few tokens in each sequence for MLM training (with probability `mlm_probability`)
-        probability_matrix = torch.full(mlm_labels.shape, mlm_probability, device=input_ids.device)
-        if special_tokens_mask is None:
-            special_tokens_mask = [
-                tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in mlm_labels.tolist()
-            ]
-            special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
-        else:
-            special_tokens_mask = special_tokens_mask.bool()
-
-        probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
-        mlm_labels[~masked_indices] = ce_ignore_index  # We only compute loss on masked tokens
-
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(mlm_labels.shape, 0.8)).bool() & masked_indices
-        input_ids_masked[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = torch.bernoulli(torch.full(mlm_labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(tokenizer), mlm_labels.shape, dtype=torch.long)
-        input_ids_masked[indices_random] = random_words[indices_random]
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    else:
-        if tokenizer.pad_token_id is not None:
-            mlm_labels[mlm_labels == tokenizer.pad_token_id] = ce_ignore_index
-
-    examples["mlm_labels"] = mlm_labels
-    examples["input_ids_masked"] = input_ids_masked
-
-    return examples
-
-
-def add_whole_word_masked_text(
-    examples: BatchEncoding,
-    tokenizer: PreTrainedTokenizerBase,
-    mlm_probability: float = 0.15,
-    ce_ignore_index: int = -100,
-    max_predictions: int = 512,
-) -> Dict[str, Any]:
-    """
-    Adds `input_ids_masked` and `mlm_labels` keys to the given examples object based on the mask generation logic in
-    BERT paper. This function is to be used with FLAVA for multimodal Masked Language Modeling (MLM) pretraining loss
-    calculation which falls under Multimodal Masked Modeling loss. For unimodal MLM, please refer to `add_masked_text`
-    instead.
-
-    For the function to properly work, please set argument `return_special_tokens_mask=True` when calling the
-    [`FlavaProcessor`] for the example processing.
-
-    Args:
-        examples ([`BatchEncoding`]): Examples object returned from [`FlavaProcessor`].
-        tokenizer (PreTrainedTokenizerBase):
-            tokenizer used to tokenizer the text. Usually [`BertTokenizer`] for FLAVA. Can be accessed from
-            [`FlavaProcessor`] object through `tokenizer` attribute.
-        mlm_probability (float, *optional*, defaults to 0.15): Probability of MLM masking.
-        ce_ignore_index (int, *optional*, defaults to -100.): Index to ignore when calculating cross entropy loss.
-        max_predictions (int, *optional*, defaults to 512): Maximum masked predictions that can happen.
-    """
-    input_ids = examples["input_ids"].clone()
-    if mlm_probability > 0:
-        is_batched = True
-        if input_ids.dim() != 2:
-            is_batched = False
-            input_ids = input_ids.unsqueeze(0)
-
-        mask_labels = []
-        for current_input_ids in input_ids:
-            ref_tokens = []
-            for idx in current_input_ids.tolist():
-                ref_tokens.append(tokenizer._convert_id_to_token(idx))
-            cand_indexes = []
-            for (i, token) in enumerate(ref_tokens):
-                if token == "[CLS]" or token == "[SEP]":
-                    continue
-
-                if len(cand_indexes) >= 1 and token.startswith("##"):
-                    cand_indexes[-1].append(i)
-                else:
-                    cand_indexes.append([i])
-            random.shuffle(cand_indexes)
-            num_to_predict = min(max_predictions, max(1, int(round(len(ref_tokens) * mlm_probability))))
-            masked_lms = []
-            covered_indexes = set()
-            for index_set in cand_indexes:
-                if len(masked_lms) >= num_to_predict:
-                    break
-                # If adding a whole-word mask would exceed the maximum number of
-                # predictions, then just skip this candidate.
-                if len(masked_lms) + len(index_set) > num_to_predict:
-                    continue
-                is_any_index_covered = False
-                for index in index_set:
-                    if index in covered_indexes:
-                        is_any_index_covered = True
-                        break
-                if is_any_index_covered:
-                    continue
-                for index in index_set:
-                    covered_indexes.add(index)
-                    masked_lms.append(index)
-
-            if len(covered_indexes) != len(masked_lms):
-                raise ValueError("Length of covered_indexes is not equal to length of masked_lms.")
-            current_mask_labels = [1 if i in covered_indexes else 0 for i in range(len(ref_tokens))]
-            mask_labels.append(torch.tensor(current_mask_labels, device=input_ids.device))
-
-        mask_labels = torch.stack(mask_labels)
-        labels = input_ids.clone()
-        probability_matrix = mask_labels
-        special_tokens_mask = examples.pop("special_tokens_mask", None)
-
-        if special_tokens_mask is None:
-            special_tokens_mask = [
-                tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
-            ]
-            special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
-        else:
-            special_tokens_mask = special_tokens_mask.bool()
-
-        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-
-        if tokenizer._pad_token is not None:
-            padding_mask = labels.eq(tokenizer.pad_token_id)
-            probability_matrix.masked_fill_(padding_mask, value=0.0)
-
-        masked_indices = probability_matrix.bool()
-        labels[~masked_indices] = ce_ignore_index  # We only compute loss on masked tokens
-
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        input_ids[indices_replaced] = tokenizer.mask_token_id
-
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
-        input_ids[indices_random] = random_words[indices_random]
-
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-        if not is_batched:
-            input_ids = input_ids[0]
-            labels = labels[0]
-    else:
-        labels = examples["input_ids"].clone()
-        input_ids = examples["input_ids"].clone()
-        if tokenizer.pad_token_id is not None:
-            labels[labels == tokenizer.pad_token_id] = ce_ignore_index
-
-    examples["mlm_labels"] = labels
-    examples["input_ids_masked"] = input_ids
-    return examples
 
 
 # Based on timm implementation, which can be found here:
@@ -755,6 +572,7 @@ class FlavaIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
+    # Copied from transformers.models.vit.modeling_vit.ViTIntermediate.forward
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
@@ -769,6 +587,7 @@ class FlavaOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTOutput.forward
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1077,6 +896,7 @@ class FlavaPreTrainedModel(PreTrainedModel):
 )
 class FlavaImageModel(FlavaPreTrainedModel):
     config_class = FlavaImageConfig
+    # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
 
@@ -1176,6 +996,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
 )
 class FlavaTextModel(FlavaPreTrainedModel):
     config_class = FlavaTextConfig
+    # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
 
     def __init__(self, config: FlavaTextConfig, add_pooling_layer: bool = True):
@@ -1281,6 +1102,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
 )
 class FlavaMultimodalModel(FlavaPreTrainedModel):
     config_class = FlavaMultimodalConfig
+    # This override allows us to load FlavaMultimodalModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.multimodal_model"
     main_input_name = "hidden_states"
 
@@ -2011,7 +1833,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         if input_ids_masked is None and input_ids is not None:
             logger.warning(
                 "`input_ids_masked` isn't passed which means MLM loss won't be calculated correctly"
-                "Setting it to `input_ids` so that model can work. Please pass it if this is unintentional..."
+                "Setting it to `input_ids` so that model can work. Please pass it if this is unintentional. This is usually OKAY if you are doing inference on unmasked text..."
             )
             input_ids_masked = input_ids
 

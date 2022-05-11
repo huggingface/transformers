@@ -59,7 +59,6 @@ if is_torch_available():
     from transformers.models.flava.modeling_flava import (
         FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST,
         FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        add_whole_word_masked_text,
     )
 else:
     FlavaModel = None
@@ -1196,12 +1195,14 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             max_length=77,
             return_tensors="pt",
             return_codebook_pixels=True,
-            return_special_tokens_mask=True,
             return_image_mask=True,
         )
-        inputs = add_whole_word_masked_text(inputs, processor.tokenizer)
+        inputs["input_ids_masked"] = inputs["input_ids"].clone()
+        inputs["input_ids_masked"][0, 4:6] = 103
+        inputs["mlm_labels"] = inputs["input_ids"].clone()
+        inputs["mlm_labels"][:, :] = -100
+        inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
         inputs = inputs.to(torch_device)
-
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)

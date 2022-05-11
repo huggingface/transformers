@@ -17,8 +17,7 @@ Image/Text processor class for FLAVA
 """
 from typing import List, Optional, Union
 
-import numpy as np
-
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
@@ -44,16 +43,7 @@ class FlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[
-            Union[
-                "Image.Image",  # noqa
-                np.ndarray,
-                "torch.Tensor",  # noqa
-                List["Image.Image"],  # noqa
-                List[np.ndarray],
-                List["torch.Tensor"],  # noqa
-            ]
-        ] = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
