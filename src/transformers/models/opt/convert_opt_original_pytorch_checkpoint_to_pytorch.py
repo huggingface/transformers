@@ -19,7 +19,6 @@ import argparse
 from pathlib import Path
 
 import torch
-from torch import nn
 
 from transformers import OPTConfig, OPTModel
 from transformers.utils import logging
@@ -27,6 +26,7 @@ from transformers.utils import logging
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
@@ -66,7 +66,7 @@ def convert_opt_checkpoint(checkpoint_path, pytorch_dump_folder_path, config=Non
 
     config = OPTConfig()
 
-    model = OPTModel(config).eval()
+    model = OPTModel(config).half().eval()
     model.load_state_dict(state_dict)
 
     # Check results

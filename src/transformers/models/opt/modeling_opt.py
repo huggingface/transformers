@@ -635,6 +635,7 @@ class OPTDecoder(OPTPretrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
+        attention_mask = attention_mask if attention_mask is not None else torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
         positions = self.embed_positions(attention_mask)
 
         attention_mask = self._prepare_decoder_attention_mask(
