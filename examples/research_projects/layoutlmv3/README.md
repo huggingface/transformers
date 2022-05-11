@@ -16,7 +16,7 @@ limitations under the License.
 
 # Token classification with LayoutLMv3 (PyTorch version)
 
-This directory contains a script, `run_funsd_cord.py`, that can be used to fine-tune LayoutLMv3 on form understanding datasets, such as [FUNSD](https://guillaumejaume.github.io/FUNSD/) and [CORD](https://github.com/clovaai/cord).
+This directory contains a script, `run_funsd_cord.py`, that can be used to fine-tune (or evaluate) LayoutLMv3 on form understanding datasets, such as [FUNSD](https://guillaumejaume.github.io/FUNSD/) and [CORD](https://github.com/clovaai/cord).
 
 The script `run_funsd_cord.py` leverages the 🤗 Datasets library and the Trainer API. You can easily customize it to your needs.
 
@@ -43,7 +43,7 @@ python run_funsd_cord.py \
 
 👀 The resulting model can be found here: https://huggingface.co/nielsr/layoutlmv3-finetuned-funsd. By specifying the `push_to_hub` flag, the model gets uploaded automatically to the hub (regularly), together with a model card, which includes metrics such as precision, recall and F1. Note that you can easily update the model card, as it's just a README file of the respective repo on the hub.
 
-There's also the "Training metrics" tab, which shows Tensorboard logs over the course of training. Pretty neat, huh?
+There's also the "Training metrics" [tab](https://huggingface.co/nielsr/layoutlmv3-finetuned-funsd/tensorboard), which shows Tensorboard logs over the course of training. Pretty neat, huh?
 
 ## Fine-tuning on CORD
 
