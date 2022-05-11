@@ -863,7 +863,6 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         num_choices = None
 
         if len(input_ids.shape) == 3:
-            assert self.num_class == 1
             batch_size, num_choices = input_ids.shape[:2]
             input_ids = input_ids.reshape(-1, input_ids.size(-1))
             attention_mask = attention_mask.reshape(-1, *attention_mask.size()[2:])
@@ -888,7 +887,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         loss_fct = CrossEntropyLoss()
         if num_choices is not None:
             logits = logits.view(-1, num_choices)
-        assert (labels != None, "labels must not None!")
+        assert (labels is not None, "labels must not None!")
         loss = loss_fct(logits, labels)
         # loss = F.cross_entropy(logits.contiguous().float(), labels.long())
         return SequenceClassifierOutput(loss=loss,

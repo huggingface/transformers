@@ -265,16 +265,6 @@ class GLMTokenizer(PreTrainedTokenizer):
         ids = self.convert_tokens_to_ids(tokens)
         return ids
 
-    def tokenize(self, text):
-        if self.do_basic_tokenize:
-            split_tokens = []
-            for token in self.basic_tokenizer.tokenize(text):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
-        else:
-            split_tokens = self.wordpiece_tokenizer.tokenize(text)
-        return split_tokens
-
     def build_input_from_ids(
             self,
             text_a_ids=None,
