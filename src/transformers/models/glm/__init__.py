@@ -27,8 +27,6 @@ _import_structure = {
     "tokenization_glm": ["GLMTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_glm_fast"] = ["GLMTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_glm"] = [
@@ -44,9 +42,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_glm import GLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GLMConfig
     from .tokenization_glm import GLMTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_glm_fast import GLMTokenizerFast
 
     if is_torch_available():
         from .modeling_glm import (

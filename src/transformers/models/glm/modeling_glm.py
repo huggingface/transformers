@@ -15,17 +15,13 @@
 """ PyTorch GLM model. """
 
 import math
-import os
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 import torch.nn.functional as F
-from torch import nn
 from torch.nn import init, LayerNorm, Linear, CrossEntropyLoss
-from typing import Optional, Tuple, Union
 
-from ...activations import ACT2FN, gelu
+from ...activations import gelu
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -552,7 +548,6 @@ class GLMStack(torch.nn.Module):
 
         batch_size, query_length = hidden_states.size()[:2]
         memory_length = 0
-        key_length = query_length + memory_length
         # attention mask is the beginning postion of B region, \in [0, query_len)
         is_scalar = torch.numel(attention_mask) == 1
         is_sep = is_scalar or torch.numel(attention_mask) == batch_size

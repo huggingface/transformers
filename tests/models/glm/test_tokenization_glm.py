@@ -14,11 +14,9 @@
 # limitations under the License.
 
 
-import json
 import os
 import unittest
 
-from transformers import GLMTokenizer
 
 from transformers.models.glm.tokenization_glm import (
     VOCAB_FILES_NAMES,

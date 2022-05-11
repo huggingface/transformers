@@ -13,15 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GLM."""
-import json
 import sys
 import unicodedata
 from typing import List, Optional
 import os
 import collections
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_punctuation
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils import PreTrainedTokenizer, _is_punctuation
 from ...utils import logging
 from functools import lru_cache
 
@@ -208,10 +206,6 @@ class GLMTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        out_string = " ".join(tokens).replace(" ##", "").strip()
 
     def build_inputs_with_special_tokens(
             self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
