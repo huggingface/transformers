@@ -330,21 +330,6 @@ def torch_nn_bcewithlogitsloss(self, input, target):
     return torch.empty(shape, device="meta")
 
 
-def torch_tensor_getitem(self, indices):
-    if not isinstance(self, torch.Tensor):
-        return operator.getitem(self, indices)
-    if not isinstance(indices, (tuple, list)):
-        indices = [indices]
-
-    def map_fn(x):
-        if isinstance(x, torch.Tensor):
-            return torch.zeros_like(x, device="cpu")
-        return x
-
-    indices = list(map(map_fn, indices))
-    return torch.empty_like(torch.empty_like(self, device="cpu")[indices], device="meta")
-
-
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: embedding_override,
     torch.nn.LayerNorm: torch_nn_layernorm_override,
@@ -370,7 +355,6 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
-    # operator.getitem: torch_tensor_getitem,
 }
 
 
@@ -723,6 +707,11 @@ class HFTracer(Tracer):
                 else:
                     self.graph.erase_node(node)
 
+            # TODO: solves GraphModule creation.
+            # Without this, return type annotation "Tuple" is causing code execution failure.
+            if node.op == "output":
+                node.type = None
+
         return self.graph
 
     def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
@@ -820,13 +809,5 @@ def symbolic_trace(
     tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
-    # Copy all the original attributes to the traced GraphModule.
-    # from copy import deepcopy
-    # regular_module_attributes = dir(nn.Module())
-    # for name in dir(model):
-    #     attr = getattr(model, name)
-    #     if name.startswith("_") or name in regular_module_attributes:
-    #         continue
-    #     setattr(traced, name, deepcopy(attr))
 
     return traced
