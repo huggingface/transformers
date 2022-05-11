@@ -18,8 +18,11 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import (
+    _LazyModule,
+    OptionalDependencyNotAvailable,
+    is_torch_available)
+
 
 
 _import_structure = {
@@ -43,7 +46,12 @@ if TYPE_CHECKING:
     from .configuration_glm import GLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GLMConfig
     from .tokenization_glm import GLMTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_glm import (
             GLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             GLMModel,

@@ -20,7 +20,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shunxing1234/GLM-base-cased": "https://huggingface.co/shunxing1234/GLM-base-cased/resolve/main/config.json",
+    "shunxing1234/GLM": "https://huggingface.co/shunxing1234/GLM/resolve/main/config.json",
     # See all GLM models at https://huggingface.co/models?filter=glm
 }
 
