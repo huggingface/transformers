@@ -362,7 +362,6 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
-        # After
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
