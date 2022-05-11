@@ -327,8 +327,6 @@ class OPTDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        # TODO(ArthurZ) could you add a flag to the config "do_layer_norm_before = True/False" to
-        # differentiate  between 350m and all other checkpoitns
         # Before
         if self.do_layer_norm_before: 
             hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -700,7 +698,8 @@ class OPTDecoder(OPTPretrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
+                        print(input)
+                        return module(*inputs, output_attentions,past_key_value)
 
                     return custom_forward
 
