@@ -123,9 +123,6 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         if not ((positions is None) or (self.padding_idx is None)):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
-        # we cannot use incremental state here because we must be aware of
-        # padding.
-
         if positions is None:
             attention_mask = attention_mask.long()
             positions = make_positions(attention_mask, self.padding_idx)
@@ -332,7 +329,6 @@ class OPTDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        # Before
         if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -344,7 +340,6 @@ class OPTDecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        # After
         if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
