@@ -1238,7 +1238,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
         """
         residual = hidden_states
 
-        # Self Attention
+        # Self-Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
@@ -1612,7 +1612,7 @@ LED_INPUTS_DOCSTRING = r"""
 class TFLEDEncoder(tf.keras.layers.Layer):
     config_class = LEDConfig
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    Transformer encoder consisting of *config.encoder_layers* self-attention layers. Each layer is a
     [`TFLEDEncoderLayer`].
 
     Args:
