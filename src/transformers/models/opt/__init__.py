@@ -17,11 +17,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig", "OPTOnnxConfig"],
+    "configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"],
 }
 
 
@@ -45,7 +45,7 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig, OPTOnnxConfig
+    from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
 
     if is_torch_available():
         from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPretrainedModel
