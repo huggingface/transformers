@@ -699,7 +699,7 @@ class OPTDecoder(OPTPretrainedModel):
                     def custom_forward(*inputs):
                         # None for past_key_value
                         print(input)
-                        return module(*inputs, output_attentions,past_key_value)
+                        return module(*inputs, output_attentions,None)
 
                     return custom_forward
 
