@@ -298,7 +298,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 [
                     [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
                     for span_id in range(num_spans)
-                ]
+                ],
+                dtype=object,
             )
 
             features = []

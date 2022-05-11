@@ -704,7 +704,10 @@ class BatchEncoding(UserDict):
                     value = [value]
 
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
+                    if as_tensor == np.asarray:
+                        tensor = as_tensor(value, dtype=object)
+                    else:
+                        tensor = as_tensor(value)
 
                     # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                     # # at-least2d
