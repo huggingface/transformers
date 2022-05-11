@@ -24,14 +24,17 @@ from ...utils import (
     is_torch_available)
 
 
-
 _import_structure = {
     "configuration_glm": ["GLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLMConfig"],
     "tokenization_glm": ["GLMTokenizer"],
 }
 
-
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_glm"] = [
         "GLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GLMForSequenceClassification",
