@@ -28,23 +28,6 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def remove_ignore_keys_(state_dict):
-    ignore_keys = [
-        "encoder.version",
-        "decoder.version",
-        "model.encoder.version",
-        "model.decoder.version",
-        "_float_tensor",
-    ]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
-
-
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
-
-
 def load_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
     sd = torch.load(checkpoint_path, map_location="cpu")
@@ -52,8 +35,11 @@ def load_checkpoint(checkpoint_path):
         sd = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # pop unnecessary weights
-    if "decoder.version" in sd:
-        sd.pop("decoder.version")
+    keys_to_delete = ["decoder.version", "decoder.layer_norm.weight", "decoder.layer_norm.bias"]
+    for key in keys_to_delete:
+        if key in sd:
+            sd.pop(key)
+
     return sd
 
 
@@ -64,7 +50,10 @@ def convert_opt_checkpoint(checkpoint_path, pytorch_dump_folder_path, config=Non
     """
     state_dict = load_checkpoint(checkpoint_path)
 
-    config = OPTConfig()
+    if config is not None:
+        config = OPTConfig.from_pretrained(config)
+    else:
+        config = OPTConfig()
 
     model = OPTModel(config).half().eval()
     model.load_state_dict(state_dict)

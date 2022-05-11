@@ -326,6 +326,10 @@ class OPTDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
+        # TODO(ArthurZ) could you add a flag to the config "do_layer_norm_before = True/False" to
+        # differentiate  between 350m and all other checkpoitns
+        # Before
+        hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
@@ -335,12 +339,15 @@ class OPTDecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # After
+#        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Fully Connected
         hidden_states_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
         residual = hidden_states
+        # Before
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
 
@@ -348,7 +355,8 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
-        hidden_states = self.final_layer_norm(hidden_states)
+        # After
+#        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -523,7 +531,9 @@ class OPTDecoder(OPTPretrainedModel):
         else:
             self.project_in = None
 
-        self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
+        # Think we can delete this
+#        self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
+        self.layer_norm = None
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
@@ -635,7 +645,6 @@ class OPTDecoder(OPTPretrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-            print("hf 2", inputs_embeds.abs().sum())
 
         # embed positions
         attention_mask = attention_mask if attention_mask is not None else torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
@@ -649,7 +658,6 @@ class OPTDecoder(OPTPretrainedModel):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + positions
-        print("hid", hidden_states.abs().sum())
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -710,7 +718,6 @@ class OPTDecoder(OPTPretrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-            print("hf attn", hidden_states.abs().sum())
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -718,15 +725,11 @@ class OPTDecoder(OPTPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if self.layer_norm:
-            hidden_states = self.layer_norm(hidden_states)
-
-        print("hf final 1", hidden_states.abs().sum())
+#        if self.layer_norm:
+#            hidden_states = self.layer_norm(hidden_states)
 
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
-
-        print("hf final 2", hidden_states.abs().sum())
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -959,8 +962,6 @@ class OPTForCausalLM(OPTPretrainedModel):
         )
 
         logits = self.lm_head(outputs[0]).contiguous()
-
-        print("hf final 3", logits.abs().sum())
 
         loss = None
         if labels is not None:
