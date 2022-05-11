@@ -20,12 +20,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "opt-125m": "https://huggingface.co/facebook/opt-125m/blob/main/config.json",
-    "opt-350m": "https://huggingface.co/facebook/opt-350m/blob/main/config.json",
-    "opt-1.3b": "https://huggingface.co/facebook/opt-1.3b/blob/main/config.json",
-    "opt-2.7b": "https://huggingface.co/facebook/opt-2.7b/blob/main/config.json",
-    "opt-6.7b": "https://huggingface.co/facebook/opt-6.7b/blob/main/config.json",
-    "opt-13b": "https://huggingface.co/facebook/opt-13b/blob/main/config.json",
+    "facebook/opt-125m": "https://huggingface.co/facebook/opt-125m/blob/main/config.json",
+    "facebook/opt-350m": "https://huggingface.co/facebook/opt-350m/blob/main/config.json",
+    "facebook/opt-1.3b": "https://huggingface.co/facebook/opt-1.3b/blob/main/config.json",
+    "facebook/opt-2.7b": "https://huggingface.co/facebook/opt-2.7b/blob/main/config.json",
+    "facebook/opt-6.7b": "https://huggingface.co/facebook/opt-6.7b/blob/main/config.json",
+    "facebook/opt-13b": "https://huggingface.co/facebook/opt-13b/blob/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class OPTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`OPTModel`]. It is used to instantiate a OPT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the OPT
-    [facebook/opt-large](https://huggingface.co/facebook/opt-large) architecture.
+    [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
