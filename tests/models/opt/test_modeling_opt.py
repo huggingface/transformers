@@ -352,7 +352,7 @@ class OPTGenerationTest(unittest.TestCase):
             81,
         ]
         GEN_OUTPUT = []
-        
+
         tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
         for model in self.all_model_path:
             model = OPTForCausalLM.from_pretrained(self.path_model)
@@ -361,7 +361,6 @@ class OPTGenerationTest(unittest.TestCase):
 
             gen = pipeline("text-generation", model=model, tokenizer=tokenizer, return_tensors=True)
 
-            
             for prompt in prompts:
                 len_input_sentence = len(tokenizer.tokenize(prompt))
                 predicted_next_token = gen(prompt)[0]["generated_token_ids"][len_input_sentence]
