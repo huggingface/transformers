@@ -763,7 +763,6 @@ class OPTModel(OPTPretrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.decoder = OPTDecoder(config)
-        # padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
