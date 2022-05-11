@@ -565,7 +565,7 @@ M2M_100_START_DOCSTRING = r"""
 """
 
 M2M_100_GENERATION_EXAMPLE = r"""
-    Translation example::
+    Translation example:
 
     ```python
     >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
@@ -1299,22 +1299,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
-
-        >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
-        >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
-
-        >>> text_to_translate = "Life is like a box of chocolates"
-        >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
-
-        >>> # translate to French
-        >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
-        >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
