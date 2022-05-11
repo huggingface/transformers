@@ -78,6 +78,7 @@ class OPTModelTester:
         pad_token_id=1,
         bos_token_id=0,
         embed_dim=16,
+        word_embed_proj_dim=16
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -97,6 +98,7 @@ class OPTModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.embed_dim = embed_dim
+        self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
@@ -127,6 +129,7 @@ class OPTModelTester:
             pad_token_id=self.pad_token_id,
             embed_dim=self.embed_dim,
             is_encoder_decoder=False,
+            word_embed_proj_dim=self.word_embed_proj_dim
         )
 
     def get_pipeline_config(self):
