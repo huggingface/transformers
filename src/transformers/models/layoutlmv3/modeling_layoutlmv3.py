@@ -40,9 +40,7 @@ from .configuration_layoutlmv3 import LayoutLMv3Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "microsoft/layoutlmv3-base"
 _CONFIG_FOR_DOC = "LayoutLMv3Config"
-_TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlmv3-base",
