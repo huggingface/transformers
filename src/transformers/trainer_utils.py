@@ -625,7 +625,7 @@ class FSDPOption(ExplicitEnum):
 
 
 class RemoveColumnsCollator:
-    """Wrap the data collator to remove unused columns."""
+    """Wrap the data collator to remove unused columns from its output."""
 
     def __init__(
         self,
@@ -657,5 +657,4 @@ class RemoveColumnsCollator:
         return {k: v for k, v in feature.items() if k in self.signature_columns}
 
     def __call__(self, features: List[dict]):
-        features = [self._remove_columns(feature) for feature in features]
-        return self.data_collator(features)
+        return self._remove_columns(self.data_collator(features))
