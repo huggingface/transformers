@@ -35,6 +35,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
+from . import DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
@@ -895,13 +896,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def prepare_tf_dataset(
         self,
         dataset: Any,
-        collate_fn: Callable,
-        collate_fn_args: dict,
         batch_size: int,
         shuffle: bool,
+        collate_fn: Optional[Callable] = None,
+        collate_fn_args: Optional[dict] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
     ):
+        if collate_fn is None:
+            collate_fn = DefaultDataCollator(return_tensors='tf')
+        if collate_fn_args is None:
+            collate_fn_args = dict()
         try:
             from datasets import Dataset
         except ImportError:
