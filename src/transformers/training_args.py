@@ -448,6 +448,9 @@ class TrainingArguments:
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
+        full_determinism (`bool`, *optional*, defaults to `False`)
+            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
+            distributed training
     """
 
     output_dir: str = field(
@@ -814,6 +817,12 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": "Whether to automatically decrease the batch size in half and rerun the training loop again each time a CUDA Out-of-Memory was reached"
+        },
+    )
+    full_determinism: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed training"
         },
     )
 
