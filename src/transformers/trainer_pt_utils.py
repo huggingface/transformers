@@ -57,6 +57,9 @@ logger = logging.get_logger(__name__)
 
 def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
     """Concatenates `tensor1` and `tensor2` on first axis, applying padding on the second if necessary."""
+    tensor1 = torch.atleast_1d(tensor1)
+    tensor2 = torch.atleast_1d(tensor2)
+
     if len(tensor1.shape) == 1 or tensor1.shape[1] == tensor2.shape[1]:
         return torch.cat((tensor1, tensor2), dim=0)
 
@@ -72,6 +75,9 @@ def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
 
 def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
     """Concatenates `array1` and `array2` on first axis, applying padding on the second if necessary."""
+    array1 = np.atleast_1d(array1)
+    array2 = np.atleast_1d(array2)
+
     if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
         return np.concatenate((array1, array2), axis=0)
 
@@ -149,8 +155,7 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-        if tensors.ndim == 0:
-            tensors = tensors[None]
+        tensors = torch.atleast_1d(tensors)
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
@@ -160,8 +165,7 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
-        if len(tensor.shape) <= 0:
-            tensor = tensor[None]
+        tensor = torch.atleast_1d(tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
@@ -1031,7 +1035,7 @@ if is_sagemaker_mp_enabled():
                 f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
             )
         all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
-        all_tensors = [t if len(t.shape) > 0 else t[None] for t in all_tensors]
+        all_tensors = [torch.atleast_1d(t) for t in all_tensors]
         return torch.cat([t.cpu() for t in all_tensors], dim=0)
 
     def smp_nested_concat(tensor):
