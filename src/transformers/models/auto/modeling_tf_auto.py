@@ -45,7 +45,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("distilbert", "TFDistilBertModel"),
         ("albert", "TFAlbertModel"),
         ("bart", "TFBartModel"),
-        ("opt", "TFOPTModel"),
         ("camembert", "TFCamembertModel"),
         ("xlm-roberta", "TFXLMRobertaModel"),
         ("longformer", "TFLongformerModel"),
