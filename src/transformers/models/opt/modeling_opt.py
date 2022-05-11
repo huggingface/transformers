@@ -81,7 +81,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def make_positions(attention_mask, padding_idx: int):
+def make_positions(mask, padding_idx: int):
     """Replace non-padding symbols with their position numbers.
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
@@ -90,8 +90,8 @@ def make_positions(attention_mask, padding_idx: int):
     # balanced to both work with ONNX export and XLA. In particular XLA
     # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
     # how to handle the dtype kwarg in cumsum.
-    mask = attention_mask
-    return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+    return positions
 
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
@@ -122,6 +122,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         # padding.
 
         if positions is None:
+            attention_mask = attention_mask.long()
             positions = make_positions(attention_mask, self.padding_idx)
 
         return F.embedding(
@@ -505,6 +506,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
+
         self.embed_positions = OPTLearnedPositionalEmbedding(
             num_embeddings,
             config.d_model,
@@ -633,6 +635,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            print("hf 2", inputs_embeds.abs().sum())
 
         # embed positions
         attention_mask = attention_mask if attention_mask is not None else torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
@@ -646,6 +649,7 @@ class OPTDecoder(OPTPretrainedModel):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + positions
+        print("hid", hidden_states.abs().sum())
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -705,12 +709,8 @@ class OPTDecoder(OPTPretrainedModel):
                     use_cache=use_cache,
                 )
 
-            if self.layer_norm:
-                new_layer_output = (self.layer_norm(layer_outputs[0]),)
-                new_layer_output += (layer_outputs[1:],)
-                layer_outputs = new_layer_output
-
             hidden_states = layer_outputs[0]
+            print("hf attn", hidden_states.abs().sum())
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -718,8 +718,15 @@ class OPTDecoder(OPTPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
+
+        print("hf final 1", hidden_states.abs().sum())
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
+
+        print("hf final 2", hidden_states.abs().sum())
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -951,8 +958,9 @@ class OPTForCausalLM(OPTPretrainedModel):
             return_dict=return_dict,
         )
 
-        # logits = self.lm_head(outputs[0]).permute(1, 0, 2).contiguous()
         logits = self.lm_head(outputs[0]).contiguous()
+
+        print("hf final 3", logits.abs().sum())
 
         loss = None
         if labels is not None:
