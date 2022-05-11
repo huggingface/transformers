@@ -114,12 +114,8 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         else:
             self.max_positions = self.num_embeddings
 
-    def forward(
-        self,
-        attention_mask: Tensor,
-        positions: Optional[Tensor] = None,
-    ):
-        """attention_masks is expected to be of size [bsz x seqlen]."""
+    def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
+        # attention_masks is expected to be of size [batch_size x seq_len].
         if not ((positions is None) or (self.padding_idx is None)):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
@@ -418,7 +414,7 @@ OPT_GENERATION_EXAMPLE = r"""
     Generation example:
 
     ```python
-    >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
     >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
     >>> tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
@@ -439,7 +435,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -476,8 +472,9 @@ OPT_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you
             can choose to directly pass an embedded representation. This is useful if you want more control over how to
             convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
@@ -518,9 +515,7 @@ class OPTDecoder(OPTPretrainedModel):
             num_embeddings = config.max_position_embeddings + 2
 
         self.embed_positions = OPTLearnedPositionalEmbedding(
-            num_embeddings,
-            config.d_model,
-            self.padding_idx,
+            num_embeddings, config.d_model, self.padding_idx
         )
 
         if config.word_embed_proj_dim != config.d_model:
