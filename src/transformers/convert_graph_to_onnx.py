@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
@@ -19,9 +20,9 @@ from typing import Dict, List, Optional, Tuple
 
 from packaging.version import Version, parse
 
-from .file_utils import ModelOutput, is_tf_available, is_torch_available
-from .pipelines import Pipeline, pipeline
-from .tokenization_utils import BatchEncoding
+from transformers.pipelines import Pipeline, pipeline
+from transformers.tokenization_utils import BatchEncoding
+from transformers.utils import ModelOutput, is_tf_available, is_torch_available
 
 
 # This is the minimal required version to
@@ -154,7 +155,7 @@ def ensure_valid_input(model, tokens, input_names):
             print(f"{arg_name} is not present in the generated input list.")
             break
 
-    print("Generated inputs order: {}".format(ordered_input_names))
+    print(f"Generated inputs order: {ordered_input_names}")
     return ordered_input_names, tuple(model_args)
 
 
@@ -278,23 +279,37 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
-        export(
-            nlp.model,
-            model_args,
-            f=output.as_posix(),
-            input_names=ordered_input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-            do_constant_folding=True,
-            use_external_data_format=use_external_format,
-            enable_onnx_checker=True,
-            opset_version=opset,
-        )
+        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
+        # so we check the torch version for backwards compatibility
+        if parse(torch.__version__) <= parse("1.10.99"):
+            export(
+                nlp.model,
+                model_args,
+                f=output.as_posix(),
+                input_names=ordered_input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                do_constant_folding=True,
+                use_external_data_format=use_external_format,
+                enable_onnx_checker=True,
+                opset_version=opset,
+            )
+        else:
+            export(
+                nlp.model,
+                model_args,
+                f=output.as_posix(),
+                input_names=ordered_input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                do_constant_folding=True,
+                opset_version=opset,
+            )
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
     Args:
         nlp: The pipeline to be exported
@@ -312,21 +327,25 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     try:
         import tensorflow as tf
 
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
+        import tf2onnx
+        from tf2onnx import __version__ as t2ov
 
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+        print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
 
         # Build
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
 
         # Forward
         nlp.model.predict(tokens.data)
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output.as_posix())
+        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in tokens.items()]
+        model_proto, _ = tf2onnx.convert.from_keras(
+            nlp.model, input_signature, opset=opset, output_path=output.as_posix()
+        )
 
     except ImportError as e:
-        raise Exception(f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.")
+        raise Exception(
+            f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first. {e}"
+        )
 
 
 def convert(
@@ -348,13 +367,18 @@ def convert(
         output: The path where the ONNX graph will be stored
         opset: The actual version of the ONNX operator set to use
         tokenizer: The name of the model to load for the pipeline, default to the model's name if not provided
-        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
+        use_external_format:
+            Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
         pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
         model_kwargs: Keyword arguments to be forwarded to the model constructor
 
     Returns:
 
     """
+    warnings.warn(
+        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of Transformers",
+        FutureWarning,
+    )
     print(f"ONNX opset version set to: {opset}")
 
     # Load the pipeline
@@ -376,7 +400,7 @@ def convert(
 def optimize(onnx_model_path: Path) -> Path:
     """
     Load the model at the specified path and let onnxruntime look at transformations on the graph to enable all the
-    optimizations possibl
+    optimizations possible
 
     Args:
         onnx_model_path: filepath where the model binary description is stored

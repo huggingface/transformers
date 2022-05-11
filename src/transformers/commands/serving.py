@@ -15,7 +15,7 @@
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from ..pipelines import SUPPORTED_TASKS, Pipeline, pipeline
+from ..pipelines import Pipeline, get_supported_tasks, pipeline
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -102,7 +102,10 @@ class ServeCommand(BaseTransformersCLICommand):
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
         )
         serve_parser.add_argument(
-            "--task", type=str, choices=SUPPORTED_TASKS.keys(), help="The task to run the pipeline on"
+            "--task",
+            type=str,
+            choices=get_supported_tasks(),
+            help="The task to run the pipeline on",
         )
         serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
         serve_parser.add_argument("--port", type=int, default=8888, help="Port the serving will listen to.")
@@ -128,12 +131,12 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if not _serve_dependencies_installed:
             raise RuntimeError(
-                "Using serve command requires FastAPI and unicorn. "
+                "Using serve command requires FastAPI and uvicorn. "
                 'Please install transformers with [serving]: pip install "transformers[serving]".'
-                "Or install FastAPI and unicorn separately."
+                "Or install FastAPI and uvicorn separately."
             )
         else:
-            logger.info("Serving model over {}:{}".format(host, port))
+            logger.info(f"Serving model over {host}:{port}")
             self._app = FastAPI(
                 routes=[
                     APIRoute(
@@ -211,9 +214,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     async def forward(self, inputs=Body(None, embed=True)):
         """
-        **inputs**:
-        **attention_mask**:
-        **tokens_type_ids**:
+        **inputs**: **attention_mask**: **tokens_type_ids**:
         """
 
         # Check we don't have empty string

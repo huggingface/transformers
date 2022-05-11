@@ -19,8 +19,7 @@
 
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 
 
 # CUDA_MAJOR = int(torch.version.cuda.split('.')[0])
@@ -61,7 +60,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
 
                 self.out_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 
@@ -71,11 +70,11 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
     def _compute_logit(self, hidden, weight, bias, proj):
         if proj is None:
-            logit = F.linear(hidden, weight, bias=bias)
+            logit = nn.functional.linear(hidden, weight, bias=bias)
         else:
             # if CUDA_MAJOR <= 9 and CUDA_MINOR <= 1:
-            proj_hid = F.linear(hidden, proj.t().contiguous())
-            logit = F.linear(proj_hid, weight, bias=bias)
+            proj_hid = nn.functional.linear(hidden, proj.t().contiguous())
+            logit = nn.functional.linear(proj_hid, weight, bias=bias)
             # else:
             #     logit = torch.einsum('bd,de,ev->bv', (hidden, proj, weight.t()))
             #     if bias is not None:
@@ -110,9 +109,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
             if labels is not None:
-                out = -F.log_softmax(logit, dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
+                out = -nn.functional.log_softmax(logit, dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
             else:
-                out = F.log_softmax(logit, dim=-1)
+                out = nn.functional.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -135,7 +134,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_weight, head_bias, head_proj = weights[0], biases[0], self.out_projs[0]
 
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
-            head_logprob = F.log_softmax(head_logit, dim=1)
+            head_logprob = nn.functional.log_softmax(head_logit, dim=1)
 
             if labels is None:
                 out = hidden.new_empty((head_logit.size(0), self.n_token))
@@ -169,7 +168,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden_i, weight_i, bias_i, proj_i)
-                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = nn.functional.log_softmax(tail_logit_i, dim=1)
                     cluster_prob_idx = self.cutoffs[0] + i - 1  # No probability for the head cluster
                     if labels is not None:
                         logprob_i = head_logprob_i[:, cluster_prob_idx] + tail_logprob_i.gather(
@@ -190,22 +189,22 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
     def log_prob(self, hidden):
         r"""
-        Computes log probabilities for all :math:`n\_classes` From:
+        Computes log probabilities for all \\(n\_classes\\) From:
         https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/adaptive.p
 
         Args:
             hidden (Tensor): a minibatch of example
 
         Returns:
-            log-probabilities of for each class :math:`c` in range :math:`0 <= c <= n\_classes`, where
-            :math:`n\_classes` is a parameter passed to ``AdaptiveLogSoftmaxWithLoss`` constructor. Shape:
+            log-probabilities of for each class \\(c\\) in range \\(0 <= c <= n\_classes\\), where \\(n\_classes\\) is
+            a parameter passed to `AdaptiveLogSoftmaxWithLoss` constructor. Shape:
 
-            - Input: :math:`(N, in\_features)`
-            - Output: :math:`(N, n\_classes)`
+            - Input: \\((N, in\_features)\\)
+            - Output: \\((N, n\_classes)\\)
         """
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
-            return F.log_softmax(logit, dim=-1)
+            return nn.functional.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -229,7 +228,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
 
             out = hidden.new_empty((head_logit.size(0), self.n_token))
-            head_logprob = F.log_softmax(head_logit, dim=1)
+            head_logprob = nn.functional.log_softmax(head_logit, dim=1)
 
             cutoff_values = [0] + self.cutoffs
             for i in range(len(cutoff_values) - 1):
@@ -241,7 +240,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden, weight_i, bias_i, proj_i)
-                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = nn.functional.log_softmax(tail_logit_i, dim=1)
 
                     logprob_i = head_logprob[:, -i] + tail_logprob_i
                     out[:, start_idx, stop_idx] = logprob_i

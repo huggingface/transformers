@@ -17,8 +17,7 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
-from ..utils import logging
+from ..utils import cached_property, is_torch_available, is_torch_tpu_available, logging, torch_required
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -69,7 +68,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         default="O1",
         metadata={
             "help": (
-                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
                 "See details at https://nvidia.github.io/apex/amp.html"
             )
         },

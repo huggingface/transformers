@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Speech2Text."""
-
 import json
+import os
 from pathlib import Path
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
@@ -56,31 +56,47 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2Text tokenizer.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        spm_file (:obj:`str`):
-            Path to the `SentencePiece <https://github.com/google/sentencepiece>`__ model file
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        spm_file (`str`):
+            Path to the [SentencePiece](https://github.com/google/sentencepiece) model file
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        do_upper_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_upper_case (`bool`, *optional*, defaults to `False`):
            Whether or not to uppercase the output when decoding.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        tgt_lang (:obj:`str`, `optional`):
+        tgt_lang (`str`, *optional*):
             A string representing the target language.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -102,8 +118,11 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         tgt_lang=None,
         lang_codes=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ):
+    ) -> None:
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -113,6 +132,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             tgt_lang=tgt_lang,
             lang_codes=lang_codes,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
         self.do_upper_case = do_upper_case
@@ -121,7 +141,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
-        self.sp_model = load_spm(spm_file)
+        self.sp_model = load_spm(spm_file, self.sp_model_kwargs)
 
         if lang_codes is not None:
             self.lang_codes = lang_codes
@@ -155,7 +175,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.prefix_tokens = [lang_code_id]
 
     def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.EncodeAsPieces(text)
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
@@ -166,7 +186,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        out_string = self.sp_model.decode(tokens)
 
         if self.do_upper_case:
             out_string = out_string.upper()
@@ -184,27 +204,25 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.bos_token_id, self.eos_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1]
         if token_ids_1 is None:
@@ -223,7 +241,12 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d: Dict) -> None:
         self.__dict__ = d
-        self.sp_model = load_spm(self.spm_file)
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
@@ -237,14 +260,18 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
         save_json(self.encoder, vocab_save_path)
 
-        if not spm_save_path.exists():
+        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
             copyfile(self.spm_file, spm_save_path)
+        elif not os.path.isfile(self.spm_file):
+            with open(spm_save_path, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (str(vocab_save_path), str(spm_save_path))
 
 
-def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
-    spm = sentencepiece.SentencePieceProcessor()
+def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+    spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm
 

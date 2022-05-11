@@ -29,9 +29,8 @@ import numpy as np
 
 import sacremoses as sm
 
-from ...file_utils import cached_path, is_torch_available, torch_only_method
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import cached_path, is_torch_available, logging, torch_only_method
 
 
 if is_torch_available():
@@ -76,10 +75,12 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
     Returns:
         A list of strings with tokenized numbers.
 
-    Example::
-        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
-        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
-    """
+    Example:
+
+    ```python
+    >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+    ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    ```"""
     tokenized = []
     for i in range(len(text_array)):
         reg, sub = MATCH_NUMBERS
@@ -91,7 +92,7 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
 def detokenize_numbers(text: str) -> str:
     """
-    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Inverts the operation of *tokenize_numbers*. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
 
     Args:
         text: A string where the number should be detokenized.
@@ -99,10 +100,12 @@ def detokenize_numbers(text: str) -> str:
     Returns:
         A detokenized string.
 
-    Example::
-        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
-        "$ 5,000 1.73 m"
-    """
+    Example:
+
+    ```python
+    >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+    "$ 5,000 1.73 m"
+    ```"""
     for reg, sub in DETOKENIZE_NUMBERS:
         text = re.sub(reg, sub, text)
     return text
@@ -110,41 +113,41 @@ def detokenize_numbers(text: str) -> str:
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
-    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no
+    Construct a Transformer-XL tokenizer adapted from Vocab class in [the original
+    code](https://github.com/kimiyoung/transformer-xl). The Transformer-XL tokenizer is a word-level tokenizer (no
     sub-word tokenization).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        special (:obj:`List[str]`, `optional`):
+        special (`List[str]`, *optional*):
             A list of special tokens (to be treated by the original implementation of this tokenizer).
-        min_freq (:obj:`int`, `optional`, defaults to 0):
+        min_freq (`int`, *optional*, defaults to 0):
             The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
-            will be mapped to :obj:`unk_token`).
-        max_size (:obj:`int`, `optional`):
+            will be mapped to `unk_token`).
+        max_size (`int`, *optional*):
             The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
-            after excluding the tokens according to the :obj:`min_freq` rule.
-        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            after excluding the tokens according to the `min_freq` rule.
+        lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        delimiter (:obj:`str`, `optional`):
+        delimiter (`str`, *optional*):
             The delimiter used between tokens.
-        vocab_file (:obj:`str`, `optional`):
+        vocab_file (`str`, *optional*):
             File containing the vocabulary (from the original implementation).
-        pretrained_vocab_file (:obj:`str`, `optional`):
-            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
-        never_split (:obj:`List[str]`, `optional`):
+        pretrained_vocab_file (`str`, *optional*):
+            File containing the vocabulary as saved with the `save_pretrained()` method.
+        never_split (`List[str]`, *optional*):
             List of tokens that should never be split. If no list is specified, will simply use the existing special
             tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+        eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<formula>"]`):
             A list of additional special tokens (for the HuggingFace functionality).
-        language (:obj:`str`, `optional`, defaults to :obj:`"en"`):
+        language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).
     """
 
@@ -198,7 +201,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.never_split = never_split
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
-        self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
+        self.punction_without_space_before_pattern = re.compile(rf"[^\s][{self.punctuation_symbols}]")
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
         self.language = language
         self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
@@ -235,9 +238,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         except Exception as e:
             raise ValueError(
-                "Unable to parse file {}. Unknown format. "
-                "If you tried to load a model saved through TransfoXLTokenizerFast,"
-                "please note they are not compatible.".format(pretrained_vocab_file)
+                f"Unable to parse file {pretrained_vocab_file}. Unknown format. "
+                "If you tried to load a model saved through TransfoXLTokenizerFast, "
+                "please note they are not compatible."
             ) from e
 
         if vocab_file is not None:
@@ -248,20 +251,20 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.lower_case
 
     def _compile_space_around_punctuation_pattern(self):
-        look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
+        look_ahead_for_special_token = f"(?=[{self.punctuation_symbols}])"
         look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
-            logger.info("counting file {} ...".format(path))
+            logger.info(f"counting file {path} ...")
         assert os.path.exists(path), f"Input file {path} not found"
 
         sents = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    logger.info("    line {}".format(idx))
+                    logger.info(f"    line {idx}")
                 symbols = self.tokenize(line, add_eos=add_eos)
                 self.counter.update(symbols)
                 sents.append(symbols)
@@ -273,10 +276,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
-            logger.info("counting {} sents ...".format(len(sents)))
+            logger.info(f"counting {len(sents)} sents ...")
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                logger.info("    line {}".format(idx))
+                logger.info(f"    line {idx}")
             self.counter.update(symbols)
 
     def _build_from_file(self, vocab_file):
@@ -292,7 +295,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unkown> token in vocabulary")
+            raise ValueError("No <unknown> token in vocabulary")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -308,11 +311,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def build_vocab(self):
         if self.vocab_file:
-            logger.info("building vocab from {}".format(self.vocab_file))
+            logger.info(f"building vocab from {self.vocab_file}")
             self._build_from_file(self.vocab_file)
-            logger.info("final vocab size {}".format(len(self)))
+            logger.info(f"final vocab size {len(self)}")
         else:
-            logger.info("building vocab with min_freq={}, max_size={}".format(self.min_freq, self.max_size))
+            logger.info(f"building vocab with min_freq={self.min_freq}, max_size={self.max_size}")
             self.idx2sym = []
             self.sym2idx = OrderedDict()
 
@@ -324,18 +327,18 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                     break
                 self.add_symbol(sym)
 
-            logger.info("final vocab size {} from {} unique tokens".format(len(self), len(self.counter)))
+            logger.info(f"final vocab size {len(self)} from {len(self.counter)} unique tokens")
 
     @torch_only_method
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
-            logger.info("encoding file {} ...".format(path))
+            logger.info(f"encoding file {path} ...")
         assert os.path.exists(path), f"Output file {path} not found"
         encoded = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    logger.info("    line {}".format(idx))
+                    logger.info(f"    line {idx}")
                 symbols = self.tokenize(line, add_eos=add_eos, add_double_eos=add_double_eos)
                 encoded.append(self.convert_to_tensor(symbols))
 
@@ -347,11 +350,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     @torch_only_method
     def encode_sents(self, sents, ordered=False, verbose=False):
         if verbose:
-            logger.info("encoding {} sents ...".format(len(sents)))
+            logger.info(f"encoding {len(sents)} sents ...")
         encoded = []
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                logger.info("    line {}".format(idx))
+                logger.info(f"    line {idx}")
             encoded.append(self.convert_to_tensor(symbols))
 
         if ordered:
@@ -363,7 +366,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if sym not in self.sym2idx:
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
-            setattr(self, "{}_idx".format(sym.strip("<>")), self.sym2idx[sym])
+            setattr(self, f"{sym.strip('<>')}_idx", self.sym2idx[sym])
 
     def add_symbol(self, sym):
         if sym not in self.sym2idx:
@@ -407,10 +410,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def moses_pipeline(self, text: str) -> List[str]:
         """
-        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
-        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`). Additionally,
-        large comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23
-        @,@ 000 people are 1 @.@ 80m tall"
+        Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`] with
+        *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally, large
+        comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000
+        people are 1 @.@ 80m tall"
 
         Args:
             text: Text to be tokenize
@@ -418,11 +421,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         Returns:
             A list of tokenized string
 
-        Example::
-            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
-            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
-            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
-        """
+        Example:
+
+        ```python
+        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+        >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+        ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        ```"""
         text = self.moses_punct_norm(text)
         text = self.moses_tokenize(text)
         text = tokenize_numbers(text)
@@ -430,15 +435,15 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
-        assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
+        assert 0 <= idx < len(self), f"Index {idx} out of vocabulary range"
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
-            # logger.info('encounter unk {}'.format(sym))
+            # logger.info(f'encounter unk {sym}')
             # assert '<eos>' not in sym
             if hasattr(self, "unk_idx"):
                 return self.sym2idx.get(sym, self.unk_idx)
@@ -675,20 +680,16 @@ class TransfoXLCorpus(object):
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                "Corpus '{}' was not found in corpus list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ", ".join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    corpus_file,
-                )
+                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list "
+                f"({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. "
+                f"We assumed '{pretrained_model_name_or_path}' was a path or url but couldn't find files {corpus_file} "
+                "at this path or url."
             )
             return None
         if resolved_corpus_file == corpus_file:
-            logger.info("loading corpus file {}".format(corpus_file))
+            logger.info(f"loading corpus file {corpus_file}")
         else:
-            logger.info("loading corpus file {} from cache at {}".format(corpus_file, resolved_corpus_file))
+            logger.info(f"loading corpus file {corpus_file} from cache at {resolved_corpus_file}")
 
         # Instantiate tokenizer.
         corpus = cls(*inputs, **kwargs)
@@ -777,7 +778,7 @@ def get_lm_corpus(datadir, dataset):
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
     else:
-        logger.info("Producing dataset {}...".format(dataset))
+        logger.info(f"Producing dataset {dataset}...")
         kwargs = {}
         if dataset in ["wt103", "wt2"]:
             kwargs["special"] = ["<eos>"]

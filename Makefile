@@ -1,5 +1,7 @@
-.PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples
 
+# make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
+export PYTHONPATH = src
 
 check_dirs := examples tests src utils
 
@@ -19,34 +21,53 @@ modified_only_fixup:
 deps_table_update:
 	@python setup.py deps_table_update
 
-# Check that source code meets quality standards
+deps_table_check_updated:
+	@md5sum src/transformers/dependency_versions_table.py > md5sum.saved
+	@python setup.py deps_table_update
+	@md5sum -c --quiet md5sum.saved || (printf "\nError: the version dependency table is outdated.\nPlease run 'make fixup' or 'make style' and commit the changes.\n\n" && exit 1)
+	@rm md5sum.saved
 
-extra_quality_checks: deps_table_update
+# autogenerating code
+
+autogenerate_code: deps_table_update
+
+# Check that the repo is in a good state
+
+repo-consistency:
 	python utils/check_copies.py
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
-	python utils/style_doc.py src/transformers docs/source --max_len 119
-	python utils/class_mapping_update.py
+	python utils/check_inits.py
+	python utils/check_config_docstrings.py
+	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
+
 quality:
 	black --check $(check_dirs)
 	isort --check-only $(check_dirs)
+	python utils/custom_init_isort.py --check_only
 	flake8 $(check_dirs)
-	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
-	${MAKE} extra_quality_checks
+	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
-style: deps_table_update
+extra_style_checks:
+	python utils/custom_init_isort.py
+	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
+
+# this target runs checks on all files and potentially modifies some of them
+
+style:
 	black $(check_dirs)
 	isort $(check_dirs)
-	python utils/style_doc.py src/transformers docs/source --max_len 119
+	${MAKE} autogenerate_code
+	${MAKE} extra_style_checks
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
 
-fixup: modified_only_fixup extra_quality_checks
+fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 # Make marked copies of snippets of codes conform to the original
 
@@ -63,12 +84,13 @@ test:
 # Run tests for examples
 
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/
+	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
-# Check that docs can build
+# Run tests for SageMaker DLC release
 
-docs:
-	cd docs && make html SPHINXOPTS="-W -j 4"
+test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
+	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
+
 
 # Release stuff
 
@@ -83,4 +105,3 @@ post-release:
 
 post-patch:
 	python utils/release.py --post_release --patch
-

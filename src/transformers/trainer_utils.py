@@ -17,20 +17,21 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import functools
 import gc
 import inspect
 import os
 import random
 import re
+import threading
 import time
-import tracemalloc
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import (
+from .utils import (
     ExplicitEnum,
-    is_sagemaker_distributed_available,
+    is_psutil_available,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -47,11 +48,10 @@ if is_tf_available():
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
-    installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
-        seed (:obj:`int`): The seed to set.
+        seed (`int`): The seed to set.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -63,22 +63,55 @@ def set_seed(seed: int):
         tf.random.set_seed(seed)
 
 
-class EvalPrediction(NamedTuple):
+class EvalPrediction:
     """
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
-        predictions (:obj:`np.ndarray`): Predictions of the model.
-        label_ids (:obj:`np.ndarray`): Targets to be matched.
+        predictions (`np.ndarray`): Predictions of the model.
+        label_ids (`np.ndarray`): Targets to be matched.
+        inputs (`np.ndarray`, *optional*)
     """
 
+    def __init__(
+        self,
+        predictions: Union[np.ndarray, Tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+    ):
+        self.predictions = predictions
+        self.label_ids = label_ids
+        self.inputs = inputs
+
+    def __iter__(self):
+        if self.inputs is not None:
+            return iter((self.predictions, self.label_ids, self.inputs))
+        else:
+            return iter((self.predictions, self.label_ids))
+
+    def __getitem__(self, idx):
+        if idx < 0 or idx > 2:
+            raise IndexError("tuple index out of range")
+        if idx == 2 and self.inputs is None:
+            raise IndexError("tuple index out of range")
+        if idx == 0:
+            return self.predictions
+        elif idx == 1:
+            return self.label_ids
+        elif idx == 2:
+            return self.inputs
+
+
+class EvalLoopOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: np.ndarray
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
+    metrics: Optional[Dict[str, float]]
+    num_samples: Optional[int]
 
 
 class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[np.ndarray]
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
     metrics: Optional[Dict[str, float]]
 
 
@@ -116,17 +149,24 @@ class EvaluationStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class HubStrategy(ExplicitEnum):
+    END = "end"
+    EVERY_SAVE = "every_save"
+    CHECKPOINT = "checkpoint"
+    ALL_CHECKPOINTS = "all_checkpoints"
+
+
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
+    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
-        run_id (:obj:`str`):
+        run_id (`str`):
             The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
             with run-{run_id}).
-        objective (:obj:`float`):
+        objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (:obj:`Dict[str, Any]`):
+        hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
     """
 
@@ -138,19 +178,19 @@ class BestRun(NamedTuple):
 def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
-    metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics otherwise.
+    metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
-        :obj:`float`: The objective to minimize or maximize
+        `float`: The objective to minimize or maximize
     """
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_samples_per_second")]
+    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -182,14 +222,49 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
     }
 
 
+def default_hp_space_sigopt(trial):
+    return [
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
+        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
+        {
+            "categorical_values": ["4", "8", "16", "32", "64"],
+            "name": "per_device_train_batch_size",
+            "type": "categorical",
+        },
+    ]
+
+
+def default_hp_space_wandb(trial) -> Dict[str, float]:
+    from .integrations import is_wandb_available
+
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
+
+    return {
+        "method": "random",
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "num_train_epochs": {"distribution": "int_uniform", "min": 1, "max": 6},
+            "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+            "per_device_train_batch_size": {"values": [4, 8, 16, 32, 64]},
+        },
+    }
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
+    SIGOPT = "sigopt"
+    WANDB = "wandb"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
+    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
+    HPSearchBackend.WANDB: default_hp_space_wandb,
 }
 
 
@@ -213,10 +288,6 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_distributed_available():
-        import smdistributed.dataparallel.torch.distributed as dist
-
-        return dist.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -224,7 +295,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     """
     Measure and return speed performance metrics.
 
@@ -240,8 +311,11 @@ def speed_metrics(split, start_time, num_samples=None):
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None:
-        samples_per_second = 1 / (runtime / num_samples)
+        samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
+    if num_steps is not None:
+        steps_per_second = num_steps / runtime
+        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     return result
 
 
@@ -258,48 +332,23 @@ class TrainerMemoryTracker:
     """
     A helper class that tracks cpu and gpu memory.
 
+    This class will silently skip unless `psutil` is available. Install with `pip install psutil`.
+
     When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
 
-    Example ::
+    Example :
 
-        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
-        self._memory_tracker.start()
-        code ...
-        metrics = {"train_runtime": 10.5}
-        self._memory_tracker.stop_and_update_metrics(metrics)
+    ```python
+    self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+    self._memory_tracker.start()
+    # code ...
+    metrics = {"train_runtime": 10.5}
+    self._memory_tracker.stop_and_update_metrics(metrics)
+    ```
 
-    At the moment gpu tracking is only for pytorch, but can be extended to support tensorflow.
+    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
-    Understanding the reports:
-
-    - ``*_alloc_delta`` - is the difference in the used/allocated memory counter between the end and the start of the
-      stage - it can be negative if a function released more memory than it allocated.
-
-    - ``*_peaked_delta`` - is any extra memory that was consumed and then freed - relative to the current allocated
-      memory counter - it is never negative.
-
-    So when you look at the metrics of any stage you add up ``alloc_delta`` + ``peaked_delta`` and you know how much
-    memory was needed to complete that stage.
-
-    The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
-    main process does the bulk of work, but it could be not quite so if model parallel is used and then other gpus may
-    use a different amount of gpu RAM. Perhaps in the future this tracker will evolve to measure those too.
-
-    Note that this tracker doesn't account for memory allocations outside of :class:`~transformers.Trainer`'s
-    ``__init__``, ``train``, ``evaluate`` and ``predict`` calls.
-
-    Because ``evaluation`` calls may happen during ``train``, we can't handle nested invocations because
-    ``torch.cuda.max_memory_allocated`` is a single counter, so if it gets reset by a nested eval call, ``train``'s
-    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__
-    gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
-    level of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``,
-    it's the latter that will account for its memory usage and that of the former.
-
-    This also means that if any other tool that is used along the :class:`~transformers.Trainer` calls
-    ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
-    :class:`~transformers.Trainer` will disrupt the normal behavior of any such tools that rely on calling
-    ``torch.cuda.reset_peak_memory_stats`` themselves.
-
+    To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
     # map trainer methods to metrics prefix
@@ -311,6 +360,18 @@ class TrainerMemoryTracker:
     }
 
     def __init__(self, skip_memory_metrics=False):
+
+        self.skip_memory_metrics = skip_memory_metrics
+
+        if not is_psutil_available():
+            # soft dependency on psutil
+            self.skip_memory_metrics = True
+
+        if self.skip_memory_metrics:
+            return
+
+        import psutil  # noqa
+
         if is_torch_cuda_available():
             import torch
 
@@ -319,13 +380,14 @@ class TrainerMemoryTracker:
         else:
             self.torch = None
 
+        self.process = psutil.Process()
+
         self.cur_stage = None
         self.cpu = {}
         self.init_reported = False
-        self.skip_memory_metrics = skip_memory_metrics
 
     def derive_stage(self):
-        """ derives the stage/caller name automatically """
+        """derives the stage/caller name automatically"""
         caller = inspect.currentframe().f_back.f_back.f_code.co_name
         if caller in self.stages:
             return self.stages[caller]
@@ -334,8 +396,24 @@ class TrainerMemoryTracker:
                 f"was called from {caller}, but only expect to be called from one of {self.stages.keys()}"
             )
 
+    def cpu_mem_used(self):
+        """get resident set size memory for the current process"""
+        return self.process.memory_info().rss
+
+    def peak_monitor_func(self):
+        self.cpu_mem_used_peak = -1
+
+        while True:
+            self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
+
+            # can't sleep or will not catch the peak right (this comment is here on purpose)
+            # time.sleep(0.001) # 1msec
+
+            if not self.peak_monitoring:
+                break
+
     def start(self):
-        """ start tracking for the caller's stage """
+        """start tracking for the caller's stage"""
         if self.skip_memory_metrics:
             return
 
@@ -346,53 +424,70 @@ class TrainerMemoryTracker:
 
         self.cur_stage = stage
 
+        gc.collect()
+
         if self.torch is not None:
             self.torch.cuda.reset_peak_memory_stats()
             self.torch.cuda.empty_cache()
 
-        gc.collect()
-
         # gpu
         if self.torch is not None:
-            self.gpu[self.cur_stage] = {}
-            self.gpu[self.cur_stage]["alloc"] = self.torch.cuda.memory_allocated()
-            self.gpu[self.cur_stage]["peaked"] = 0
+            self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
 
         # cpu
-        self.cpu[self.cur_stage] = {}
-        tracemalloc.start()
+        self.cpu_mem_used_at_start = self.cpu_mem_used()
+
+        self.peak_monitoring = True
+        peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
+        peak_monitor_thread.daemon = True
+        peak_monitor_thread.start()
 
     def stop(self, stage):
-        """ stop tracking for the passed stage """
+        """stop tracking for the passed stage"""
 
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
             return
 
+        # this sends a signal to peak_monitor_func to complete its loop
+        self.peak_monitoring = False
+
+        # first ensure all objects get collected and their memory is freed
+        gc.collect()
+
         if self.torch is not None:
             self.torch.cuda.empty_cache()
 
-        gc.collect()
+        # concepts:
+        # - alloc_delta:  the difference of allocated memory between the end and the start
+        # - peaked_delta: the difference between the peak memory and the current memory
+        # in order to know how much memory the measured code consumed one needs to sum these two
 
         # gpu
         if self.torch is not None:
-            mem_cur = self.torch.cuda.memory_allocated()
-            # this is the difference between the start and the end allocated memory
-            self.gpu[self.cur_stage]["alloc"] = mem_cur - self.gpu[self.cur_stage]["alloc"]  # can be negative
-            # this is the difference if any between the start and the peak
-            self.gpu[self.cur_stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
+            self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
+            self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            self.gpu[self.cur_stage] = dict(
+                begin=self.gpu_mem_used_at_start,
+                end=self.gpu_mem_used_now,
+                alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+                peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+            )
 
         # cpu
-        cpu_mem_used_delta, cpu_mem_used_peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()  # reset accounting
-        self.cpu[self.cur_stage]["alloc"] = cpu_mem_used_delta  # can be negative
-        self.cpu[self.cur_stage]["peaked"] = max(0, cpu_mem_used_peak - cpu_mem_used_delta)
+        self.cpu_mem_used_now = self.cpu_mem_used()
+        self.cpu[self.cur_stage] = dict(
+            begin=self.cpu_mem_used_at_start,
+            end=self.cpu_mem_used_now,
+            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        )
 
         # reset - cycle finished
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
-        """ stop tracking for the passed stage """
+        """updates the metrics"""
         if self.skip_memory_metrics:
             return
 
@@ -412,9 +507,28 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
                 if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+            # if we need additional debug info, enable the following
+            # for t in ["begin", "end"]:
+            #     if stage in self.cpu and t in self.cpu[stage]:
+            #         metrics[f"{stage}_mem_cpu_{t}"] = self.cpu[stage][t]
+            #     if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+            #         metrics[f"{stage}_mem_gpu_{t}"] = self.gpu[stage][t]
+
+        # since memory can be allocated before init, and it might be difficult to track overall
+        # memory usage, in particular for GPU, let's report memory usage at the point init was called
+        if stages[0] == "init":
+            metrics["before_init_mem_cpu"] = self.cpu["init"]["begin"]
+            if self.torch is not None:
+                metrics["before_init_mem_gpu"] = self.gpu["init"]["begin"]
+            # if we also wanted to report any additional memory allocations in between init and
+            # whatever the next stage was we could also report this:
+            # if self.cpu["init"]["end"] != self.cpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_cpu_delta"] = self.cpu[stage]["begin"] - self.cpu["init"]["end"]
+            # if self.torch is not None and self.gpu["init"]["end"] != self.gpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_gpu_delta"] = self.gpu[stage]["begin"] - self.gpu["init"]["end"]
 
     def stop_and_update_metrics(self, metrics=None):
-        """ combine stop + update in one call for simpler code """
+        """combine stop and metrics update in one call for simpler code"""
         if self.skip_memory_metrics:
             return
 
@@ -424,6 +538,17 @@ class TrainerMemoryTracker:
         # init doesn't have metrics to update so we just save that data for later stages to retrieve
         if metrics is not None:
             self.update_metrics(stage, metrics)
+
+
+def has_length(dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        return len(dataset) is not None
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
 
 
 def denumpify_detensorize(metrics):
@@ -439,6 +564,16 @@ def denumpify_detensorize(metrics):
     elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
         return metrics.item()
     return metrics
+
+
+def number_of_arguments(func):
+    """
+    Return the number of arguments of the passed function, even if it's a partial function.
+    """
+    if isinstance(func, functools.partial):
+        total_args = len(inspect.signature(func.func).parameters)
+        return total_args - len(func.args) - len(func.keywords)
+    return len(inspect.signature(func).parameters)
 
 
 class ShardedDDPOption(ExplicitEnum):

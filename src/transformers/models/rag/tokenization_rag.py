@@ -34,7 +34,7 @@ class RagTokenizer:
 
     def save_pretrained(self, save_directory):
         if os.path.isfile(save_directory):
-            raise ValueError("Provided path ({}) should be a directory, not a file".format(save_directory))
+            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
         question_encoder_path = os.path.join(save_directory, "question_encoder_tokenizer")
         generator_path = os.path.join(save_directory, "generator_tokenizer")

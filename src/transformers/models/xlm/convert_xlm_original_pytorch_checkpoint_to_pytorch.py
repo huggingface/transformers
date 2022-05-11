@@ -21,9 +21,8 @@ import json
 import numpy
 import torch
 
-from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.models.xlm.tokenization_xlm import VOCAB_FILES_NAMES
-from transformers.utils import logging
+from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
 logging.set_verbosity_info()
@@ -54,14 +53,14 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
     pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
     pytorch_vocab_dump_path = pytorch_dump_folder_path + "/" + VOCAB_FILES_NAMES["vocab_file"]
 
-    print("Save PyTorch model to {}".format(pytorch_weights_dump_path))
+    print(f"Save PyTorch model to {pytorch_weights_dump_path}")
     torch.save(two_levels_state_dict, pytorch_weights_dump_path)
 
-    print("Save configuration file to {}".format(pytorch_config_dump_path))
+    print(f"Save configuration file to {pytorch_config_dump_path}")
     with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
         f.write(json.dumps(config, indent=2) + "\n")
 
-    print("Save vocab file to {}".format(pytorch_config_dump_path))
+    print(f"Save vocab file to {pytorch_config_dump_path}")
     with open(pytorch_vocab_dump_path, "w", encoding="utf-8") as f:
         f.write(json.dumps(vocab, indent=2) + "\n")
 

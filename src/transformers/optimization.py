@@ -15,14 +15,17 @@
 """PyTorch optimization for BERT model."""
 
 import math
+import warnings
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
+from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -33,13 +36,13 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     Create a schedule with a constant learning rate, using the learning rate set in optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
 
@@ -50,15 +53,15 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
     increases linearly between 0 and the initial lr set in the optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step: int):
@@ -75,17 +78,17 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
+        num_training_steps (`int`):
             The total number of training steps.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step: int):
@@ -107,20 +110,20 @@ def get_cosine_schedule_with_warmup(
     initial lr set in the optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
+        num_training_steps (`int`):
             The total number of training steps.
-        num_cycles (:obj:`float`, `optional`, defaults to 0.5):
+        num_cycles (`float`, *optional*, defaults to 0.5):
             The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
             following a half-cosine).
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step):
@@ -141,19 +144,19 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
     linearly between 0 and the initial lr set in the optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
+        num_training_steps (`int`):
             The total number of training steps.
-        num_cycles (:obj:`int`, `optional`, defaults to 1):
+        num_cycles (`int`, *optional*, defaults to 1):
             The number of hard restarts to use.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step):
@@ -172,34 +175,35 @@ def get_polynomial_decay_schedule_with_warmup(
 ):
     """
     Create a schedule with a learning rate that decreases as a polynomial decay from the initial lr set in the
-    optimizer to end lr defined by `lr_end`, after a warmup period during which it increases linearly from 0 to the
+    optimizer to end lr defined by *lr_end*, after a warmup period during which it increases linearly from 0 to the
     initial lr set in the optimizer.
 
     Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
+        num_training_steps (`int`):
             The total number of training steps.
-        lr_end (:obj:`float`, `optional`, defaults to 1e-7):
+        lr_end (`float`, *optional*, defaults to 1e-7):
             The end LR.
-        power (:obj:`float`, `optional`, defaults to 1.0):
+        power (`float`, *optional*, defaults to 1.0):
             Power factor.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Note: `power` defaults to 1.0 as in the fairseq implementation, which in turn is based on the original BERT
+    Note: *power* defaults to 1.0 as in the fairseq implementation, which in turn is based on the original BERT
     implementation at
     https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/optimization.py#L37
 
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
 
     """
 
     lr_init = optimizer.defaults["lr"]
-    assert lr_init > lr_end, f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})"
+    if not (lr_init > lr_end):
+        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
 
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
@@ -210,7 +214,7 @@ def get_polynomial_decay_schedule_with_warmup(
             lr_range = lr_init - lr_end
             decay_steps = num_training_steps - num_warmup_steps
             pct_remaining = 1 - (current_step - num_warmup_steps) / decay_steps
-            decay = lr_range * pct_remaining ** power + lr_end
+            decay = lr_range * pct_remaining**power + lr_end
             return decay / lr_init  # as LambdaLR multiplies by lr_init
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
@@ -236,14 +240,14 @@ def get_scheduler(
     Unified API to get any scheduler from its name.
 
     Args:
-        name (:obj:`str` or `:obj:`SchedulerType`):
+        name (`str` or `SchedulerType`):
             The name of the scheduler to use.
-        optimizer (:obj:`torch.optim.Optimizer`):
+        optimizer (`torch.optim.Optimizer`):
             The optimizer that will be used during training.
-        num_warmup_steps (:obj:`int`, `optional`):
+        num_warmup_steps (`int`, *optional*):
             The number of warmup steps to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
-        num_training_steps (:obj:`int`, `optional`):
+        num_training_steps (`int``, *optional*):
             The number of training steps to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
     """
@@ -268,41 +272,51 @@ def get_scheduler(
 
 class AdamW(Optimizer):
     """
-    Implements Adam algorithm with weight decay fix as introduced in `Decoupled Weight Decay Regularization
-    <https://arxiv.org/abs/1711.05101>`__.
+    Implements Adam algorithm with weight decay fix as introduced in [Decoupled Weight Decay
+    Regularization](https://arxiv.org/abs/1711.05101).
 
     Parameters:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
-        lr (:obj:`float`, `optional`, defaults to 1e-3):
+        lr (`float`, *optional*, defaults to 1e-3):
             The learning rate to use.
-        betas (:obj:`Tuple[float,float]`, `optional`, defaults to (0.9, 0.999)):
+        betas (`Tuple[float,float]`, *optional*, defaults to (0.9, 0.999)):
             Adam's betas parameters (b1, b2).
-        eps (:obj:`float`, `optional`, defaults to 1e-6):
+        eps (`float`, *optional*, defaults to 1e-6):
             Adam's epsilon for numerical stability.
-        weight_decay (:obj:`float`, `optional`, defaults to 0):
+        weight_decay (`float`, *optional*, defaults to 0):
             Decoupled weight decay to apply.
-        correct_bias (:obj:`bool`, `optional`, defaults to `True`):
-            Whether ot not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
+        correct_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to correct bias in Adam (for instance, in Bert TF repository they use `False`).
+        no_deprecation_warning (`bool`, *optional*, defaults to `False`):
+            A flag used to disable the deprecation warning (set to `True` to disable the warning).
     """
 
     def __init__(
         self,
-        params: Iterable[torch.nn.parameter.Parameter],
+        params: Iterable[nn.parameter.Parameter],
         lr: float = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
+        no_deprecation_warning: bool = False,
     ):
+        if not no_deprecation_warning:
+            warnings.warn(
+                "This implementation of AdamW is deprecated and will be removed in a future version. Use the"
+                " PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning",
+                FutureWarning,
+            )
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if not 0.0 <= betas[0] < 1.0:
-            raise ValueError("Invalid beta parameter: {} - should be in [0.0, 1.0[".format(betas[0]))
+            raise ValueError(f"Invalid beta parameter: {betas[0]} - should be in [0.0, 1.0)")
         if not 0.0 <= betas[1] < 1.0:
-            raise ValueError("Invalid beta parameter: {} - should be in [0.0, 1.0[".format(betas[1]))
+            raise ValueError(f"Invalid beta parameter: {betas[1]} - should be in [0.0, 1.0)")
         if not 0.0 <= eps:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(eps))
+            raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
         super().__init__(params, defaults)
 
@@ -311,7 +325,7 @@ class AdamW(Optimizer):
         Performs a single optimization step.
 
         Arguments:
-            closure (:obj:`Callable`, `optional`): A closure that reevaluates the model and returns the loss.
+            closure (`Callable`, *optional*): A closure that reevaluates the model and returns the loss.
         """
         loss = None
         if closure is not None:
@@ -342,7 +356,7 @@ class AdamW(Optimizer):
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
-                exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
+                exp_avg.mul_(beta1).add_(grad, alpha=(1.0 - beta1))
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
                 denom = exp_avg_sq.sqrt().add_(group["eps"])
 
@@ -363,7 +377,7 @@ class AdamW(Optimizer):
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
                 if group["weight_decay"] > 0.0:
-                    p.data.add_(p.data, alpha=-group["lr"] * group["weight_decay"])
+                    p.data.add_(p.data, alpha=(-group["lr"] * group["weight_decay"]))
 
         return loss
 
@@ -373,65 +387,85 @@ class Adafactor(Optimizer):
     AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
     https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
 
-    Paper: `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost` https://arxiv.org/abs/1804.04235 Note that
-    this optimizer internally adjusts the learning rate depending on the *scale_parameter*, *relative_step* and
-    *warmup_init* options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
+    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://arxiv.org/abs/1804.04235 Note that
+    this optimizer internally adjusts the learning rate depending on the `scale_parameter`, `relative_step` and
+    `warmup_init` options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
     `relative_step=False`.
 
     Arguments:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
-        lr (:obj:`float`, `optional`):
+        lr (`float`, *optional*):
             The external learning rate.
-        eps (:obj:`Tuple[float, float]`, `optional`, defaults to (1e-30, 1e-3)):
+        eps (`Tuple[float, float]`, *optional*, defaults to (1e-30, 1e-3)):
             Regularization constants for square gradient and parameter scale respectively
-        clip_threshold (:obj:`float`, `optional`, defaults 1.0):
+        clip_threshold (`float`, *optional*, defaults 1.0):
             Threshold of root mean square of final gradient update
-        decay_rate (:obj:`float`, `optional`, defaults to -0.8):
+        decay_rate (`float`, *optional*, defaults to -0.8):
             Coefficient used to compute running averages of square
-        beta1 (:obj:`float`, `optional`):
+        beta1 (`float`, *optional*):
             Coefficient used for computing running averages of gradient
-        weight_decay (:obj:`float`, `optional`, defaults to 0):
+        weight_decay (`float`, *optional*, defaults to 0):
             Weight decay (L2 penalty)
-        scale_parameter (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        scale_parameter (`bool`, *optional*, defaults to `True`):
             If True, learning rate is scaled by root mean square
-        relative_step (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        relative_step (`bool`, *optional*, defaults to `True`):
             If True, time-dependent learning rate is computed instead of external learning rate
-        warmup_init (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        warmup_init (`bool`, *optional*, defaults to `False`):
             Time-dependent learning rate computation depends on whether warm-up initialization is being used
 
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 
-    Recommended T5 finetuning settings:
+    Recommended T5 finetuning settings (https://discuss.huggingface.co/t/t5-finetuning-tips/684/3):
 
-        - Scheduled LR warm-up to fixed LR
-        - disable relative updates
-        - use clip threshold: https://arxiv.org/abs/2004.14546
+        - Training without LR warmup or clip_threshold is not recommended.
 
-        Example::
+           - use scheduled LR warm-up to fixed LR
+           - use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+        - Disable relative updates
+        - Use scale_parameter=False
+        - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
 
-            Adafactor(model.parameters(), lr=1e-3, relative_step=False, warmup_init=True)
+    Example:
 
-        - Alternatively, relative_step with warmup_init can be used.
-        - Training without LR warmup or clip threshold is not recommended. Additional optimizer operations like
-          gradient clipping should not be used alongside Adafactor.
+    ```python
+    Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=1e-3)
+    ```
 
-    Usage::
+    Others reported the following combination to work well:
 
-        # replace AdamW with Adafactor
-        optimizer = Adafactor(
-            model.parameters(),
-            lr=1e-3,
-            eps=(1e-30, 1e-3),
-            clip_threshold=1.0,
-            decay_rate=-0.8,
-            beta1=None,
-            weight_decay=0.0,
-            relative_step=False,
-            scale_parameter=False,
-            warmup_init=False
-        )
-    """
+    ```python
+    Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+    ```
+
+    When using `lr=None` with [`Trainer`] you will most likely need to use [`~optimization.AdafactorSchedule`]
+    scheduler as following:
+
+    ```python
+    from transformers.optimization import Adafactor, AdafactorSchedule
+
+    optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+    lr_scheduler = AdafactorSchedule(optimizer)
+    trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
+    ```
+
+    Usage:
+
+    ```python
+    # replace AdamW with Adafactor
+    optimizer = Adafactor(
+        model.parameters(),
+        lr=1e-3,
+        eps=(1e-30, 1e-3),
+        clip_threshold=1.0,
+        decay_rate=-0.8,
+        beta1=None,
+        weight_decay=0.0,
+        relative_step=False,
+        scale_parameter=False,
+        warmup_init=False,
+    )
+    ```"""
 
     def __init__(
         self,
@@ -446,10 +480,11 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
-            raise ValueError("Cannot combine manual lr and relative_step options")
+            raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
-            raise ValueError("warmup_init requires relative_step=True")
+            raise ValueError("`warmup_init=True` requires `relative_step=True`")
 
         defaults = dict(
             lr=lr,
@@ -487,9 +522,11 @@ class Adafactor(Optimizer):
 
     @staticmethod
     def _approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col):
-        r_factor = (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_()
-        c_factor = exp_avg_sq_col.rsqrt()
-        return torch.mm(r_factor.unsqueeze(-1), c_factor.unsqueeze(0))
+        # copy from fairseq's adafactor implementation:
+        # https://github.com/huggingface/transformers/blob/8395f14de6068012787d83989c3627c3df6a252b/src/transformers/optimization.py#L505
+        r_factor = (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1)
+        c_factor = exp_avg_sq_col.unsqueeze(-2).rsqrt()
+        return torch.mul(r_factor, c_factor)
 
     def step(self, closure=None):
         """
@@ -549,13 +586,13 @@ class Adafactor(Optimizer):
                 lr = self._get_lr(group, state)
 
                 beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
-                update = (grad ** 2) + group["eps"][0]
+                update = (grad**2) + group["eps"][0]
                 if factored:
                     exp_avg_sq_row = state["exp_avg_sq_row"]
                     exp_avg_sq_col = state["exp_avg_sq_col"]
 
-                    exp_avg_sq_row.mul_(beta2t).add_(1.0 - beta2t, update.mean(dim=-1))
-                    exp_avg_sq_col.mul_(beta2t).add_(1.0 - beta2t, update.mean(dim=-2))
+                    exp_avg_sq_row.mul_(beta2t).add_(update.mean(dim=-1), alpha=(1.0 - beta2t))
+                    exp_avg_sq_col.mul_(beta2t).add_(update.mean(dim=-2), alpha=(1.0 - beta2t))
 
                     # Approximation of exponential moving average of square of gradient
                     update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
@@ -563,7 +600,7 @@ class Adafactor(Optimizer):
                 else:
                     exp_avg_sq = state["exp_avg_sq"]
 
-                    exp_avg_sq.mul_(beta2t).add_(1.0 - beta2t, update)
+                    exp_avg_sq.mul_(beta2t).add_(update, alpha=(1.0 - beta2t))
                     update = exp_avg_sq.rsqrt().mul_(grad)
 
                 update.div_((self._rms(update) / group["clip_threshold"]).clamp_(min=1.0))
@@ -571,11 +608,11 @@ class Adafactor(Optimizer):
 
                 if use_first_moment:
                     exp_avg = state["exp_avg"]
-                    exp_avg.mul_(group["beta1"]).add_(1 - group["beta1"], update)
+                    exp_avg.mul_(group["beta1"]).add_(update, alpha=(1 - group["beta1"]))
                     update = exp_avg
 
                 if group["weight_decay"] != 0:
-                    p_data_fp32.add_(-group["weight_decay"] * lr, p_data_fp32)
+                    p_data_fp32.add_(p_data_fp32, alpha=(-group["weight_decay"] * lr))
 
                 p_data_fp32.add_(-update)
 
@@ -583,3 +620,51 @@ class Adafactor(Optimizer):
                     p.data.copy_(p_data_fp32)
 
         return loss
+
+
+class AdafactorSchedule(LambdaLR):
+    """
+    Since [`~optimization.Adafactor`] performs its own scheduling, if the training loop relies on a scheduler (e.g.,
+    for logging), this class creates a proxy object that retrieves the current lr values from the optimizer.
+
+    It returns `initial_lr` during startup and the actual `lr` during stepping.
+    """
+
+    def __init__(self, optimizer, initial_lr=0.0):
+        def lr_lambda(_):
+            return initial_lr
+
+        for group in optimizer.param_groups:
+            group["initial_lr"] = initial_lr
+        super().__init__(optimizer, lr_lambda)
+        for group in optimizer.param_groups:
+            del group["initial_lr"]
+
+    def get_lr(self):
+        opt = self.optimizer
+        lrs = [
+            opt._get_lr(group, opt.state[group["params"][0]])
+            for group in opt.param_groups
+            if group["params"][0].grad is not None
+        ]
+        if len(lrs) == 0:
+            lrs = self.base_lrs  # if called before stepping
+        return lrs
+
+
+def get_adafactor_schedule(optimizer, initial_lr=0.0):
+    """
+    Get a proxy schedule for [`~optimization.Adafactor`]
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+        initial_lr (`float`, *optional*, defaults to 0.0):
+            Initial lr
+
+    Return:
+        [`~optimization.Adafactor`] proxy schedule object.
+
+
+    """
+    return AdafactorSchedule(optimizer, initial_lr)

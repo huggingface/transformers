@@ -68,25 +68,25 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    the superclass for more information regarding methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"__start__"`):
+        bos_token (`str`, *optional*, defaults to `"__start__"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
+        eos_token (`str`, *optional*, defaults to `"__end__"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
+        unk_token (`str`, *optional*, defaults to `"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
+        pad_token (`str`, *optional*, defaults to `"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -183,7 +183,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return " ".join(words)
 
     def _tokenize(self, text: str) -> List[str]:
-        """ Split a string into tokens using BPE."""
+        """Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -193,7 +193,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token to an id using the vocab. """
+        """Converts a token to an id using the vocab."""
         token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
@@ -202,13 +202,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens  in a single string. """
+        """Converts a sequence of tokens in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -226,8 +226,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!".format(merge_file)
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!"
                     )
                     index = token_index
                 writer.write(" ".join(bpe_tokens) + "\n")

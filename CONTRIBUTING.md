@@ -26,7 +26,7 @@ on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
 Whichever way you choose to contribute, please be mindful to respect our
-[code of conduct](https://github.com/huggingface/transformers/blob/master/CODE_OF_CONDUCT.md).
+[code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
 ## You can contribute in so many ways!
 
@@ -35,6 +35,13 @@ There are 4 ways you can contribute to transformers:
 * Implementing new models;
 * Contributing to the examples or to the documentation;
 * Submitting issues related to bugs or desired new features.
+
+In particular there is a special [Good First
+Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
+open Issues that are open to anybody to work on. Just comment in the issue that you'd like to work
+on it. In that same listing you will also find some Issues with `Good Second Issue` label. These are
+typically slightly more complicated than the Issues with just `Good First Issue` label. But if you
+feel you know what you're doing, go for it.
 
 *All are equally valuable to the community.*
 
@@ -46,7 +53,7 @@ feedback.
 
 ### Did you find a bug?
 
-The transformers are robust and reliable thanks to the users who notify us of
+The 🤗 Transformers library is robust and reliable thanks to the users who notify us of
 the problems they encounter. So thank you for reporting an issue.
 
 First, we would really appreciate it if you could **make sure the bug was not
@@ -85,7 +92,7 @@ If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
 We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them
-in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) folder.
+in the [`templates`](https://github.com/huggingface/transformers/tree/main/templates) folder.
 
 ### Do you want a new feature (that is not a model)?
 
@@ -107,7 +114,7 @@ If your issue is well written we're already 80% of the way there by the time you
 post it.
 
 We have added **templates** to guide you in the process of adding a new example script for training or testing the
-models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates)
+models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/main/templates)
 folder.
 
 ## Start contributing! (Pull Requests)
@@ -117,7 +124,7 @@ issues to make sure that nobody is already working on the same thing. If you are
 unsure, it is always a good idea to open an issue to get some feedback.
 
 You will need basic `git` proficiency to be able to contribute to
-`transformers`. `git` is not the easiest tool to use but it has the greatest
+🤗 Transformers. `git` is not the easiest tool to use but it has the greatest
 manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
@@ -141,7 +148,7 @@ Follow these steps to start contributing:
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   **Do not** work on the `master` branch.
+   **Do not** work on the `main` branch.
 
 4. Set up a development environment by running the following command in a virtual environment:
 
@@ -168,34 +175,26 @@ Follow these steps to start contributing:
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
-   passes:
+   passes. You should run the tests impacted by your changes like this:
+
+   ```bash
+   $ pytest tests/<TEST_TO_RUN>.py
+   ```
+
+   You can also run the full suite with the following command, but it takes
+   a beefy machine to produce a result in a decent amount of time now that
+   Transformers has grown a lot. Here is the command for it:
 
    ```bash
    $ make test
    ```
 
-   Note, that this command uses `-n auto` pytest flag, therefore, it will start as many parallel `pytest` processes as the number of your computer's CPU-cores, and if you have lots of those and a few GPUs and not a great amount of RAM, it's likely to overload your computer. Therefore, to run the test suite, you may want to consider using this command instead:
+   For more information about tests, check out the
+   [dedicated documentation](https://huggingface.co/docs/transformers/testing)
 
-   ```bash
-   $ python -m pytest -n 3 --dist=loadfile -s -v ./tests/
-   ```
-
-   Adjust the value of `-n` to fit the load your hardware can support.
-
-   `transformers` relies on `black` and `isort` to format its source code
-   consistently. After you make changes, format them with:
-
-   ```bash
-   $ make style
-   ```
-
-   `transformers` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
-   control runs in CI, however you can also run the same checks with:
-
-   ```bash
-   $ make quality
-   ```
-   You can do the automatic style corrections and code verifications that can't be automated in one go:
+   🤗 Transformers relies on `black` and `isort` to format its source code
+   consistently. After you make changes, apply automatic style corrections and code verifications
+   that can't be automated in one go with:
 
    ```bash
    $ make fixup
@@ -203,15 +202,54 @@ Follow these steps to start contributing:
 
    This target is also optimized to only work with files modified by the PR you're working on.
 
-   If you're modifying documents under `docs/source`, make sure to validate that
-   they can still be built. This check also runs in CI. To run a local check
-   make sure you have installed the documentation builder requirements, by
-   running `pip install .[tf,torch,docs]` once from the root of this repository
-   and then run:
+   If you prefer to run the checks one after the other, the following command apply the
+   style corrections:
 
    ```bash
-   $ make docs
+   $ make style
    ```
+
+   🤗 Transformers also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
+   control runs in CI, however you can also run the same checks with:
+
+   ```bash
+   $ make quality
+   ```
+
+   Finally we have a lot of scripts that check we didn't forget to update
+   some files when adding a new model, that you can run with
+
+   ```bash
+   $ make repo-consistency
+   ```
+
+   To learn more about those checks and how to fix any issue with them, check out the
+   [documentation](https://huggingface.co/docs/transformers/pr_checks)
+
+   If you're modifying documents under `docs/source`, make sure to validate that
+   they can still be built. This check also runs in CI. To run a local check
+   make sure you have installed the documentation builder requirements. First you will need to clone the
+   repository containing our tools to build the documentation:
+   
+   ```bash
+   $ pip install git+https://github.com/huggingface/doc-builder
+   ```
+
+   Then, make sure you have all the dependencies to be able to build the doc with:
+   
+   ```bash
+   $ pip install ".[docs]"
+   ```
+
+   Finally run the following command from the root of the repository:
+
+   ```bash
+   $ doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+   ```
+
+   This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
+   Markdown files with your favorite editor. You won't be able to see the final rendering on the website
+   before your PR is merged, we are actively working on adding a tool for this.
 
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
@@ -229,7 +267,7 @@ Follow these steps to start contributing:
 
    ```bash
    $ git fetch upstream
-   $ git rebase upstream/master
+   $ git rebase upstream/main
    ```
 
    Push the changes to your account using:
@@ -266,14 +304,21 @@ Follow these steps to start contributing:
    - If you are adding a new tokenizer, write tests, and make sure
      `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
    CircleCI does not run the slow tests, but github actions does every night!
-6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_bert.py` for an
    example.
+7. Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
+   the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference 
+   them by URL. We recommend putting them in the following dataset: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
+   If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
+   to this dataset.
+
+See more about the checks run on a pull request in our [PR guide](pr_checks)
 
 ### Tests
 
 An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
-the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the
-[examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+the [tests folder](https://github.com/huggingface/transformers/tree/main/tests) and examples tests in the
+[examples folder](https://github.com/huggingface/transformers/tree/main/examples).
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
 repository, here's how to run tests with `pytest` for the library:
@@ -285,7 +330,7 @@ $ python -m pytest -n auto --dist=loadfile -s -v ./tests/
 and for the examples:
 
 ```bash
-$ pip install -r examples/requirements.txt  # only needed the first time
+$ pip install -r examples/xxx/requirements.txt  # only needed the first time
 $ python -m pytest -n auto --dist=loadfile -s -v ./examples/
 ```
 In fact, that's how `make test` and `make test-examples` are implemented (sans the `pip install` line)!
@@ -319,12 +364,11 @@ $ python -m unittest discover -s examples -t examples -v
 
 ### Style guide
 
-For documentation strings, `transformers` follows the [google style](https://google.github.io/styleguide/pyguide.html).
-Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification)
+For documentation strings, 🤗 Transformers follows the [google style](https://google.github.io/styleguide/pyguide.html).
+Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification)
 for more information.
 
-#### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)
-
+**This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md).**
 
 ### Develop on Windows
 
@@ -341,15 +385,15 @@ One way one can run the make command on Window is to pass by MSYS2:
 
 You can now use `make` from any terminal (Powershell, cmd.exe, etc) 🎉
 
-### Syncing forked master with upstream (HuggingFace) master
+### Syncing forked main with upstream (HuggingFace) main
 
-To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnessary notifications to the developers involved in these PRs, 
-when syncing the master branch of a forked repository, please, follow these steps:
-1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked master.
+To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnecessary notifications to the developers involved in these PRs,
+when syncing the main branch of a forked repository, please, follow these steps:
+1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked main.
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:
 ```
 $ git checkout -b your-branch-for-syncing
-$ git pull --squash --no-commit upstream master
+$ git pull --squash --no-commit upstream main
 $ git commit -m '<your message without GitHub references>'
 $ git push --set-upstream origin your-branch-for-syncing
 ```

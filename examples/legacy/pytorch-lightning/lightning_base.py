@@ -28,12 +28,12 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
-from transformers.utils.versions import require_version_examples
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
-require_version_examples("pytorch_lightning>=1.0.4")
+require_version("pytorch_lightning>=1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,

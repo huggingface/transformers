@@ -1,0 +1,7 @@
+accelerate
+datasets >= 1.8.0
+sentencepiece != 0.1.92
+protobuf
+sacrebleu >= 1.4.12
+py7zr
+torch >= 1.3

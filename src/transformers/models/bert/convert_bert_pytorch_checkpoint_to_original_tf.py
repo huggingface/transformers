@@ -65,7 +65,7 @@ def convert_pytorch_checkpoint_to_tf(model: BertModel, ckpt_dir: str, model_name
     def to_tf_var_name(name: str):
         for patt, repl in iter(var_map):
             name = name.replace(patt, repl)
-        return "bert/{}".format(name)
+        return f"bert/{name}"
 
     def create_tf_var(tensor: np.ndarray, name: str, session: tf.Session):
         tf_dtype = tf.dtypes.as_dtype(tensor.dtype)
@@ -84,7 +84,7 @@ def convert_pytorch_checkpoint_to_tf(model: BertModel, ckpt_dir: str, model_name
             tf_var = create_tf_var(tensor=torch_tensor, name=tf_name, session=session)
             tf.keras.backend.set_value(tf_var, torch_tensor)
             tf_weight = session.run(tf_var)
-            print("Successfully created {}: {}".format(tf_name, np.allclose(tf_weight, torch_tensor)))
+            print(f"Successfully created {tf_name}: {np.allclose(tf_weight, torch_tensor)}")
 
         saver = tf.train.Saver(tf.trainable_variables())
         saver.save(session, os.path.join(ckpt_dir, model_name.replace("-", "_") + ".ckpt"))

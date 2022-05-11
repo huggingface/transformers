@@ -28,7 +28,7 @@ CheckpointState = collections.namedtuple(
 
 
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
-    print("Reading saved model from %s", model_file)
+    print(f"Reading saved model from {model_file}")
     state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
     return CheckpointState(**state_dict)
 
@@ -55,7 +55,7 @@ class DPRState:
 class DPRContextEncoderState(DPRState):
     def load_dpr_model(self):
         model = DPRContextEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
-        print("Loading DPR biencoder from {}".format(self.src_file))
+        print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.ctx_encoder, "ctx_model."
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
@@ -73,7 +73,7 @@ class DPRContextEncoderState(DPRState):
 class DPRQuestionEncoderState(DPRState):
     def load_dpr_model(self):
         model = DPRQuestionEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
-        print("Loading DPR biencoder from {}".format(self.src_file))
+        print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.question_encoder, "question_model."
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
@@ -91,7 +91,7 @@ class DPRQuestionEncoderState(DPRState):
 class DPRReaderState(DPRState):
     def load_dpr_model(self):
         model = DPRReader(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
-        print("Loading DPR reader from {}".format(self.src_file))
+        print(f"Loading DPR reader from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
         state_dict = {

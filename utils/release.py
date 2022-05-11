@@ -17,7 +17,6 @@ import argparse
 import os
 import re
 
-import git
 import packaging.version
 
 
@@ -26,16 +25,13 @@ REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
-    "doc": (re.compile(r"^(\s*)release\s*=\s*u'[^']+'$", re.MULTILINE), "release = u'VERSION'\n"),
+    "doc": (re.compile(r'^(\s*)release\s*=\s*"[^"]+"$', re.MULTILINE), 'release = "VERSION"\n'),
 }
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",
     "setup": "setup.py",
-    "doc": "docs/source/conf.py",
 }
 README_FILE = "README.md"
-CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
-DEPLOY_SH_FILE = ".circleci/deploy.sh"
 
 
 def update_version_in_file(fname, version, pattern):
@@ -70,8 +66,8 @@ def global_version_update(version, patch=False):
         update_version_in_examples(version)
 
 
-def clean_master_ref_in_model_list():
-    """Replace the links from master doc tp stable doc in the model list of the README."""
+def clean_main_ref_in_model_list():
+    """Replace the links from main doc tp stable doc in the model list of the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
@@ -89,8 +85,8 @@ def clean_master_ref_in_model_list():
     while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
             lines[index] = lines[index].replace(
-                "https://huggingface.co/transformers/master/model_doc",
-                "https://huggingface.co/transformers/model_doc",
+                "https://huggingface.co/docs/transformers/main/model_doc",
+                "https://huggingface.co/docs/transformers/model_doc",
             )
         index += 1
 
@@ -128,59 +124,7 @@ def pre_release_work(patch=False):
     global_version_update(version, patch=patch)
     if not patch:
         print("Cleaning main README")
-        clean_master_ref_in_model_list()
-
-
-def update_custom_js(version, patch=False):
-    """Update the version table in the custom.js file."""
-    with open(CUSTOM_JS_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    index = 0
-
-    # First let's put the right version
-    while not lines[index].startswith("const stableVersion ="):
-        index += 1
-    lines[index] = f'const stableVersion = "v{version}"\n'
-
-    # Then update the dictionary
-    while not lines[index].startswith("const versionMapping = {"):
-        index += 1
-
-    # We go until the end
-    while not lines[index].startswith("}"):
-        search = re.search(r'^(\s+)"": "([^"]+) \(stable\)",\s*\n$', lines[index])
-        if search is not None:
-            indent, old_versions = search.groups()
-            if patch:
-                # We add the patch to the current stable doc
-                old_versions = f"{old_versions}/v{version}"
-                lines[index] = f'{indent}"": "{old_versions} (stable)",\n'
-            else:
-                # We only keep the last of the micro versions associated to that particular release
-                old_version = old_versions.split("/")[-1]
-                lines[index] = f'{indent}"": "v{version} (stable)",\n{indent}"{old_version}": "{old_versions}",\n'
-        index += 1
-
-    with open(CUSTOM_JS_FILE, "w", encoding="utf-8", newline="\n") as f:
-        lines = f.writelines(lines)
-
-
-def update_deploy_sh(version, commit):
-    with open(DEPLOY_SH_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-
-    index = len(lines) - 1
-    while len(lines[index]) <= 1:
-        index -= 1
-
-    search = re.search(r'^deploy_doc\s+"(\S+)"\s+#\s+(v\S+)\s+', lines[index])
-    old_commit, old_version = search.groups()
-    lines[
-        index
-    ] = f'deploy_doc "{old_commit}" {old_version}\ndeploy_doc "{commit}"  # v{version} Latest stable release'
-
-    with open(DEPLOY_SH_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.writelines(lines)
+        clean_main_ref_in_model_list()
 
 
 def post_release_work():
@@ -189,58 +133,14 @@ def post_release_work():
     current_version = get_version()
     dev_version = f"{current_version.major}.{current_version.minor + 1}.0.dev0"
     current_version = current_version.base_version
-    # Get the current commit hash
-    repo = git.Repo(".", search_parent_directories=True)
-    version_commit = repo.head.object.hexsha[:7]
 
     # Check with the user we got that right.
     version = input(f"Which version are we developing now? [{dev_version}]")
-    commit = input(f"Commit hash to associate to v{current_version}? [{version_commit}]")
     if len(version) == 0:
         version = dev_version
-    if len(commit) == 0:
-        commit = version_commit
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-
-    print("Updating doc deployment and version navbar in the source documentation.")
-    update_custom_js(current_version)
-    update_deploy_sh(current_version, commit)
-
-
-def post_patch_work():
-    """Do all the necesarry post-patch steps."""
-    # Try to guess the right info: last patch in the minor release before current version and its commit hash.
-    current_version = get_version()
-    repo = git.Repo(".", search_parent_directories=True)
-    repo_tags = repo.tags
-    default_version = None
-    version_commit = None
-    for tag in repo_tags:
-        if str(tag).startswith(f"v{current_version.major}.{current_version.minor - 1}"):
-            if default_version is None:
-                default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = str(tag.commit)[:7]
-            elif packaging.version.parse(str(tag)[1:]) > default_version:
-                default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = str(tag.commit)[:7]
-
-    # Confirm with the user or ask for the info if not found.
-    if default_version is None:
-        version = input("Which patch version was just released?")
-        commit = input("Commit hash to associated to it?")
-    else:
-        version = input(f"Which patch version was just released? [{default_version}]")
-        commit = input(f"Commit hash to associated to it? [{version_commit}]")
-        if len(version) == 0:
-            version = default_version
-        if len(commit) == 0:
-            commit = version_commit
-
-    print("Updating doc deployment and version navbar in the source documentation.")
-    update_custom_js(version, patch=True)
-    update_deploy_sh(version, commit)
 
 
 if __name__ == "__main__":
@@ -251,6 +151,6 @@ if __name__ == "__main__":
     if not args.post_release:
         pre_release_work(patch=args.patch)
     elif args.patch:
-        post_patch_work()
+        print("Nothing to do after a patch :-)")
     else:
         post_release_work()

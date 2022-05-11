@@ -152,7 +152,7 @@ def get_entailment_id(config):
     for label, ind in config.label2id.items():
         if label.lower().startswith("entail"):
             return ind
-    logging.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
+    logger.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
     return -1
 
 
@@ -245,7 +245,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )

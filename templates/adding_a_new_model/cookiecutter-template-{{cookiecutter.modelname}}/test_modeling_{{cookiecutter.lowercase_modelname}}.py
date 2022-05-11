@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,19 +18,19 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 import unittest
 
-from tests.test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from transformers import {{cookiecutter.camelcase_modelname}}Config
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        {{cookiecutter.camelcase_modelname}}Config,
         {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
@@ -112,7 +112,12 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = {{cookiecutter.camelcase_modelname}}Config(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return {{cookiecutter.camelcase_modelname}}Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -126,8 +131,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -483,12 +486,12 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.file_utils import cached_property
+from transformers.utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():

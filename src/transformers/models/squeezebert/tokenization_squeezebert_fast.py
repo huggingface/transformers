@@ -52,13 +52,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class SqueezeBertTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a "Fast" SqueezeBert tokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a "Fast" SqueezeBert tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.SqueezeBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting + wordpiece.
+    [`SqueezeBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting + wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -1,4 +1,4 @@
-## Copyright 2020 The HuggingFace Team. All rights reserved.
+## Copyright 2022 The HuggingFace Team. All rights reserved.
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
 ## you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@
             "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
             "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
             "{{cookiecutter.camelcase_modelname}}Model",
+            "{{cookiecutter.camelcase_modelname}}PreTrainedModel",
         ]
     )
 {% endif -%}
@@ -80,6 +81,35 @@
             "TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
             "TF{{cookiecutter.camelcase_modelname}}Model",
             "TF{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
+    )
+{% endif -%}
+# End.
+
+# Below: "    # Flax models structure" if generating Flax
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM",
+            "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM",
+            "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
+            "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification",
+            "Flax{{cookiecutter.camelcase_modelname}}Layer",
+            "Flax{{cookiecutter.camelcase_modelname}}Model",
+            "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
+    )
+{% else %}
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+            "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "Flax{{cookiecutter.camelcase_modelname}}Model",
+            "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
         ]
     )
 {% endif -%}
@@ -120,6 +150,7 @@
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
             {{cookiecutter.camelcase_modelname}}Model,
+            {{cookiecutter.camelcase_modelname}}PreTrainedModel,
         )
 {% endif -%}
 # End.
@@ -148,6 +179,31 @@
 {% endif -%}
 # End.
 
+# Below: "    if is_flax_available():" if generating Flax
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+            Flax{{cookiecutter.camelcase_modelname}}Layer,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+            Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% else %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+            Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% endif -%}
+# End.
+
 # Below: "    if is_tokenizers_available():"
 # Replace with:
         from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
@@ -170,17 +226,12 @@
 # To replace in: "src/transformers/models/auto/configuration_auto.py"
 # Below: "# Add configs here"
 # Replace with:
-        ("{{cookiecutter.lowercase_modelname}}", {{cookiecutter.camelcase_modelname}}Config),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}Config"),
 # End.
 
 # Below: "# Add archive maps here"
 # Replace with:
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP,
-# End.
-
-# Below: "from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig",
-# Replace with:
-from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP"),
 # End.
 
 # Below: "# Add full (and cased) model names here"
@@ -191,75 +242,47 @@ from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowerca
 
 
 # To replace in: "src/transformers/models/auto/modeling_auto.py" if generating PyTorch
-# Below: "from .configuration_auto import ("
-# Replace with:
-    {{cookiecutter.camelcase_modelname}}Config,
-# End.
-
-# Below: "# Add modeling imports here"
-# Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
-    {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-    {{cookiecutter.camelcase_modelname}}ForCausalLM,
-    {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-    {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-    {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-    {{cookiecutter.camelcase_modelname}}ForTokenClassification,
-    {{cookiecutter.camelcase_modelname}}Model,
-)
-{% else -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
-    {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-    {{cookiecutter.camelcase_modelname}}ForCausalLM,
-    {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-    {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-    {{cookiecutter.camelcase_modelname}}Model,
-)
-{% endif -%}
-# End.
-
 # Below: "# Base model mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Model),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}Model"),
 # End.
 
 # Below: "# Model with LM heads mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForMaskedLM),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
 {% else %}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
 {% endif -%}
 # End.
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForCausalLM),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForCausalLM"),
 # End.
 
 # Below: "# Model for Masked LM mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForMaskedLM),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
 {% else -%}
 {% endif -%}
 # End.
 
 # Below: "# Model for Sequence Classification mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForSequenceClassification),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
 # End.
 
 # Below: "# Model for Question Answering mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForQuestionAnswering),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
 # End.
 
 # Below: "# Model for Token Classification mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForTokenClassification),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForTokenClassification"),
 {% else -%}
 {% endif -%}
 # End.
@@ -267,7 +290,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Below: "# Model for Multiple Choice mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForMultipleChoice),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForMultipleChoice"),
 {% else -%}
 {% endif -%}
 # End.
@@ -276,54 +299,29 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 {% else %}
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
 {% endif -%}
 # End.
 
 # To replace in: "src/transformers/models/auto/modeling_tf_auto.py" if generating TensorFlow
-# Below: "from .configuration_auto import ("
-# Replace with:
-    {{cookiecutter.camelcase_modelname}}Config,
-# End.
-
-# Below: "# Add modeling imports here"
-# Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
-    TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-    TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
-    TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-    TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-    TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-    TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-    TF{{cookiecutter.camelcase_modelname}}Model,
-)
-{% else -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
-    TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-    TF{{cookiecutter.camelcase_modelname}}Model,
-)
-{% endif -%}
-# End.
-
 # Below: "# Base model mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}Model),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}Model"),
 # End.
 
 # Below: "# Model with LM heads mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMaskedLM),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
 {% else %}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
 {% endif -%}
 # End.
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForCausalLM),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForCausalLM"),
 {% else -%}
 {% endif -%}
 # End.
@@ -331,7 +329,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model for Masked LM mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMaskedLM),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
 {% else -%}
 {% endif -%}
 # End.
@@ -339,7 +337,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model for Sequence Classification mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
 {% else -%}
 {% endif -%}
 # End.
@@ -347,7 +345,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model for Question Answering mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
 {% else -%}
 {% endif -%}
 # End.
@@ -355,7 +353,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model for Token Classification mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForTokenClassification),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForTokenClassification"),
 {% else -%}
 {% endif -%}
 # End.
@@ -363,7 +361,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model for Multiple Choice mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice"),
 {% else -%}
 {% endif -%}
 # End.
@@ -372,9 +370,84 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 {% else %}
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
+        ("{{cookiecutter.lowercase_modelname}}", "TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
 {% endif -%}
 # End.
+
+# To replace in: "src/transformers/models/auto/modeling_flax_auto.py" if generating Flax
+# Below: "# Base model mapping"
+# Replace with:
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}Model"),
+# End.
+
+# Below: "# Model for Masked LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
+{% endif -%}
+# End.
+
+# Below: "# Model for Causal LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM"),
+{% else -%}
+{% endif -%}
+# End.
+
+# Below: "# Model for Masked LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM"),
+{% else -%}
+{% endif -%}
+# End.
+
+# Below: "# Model for Sequence Classification mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
+{% endif -%}
+# End.
+
+# Below: "# Model for Question Answering mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
+{% endif -%}
+# End.
+
+# Below: "# Model for Token Classification mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification"),
+{% else -%}
+{% endif -%}
+# End.
+
+# Below: "# Model for Multiple Choice mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice"),
+{% else -%}
+{% endif -%}
+# End.
+
+# Below: "# Model for Seq2Seq Causal LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration"),
+{% endif -%}
+# End.
+
+
 
 # To replace in: "utils/check_repo.py" if generating PyTorch
 

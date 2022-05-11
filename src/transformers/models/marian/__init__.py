@@ -17,8 +17,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
-    _BaseLazyModule,
+from ...utils import (
+    _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -27,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_marian": ["MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarianConfig"],
+    "configuration_marian": ["MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarianConfig", "MarianOnnxConfig"],
 }
 
 if is_sentencepiece_available():
@@ -36,18 +37,20 @@ if is_sentencepiece_available():
 if is_torch_available():
     _import_structure["modeling_marian"] = [
         "MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MarianForCausalLM",
         "MarianModel",
         "MarianMTModel",
         "MarianPreTrainedModel",
-        "MarianForCausalLM",
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_marian"] = ["TFMarianMTModel", "TFMarianModel"]
+    _import_structure["modeling_tf_marian"] = ["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_marian"] = ["FlaxMarianModel", "FlaxMarianMTModel", "FlaxMarianPreTrainedModel"]
 
 if TYPE_CHECKING:
-    from .configuration_marian import MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MarianConfig
+    from .configuration_marian import MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MarianConfig, MarianOnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_marian import MarianTokenizer
@@ -62,22 +65,12 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_marian import TFMarianModel, TFMarianMTModel
+        from .modeling_tf_marian import TFMarianModel, TFMarianMTModel, TFMarianPreTrainedModel
+
+    if is_flax_available():
+        from .modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
