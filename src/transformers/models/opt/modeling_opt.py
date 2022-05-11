@@ -15,7 +15,7 @@
 """ PyTorch OPT model."""
 import math
 import random
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -123,6 +123,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
 
         if positions is None:
             positions = make_positions(attention_mask, self.padding_idx)
+
         return F.embedding(
             positions,
             self.weight,
@@ -283,7 +284,6 @@ class OPTDecoderLayer(nn.Module):
     def __init__(self, config: OPTConfig):
         super().__init__()
         self.embed_dim = config.d_model
-
         self.self_attn = OPTAttention(
             embed_dim=self.embed_dim,
             num_heads=config.num_attention_heads,
@@ -415,7 +415,7 @@ OPT_GENERATION_EXAMPLE = r"""
     >>> TEXTS_TO_GENERATE = "Hey, are you consciours? Can you talk to me?" "Hi there, my name is Barack"
     >>> inputs = tokenizer([TEXTS_TO_GENERATE], max_length=1024, return_tensors="pt")
 
-    >>> # Generate 
+    >>> # Generate
     >>> generate_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     'I'm not conscious.<\s>'
@@ -501,7 +501,7 @@ class OPTDecoder(OPTPretrainedModel):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
 
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
@@ -511,13 +511,15 @@ class OPTDecoder(OPTPretrainedModel):
             self.padding_idx,
         )
 
-        self.project_out_dim = (
-            nn.Linear(config.d_model, config.embed_dim, bias=False) if config.embed_dim != config.d_model else None
-        )
+        if config.word_embed_proj_dim != config.d_model:
+            self.project_out = nn.Linear(config.d_model, config.word_embed_proj_dim, bias=False)
+        else:
+            self.project_out = None
 
-        self.project_in_dim = (
-            nn.Linear(config.embed_dim, config.d_model, bias=False) if config.d_model != config.embed_dim else None
-        )
+        if config.word_embed_proj_dim != config.d_model:
+            self.project_in = nn.Linear(config.word_embed_proj_dim, config.d_model, bias=False)
+        else:
+            self.project_in = None
 
         self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -639,8 +641,8 @@ class OPTDecoder(OPTPretrainedModel):
         # embed positions
         positions = self.embed_positions(attention_mask)
 
-        if self.project_in_dim is not None:
-            inputs_embeds = self.project_in_dim(inputs_embeds)
+        if self.project_in is not None:
+            inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + positions
 
@@ -702,10 +704,11 @@ class OPTDecoder(OPTPretrainedModel):
                     use_cache=use_cache,
                 )
 
-                if self.layer_norm:
-                    new_layer_output = (self.layer_norm(layer_outputs[0]),)
-                    new_layer_output += (layer_outputs[1:],)
-                    layer_outputs = new_layer_output
+            if self.layer_norm:
+                new_layer_output = (self.layer_norm(layer_outputs[0]),)
+                new_layer_output += (layer_outputs[1:],)
+                layer_outputs = new_layer_output
+
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -714,8 +717,8 @@ class OPTDecoder(OPTPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if self.project_out_dim is not None:
-            hidden_states = self.project_out_dim(hidden_states)
+        if self.project_out is not None:
+            hidden_states = self.project_out(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

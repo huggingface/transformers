@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Metaseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,14 +14,9 @@
 # limitations under the License.
 """ OPT model configuration"""
 import warnings
-from collections import OrderedDict
-from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
-from ...onnx.utils import compute_effective_axis_dimension
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -43,18 +38,18 @@ class OPTConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 50272):
             Vocabulary size of the OPT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OPTModel`] or [`TFOPTModel`].
-        d_model (`int`, *optional*, defaults to 1024):
+        d_model (`int`, *optional*, defaults to 768):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.
-        ffn_dim (`int`, *optional*, defaults to 4096):
+        ffn_dim (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
@@ -63,7 +58,7 @@ class OPTConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
@@ -71,13 +66,8 @@ class OPTConfig(PretrainedConfig):
         layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
 
     Example:
 
@@ -99,15 +89,15 @@ class OPTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50272,  # TODO check the real value
+        vocab_size=50272,
         max_position_embeddings=2048,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        ffn_dim=4096,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        ffn_dim=3072,
         layerdrop=0.0,
         activation_function="relu",
-        d_model=1024,
-        embed_dim=512,
+        d_model=768,
+        word_embed_proj_dim=768,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -121,13 +111,13 @@ class OPTConfig(PretrainedConfig):
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         output_projection=True,
-        decoder_layernorm=False,
+        decoder_layernorm=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
-        self.embed_dim = embed_dim
+        self.word_embed_proj_dim = word_embed_proj_dim
         self.ffn_dim = ffn_dim
         self.share_input_output_embed = share_input_output_embed
         self.d_model = d_model
