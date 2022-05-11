@@ -338,7 +338,7 @@ class OPTGenerationTest(unittest.TestCase):
         super().setUp()
         # self.all_model_path = ["facebook/opt-125m", "facebook/opt-350m", "facebook/opt-1.3b"]
         self.path_model = "ArthurZ/opt-350m"
-        
+
     def test_generation(self):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
