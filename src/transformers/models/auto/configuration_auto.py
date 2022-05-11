@@ -243,7 +243,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
-        ("cvt", "Cvt"),
+        ("cvt", "CvT"),
         ("van", "VAN"),
         ("resnet", "ResNet"),
         ("regnet", "RegNet"),
