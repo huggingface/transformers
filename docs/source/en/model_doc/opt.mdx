@@ -15,18 +15,18 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://arxiv.org/pdf/2205.01068) by Meta AI.
-OPT is a serie of pretrained decoder only LM which perform similarly to GPT3. 
+OPT is a series of open-sourced large causal language models which perform similar in performance to GPT3. 
 
 
 The abstract from the paper is the following:
 
-Large language models, which are often trained for hundreds of thousands of compute days, have shown remarkable capabilities for zero- and few-shot learning. Given their computational cost, these models are difficult to replicate without significant capital. For the few that are available through APIs, no access is granted to the full model weights, making them difficult to study. We present Open Pre-trained Transformers (OPT), a suite of decoder-only pre-trained transformers ranging from 125M to 175B parameters, which we aim to fully and responsibly share with interested researchers. We show that OPT-175B is comparable to GPT-3, while requiring only 1/7th the carbon footprint to develop. We are also releasing our logbook detailing the infrastructure challenges we faced, along with code for experimenting with all of the released models.
+*Large language models, which are often trained for hundreds of thousands of compute days, have shown remarkable capabilities for zero- and few-shot learning. Given their computational cost, these models are difficult to replicate without significant capital. For the few that are available through APIs, no access is granted to the full model weights, making them difficult to study. We present Open Pre-trained Transformers (OPT), a suite of decoder-only pre-trained transformers ranging from 125M to 175B parameters, which we aim to fully and responsibly share with interested researchers. We show that OPT-175B is comparable to GPT-3, while requiring only 1/7th the carbon footprint to develop. We are also releasing our logbook detailing the infrastructure challenges we faced, along with code for experimenting with all of the released models.*
 
 Tips:
 
 If you want to use the `opt-350m`, you need to set the `do_layer_norm_before` parameter to `False`. 
 
-This model was contributed by [Patrick Von Platen](https://huggingface.co/patrickvonplaten), [Arthur Zucker](https://huggingface.co/ArthurZ) and [Younes Belkada](https://huggingface.co/ybelkada),.
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Younes Belkada](https://huggingface.co/ybelkada), [Patrick Von Platen](https://huggingface.co/patrickvonplaten).
 The original code can be found [here](https://github.com/facebookresearch/metaseq).
 
 
