@@ -40,7 +40,7 @@ class OPTConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50272):
             Vocabulary size of the OPT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OPTModel`] or [`TFOPTModel`].
+            `inputs_ids` passed when calling [`OPTModel`] 
         d_model (`int`, *optional*, defaults to 768):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -141,10 +141,3 @@ class OPTConfig(PretrainedConfig):
             **kwargs,
         )
 
-        # ensure backward compatibility for OPT CNN models
-        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
-                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
-            )

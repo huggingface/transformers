@@ -92,7 +92,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeparableConv1D",  # Building part of bigger (tested) model.
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
-    "FlaxOPTForCausalLM",  #
     "OPTDecoderWrapper",
 ]
 
