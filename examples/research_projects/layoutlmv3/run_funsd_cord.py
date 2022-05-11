@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning LayoutLMv3 for token classification on FUNSD.
+Fine-tuning LayoutLMv3 for token classification on FUNSD or CORD.
 """
 # You can also adapt this script on your own token classification task and datasets. Pointers for this are left as
 # comments.
@@ -27,23 +27,19 @@ from typing import Optional
 
 import datasets
 import numpy as np
-import torch
 from datasets import ClassLabel, load_dataset, load_metric
-from torchvision import transforms
 
 import transformers
-from data_collator import DataCollatorForKeyValueExtraction
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
-    AutoTokenizer,
+    AutoProcessor,
     HfArgumentParser,
-    PretrainedConfig,
-    PreTrainedTokenizerFast,
     Trainer,
     TrainingArguments,
     set_seed,
 )
+from transformers.data.data_collator import default_data_collator
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
@@ -70,8 +66,8 @@ class ModelArguments:
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+    processor_name: Optional[str] = field(
+        default=None, metadata={"help": "Name or path to the processor files if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
         default=None,
@@ -129,18 +125,10 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=None,
+        default=512,
         metadata={
             "help": "The maximum total input sequence length after tokenization. If set, sequences longer "
             "than this will be truncated, sequences shorter will be padded."
-        },
-    )
-    pad_to_max_length: bool = field(
-        default=True,
-        metadata={
-            "help": "Whether to pad all samples to model maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-            "efficient on GPU but very bad for TPU."
         },
     )
     max_train_samples: Optional[int] = field(
@@ -270,8 +258,9 @@ def main():
         column_names = dataset["test"].column_names
         features = dataset["test"].features
 
+    image_column_name = "image"
     text_column_name = "words" if "words" in column_names else "tokens"
-
+    boxes_column_name = "bboxes"
     label_column_name = (
         f"{data_args.task_name}_tags" if f"{data_args.task_name}_tags" in column_names else column_names[1]
     )
@@ -290,17 +279,18 @@ def main():
 
     # If the labels are of type ClassLabel, they are already integers and we have the map stored somewhere.
     # Otherwise, we have to get the list of labels manually.
-    labels_are_int = isinstance(features[label_column_name].feature, ClassLabel)
-    if labels_are_int:
+    if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
-        label_to_id = {i: i for i in range(len(label_list))}
+        # No need to convert the labels since they are already ints.
+        id2label = {k: v for k, v in enumerate(label_list)}
+        label2id = {v: k for k, v in enumerate(label_list)}
     else:
-        label_list = get_label_list(dataset["train"][label_column_name])
-        label_to_id = {l: i for i, l in enumerate(label_list)}
-
+        label_list = get_label_list(datasets["train"][label_column_name])
+        id2label = {k: v for k, v in enumerate(label_list)}
+        label2id = {v: k for k, v in enumerate(label_list)}
     num_labels = len(label_list)
 
-    # Load pretrained model and tokenizer
+    # Load pretrained model and processor
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
@@ -314,14 +304,14 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        # model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
-        "roberta-base",
+    processor = AutoProcessor.from_pretrained(
+        model_args.processor_name if model_args.processor_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
         add_prefix_space=True,
+        apply_ocr=False,
     )
 
     model = AutoModelForTokenClassification.from_pretrained(
@@ -333,107 +323,30 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    # Tokenizer check: this script requires a fast tokenizer.
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
-        raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
-            "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
-            "requirement"
-        )
-
-    # Model has labels -> use them.
-    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
-        if list(sorted(model.config.label2id.keys())) == list(sorted(label_list)):
-            # Reorganize `label_list` to match the ordering of the model.
-            if labels_are_int:
-                label_to_id = {i: int(model.config.label2id[l]) for i, l in enumerate(label_list)}
-                label_list = [model.config.id2label[i] for i in range(num_labels)]
-            else:
-                label_list = [model.config.id2label[i] for i in range(num_labels)]
-                label_to_id = {l: i for i, l in enumerate(label_list)}
-        else:
-            logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                f"model labels: {list(sorted(model.config.label2id.keys()))}, dataset labels: {list(sorted(label_list))}."
-                "\nIgnoring the model labels as a result.",
-            )
-
     # Set the correspondences label/ID inside the model config
-    model.config.label2id = {l: i for i, l in enumerate(label_list)}
-    model.config.id2label = {i: l for i, l in enumerate(label_list)}
-
-    # Map that sends B-Xxx label to its I-Xxx counterpart
-    b_to_i_label = []
-    for idx, label in enumerate(label_list):
-        if label.startswith("B-") and label.replace("B-", "I-") in label_list:
-            b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
-        else:
-            b_to_i_label.append(idx)
+    model.config.label2id = label2id
+    model.config.id2label = id2label
 
     # Preprocessing the dataset
-    # Padding strategy
-    padding = "max_length" if data_args.pad_to_max_length else False
+    # The processor does everything for us (prepare the image using LayoutLMv3FeatureExtractor
+    # and prepare the words, boxes and word-level labels using LayoutLMv3TokenizerFast)
+    def prepare_examples(examples):
+        images = examples[image_column_name]
+        words = examples[text_column_name]
+        boxes = examples[boxes_column_name]
+        word_labels = examples[label_column_name]
 
-    # Image transformation
-    patch_transform = transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=torch.tensor([0.5, 0.5, 0.5]), std=torch.tensor([0.5, 0.5, 0.5])),
-        ]
-    )
-
-    # Tokenize all texts and align the labels with them.
-    def tokenize_and_align_labels(examples, augmentation=False):
-        tokenized_inputs = tokenizer(
-            examples[text_column_name],
-            padding=False,
+        encoding = processor(
+            images,
+            words,
+            boxes=boxes,
+            word_labels=word_labels,
             truncation=True,
-            return_overflowing_tokens=True,
-            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
-            is_split_into_words=True,
+            padding="max_length",
+            max_length=data_args.max_seq_length,
         )
 
-        labels = []
-        bboxes = []
-        images = []
-        for batch_index in range(len(tokenized_inputs["input_ids"])):
-            word_ids = tokenized_inputs.word_ids(batch_index=batch_index)
-            org_batch_index = tokenized_inputs["overflow_to_sample_mapping"][batch_index]
-
-            label = examples[label_column_name][org_batch_index]
-            bbox = examples["bboxes"][org_batch_index]
-            previous_word_idx = None
-            label_ids = []
-            bbox_inputs = []
-            for word_idx in word_ids:
-                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
-                # ignored in the loss function.
-                if word_idx is None:
-                    label_ids.append(-100)
-                    bbox_inputs.append([0, 0, 0, 0])
-                # We set the label for the first token of each word.
-                elif word_idx != previous_word_idx:
-                    label_ids.append(label_to_id[label[word_idx]])
-                    bbox_inputs.append(bbox[word_idx])
-                # For the other tokens in a word, we set the label to either the current label or -100, depending on
-                # the label_all_tokens flag.
-                else:
-                    label_ids.append(label_to_id[label[word_idx]] if data_args.label_all_tokens else -100)
-                    bbox_inputs.append(bbox[word_idx])
-                previous_word_idx = word_idx
-            labels.append(label_ids)
-            bboxes.append(bbox_inputs)
-
-            image = examples["image"][org_batch_index]
-            patch = patch_transform(image)
-            images.append(patch)
-
-        tokenized_inputs["labels"] = labels
-        tokenized_inputs["bbox"] = bboxes
-        tokenized_inputs["pixel_values"] = images
-
-        return tokenized_inputs
+        return encoding
 
     if training_args.do_train:
         if "train" not in dataset:
@@ -443,7 +356,7 @@ def main():
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
-                tokenize_and_align_labels,
+                prepare_examples,
                 batched=True,
                 remove_columns=remove_columns,
                 num_proc=data_args.preprocessing_num_workers,
@@ -459,7 +372,7 @@ def main():
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_dataset.map(
-                tokenize_and_align_labels,
+                prepare_examples,
                 batched=True,
                 remove_columns=remove_columns,
                 num_proc=data_args.preprocessing_num_workers,
@@ -475,20 +388,12 @@ def main():
             predict_dataset = predict_dataset.select(range(max_predict_samples))
         with training_args.main_process_first(desc="prediction dataset map pre-processing"):
             predict_dataset = predict_dataset.map(
-                tokenize_and_align_labels,
+                prepare_examples,
                 batched=True,
                 remove_columns=remove_columns,
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
             )
-
-    # Data collator
-    data_collator = DataCollatorForKeyValueExtraction(
-        tokenizer,
-        pad_to_multiple_of=8 if training_args.fp16 else None,
-        padding=padding,
-        max_length=512,
-    )
 
     # Metrics
     metric = load_metric("seqeval")
@@ -532,8 +437,8 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
+        tokenizer=processor,
+        data_collator=default_data_collator,
         compute_metrics=compute_metrics,
     )
 
