@@ -35,10 +35,18 @@ def load_checkpoint(checkpoint_path):
         sd = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # pop unnecessary weights
-    keys_to_delete = ["decoder.version", "decoder.layer_norm.weight", "decoder.layer_norm.bias"]
+    keys_to_delete = ["decoder.version", "decoder.layer_norm.weight", "decoder.layer_norm.bias", "decoder.output_projection.weight"]
     for key in keys_to_delete:
         if key in sd:
             sd.pop(key)
+
+    keys_to_rename = {
+        "decoder.project_in_dim.weight": "decoder.project_in.weight",
+        "decoder.project_out_dim.weight": "decoder.project_out.weight",
+    }
+    for old_key, new_key in keys_to_rename.items():
+        if old_key in sd:
+            sd[new_key] = sd.pop(old_key)
 
     return sd
 
