@@ -4,7 +4,6 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
 
-import numpy as np
 from datasets import Dataset
 from tqdm import tqdm
 
