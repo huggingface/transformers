@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch OPT model."""
-import math
 import random
 from typing import List, Optional, Tuple, Union
 
@@ -516,8 +515,6 @@ class OPTDecoder(OPTPretrainedModel):
         self.layerdrop = config.layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.share_input_output_embed = config.share_input_output_embed
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
@@ -654,7 +651,7 @@ class OPTDecoder(OPTPretrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # embed positions
         attention_mask = (
