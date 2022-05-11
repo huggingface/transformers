@@ -1535,6 +1535,7 @@ class TFModelTesterMixin:
 
             if "labels" in inspect.signature(model_class.call).parameters.keys():
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                tf_inputs_dict["extra_unwanted_column"] = list(tf_inputs_dict.values())[0]  # Use a random other tensor
                 input_dataset = Dataset.from_dict(tf_inputs_dict)
                 tf_dataset = model.prepare_tf_dataset(
                     input_dataset, batch_size=len(input_dataset), drop_remainder=False, shuffle=False
@@ -1543,8 +1544,12 @@ class TFModelTesterMixin:
                 self.assertGreater(len(test_batch_labels), 0)  # Assert the labels are present
                 feature_columns = 1 if isinstance(test_batch, tf.Tensor) else len(test_batch)
                 label_columns = 1 if isinstance(test_batch_labels, tf.Tensor) else len(test_batch_labels)
-                # Assert we didn't lose any columns
-                self.assertEqual(feature_columns + label_columns, len(input_dataset.features))
+                # Assert we discarded the unwanted extra column but kept everything else
+                self.assertEqual(feature_columns + label_columns, len(input_dataset.features) - 1)
+                if isinstance(test_batch, dict):
+                    self.assertNotIn("extra_unwanted_column", test_batch)
+                if isinstance(test_batch_labels, dict):
+                    self.assertNotIn("extra_unwanted_column", test_batch_labels)
                 model.compile(optimizer="sgd", run_eagerly=True)
                 model.train_on_batch(test_batch, test_batch_labels)
 
