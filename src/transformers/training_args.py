@@ -289,8 +289,7 @@ class TrainingArguments:
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
-            If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
-            model forward method.
+            Whether or not to automatically remove the columns unused by the model forward method.
 
             (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
