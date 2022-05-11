@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -210,12 +210,4 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
 
         encoding = feature_extractor(image, return_tensors="pt")
 
-        self.assertEqual(
-            encoding.pixel_values.shape,
-            (
-                1,
-                3,
-                224,
-                224,
-            ),
-        )
+        self.assertEqual(encoding.pixel_values.shape, (1, 3, 224, 224))

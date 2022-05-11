@@ -121,13 +121,6 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 class LayoutLMv3PatchEmbeddings(nn.Module):
     """LayoutLMv3 image (patch) embeddings. This class also automatically interpolates the position embeddings for varying
     image sizes."""
@@ -135,8 +128,16 @@ class LayoutLMv3PatchEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        image_size = to_2tuple(config.input_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size = (
+            config.input_size
+            if isinstance(config.input_size, collections.abc.Iterable)
+            else (config.input_size, config.input_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
         self.patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.proj = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
@@ -145,9 +146,8 @@ class LayoutLMv3PatchEmbeddings(nn.Module):
 
         if position_embedding is not None:
             # interpolate the position embedding to the corresponding size
-            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1).permute(
-                0, 3, 1, 2
-            )
+            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1)
+            position_embedding = position_embedding.permute(0, 3, 1, 2)
             patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
             position_embedding = F.interpolate(position_embedding, size=(patch_height, patch_width), mode="bicubic")
             embeddings = embeddings + position_embedding
@@ -184,13 +184,12 @@ class LayoutLMv3TextEmbeddings(nn.Module):
 
     def calculate_spatial_position_embeddings(self, bbox):
         try:
-            assert torch.all(0 <= bbox) and torch.all(bbox <= 1023)
             left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
             upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
             right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
             lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The :obj:`bbox` coordinate values should be within 0-1000 range.") from e
+            raise IndexError("The `bbox` coordinate values should be within 0-1000 range.") from e
 
         h_position_embeddings = self.h_position_embeddings(torch.clip(bbox[:, :, 3] - bbox[:, :, 1], 0, 1023))
         w_position_embeddings = self.w_position_embeddings(torch.clip(bbox[:, :, 2] - bbox[:, :, 0], 0, 1023))
