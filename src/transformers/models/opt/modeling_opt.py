@@ -328,7 +328,7 @@ class OPTDecoderLayer(nn.Module):
 
         # Self Attention
         # Before
-        if self.do_layer_norm_before: 
+        if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -340,7 +340,7 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         # After
-        if not self.do_layer_norm_before: 
+        if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Fully Connected
@@ -348,7 +348,7 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
         residual = hidden_states
         # Before
-        if self.do_layer_norm_before: 
+        if self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
@@ -358,7 +358,7 @@ class OPTDecoderLayer(nn.Module):
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
         # After
-        if not self.do_layer_norm_before: 
+        if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
@@ -455,7 +455,8 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_inputs`] and modify
             to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
@@ -535,7 +536,7 @@ class OPTDecoder(OPTPretrainedModel):
             self.project_in = None
 
         # Think we can delete this
-#        self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
+        #        self.layer_norm = nn.LayerNorm(config.d_model) if config.decoder_layernorm else None
         self.layer_norm = None
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
@@ -650,8 +651,12 @@ class OPTDecoder(OPTPretrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        attention_mask = attention_mask if attention_mask is not None else torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-        positions = self.embed_positions(attention_mask)[:,past_key_values_length:,:]
+        attention_mask = (
+            attention_mask
+            if attention_mask is not None
+            else torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+        )
+        positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -698,7 +703,7 @@ class OPTDecoder(OPTPretrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, output_attentions,None)
+                        return module(*inputs, output_attentions, None)
 
                     return custom_forward
 
@@ -728,8 +733,8 @@ class OPTDecoder(OPTPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-#        if self.layer_norm:
-#            hidden_states = self.layer_norm(hidden_states)
+        #        if self.layer_norm:
+        #            hidden_states = self.layer_norm(hidden_states)
 
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
@@ -740,11 +745,7 @@ class OPTDecoder(OPTPretrainedModel):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -819,7 +820,7 @@ class OPTModel(OPTPretrainedModel):
 
         if not return_dict:
             return decoder_outputs
-        
+
         return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
@@ -934,8 +935,8 @@ class OPTForCausalLM(OPTPretrainedModel):
 
         ```python
         >>> from transformers import OPTTokenizer, OPTForCausalLM
-
         # this needs fixing
+
         >>> tokenizer = OPTTokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
         >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."

@@ -109,7 +109,7 @@ class OPTConfig(PretrainedConfig):
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         output_projection=True,
-        do_layer_norm_before = True,
+        do_layer_norm_before=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
