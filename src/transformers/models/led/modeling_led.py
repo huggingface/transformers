@@ -1437,12 +1437,12 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
 
 LED_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    This model inherits from [`PreTrainedModel`]. See the superclass documentation for the generic methods the
+    library implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for general usage
     and behavior.
 
     Parameters:
