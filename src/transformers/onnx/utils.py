@@ -14,6 +14,9 @@
 
 from ctypes import c_float, sizeof
 from enum import Enum
+from typing import List, Union
+
+from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
 
 
 class ParameterFormat(Enum):
@@ -61,3 +64,32 @@ def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterForm
         Size (in byte) taken to save all the parameters
     """
     return num_parameters * dtype.size
+
+
+def get_preprocessors(model_name: str) -> List[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]:
+    """
+    Gets all preprocessors (tokenizer, feature extractor or processor) that are available for `model_name`.
+
+    Args:
+        model_name (`str`): Name of the model for which preprocessors are loaded.
+
+    Returns:
+        `List[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]`: A list of preprocessors.
+    """
+    procs = []
+    try:
+        procs.append(AutoTokenizer.from_pretrained(model_name))
+    except (OSError, KeyError):
+        pass
+
+    try:
+        procs.append(AutoFeatureExtractor.from_pretrained(model_name))
+    except (OSError, KeyError):
+        pass
+
+    try:
+        procs.append(AutoProcessor.from_pretrained(model_name))
+    except (ValueError, OSError, KeyError):
+        pass
+
+    return procs
