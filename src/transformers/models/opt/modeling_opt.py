@@ -634,12 +634,12 @@ class OPTDecoder(OPTPretrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
+        # embed positions
+        positions = self.embed_positions(attention_mask)
+
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-
-        # embed positions
-        positions = self.embed_positions(attention_mask)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
