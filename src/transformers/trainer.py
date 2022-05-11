@@ -115,10 +115,12 @@ from .trainer_utils import (
     default_compute_objective,
     default_hp_space,
     denumpify_detensorize,
+    enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
     number_of_arguments,
+    seed_worker,
     set_seed,
     speed_metrics,
 )
@@ -300,7 +302,7 @@ class Trainer:
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
         # Seed must be set before instantiating the model when using model
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -746,6 +748,7 @@ class Trainer:
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
+            worker_init_fn=seed_worker,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
@@ -1254,7 +1257,7 @@ class Trainer:
         model_reloaded = False
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
-            set_seed(args.seed)
+            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
             self.model = self.call_model_init(trial)
             model_reloaded = True
             # Reinitializes optimizer and scheduler
