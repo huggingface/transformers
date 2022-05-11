@@ -298,7 +298,7 @@ def export(
             "Please install torch or tensorflow first."
         )
 
-    if isinstance(model, TFPreTrainedModel) and cuda:
+    if is_tf_available() and isinstance(model, TFPreTrainedModel) and cuda:
         raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
@@ -363,7 +363,7 @@ def validate_model_outputs(
     session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
-    if issubclass(type(reference_model), PreTrainedModel):
+    if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
         reference_model.to("cpu")
     ref_outputs = reference_model(**reference_model_inputs)
     ref_outputs_dict = {}
