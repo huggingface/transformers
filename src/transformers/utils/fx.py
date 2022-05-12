@@ -702,6 +702,9 @@ class HFTracer(Tracer):
                 # Removing default values for inputs as the forward pass will fail with them.
                 if node.target in input_names:
                     node.args = ()
+                    # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
+                    # It cannot infer on the attributes and methods the input should have, and fails.
+                    node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
                     self.graph.erase_node(node)
@@ -808,5 +811,7 @@ def symbolic_trace(
     tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
+
+    traced.device = model.device
 
     return traced
