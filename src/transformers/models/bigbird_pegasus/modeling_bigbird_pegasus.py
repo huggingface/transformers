@@ -1685,8 +1685,8 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             be used by default.
 
             If you want to change padding behavior, you should read
-            [`modeling_bigbird_pegasus._prepare_decoder_inputs`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
 
         decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
