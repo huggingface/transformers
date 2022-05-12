@@ -55,24 +55,27 @@ class OPTConfig(PretrainedConfig):
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        do_layer_norm_before (`bool`, *optional*, defaults to `True`):
+            Whether to perform layer normalization before the attention block.
+        word_embed_proj_dim (`int`, *optional*):
+            `word_embed_proj_dim` can be set to down-project word embeddings, *e.g.* `opt-350m`. Defaults to
+            `hidden_size`.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        do_layer_norm_before (`bool`, *optional*, defaults to `True`):
-            Whether to perform layer normalization before the attention block.
 
     Example:
 
@@ -90,36 +93,41 @@ class OPTConfig(PretrainedConfig):
     ```"""
     model_type = "opt"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_hidden_layers": "num_hidden_layers"}
 
     def __init__(
         self,
         vocab_size=50272,
-        max_position_embeddings=2048,
+        hidden_size=768,
         num_hidden_layers=12,
-        num_attention_heads=12,
         ffn_dim=3072,
-        layerdrop=0.0,
-        activation_function="relu",
-        d_model=768,
+        max_position_embeddings=2048,
+        do_layer_norm_before=True,
+        word_embed_proj_dim=None,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
+        num_attention_heads=12,
+        activation_function="relu",
+        layerdrop=0.0,
         init_std=0.02,
+        use_cache=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        do_layer_norm_before=True,
-        use_cache=True,
-        word_embed_proj_dim=None,
         **kwargs
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
-        self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else d_model
+        self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else hidden_size
         self.ffn_dim = ffn_dim
-        self.d_model = d_model
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
@@ -129,10 +137,3 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
