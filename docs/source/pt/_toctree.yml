@@ -5,6 +5,8 @@
 - sections:
   - local: pipeline_tutorial
     title: Pipelines para inferência
+  - local: preprocessing
+    title: Pré-processamento
   - local: training
     title: Fine-tuning de um modelo pré-treinado
   - local: accelerate
