@@ -8,18 +8,16 @@ import numpy as np
 import pandas as pd
 import torch
 from transformers import AutoConfig
-from transformers import AutoModelForCausalLM
-from transformers import AutoModelForMaskedLM
-from transformers import AutoModelForSeq2SeqLM
-from transformers import BertConfig
-from transformers import BigBirdConfig
-from transformers import ReformerConfig
+from transformers import AutoModelForCausalLM, AutoModelForMaskedLM, AutoModelForSeq2SeqLM
+from transformers import BertConfig, ReformerConfig, XLNetModel, XLNetConfig
 
 import torchdynamo
 from torchdynamo.optimizations.training import aot_autograd_debug_strategy1
 from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
 from torchdynamo.testing import collect_results
 from torchdynamo.testing import same
+
+torch.backends.cuda.matmul.allow_tf32 = True
 
 ## TODO
 # 1) Add run_only argument and refactor
@@ -33,13 +31,21 @@ benchmarks = [
         AutoConfig.from_pretrained("allenai/longformer-base-4096"),
         AutoModelForMaskedLM,
         (2, 1024),
-        [torch.float16, torch.bfloat16],
-    ),  # hmm, nans with float16
-    (AutoConfig.from_pretrained("t5-small"), AutoModelForSeq2SeqLM, (4, 1024), [torch.float16, torch.bfloat16]), # Doesn't work with nn.utils._stateless for some reason...
-    # (AutoConfig.from_pretrained("facebook/bert-base"), AutoModelForSeq2SeqLM, (4, 512), []), # Doesn't work with nn.utils._stateless for some reason...
-    (ReformerConfig(), AutoModelForMaskedLM, (8, 4096), []), # not sure...
-    (BigBirdConfig(attention_type="block_sparse"), AutoModelForMaskedLM, (2, 1024), []), # not sure...
-    (AutoConfig.from_pretrained("distilbert-base-uncased"),  AutoModelForMaskedLM, (8, 512), []), # encounters inf as a global value
+        [torch.bfloat16], # trilu not implemented for bfloat16
+    ),
+    (AutoConfig.from_pretrained("t5-small"), AutoModelForSeq2SeqLM, (4, 1024), [torch.bfloat16]),
+    (ReformerConfig(), AutoModelForMaskedLM, (8, 4096), []),
+    (AutoConfig.from_pretrained("distilbert-base-uncased"),  AutoModelForMaskedLM, (8, 512), []),
+    (AutoConfig.from_pretrained("roberta-base"),  AutoModelForMaskedLM, (16, 512), []),
+    # (BigBirdConfig(attention_type="block_sparse"), AutoModelForMaskedLM, (2, 1024), [torch.bfloat16, torch.float16]), # Currently quite slow - needs investigation
+    (AutoConfig.from_pretrained("distilgpt2"), AutoModelForCausalLM, (16, 512), []),
+    (AutoConfig.from_pretrained("google/electra-base-discriminator"), AutoModelForMaskedLM, (8, 512), []),
+    (AutoConfig.from_pretrained("google/fnet-base"), AutoModelForMaskedLM, (8, 512), [torch.bfloat16, torch.float16]),
+    (AutoConfig.from_pretrained("YituTech/conv-bert-base"), AutoModelForMaskedLM, (8, 512), [torch.bfloat16]),
+    (AutoConfig.from_pretrained("google/mobilebert-uncased"), AutoModelForMaskedLM, (4, 512), []),
+    (AutoConfig.from_pretrained("camembert-base"), AutoModelForMaskedLM, (8, 512), []),
+    (AutoConfig.from_pretrained("microsoft/layoutlm-base-uncased"), AutoModelForMaskedLM, (8, 512), []),
+
 ]
 
 device = "cuda"
@@ -77,7 +83,8 @@ def forward_and_backward_pass(mod, inputs, collect_outputs=True):
     loss = pred.loss
     loss.backward()
     if collect_outputs:
-        return collect_results(mod, pred, loss, example_inputs=())
+        # Only check correctness of loss and gradients
+        return collect_results(mod, loss, loss, example_inputs=())
     return None
 
 
@@ -102,7 +109,7 @@ def check_correctness(args, mod, train_inputs, optimize_ctx):
         print("ERROR")
         return False
 
-    if not same(correct_result, new_result, tol=1e-3):
+    if not same(correct_result, new_result, tol=1e-2):
         print("INCORRECT")
         return False
     return True
@@ -160,7 +167,7 @@ model_header, dtype_header, nh, th, mh, sp, mp, acc = (
     "time (s)",
     "mem (GB)",
     "speedup",
-    "mem_compresssion",
+    "mem_compression",
     "is_accurate",
 )
 
@@ -182,11 +189,10 @@ results = []
 
 def load_model(config, model_type, dtype, args):
     for attr in dir(config):
-        if "drop" in attr:
+        if "drop" in attr and isinstance(getattr(config, attr), float):
             setattr(
-                config, attr, 1e-60
+                config, attr, 1e-30
             )  # So we can check for correct gradients without eliminating the dropout computation
-
     model = model_type.from_config(config).to(device, dtype=dtype)
     if args.use_eval_mode:
         model.eval()
