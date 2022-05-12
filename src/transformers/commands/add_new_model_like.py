@@ -18,6 +18,7 @@ import os
 import re
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from datetime import date
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
@@ -32,6 +33,7 @@ from . import BaseTransformersCLICommand
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
@@ -421,6 +423,7 @@ def duplicate_module(
     with open(module_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
     objects = parse_module_content(content)
 
     # Loop and treat all objects
@@ -1062,6 +1065,7 @@ def duplicate_doc_file(
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
@@ -1255,8 +1259,8 @@ def create_new_model_like(
 
     if disabled_fx_test:
         print(
-            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works "
-            "for your new model."
+            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works"
+            " for your new model."
         )
 
     # 4. Add model to auto classes
@@ -1532,7 +1536,8 @@ def get_user_input():
     )
 
     all_frameworks = get_user_field(
-        f"Should we add a version of your new model in all the frameworks implemented by {old_model_type} ({old_frameworks})?",
+        "Should we add a version of your new model in all the frameworks implemented by"
+        f" {old_model_type} ({old_frameworks})?",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",

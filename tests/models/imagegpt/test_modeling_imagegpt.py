@@ -171,6 +171,12 @@ class ImageGPTModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 513
+        config.max_position_embeddings = 1024
+        return config
+
     def prepare_config_and_inputs_for_decoder(self):
         (
             config,

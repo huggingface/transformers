@@ -246,7 +246,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_scores),
                 [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
-                message=f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}",
+                message=(
+                    f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+                    f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}"
+                ),
             )
 
         # compute global attn indices required through out forward fn
@@ -299,7 +302,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_probs = tf.reshape(layer_head_mask, (1, 1, -1, 1)) * attn_probs
@@ -392,7 +398,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(query),
                 shape_list(key),
-                message=f"Shape of query and key should be equal, but got query: {shape_list(query)} and key: {shape_list(key)}",
+                message=(
+                    f"Shape of query and key should be equal, but got query: {shape_list(query)} and key:"
+                    f" {shape_list(key)}"
+                ),
             )
 
         chunks_count = seq_len // window_overlap - 1
@@ -677,7 +686,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(chunked_hidden_states),
                 [batch_size, num_output_chunks, frame_size],
-                message=f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}.",
+                message=(
+                    "Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension"
+                    f" {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+                ),
             )
 
         chunked_hidden_states = tf.reshape(
@@ -855,7 +867,11 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_scores),
                 [batch_size * self.num_heads, max_num_global_attn_indices, seq_len],
-                message=f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {shape_list(global_attn_scores)}.",
+                message=(
+                    "global_attn_scores have the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+                    f" {shape_list(global_attn_scores)}."
+                ),
             )
 
         global_attn_scores = tf.reshape(
@@ -894,7 +910,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
             global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
@@ -913,7 +932,11 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_output),
                 [batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim],
-                message=f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {shape_list(global_attn_output)}.",
+                message=(
+                    "global_attn_output tensor has the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+                    f" {shape_list(global_attn_output)}."
+                ),
             )
 
         global_attn_output = tf.reshape(
@@ -1069,7 +1092,10 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                message=(
+                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                    f" {shape_list(attn_weights)}"
+                ),
             )
 
         if attention_mask is not None:
@@ -1077,7 +1103,10 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
                     [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    message=(
+                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                        f" {shape_list(attention_mask)}"
+                    ),
                 )
 
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + tf.cast(
@@ -1092,7 +1121,10 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
@@ -1108,7 +1140,10 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                message=(
+                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                    f" {shape_list(attn_output)}"
+                ),
             )
 
         attn_output = tf.transpose(
@@ -1753,7 +1788,10 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
                 len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(head_mask)[0]}.",
+                message=(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {shape_list(head_mask)[0]}."
+                ),
             )
 
         # encoder layers
@@ -2013,7 +2051,10 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
                 len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(head_mask)[0]}.",
+                message=(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {shape_list(head_mask)[0]}."
+                ),
             )
 
         for idx, decoder_layer in enumerate(self.layers):

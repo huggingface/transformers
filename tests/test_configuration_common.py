@@ -300,8 +300,9 @@ class ConfigTestUtils(unittest.TestCase):
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
             raise ValueError(
-                "The following keys are set with the default values in `test_configuration_common.config_common_kwargs` "
-                f"pick another value for them: {', '.join(keys_with_defaults)}."
+                "The following keys are set with the default values in"
+                " `test_configuration_common.config_common_kwargs` pick another value for them:"
+                f" {', '.join(keys_with_defaults)}."
             )
 
     def test_cached_files_are_used_when_internet_is_down(self):

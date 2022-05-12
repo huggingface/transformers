@@ -93,7 +93,8 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         self.head_dim = self.embed_dim // self.num_attention_heads
         if self.head_dim * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
+                f" `num_attention_heads`: {self.num_attention_heads})."
             )
         self.scale_attn = self.head_dim**0.5
         self.rotary_dim = config.rotary_dim
@@ -929,7 +930,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
