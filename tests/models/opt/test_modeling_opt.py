@@ -114,7 +114,7 @@ class OPTModelTester:
     def get_config(self):
         return OPTConfig(
             vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
+            hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             ffn_dim=self.intermediate_size,
