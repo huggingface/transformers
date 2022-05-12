@@ -359,7 +359,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--checkpoint_url",
-        default="https://unilm.blob.core.windows.net/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        default="https://conversationhub.blob.core.windows.net/beit-share-public/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
     )

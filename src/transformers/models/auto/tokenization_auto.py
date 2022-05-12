@@ -141,6 +141,7 @@ else:
                 "bigscience176b",
                 ("BigScience176BTokenizer", "BigScience176BTokenizerFast" if is_tokenizers_available() else None),
             ),
+            ("opt", ("GPT2Tokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
