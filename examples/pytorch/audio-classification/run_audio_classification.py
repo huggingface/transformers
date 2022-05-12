@@ -86,8 +86,9 @@ class DataTrainingArguments:
     eval_split_name: str = field(
         default="validation",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
-            "'validation'"
+            "help": (
+                "The name of the training data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     audio_column_name: str = field(
@@ -100,15 +101,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_length_seconds: float = field(
@@ -149,8 +154,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     freeze_feature_extractor: Optional[bool] = field(

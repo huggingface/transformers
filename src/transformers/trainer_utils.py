@@ -245,7 +245,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 def default_hp_space_ray(trial) -> Dict[str, float]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip " "install ray[tune]`"
+    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {

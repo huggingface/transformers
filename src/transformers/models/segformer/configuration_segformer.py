@@ -23,7 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/segformer-b0-finetuned-ade-512-512": "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json",
+    "nvidia/segformer-b0-finetuned-ade-512-512": (
+        "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json"
+    ),
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 }
 
@@ -122,8 +124,8 @@ class SegformerConfig(PretrainedConfig):
 
         if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
             warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be removed, "
-                "as the behaviour will default to that of reshape_last_stage = True.",
+                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
+                " removed, as the behaviour will default to that of reshape_last_stage = True.",
                 FutureWarning,
             )
 

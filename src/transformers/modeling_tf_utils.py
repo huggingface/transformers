@@ -424,14 +424,16 @@ def input_processing(func, config, input_ids, **kwargs):
 
     if "decoder_cached_states" in kwargs["kwargs_call"]:
         warnings.warn(
-            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+            " `past_key_values` instead.",
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
     if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
-            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values`"
+            " instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
@@ -443,7 +445,8 @@ def input_processing(func, config, input_ids, **kwargs):
     else:
         if len(kwargs["kwargs_call"]) > 0:
             raise ValueError(
-                f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+                "The following keyword arguments are not supported by this model:"
+                f" {list(kwargs['kwargs_call'].keys())}."
             )
         kwargs.pop("kwargs_call")
 
@@ -469,12 +472,14 @@ def input_processing(func, config, input_ids, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
+                    f" {parameter_names[i]}."
                 )
     elif isinstance(input_ids, Mapping):
         if "inputs" in input_ids:
             warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
@@ -482,7 +487,8 @@ def input_processing(func, config, input_ids, **kwargs):
 
         if "decoder_cached_states" in input_ids:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+                " `past_key_values` instead.",
                 FutureWarning,
             )
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
@@ -502,7 +508,8 @@ def input_processing(func, config, input_ids, **kwargs):
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for"
+                f" {parameter_names[0]}."
             )
 
     # Populates any unspecified argument with their default value, according to the signature.
@@ -1758,11 +1765,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 )
             except ValueError:
                 raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
-                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
-                    f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
+                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
+                    f" directory containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\nCheckout your internet"
+                    " connection or see how to run the library in offline mode at"
+                    " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError:
                 raise EnvironmentError(
@@ -1841,27 +1848,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.warning(
-                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -1871,9 +1880,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         if output_loading_info:

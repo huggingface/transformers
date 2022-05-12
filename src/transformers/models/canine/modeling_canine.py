@@ -546,12 +546,11 @@ class CanineAttention(nn.Module):
         self.local = local
         if attend_from_chunk_width < attend_from_chunk_stride:
             raise ValueError(
-                "`attend_from_chunk_width` < `attend_from_chunk_stride` "
-                "would cause sequence positions to get skipped."
+                "`attend_from_chunk_width` < `attend_from_chunk_stride` would cause sequence positions to get skipped."
             )
         if attend_to_chunk_width < attend_to_chunk_stride:
             raise ValueError(
-                "`attend_to_chunk_width` < `attend_to_chunk_stride`" "would cause sequence positions to get skipped."
+                "`attend_to_chunk_width` < `attend_to_chunk_stride`would cause sequence positions to get skipped."
             )
         self.always_attend_to_first_position = always_attend_to_first_position
         self.first_position_attends_to_all = first_position_attends_to_all
