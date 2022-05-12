@@ -104,7 +104,9 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 >>> import torch
 >>> from transformers import pipeline
 
->>> reconocedor_de_voz = pipeline("automatic-speech-recognition", model="jonatasgrosman/wav2vec2-large-xlsr-53-spanish", device=0)
+>>> reconocedor_de_voz = pipeline(
+...     "automatic-speech-recognition", model="jonatasgrosman/wav2vec2-large-xlsr-53-spanish", device=0
+... )
 ```
 
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
