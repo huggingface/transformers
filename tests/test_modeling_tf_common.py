@@ -1540,6 +1540,8 @@ class TFModelTesterMixin:
 
             if "labels" in inspect.signature(model_class.call).parameters.keys():
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                if "labels" not in tf_inputs_dict:
+                    return  # This model isn't giving us labels after all, don't try training with it
                 tf_inputs_dict = {key: val for key, val in tf_inputs_dict.items() if "head_mask" not in key}
                 tf_inputs_dict["extra_unwanted_column"] = list(tf_inputs_dict.values())[0]  # Use a random other tensor
                 input_dataset = Dataset.from_dict(tf_inputs_dict)
@@ -1551,6 +1553,9 @@ class TFModelTesterMixin:
                 feature_columns = 1 if isinstance(test_batch, tf.Tensor) else len(test_batch)
                 label_columns = 1 if isinstance(test_batch_labels, tf.Tensor) else len(test_batch_labels)
                 # Assert we discarded the unwanted extra column but kept everything else
+                if feature_columns + label_columns != len(input_dataset.features) - 1:
+                    breakpoint()
+                    print()
                 self.assertEqual(feature_columns + label_columns, len(input_dataset.features) - 1)
                 if isinstance(test_batch, dict):
                     self.assertNotIn("extra_unwanted_column", test_batch)
