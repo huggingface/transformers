@@ -1,13 +1,13 @@
 from typing import List, Union
 
-from ..file_utils import (
+from ..utils import (
     add_end_docstrings,
     is_tf_available,
     is_torch_available,
     is_vision_available,
+    logging,
     requires_backends,
 )
-from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
 
@@ -21,6 +21,8 @@ if is_torch_available():
 
 if is_tf_available():
     import tensorflow as tf
+
+    from ..tf_utils import stable_softmax
 
 logger = logging.get_logger(__name__)
 
@@ -119,7 +121,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             scores = probs.tolist()
         else:
             logits = tf.concat([output["logits_per_image"] for output in model_outputs], axis=0)
-            probs = tf.nn.softmax(logits, axis=0)
+            probs = stable_softmax(logits, axis=0)
             scores = probs.numpy().tolist()
 
         result = [

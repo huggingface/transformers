@@ -18,7 +18,7 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,14 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
@@ -42,7 +34,15 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_led import LEDConfig
 
 
@@ -67,7 +67,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -763,9 +764,10 @@ class LEDDecoderAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
@@ -833,27 +835,25 @@ class LEDDecoderAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -871,11 +871,10 @@ class LEDDecoderAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+            )
 
         attn_output = (
             attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1008,7 +1007,7 @@ class LEDDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        # Self Attention
+        # Self-Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
@@ -1438,13 +1437,11 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
 
 LED_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
+    This model inherits from [`PreTrainedModel`]. See the superclass documentation for the generic methods the library
+    implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads etc.)
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for general usage and behavior.
 
     Parameters:
         config ([`LEDConfig`]):
@@ -1567,11 +1564,11 @@ LED_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -1590,13 +1587,13 @@ LED_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 class LEDEncoder(LEDPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    Transformer encoder consisting of *config.encoder_layers* self-attention layers. Each layer is a
     [`LEDEncoderLayer`].
 
     Args:
@@ -1615,14 +1612,17 @@ class LEDEncoder(LEDPreTrainedModel):
         self.max_source_positions = config.max_encoder_position_embeddings
 
         if isinstance(config.attention_window, int):
-            assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
-            assert config.attention_window > 0, "`config.attention_window` has to be positive"
+            if config.attention_window % 2 != 0:
+                raise ValueError("`config.attention_window` has to be an even value")
+            if config.attention_window <= 0:
+                raise ValueError("`config.attention_window` has to be positive")
             config.attention_window = [config.attention_window] * config.num_hidden_layers  # one value per layer
         else:
-            assert len(config.attention_window) == config.num_hidden_layers, (
-                "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
-                f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
-            )
+            if len(config.attention_window) != config.num_hidden_layers:
+                raise ValueError(
+                    "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
+                    f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
+                )
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
@@ -1641,7 +1641,7 @@ class LEDEncoder(LEDPreTrainedModel):
         self.post_init()
 
     def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
-        # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+        # longformer self-attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
         # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
         # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
         if attention_mask is not None:
@@ -1667,7 +1667,8 @@ class LEDEncoder(LEDPreTrainedModel):
             else max(self.config.attention_window)
         )
 
-        assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(f"`attention_window` should be an even value. Given {attention_window}")
         input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
         batch_size, seq_len = input_shape[:2]
 
@@ -1748,7 +1749,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1810,9 +1811,10 @@ class LEDEncoder(LEDPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -2003,7 +2005,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2065,9 +2067,10 @@ class LEDDecoder(LEDPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -2187,23 +2190,23 @@ class LEDModel(LEDPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        global_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2323,24 +2326,24 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     @add_end_docstrings(LED_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        global_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2487,23 +2490,23 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        global_attention_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqSequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -2614,24 +2617,24 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
-        start_positions=None,
-        end_positions=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        global_attention_mask: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqQuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

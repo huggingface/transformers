@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT-J model."""
 
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -22,7 +22,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -30,16 +29,25 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
+_CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
 _CONFIG_FOR_DOC = "GPTJConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
+
+_CHECKPOINT_FOR_QA = "ydshieh/tiny-random-gptj-for-question-answering"
+_QA_EXPECTED_OUTPUT = "' was Jim Henson?Jim Henson was a n'"
+_QA_EXPECTED_LOSS = 3.13
+
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/tiny-random-gptj-for-sequence-classification"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.76
+
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
@@ -52,7 +60,9 @@ def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     if seq_len is None:
         seq_len = x.shape[seq_dim]
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(x.device).float()
+    sinusoid_inp = (
+        torch.einsum("i , j -> i j", torch.arange(seq_len, dtype=torch.float), inv_freq).to(x.device).float()
+    )
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 
@@ -63,8 +73,19 @@ def rotate_every_two(x):
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
+def duplicate_interleave(m):
+    """
+    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
+    """
+    dim0 = m.shape[0]
+    m = m.view(-1, 1)  # flatten the matrix
+    m = m.repeat(1, 2)  # repeat all elements into the 2nd dimension
+    m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
+    return m
+
+
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: t[None, offset : x.shape[1] + offset, None, :].repeat_interleave(2, 3), sincos)
+    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
     # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
@@ -170,13 +191,16 @@ class GPTJAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        layer_past=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
+        hidden_states: Optional[torch.FloatTensor],
+        attention_mask: Optional[torch.FloatTensor] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Union[
+        Tuple[torch.Tensor, Tuple[torch.Tensor]],
+        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+    ]:
 
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -250,7 +274,7 @@ class GPTJMLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: Optional[torch.FloatTensor]) -> torch.FloatTensor:
         hidden_states = self.fc_in(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.fc_out(hidden_states)
@@ -268,13 +292,13 @@ class GPTJBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
+        hidden_states: Optional[torch.FloatTensor],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -391,7 +415,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 PARALLELIZE_DOCSTRING = r"""
@@ -512,18 +536,18 @@ class GPTJModel(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -563,7 +587,8 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -765,19 +790,19 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -881,25 +906,27 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -929,9 +956,8 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         else:
             batch_size = inputs_embeds.shape[0]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -1007,24 +1033,26 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

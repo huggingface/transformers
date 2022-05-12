@@ -23,7 +23,6 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from .file_utils import ModelOutput
 from .generation_beam_constraints import Constraint, DisjunctiveConstraint, PhrasalConstraint
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
@@ -33,6 +32,7 @@ from .generation_logits_process import (
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
+    LogitNormalization,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -52,7 +52,7 @@ from .generation_stopping_criteria import (
     validate_stopping_criteria,
 )
 from .pytorch_utils import torch_int_div
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)
@@ -502,7 +502,7 @@ class GenerationMixin:
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
             return inputs.ne(pad_token_id).long()
         else:
-            return torch.ones(inputs.shape[:2], dtype=torch.long, device=self.device)
+            return torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
@@ -532,13 +532,16 @@ class GenerationMixin:
         decoder_start_token_id: int = None,
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        device: torch.device = None,
     ) -> torch.LongTensor:
 
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
         else:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-            return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
+            if device is None:
+                device = self.device
+            return torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
@@ -637,6 +640,7 @@ class GenerationMixin:
         typical_p: Optional[float] = None,
         temperature: Optional[float] = None,
         num_beams: Optional[int] = None,
+        renormalize_logits: Optional[bool] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -661,6 +665,9 @@ class GenerationMixin:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if typical_p is not None and typical_p < 1.0:
             warpers.append(TypicalLogitsWarper(mass=typical_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+        # `LogitNormalization` should always be the last logit processor, when present
+        if renormalize_logits is True:
+            warpers.append(LogitNormalization())
         return warpers
 
     def _get_logits_processor(
@@ -683,6 +690,7 @@ class GenerationMixin:
         remove_invalid_values: bool,
         exponential_decay_length_penalty: Tuple,
         logits_processor: Optional[LogitsProcessorList],
+        renormalize_logits: Optional[bool],
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -701,7 +709,6 @@ class GenerationMixin:
             else self.config.encoder_no_repeat_ngram_size
         )
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
-        min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         diversity_penalty = diversity_penalty if diversity_penalty is not None else self.config.diversity_penalty
         forced_bos_token_id = (
@@ -741,7 +748,7 @@ class GenerationMixin:
                 )
         if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None and min_length > -1:
+        if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams // num_beam_groups))
@@ -756,6 +763,9 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
             )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
+        # `LogitNormalization` should always be the last logit processor, when present
+        if renormalize_logits is True:
+            processors.append(LogitNormalization())
         return processors
 
     def _get_stopping_criteria(
@@ -860,6 +870,7 @@ class GenerationMixin:
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         constraints: Optional[List[Constraint]] = None,
         output_attentions: Optional[bool] = None,
@@ -939,9 +950,9 @@ class GenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
-                model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
-                sequences.
+                 Exponential penalty to the length. 1.0 means that the beam score is penalized by the sequence length.
+                 0.0 means no penalty. Set to values < 0.0 in order to encourage the model to generate longer
+                 sequences, to a value > 0.0 in order to encourage the model to produce shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
@@ -977,7 +988,7 @@ class GenerationMixin:
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
                 at a particular time. Note that `diversity_penalty` is only effective if `group beam search` is
                 enabled.
-            prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -988,6 +999,10 @@ class GenerationMixin:
                  Custom logits processors that complement the default logits processors built from arguments and a
                  model's config. If a logit processor is passed that is already created with the arguments or a model's
                  config an error is thrown. This feature is intended for advanced users.
+            renormalize_logits: (`bool`, *optional*, defaults to `False`):
+                Whether to renormalize the logits after applying all the logits processors or warpers (including the
+                custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
+                score logits are normalized but some logit processors or warpers break the normalization.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                  Custom stopping criteria that complement the default stopping criteria built from arguments and a
                  model's config. If a stopping criteria is passed that is already created with the arguments or a
@@ -1004,7 +1019,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             forced_bos_token_id (`int`, *optional*):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
                 for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
@@ -1027,11 +1042,11 @@ class GenerationMixin:
                 should be prefixed with *decoder_*.
 
         Return:
-            [`~file_utils.ModelOutput`] or `torch.LongTensor`: A [`~file_utils.ModelOutput`] (if
-            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
 
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
-                [`~file_utils.ModelOutput`] types are:
+                [`~utils.ModelOutput`] types are:
 
                     - [`~generation_utils.GreedySearchDecoderOnlyOutput`],
                     - [`~generation_utils.SampleDecoderOnlyOutput`],
@@ -1039,7 +1054,7 @@ class GenerationMixin:
                     - [`~generation_utils.BeamSampleDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
-                [`~file_utils.ModelOutput`] types are:
+                [`~utils.ModelOutput`] types are:
 
                     - [`~generation_utils.GreedySearchEncoderDecoderOutput`],
                     - [`~generation_utils.SampleEncoderDecoderOutput`],
@@ -1165,6 +1180,7 @@ class GenerationMixin:
                 decoder_start_token_id=decoder_start_token_id,
                 bos_token_id=bos_token_id,
                 model_kwargs=model_kwargs,
+                device=inputs_tensor.device,
             )
         else:
             # if decoder-only then inputs_tensor has to be `input_ids`
@@ -1186,7 +1202,13 @@ class GenerationMixin:
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
 
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
         if input_ids_seq_length >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
@@ -1237,6 +1259,7 @@ class GenerationMixin:
             remove_invalid_values=remove_invalid_values,
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
+            renormalize_logits=renormalize_logits,
         )
 
         # 8. prepare stopping criteria
@@ -1267,7 +1290,12 @@ class GenerationMixin:
         elif is_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k,
+                top_p=top_p,
+                typical_p=typical_p,
+                temperature=temperature,
+                num_beams=num_beams,
+                renormalize_logits=renormalize_logits,
             )
 
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1303,7 +1331,7 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=num_beams,
-                device=self.device,
+                device=inputs_tensor.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
@@ -1329,7 +1357,12 @@ class GenerationMixin:
         elif is_beam_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k,
+                top_p=top_p,
+                typical_p=typical_p,
+                temperature=temperature,
+                num_beams=num_beams,
+                renormalize_logits=renormalize_logits,
             )
 
             if stopping_criteria.max_length is None:
@@ -1338,7 +1371,7 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size * num_return_sequences,
                 num_beams=num_beams,
-                device=self.device,
+                device=inputs_tensor.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
             )
@@ -1381,7 +1414,7 @@ class GenerationMixin:
                 batch_size=batch_size,
                 num_beams=num_beams,
                 max_length=stopping_criteria.max_length,
-                device=self.device,
+                device=inputs_tensor.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
@@ -1463,7 +1496,7 @@ class GenerationMixin:
                 constraints=final_constraints,
                 batch_size=batch_size,
                 num_beams=num_beams,
-                device=self.device,
+                device=inputs_tensor.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
@@ -1532,7 +1565,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -1768,7 +1801,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2023,7 +2056,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2340,7 +2373,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -2657,7 +2690,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
 
@@ -3027,7 +3060,7 @@ class GenerationMixin:
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -3075,7 +3108,7 @@ class GenerationMixin:
         ...     )
         ... }
 
-        >>> constraint_str = "sind"
+        >>> constraint_str = "Sie"
         >>> constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # slice to remove eos token
         >>> constraints = [PhrasalConstraint(token_ids=constraint_token_ids)]
 
@@ -3174,10 +3207,6 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits[:, -1, :]
-
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = outputs.logits[:, -1, :]
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.

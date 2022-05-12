@@ -14,13 +14,13 @@
 # limitations under the License.
 
 import inspect
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
 
-from .file_utils import add_start_docstrings
-from .tf_utils import set_tensor_by_indices_to_value
+from .tf_utils import stable_softmax
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
@@ -38,7 +38,10 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         scores (`tf.Tensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
-            search or log softmax for each vocabulary token when using beam search
+            search or log softmax for each vocabulary token when using beam search.
+        cur_len (`int`):
+            The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
+            is the maximum length generate can produce, and we need to know which of its tokens are valid.
         kwargs:
             Additional logits processor specific kwargs.
 
@@ -51,7 +54,7 @@ class TFLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for processing logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
@@ -62,7 +65,7 @@ class TFLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for warping logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
@@ -77,18 +80,18 @@ class TFLogitsProcessorList(list):
     """
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, **kwargs) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int, **kwargs) -> tf.Tensor:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 2:
+            if len(function_args) > 3:
                 if not all(arg in kwargs for arg in list(function_args.keys())[2:]):
                     raise ValueError(
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
                         f"{processor.__class__} are passed to the logits processor."
                     )
-                scores = processor(input_ids, scores, **kwargs)
+                scores = processor(input_ids, scores, cur_len, **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                scores = processor(input_ids, scores, cur_len)
         return scores
 
 
@@ -107,7 +110,7 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         scores = scores / self.temperature
         return scores
 
@@ -133,7 +136,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
@@ -163,11 +166,11 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         topk_scores, topk_indices = tf.math.top_k(scores, scores.shape[-1])
 
         mask_scores = tf.fill(scores.shape, self.filter_value)
-        cumulative_probs = tf.math.cumsum(tf.nn.softmax(topk_scores, axis=-1), axis=-1)
+        cumulative_probs = tf.math.cumsum(stable_softmax(topk_scores, axis=-1), axis=-1)
         score_mask = cumulative_probs < self.top_p
 
         # Also include the token that is higher than top_p (the first false = shift and insert a True on the left)
@@ -216,17 +219,18 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        # create boolean flag to decide if min length penalty should be applied
-        cur_len = input_ids.shape[-1]
-        apply_penalty = 1 - tf.clip_by_value(cur_len - self.min_length, 0, 1)
+    def _apply_eos_token_mask(self, scores: tf.Tensor) -> tf.Tensor:
+        eos_token_id_mask = tf.range(scores.shape[-1]) == self.eos_token_id
+        scores = tf.where(eos_token_id_mask, float("-inf"), scores)
+        return scores
 
-        # TODO(Matt) - this if statement has to be rewritten for XLA. Leaving it now though since
-        # generate is not XLA - compileable anyways
-        if apply_penalty:
-            eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
-            scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
-
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        # applies eos token masking if the first argument is true
+        scores = tf.cond(
+            tf.less(cur_len, self.min_length),
+            lambda: self._apply_eos_token_mask(scores),
+            lambda: tf.identity(scores),
+        )
         return scores
 
 
@@ -246,22 +250,32 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         self.penalty = penalty
 
-    def _create_score_penalties(self, input_ids, logits):
-        # create logit penalties for already seen input_ids
-        token_penalties = np.ones(logits.shape)
-        prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
-        for i, prev_input_id in enumerate(prev_input_ids):
-            logit_penalized = logits[i].numpy()[prev_input_id]
-            logit_penalties = np.zeros(logit_penalized.shape)
-            # if previous logit score is < 0 then multiply repetition penalty else divide
-            logit_penalties[logit_penalized < 0] = self.penalty
-            logit_penalties[logit_penalized > 0] = 1 / self.penalty
-            np.put(token_penalties[i], prev_input_id, logit_penalties)
-        return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
+    def _create_score_penalties(self, input_ids: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        # We want to populate the penalties in the positions of `input_ids`. Since XLA can't handle shapes unknown
+        # before runtime, `tf.unique` can't be used. Therefore, we may have redundant updates, when a given row has
+        # the same token multiple times.
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        # Gathers the penalties to apply
+        logit_penalties = tf.gather(logits, input_ids, axis=1, batch_dims=1)
+        logit_penalties = tf.where(logit_penalties > 0, 1 / self.penalty, logit_penalties)
+        logit_penalties = tf.where(logit_penalties < 0, self.penalty, logit_penalties)
 
-        score_penalties = self._create_score_penalties(input_ids, scores)
+        # Scatters the penalties
+        token_penalties = tf.ones(logits.shape)
+        indexable_prev_input_ids = tf.concat(
+            (
+                tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
+                tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
+            ),
+            axis=1,
+        )
+        token_penalties = tf.tensor_scatter_nd_update(
+            token_penalties, indices=indexable_prev_input_ids, updates=tf.reshape(logit_penalties, [-1])
+        )
+        return token_penalties
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        score_penalties = self._create_score_penalties(input_ids[:, :cur_len], scores)
 
         scores = tf.math.multiply(scores, score_penalties)
 
@@ -294,60 +308,75 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        self.bad_words_ids = bad_words_ids
+        # stores the information about bad words in three tensors:
+        # 1. a rectangular tensor with the forbidden sequences (padded with `-1`), for full data comparisons
+        self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
+        # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
+        bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
+        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+            raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
+        self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
+        # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned
+        self.seq_forbidden_tokens = tf.convert_to_tensor([bad_words[-1] for bad_words in bad_words_ids])
 
-    def calc_banned_bad_words_ids(self, prev_input_ids):
-        banned_tokens = []
+    def _calc_row_banned_bad_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
+        def _tokens_match(bad_word_seq_number):
+            def _len_one():
+                # If the bad sequence only has one token, always mask it
+                return tf.cond(
+                    tf.math.equal(self.bad_word_seqs_len[bad_word_seq_number], 1),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    _len_greater_than_cur_len,
+                )
 
-        def _tokens_match(prev_tokens, tokens):
-            if len(tokens) == 0:
-                # if bad word tokens is just one token always ban it
-                return True
-            if len(tokens) > len(prev_tokens):
-                # if bad word tokens are longer than prev tokens they can't be equal
-                return False
+            def _len_greater_than_cur_len():
+                # Otherwise, if the bad sequence is longer than the current length they can't ever match
+                return tf.cond(
+                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], row_input_ids.shape[0]),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                    _match_found,
+                )
 
-            if prev_tokens[-len(tokens) :] == tokens:
-                # if tokens match
-                return True
-            else:
-                return False
+            def _match_found():
+                # Finaly, runs the actual comparison. Can only be called if the previous comparisons do not yield
+                # an answer (otherwise we get indexing exceptions)
+                compare_len = self.bad_word_seqs_len[bad_word_seq_number] - 1
+                return tf.cond(
+                    tf.math.reduce_all(
+                        tf.math.equal(
+                            row_input_ids[-compare_len:], self.bad_word_seqs_ids[bad_word_seq_number, :compare_len]
+                        )
+                    ),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                )
 
-        for prev_input_ids_slice in prev_input_ids:
-            banned_tokens_slice = []
+            match = _len_one()
+            return match
 
-            for banned_token_seq in self.bad_words_ids:
-                assert (
-                    len(banned_token_seq) > 0
-                ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
+        # Compares the current row against all bad word sequences, obtaining a mask with the matches.
+        match_mask = tf.map_fn(_tokens_match, tf.range(self.bad_word_seqs_ids.shape[0]), fn_output_signature=tf.bool)
+        row_banned_tokens = self.seq_forbidden_tokens[match_mask]
+        return row_banned_tokens
 
-                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
-                    # if tokens do not match continue
-                    continue
-
-                banned_tokens_slice.append(banned_token_seq[-1])
-
-            banned_tokens.append(banned_tokens_slice)
-
-        return banned_tokens
-
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-
-        vocab_size = scores.shape[-1]
-
-        # calculate a list of banned tokens according to bad words
-        banned_tokens = self.calc_banned_bad_words_ids(input_ids)
-
-        banned_tokens_indices_mask = []
-        for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
+        # `input_ids`, they may have a different length for each row, and they may even be empty for some rows.
+        # To remain simple and XLA-compatible, we work on a per-row fashion.
+        # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
+        # a frequent choke point. (make `cur_len` a tensor?)
+        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
+            row_input_ids, row_score = row_inputs
+            banned_tokens = self._calc_row_banned_bad_tokens(row_input_ids[:cur_len])
+            banned_tokens_mask = tf.scatter_nd(
+                indices=tf.expand_dims(banned_tokens, axis=-1),
+                updates=tf.ones_like(banned_tokens, dtype=tf.bool),
+                shape=row_score.shape,
             )
+            row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
+            return row_score
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
-
+        scores = tf.map_fn(_get_row_updated_score, (input_ids, scores), fn_output_signature=tf.float32)
         return scores
 
 
@@ -366,12 +395,13 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def calc_banned_ngram_tokens(self, prev_input_ids, num_hypos, cur_len):
+    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
         # Copied from fairseq for no_repeat_ngram in beam_search
         if cur_len + 1 < self.ngram_size:
             # return no banned tokens if we haven't generated ngram_size tokens yet
             return [[] for _ in range(num_hypos)]
         generated_ngrams = [{} for _ in range(num_hypos)]
+        prev_input_ids = input_ids[:, :cur_len]
         for idx in range(num_hypos):
             gen_tokens = prev_input_ids[idx].numpy().tolist()
             generated_ngram = generated_ngrams[idx]
@@ -389,10 +419,14 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+
+        # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
+        # https://github.com/huggingface/transformers/pull/16974
+        if not tf.executing_eagerly():
+            raise NotImplementedError("TFNoRepeatNGramLogitsProcessor is only implemented for eager execution.")
 
         batch_size, vocab_size = scores.shape
-        cur_len = input_ids.shape[-1]
         banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
 
         # create banned_tokens boolean mask
@@ -402,8 +436,69 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
                 [True if token in banned_tokens_slice else False for token in range(vocab_size)]
             )
 
-        scores = set_tensor_by_indices_to_value(
-            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-        )
+        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 
+        return scores
+
+
+class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        if bos_token_id < 0:
+            raise ValueError(f"The forced bos token id  must be a non-negative integer, got {bos_token_id}")
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the bos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.bos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.bos_token_id)), scores), axis=-1)
+            if self.bos_token_id < (num_tokens - 1):
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.bos_token_id))),
+                    axis=-1,
+                )
+        return scores
+
+
+class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
+
+    Args:
+        max_length (`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        if eos_token_id < 0:
+            raise ValueError(f"The forced eos token id must be a non-negative integer, got {eos_token_id}")
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        if cur_len == self.max_length - 1:
+            batch_size, num_tokens = scores.shape
+            # sets the score to 0 in the eos_token_id column
+            scores = tf.zeros((batch_size, 1))
+            # sets the score to -inf everywhere else
+            if self.eos_token_id > 0:
+                scores = tf.concat((tf.broadcast_to(-float("inf"), (batch_size, self.eos_token_id)), scores), axis=-1)
+            if self.eos_token_id < (num_tokens - 1):
+                scores = tf.concat(
+                    (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))),
+                    axis=-1,
+                )
         return scores

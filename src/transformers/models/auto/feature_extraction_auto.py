@@ -23,8 +23,7 @@ from typing import Dict, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo
-from ...utils import logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -48,13 +47,22 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
+        ("flava", "FlavaFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
+        ("van", "ConvNextFeatureExtractor"),
+        ("resnet", "ConvNextFeatureExtractor"),
+        ("regnet", "ConvNextFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
+        ("data2vec-vision", "BeitFeatureExtractor"),
+        ("dpt", "DPTFeatureExtractor"),
+        ("glpn", "GLPNFeatureExtractor"),
+        ("yolos", "YolosFeatureExtractor"),
     ]
 )
 
@@ -115,7 +123,7 @@ def get_feature_extractor_config(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `transformers-cli login` (stored in `~/.huggingface`).
-        revision(`str`, *optional*, defaults to `"main"`):
+        revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
@@ -220,7 +228,7 @@ class AutoFeatureExtractor:
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -305,7 +313,7 @@ class AutoFeatureExtractor:
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            "`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
         )
 
     @staticmethod

@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
 
-from ..utils import logging
+from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
 
@@ -501,7 +501,7 @@ def filter_framework_files(
         `List[Union[str, os.PathLike]]`: The list of filtered files.
     """
     if frameworks is None:
-        return files
+        frameworks = get_default_frameworks()
 
     framework_to_file = {}
     others = []
@@ -517,7 +517,7 @@ def filter_framework_files(
         else:
             framework_to_file["pt"] = f
 
-    return [framework_to_file[f] for f in frameworks] + others
+    return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
 
 
 def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
@@ -541,7 +541,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
 
-    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.mdx"
 
     # Basic pattern for test files
     test_files = [
@@ -554,7 +554,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     ]
     test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
-    test_files = [REPO_PATH / "tests" / module_name / f for f in test_files]
+    test_files = [REPO_PATH / "tests" / "models" / module_name / f for f in test_files]
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
@@ -598,6 +598,20 @@ def find_base_model_checkpoint(
     return ""
 
 
+def get_default_frameworks():
+    """
+    Returns the list of frameworks (PyTorch, TensorFlow, Flax) that are installed in the environment.
+    """
+    frameworks = []
+    if is_torch_available():
+        frameworks.append("pt")
+    if is_tf_available():
+        frameworks.append("tf")
+    if is_flax_available():
+        frameworks.append("flax")
+    return frameworks
+
+
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
 
 
@@ -616,17 +630,19 @@ def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = No
         that framework as values.
     """
     if frameworks is None:
-        frameworks = ["pt", "tf", "flax"]
+        frameworks = get_default_frameworks()
 
     modules = {
-        "pt": auto_module.modeling_auto,
-        "tf": auto_module.modeling_tf_auto,
-        "flax": auto_module.modeling_flax_auto,
+        "pt": auto_module.modeling_auto if is_torch_available() else None,
+        "tf": auto_module.modeling_tf_auto if is_tf_available() else None,
+        "flax": auto_module.modeling_flax_auto if is_flax_available() else None,
     }
 
     model_classes = {}
     for framework in frameworks:
         new_model_classes = []
+        if modules[framework] is None:
+            raise ValueError(f"You selected {framework} in the frameworks, but it is not installed.")
         model_mappings = [attr for attr in dir(modules[framework]) if _re_model_mapping.search(attr) is not None]
         for model_mapping_name in model_mappings:
             model_mapping = getattr(modules[framework], model_mapping_name)
@@ -683,9 +699,9 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
             available_frameworks.append("pt")
 
     if frameworks is None:
-        frameworks = available_frameworks.copy()
-    else:
-        frameworks = [f for f in frameworks if f in available_frameworks]
+        frameworks = get_default_frameworks()
+
+    frameworks = [f for f in frameworks if f in available_frameworks]
 
     model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
 
@@ -738,7 +754,7 @@ def clean_frameworks_in_init(
             Whether or not to keep the preprocessing (tokenizer, feature extractor, processor) imports in the init.
     """
     if frameworks is None:
-        frameworks = ["pt", "tf", "flax"]
+        frameworks = get_default_frameworks()
 
     names = {"pt": "torch"}
     to_remove = [names.get(f, f) for f in ["pt", "tf", "flax"] if f not in frameworks]
@@ -750,7 +766,9 @@ def clean_frameworks_in_init(
         return
 
     remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(rf"^\s*if is_({remove_pattern})_available\(\):\s*$")
+    re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
+    re_try = re.compile(r"\s*try:")
+    re_else = re.compile(r"\s*else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
@@ -760,20 +778,25 @@ def clean_frameworks_in_init(
     new_lines = []
     idx = 0
     while idx < len(lines):
-        # Conditional imports
-        if re_conditional_imports.search(lines[idx]) is not None:
+        # Conditional imports in try-except-else blocks
+        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
+            # Remove the preceding `try:`
+            new_lines.pop()
             idx += 1
-            while is_empty_line(lines[idx]):
+            # Iterate until `else:`
+            while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
                 idx += 1
+            idx += 1
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
-        # Remove the import from file_utils
+        # Remove the import from utils
         elif re_is_xxx_available.search(lines[idx]) is not None:
             line = lines[idx]
             for framework in to_remove:
                 line = line.replace(f", is_{framework}_available", "")
                 line = line.replace(f"is_{framework}_available, ", "")
+                line = line.replace(f"is_{framework}_available,", "")
                 line = line.replace(f"is_{framework}_available", "")
 
             if len(line.strip()) > 0:
@@ -820,11 +843,11 @@ def add_model_to_main_init(
     while idx < len(lines):
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        elif lines[idx].lstrip().startswith("if is_torch_available"):
+        elif lines[idx].lstrip().startswith("if not is_torch_available"):
             framework = "pt"
-        elif lines[idx].lstrip().startswith("if is_tf_available"):
+        elif lines[idx].lstrip().startswith("if not is_tf_available"):
             framework = "tf"
-        elif lines[idx].lstrip().startswith("if is_flax_available"):
+        elif lines[idx].lstrip().startswith("if not is_flax_available"):
             framework = "flax"
 
         # Skip if we are in a framework not wanted.
@@ -1040,7 +1063,7 @@ def duplicate_doc_file(
         content = f.read()
 
     if frameworks is None:
-        frameworks = ["pt", "tf", "flax"]
+        frameworks = get_default_frameworks()
     if dest_file is None:
         dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.mdx"
 
@@ -1211,7 +1234,7 @@ def create_new_model_like(
 
     disabled_fx_test = False
 
-    tests_folder = REPO_PATH / "tests" / new_model_patterns.model_lower_cased
+    tests_folder = REPO_PATH / "tests" / "models" / new_model_patterns.model_lower_cased
     os.makedirs(tests_folder, exist_ok=True)
     with open(tests_folder / "__init__.py", "w"):
         pass
@@ -1240,7 +1263,7 @@ def create_new_model_like(
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
     # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
 
     # 6. Warn the user for duplicate patterns
@@ -1302,7 +1325,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.old_model_type = config["old_model_type"]
             self.model_patterns = ModelPatterns(**config["new_model_patterns"])
             self.add_copied_from = config.get("add_copied_from", True)
-            self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
+            self.frameworks = config.get("frameworks", get_default_frameworks())
             self.old_checkpoint = config.get("old_checkpoint", None)
         else:
             (

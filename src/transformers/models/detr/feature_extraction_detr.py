@@ -23,9 +23,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 if is_torch_available():
@@ -456,7 +455,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
 
@@ -639,7 +638,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
 
@@ -682,7 +681,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.

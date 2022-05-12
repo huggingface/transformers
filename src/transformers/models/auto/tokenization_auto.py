@@ -22,11 +22,10 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -106,6 +105,7 @@ else:
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
+            ("tapex", ("TapexTokenizer", None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -136,6 +136,7 @@ else:
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
@@ -150,7 +151,13 @@ else:
             ("fsmt", ("FSMTTokenizer", None)),
             ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
-            ("deberta-v2", ("DebertaV2Tokenizer" if is_sentencepiece_available() else None, None)),
+            (
+                "deberta-v2",
+                (
+                    "DebertaV2Tokenizer" if is_sentencepiece_available() else None,
+                    "DebertaV2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("rag", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
@@ -234,6 +241,24 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "nystromformer",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "yoso",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ]
     )
 
@@ -299,7 +324,7 @@ def get_tokenizer_config(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `transformers-cli login` (stored in `~/.huggingface`).
-        revision(`str`, *optional*, defaults to `"main"`):
+        revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
@@ -403,7 +428,7 @@ class AutoTokenizer:
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.

@@ -24,6 +24,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
@@ -538,6 +539,43 @@ class TokenizerTesterMixin:
                     ]
                 for attr in attributes_list:
                     self.assertTrue(hasattr(tokenizer, attr))
+
+    def test_tokenizers_common_ids_setters(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                ]
+
+                vocab = tokenizer.get_vocab()
+                token_id_to_test_setters = next(iter(vocab.values()))
+                token_to_test_setters = tokenizer.convert_ids_to_tokens(
+                    token_id_to_test_setters, skip_special_tokens=False
+                )
+
+                for attr in attributes_list:
+                    setattr(tokenizer, attr + "_id", None)
+                    self.assertEqual(getattr(tokenizer, attr), None)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), None)
+
+                    setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
+
+                setattr(tokenizer, "additional_special_tokens_ids", [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+
+                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
 
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
@@ -3712,6 +3750,15 @@ class TokenizerTesterMixin:
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
                     self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
+    def test_convert_tokens_to_string_format(self):
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokens = ["this", "is", "a", "test"]
+                string = tokenizer.convert_tokens_to_string(tokens)
+
+                self.assertIsInstance(string, str)
+
     def test_save_slow_from_fast_and_reload_fast(self):
         if not self.test_slow_tokenizer or not self.test_rust_tokenizer:
             # we need both slow and fast versions
@@ -3740,6 +3787,24 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
+
+
+class TokenizerUtilTester(unittest.TestCase):
+    def test_cached_files_are_used_when_internet_is_down(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = []
+        response_mock.raise_for_status.side_effect = HTTPError
+
+        # Download this model to make sure it's in the cache.
+        _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Under the mock environment we get a 500 error when trying to reach the model.
+        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+            _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
 
 @is_staging_test

@@ -16,22 +16,17 @@
 """ TF 2.0 OpenAI GPT model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFConv1D,
+    TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     TFSequenceSummary,
@@ -40,8 +35,15 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_openai import OpenAIGPTConfig
 
 
@@ -109,7 +111,7 @@ class TFAttention(tf.keras.layers.Layer):
             attention_mask = tf.cast(attention_mask, dtype=w.dtype)
             w = w + attention_mask
 
-        w = tf.nn.softmax(w, axis=-1)
+        w = stable_softmax(w, axis=-1)
         w = self.attn_dropout(w, training=training)
 
         # Mask heads if we want to
@@ -247,7 +249,6 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -483,8 +484,8 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -510,18 +511,17 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[Tuple, TFBaseModelOutput]:
 
         outputs = self.transformer(
             input_ids=input_ids,
@@ -573,19 +573,18 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-        **kwargs,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[Tuple, TFCausalLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -656,19 +655,18 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        mc_token_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        mc_token_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[Tuple, TFOpenAIGPTDoubleHeadsModelOutput]:
         r"""
         mc_token_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
@@ -695,9 +693,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
         >>> inputs["mc_token_ids"] = tf.constant(
         ...     [inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1]
-        >>> )[
+        ... )[
         ...     None, :
-        >>> ]  # Batch size 1
+        ... ]  # Batch size 1
         >>> outputs = model(inputs)
         >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""
@@ -800,19 +798,18 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-        **kwargs,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,

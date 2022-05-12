@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 
-from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
 

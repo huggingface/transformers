@@ -26,12 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -41,14 +35,15 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
+from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
 )
-from ...utils import logging
 from .configuration_roformer import RoFormerConfig
 
 
@@ -73,12 +68,12 @@ ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
         self.weight = self._init_weight(self.weight)
 
     @staticmethod
-    def _init_weight(out: nn.Parameter):
+    def _init_weight(out: nn.Parameter) -> nn.Parameter:
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
@@ -95,7 +90,7 @@ class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
         return out
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
@@ -359,7 +354,7 @@ class RoFormerSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -429,7 +424,7 @@ class RoFormerIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -443,7 +438,7 @@ class RoFormerOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -687,7 +682,7 @@ class RoFormerOnlyMLMHead(nn.Module):
         super().__init__()
         self.predictions = RoFormerLMPredictionHead(config)
 
-    def forward(self, sequence_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
@@ -783,7 +778,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -905,7 +900,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

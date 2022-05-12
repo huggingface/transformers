@@ -169,12 +169,15 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
     def __call__(self, original_config: object) -> MaskFormerFeatureExtractor:
         model = original_config.MODEL
         model_input = original_config.INPUT
+        dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
 
         return MaskFormerFeatureExtractor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
+            num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
+            ignore_index=dataset_catalog.ignore_label,
             size_divisibility=32,  # 32 is required by swin
         )
 
@@ -552,7 +555,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def test(original_model, our_model: MaskFormerForInstanceSegmentation):
+def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_extractor: MaskFormerFeatureExtractor):
     with torch.no_grad():
 
         original_model = original_model.eval()
@@ -599,8 +602,6 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
         original_segmentation = original_model_out[0]["sem_seg"]
 
         our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
-
-        feature_extractor = MaskFormerFeatureExtractor()
 
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
@@ -707,7 +708,7 @@ if __name__ == "__main__":
             mask_former_for_instance_segmentation
         )
 
-        test(original_model, mask_former_for_instance_segmentation)
+        test(original_model, mask_former_for_instance_segmentation, feature_extractor)
 
         model_name = get_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")

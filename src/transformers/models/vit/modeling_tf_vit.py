@@ -23,7 +23,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFModelInputType,
@@ -33,15 +32,24 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_vit import ViTConfig
 
 
 logger = logging.get_logger(__name__)
 
+# General docstring
 _CONFIG_FOR_DOC = "ViTConfig"
-_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224"
+_FEAT_EXTRACTOR_FOR_DOC = "ViTFeatureExtractor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 # Inspired by
@@ -252,7 +260,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -487,7 +495,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         if pixel_values is None:
@@ -627,8 +634,8 @@ VIT_INPUTS_DOCSTRING = r"""
         interpolate_pos_encoding (`bool`, *optional*):
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -647,7 +654,14 @@ class TFViTModel(TFViTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -657,28 +671,7 @@ class TFViTModel(TFViTPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViTFeatureExtractor, TFViTModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
-        >>> model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
 
         outputs = self.vit(
             pixel_values=pixel_values,
@@ -747,7 +740,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -758,37 +757,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
-        >>> import tensorflow as tf
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-        >>> model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
-        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
-        ```"""
+        """
 
         outputs = self.vit(
             pixel_values=pixel_values,

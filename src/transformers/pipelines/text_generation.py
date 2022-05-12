@@ -2,7 +2,7 @@ import enum
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
-from ..file_utils import add_end_docstrings, is_tf_available
+from ..utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -226,7 +226,7 @@ class TextGenerationPipeline(Pipeline):
         records = []
         for sequence in generated_sequence:
             if return_type == ReturnType.TENSORS:
-                record = {"generated_token_ids": generated_sequence}
+                record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode text
                 text = self.tokenizer.decode(

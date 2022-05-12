@@ -2,9 +2,8 @@ from typing import List, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings
 from ..tokenization_utils import TruncationStrategy
-from ..utils import logging
+from ..utils import add_end_docstrings, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 

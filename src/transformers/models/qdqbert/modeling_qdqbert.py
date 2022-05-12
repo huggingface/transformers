@@ -19,6 +19,7 @@
 import math
 import os
 import warnings
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
@@ -27,14 +28,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_pytorch_quantization_available,
-    replace_return_docstrings,
-    requires_backends,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -46,8 +39,17 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_pytorch_quantization_available,
+    logging,
+    replace_return_docstrings,
+    requires_backends,
+)
 from .configuration_qdqbert import QDQBertConfig
 
 
@@ -172,8 +174,13 @@ class QDQBertEmbeddings(nn.Module):
             )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -641,7 +648,7 @@ class QDQBertPooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -661,7 +668,7 @@ class QDQBertPredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -820,7 +827,7 @@ QDQBERT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -951,7 +958,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

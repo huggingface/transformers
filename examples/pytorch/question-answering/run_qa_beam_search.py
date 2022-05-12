@@ -47,7 +47,7 @@ from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.18.0.dev0")
+check_min_version("4.19.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -260,7 +260,10 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -273,7 +276,13 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            field="data",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -432,7 +441,8 @@ def main():
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
             # Select samples from Dataset, This will help to decrease processing time
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         # Create Training Features
         with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
@@ -445,7 +455,8 @@ def main():
             )
         if data_args.max_train_samples is not None:
             # Select samples from dataset again since Feature Creation might increase number of features
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -519,7 +530,8 @@ def main():
         eval_examples = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
             # Selecting Eval Samples from Dataset
-            eval_examples = eval_examples.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
+            eval_examples = eval_examples.select(range(max_eval_samples))
         # Create Features from Eval Dataset
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_examples.map(
@@ -532,7 +544,8 @@ def main():
             )
         if data_args.max_eval_samples is not None:
             # Selecting Samples from Dataset again since Feature Creation might increase samples size
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     if training_args.do_predict:
         if "test" not in raw_datasets:
@@ -553,7 +566,8 @@ def main():
             )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data

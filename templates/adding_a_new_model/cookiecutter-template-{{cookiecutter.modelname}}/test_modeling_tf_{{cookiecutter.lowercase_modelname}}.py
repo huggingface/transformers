@@ -20,8 +20,8 @@ import unittest
 from transformers import is_tf_available, {{cookiecutter.camelcase_modelname}}Config
 from transformers.testing_utils import require_tf, slow
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -92,7 +92,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -258,6 +258,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self.parent.assertListEqual(
             list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
+
 
     def create_and_check_causal_lm_model_past(
         self,
@@ -597,6 +598,10 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Template classes interact badly with this test.")
+    def test_keras_fit(self):
+        pass
+
     def test_causal_lm_base_model(self):
         """Test the base model of the causal LM model
 
@@ -706,8 +711,8 @@ from transformers import (
 )
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
@@ -946,6 +951,10 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
+
+    @unittest.skip(reason="Template classes interact badly with this test.")
+    def test_keras_fit(self):
+        pass
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):

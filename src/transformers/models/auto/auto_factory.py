@@ -18,8 +18,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import copy_func
-from ...utils import logging
+from ...utils import copy_func, logging
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
@@ -120,7 +119,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -216,7 +215,7 @@ FROM_PRETRAINED_TF_DOCSTRING = """
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -312,7 +311,7 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.

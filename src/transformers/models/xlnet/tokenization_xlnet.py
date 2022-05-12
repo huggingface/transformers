@@ -22,9 +22,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...file_utils import SPIECE_UNDERLINE
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...utils import SPIECE_UNDERLINE, logging
 
 
 logger = logging.get_logger(__name__)

@@ -20,10 +20,9 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from tqdm import tqdm
 
-from ...file_utils import is_tf_available, is_torch_available
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 from .utils import DataProcessor
 
 

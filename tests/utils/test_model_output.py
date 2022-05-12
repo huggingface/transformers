@@ -17,7 +17,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
-from transformers.file_utils import ModelOutput
+from transformers.utils import ModelOutput
 
 
 @dataclass

@@ -27,13 +27,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -42,15 +35,16 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    SQuADHead,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
+from ...modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
 )
-from ...utils import logging
 from .configuration_xlm import XLMConfig
 
 
@@ -390,7 +384,7 @@ XLM_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1045,7 +1039,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0
-        >>> )  # Batch size 1
+        ... )  # Batch size 1
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 

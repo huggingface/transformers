@@ -23,12 +23,12 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -43,7 +43,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_t5 import T5Config
 
 
@@ -187,6 +187,7 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -275,6 +276,7 @@ class FlaxT5Attention(nn.Module):
             relative_position,
             bidirectional=(not self.causal),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
 
         values = self.relative_attention_bias(relative_position_bucket)
@@ -799,7 +801,7 @@ T5_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 T5_DECODE_INPUTS_DOCSTRING = r"""
@@ -840,7 +842,7 @@ T5_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -898,7 +900,7 @@ T5_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -918,12 +920,13 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
@@ -934,13 +937,23 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
             decoder_input_ids,
             decoder_attention_mask,
         )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     def __call__(
@@ -1331,7 +1344,7 @@ FLAX_T5_MODEL_DOCSTRING = """
 
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
-    >>> ).input_ids
+    ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
     >>> # forward pass

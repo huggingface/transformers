@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.18.0.dev0")
+check_min_version("4.19.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -249,7 +249,10 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -431,7 +434,8 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
                 tokenize_and_align_labels,
@@ -446,7 +450,8 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_dataset.map(
                 tokenize_and_align_labels,
@@ -461,7 +466,8 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = raw_datasets["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         with training_args.main_process_first(desc="prediction dataset map pre-processing"):
             predict_dataset = predict_dataset.map(
                 tokenize_and_align_labels,

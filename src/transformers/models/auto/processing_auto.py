@@ -22,9 +22,8 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -39,6 +38,7 @@ logger = logging.get_logger(__name__)
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("clip", "CLIPProcessor"),
+        ("flava", "FLAVAProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
@@ -47,6 +47,12 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("unispeech", "Wav2Vec2Processor"),
+        ("unispeech-sat", "Wav2Vec2Processor"),
+        ("sew", "Wav2Vec2Processor"),
+        ("sew-d", "Wav2Vec2Processor"),
+        ("vilt", "ViltProcessor"),
+        ("wavlm", "Wav2Vec2Processor"),
     ]
 )
 

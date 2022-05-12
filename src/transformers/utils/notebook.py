@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
 import re
 import time
 from typing import Optional
@@ -21,7 +20,7 @@ from typing import Optional
 import IPython.display as disp
 
 from ..trainer_callback import TrainerCallback
-from ..trainer_utils import IntervalStrategy
+from ..trainer_utils import IntervalStrategy, has_length
 
 
 def format_time(t):
@@ -294,7 +293,7 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if not isinstance(eval_dataloader.dataset, collections.abc.Sized):
+        if not has_length(eval_dataloader):
             return
         if self.prediction_bar is None:
             if self.training_tracker is not None:

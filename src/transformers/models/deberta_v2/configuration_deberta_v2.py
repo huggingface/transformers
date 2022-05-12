@@ -33,7 +33,7 @@ class DebertaV2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
     DeBERTa-v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DeBERTa
-    [microsoft/deberta-v2-xlarge](https://huggingface.co/microsoft/deberta-base) architecture.
+    [microsoft/deberta-v2-xlarge](https://huggingface.co/microsoft/deberta-v2-xlarge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -77,8 +77,8 @@ class DebertaV2Config(PretrainedConfig):
         position_biased_input (`bool`, *optional*, defaults to `False`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (`List[str]`, *optional*):
-            The type of relative position attention, it can be a combination of `["p2c", "c2p", "p2p"]`, e.g.
-            `["p2c"]`, `["p2c", "c2p"]`, `["p2c", "c2p", 'p2p"]`.
+            The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
+            `["p2c", "c2p"]`, `["p2c", "c2p"]`.
         layer_norm_eps (`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
     """

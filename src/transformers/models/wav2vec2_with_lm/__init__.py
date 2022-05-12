@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule
+from ...utils import _LazyModule
 
 
 # fmt: off

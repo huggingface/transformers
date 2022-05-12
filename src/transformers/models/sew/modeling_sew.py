@@ -27,11 +27,10 @@ from torch.nn import CrossEntropyLoss
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sew import SEWConfig
 
 
@@ -829,7 +828,7 @@ SEW_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -915,13 +914,13 @@ class SEWModel(SEWPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        mask_time_indices=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1019,13 +1018,13 @@ class SEWForCTC(SEWPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1155,13 +1154,13 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
     )
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,

@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
@@ -302,11 +301,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 ]
             )
 
-            # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-            if self.tokenizer.cls_token_id is not None:
-                cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
-                p_mask[cls_index] = 0
-
             features = []
             for span_idx in range(num_spans):
                 input_ids_span_idx = encoded_inputs["input_ids"][span_idx]
@@ -316,6 +310,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 token_type_ids_span_idx = (
                     encoded_inputs["token_type_ids"][span_idx] if "token_type_ids" in encoded_inputs else None
                 )
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id is not None:
+                    cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
+                    for cls_index in cls_indices:
+                        p_mask[span_idx][cls_index] = 0
                 submask = p_mask[span_idx]
                 if isinstance(submask, np.ndarray):
                     submask = submask.tolist()
@@ -399,8 +398,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
             # Normalize logits and spans to retrieve the answer
-            start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
-            end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+            start_ = np.exp(start_ - start_.max(axis=-1, keepdims=True))
+            start_ = start_ / start_.sum()
+
+            end_ = np.exp(end_ - end_.max(axis=-1, keepdims=True))
+            end_ = end_ / end_.sum()
 
             if handle_impossible_answer:
                 min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())

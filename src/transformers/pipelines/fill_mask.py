@@ -2,13 +2,14 @@ from typing import Dict
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 
 
 if is_tf_available():
     import tensorflow as tf
+
+    from ..tf_utils import stable_softmax
 
 
 if is_torch_available():
@@ -102,7 +103,7 @@ class FillMaskPipeline(Pipeline):
             outputs = outputs.numpy()
 
             logits = outputs[0, masked_index, :]
-            probs = tf.nn.softmax(logits, axis=-1)
+            probs = stable_softmax(logits, axis=-1)
             if target_ids is not None:
                 probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
                 probs = tf.expand_dims(probs, 0)

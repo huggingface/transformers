@@ -20,7 +20,7 @@ from typing import Callable, Iterable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from .file_utils import add_start_docstrings
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
@@ -240,6 +240,9 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        mass = float(mass)
+        if not (mass > 0 and mass < 1):
+            raise ValueError(f"`typical_p` has to be a float > 0 and < 1, but is {mass}")
 
         self.filter_value = filter_value
         self.mass = mass
@@ -675,4 +678,17 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(
                 self.regulation_factor, cur_len - self.regulation_start
             )
+        return scores
+
+
+class LogitNormalization(LogitsProcessor, LogitsWarper):
+    r"""
+    [`LogitsWarper`] and [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
+    the scores during beam search, after applying the logits processors or warpers, since the search algorithm used in
+    this library doesn't do it (it only does it before, but they may need re-normalization) but it still supposes that
+    the scores are normalized when comparing the hypotheses.
+    """
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+        scores = scores.log_softmax(dim=-1)
         return scores

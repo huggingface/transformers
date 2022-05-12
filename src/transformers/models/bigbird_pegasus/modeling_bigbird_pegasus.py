@@ -18,7 +18,7 @@
 import copy
 import math
 import random
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -26,13 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -43,7 +36,14 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
 
@@ -51,17 +51,20 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
+_TOKENIZER_FOR_DOC = "PegasusTokenizerFast"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-bigbird_pegasus"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 
 # QuestionAsnwering docstring
-_QA_EXPECTED_LOSS = 2.56
-_QA_EXPECTED_OUTPUT_SHAPE = [1, 12]
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-bigbird_pegasus"
+_QA_EXPECTED_LOSS = 3.96
+_QA_EXPECTED_OUTPUT = "''"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -80,7 +83,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -284,8 +288,11 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         to_seq_length = from_seq_length = seqlen
         from_block_size = to_block_size = self.block_size
 
-        assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
-        assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
+        if from_seq_length % from_block_size != 0:
+            raise ValueError("Query sided sequence length must be multiple of block size")
+
+        if to_seq_length % to_block_size != 0:
+            raise ValueError("Key/Value sided sequence length must be multiple of block size")
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -901,9 +908,8 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
@@ -977,11 +983,11 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         """
         # using this method when from_seq_length not in [1024, 3072, 4096]
 
-        assert (
-            from_seq_length // from_block_size == to_seq_length // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
-        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
+        if from_seq_length not in plan_from_length:
+            raise ValueError("Error from sequence length not in plan!")
 
         # Total number of blocks in the mmask
         num_blocks = from_seq_length // from_block_size
@@ -1478,7 +1484,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -1573,7 +1579,7 @@ class BigBirdPegasusClassificationHead(nn.Module):
         self.dropout = nn.Dropout(p=pooler_dropout)
         self.out_proj = nn.Linear(inner_dim, num_classes)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = torch.tanh(hidden_states)
@@ -1724,7 +1730,7 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 BIGBIRD_PEGASUS_STANDALONE_INPUTS_DOCSTRING = r"""
@@ -1751,7 +1757,7 @@ BIGBIRD_PEGASUS_STANDALONE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1834,7 +1840,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1911,9 +1917,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1994,9 +2001,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
-        assert (
-            seq_length % block_size == 0
-        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+            )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -2188,7 +2196,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2239,9 +2247,10 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != len(self.layers):
+                    raise ValueError(
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -2367,22 +2376,22 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Seq2SeqModelOutput]:
 
         # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -2503,23 +2512,23 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     @add_end_docstrings(BIGBIRD_PEGASUS_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2645,29 +2654,30 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -2771,31 +2781,31 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
+        expected_output=_QA_EXPECTED_OUTPUT,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        start_positions=None,
-        end_positions=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -2921,20 +2931,20 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2999,7 +3009,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 

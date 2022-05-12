@@ -63,7 +63,7 @@ will see a bot add a comment to a link where the documentation with your changes
 Accepted files are Markdown (.md or .mdx).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
-the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/master/docs/source/_toctree.yml) file.
+the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
 
@@ -88,7 +88,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
+For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/main_classes/trainer.mdx).
 
 
 ## Writing Documentation - Specification
@@ -107,6 +107,11 @@ Adding a new tutorial or section is done in two steps:
 Make sure to put your new file under the proper section. It's unlikely to go in the first section (*Get Started*), so
 depending on the intended targets (beginners, more advanced users or researchers) it should go in section two, three or
 four.
+
+### Translating
+
+When translating, refer to the guide at [./TRANSLATING.md](https://github.com/huggingface/transformers/blob/main/docs/TRANSLATING.md).
+
 
 ### Adding a new model
 
@@ -172,9 +177,9 @@ adds a link to its documentation with this syntax: \[\`XXXClass\`\] or \[\`funct
 function to be in the main package.
 
 If you want to create a link to some internal class or function, you need to
-provide its path. For instance: \[\`file_utils.ModelOutput\`\]. This will be converted into a link with
-`file_utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
-linking to in the description, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
+provide its path. For instance: \[\`utils.ModelOutput\`\]. This will be converted into a link with
+`utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
+linking to in the description, add a ~: \[\`~utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
 The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
 
@@ -348,6 +353,13 @@ You will first need to run the following command (from the root of the repositor
 ```bash
 python utils/prepare_for_doc_test.py src docs
 ```
+
+If you work on a specific python module, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
+
+```bash
+python utils/prepare_for_doc_test.py src/transformers/utils/doc.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
+```
+(`utils/doc.py` should always be included)
 
 Then you can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
 
