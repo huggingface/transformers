@@ -30,7 +30,7 @@ if is_torch_available():
         "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OPTForCausalLM",
         "OPTModel",
-        "OPTPretrainedModel",
+        "OPTPreTrainedModel",
     ]
 
 if is_tf_available():
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
 
     if is_torch_available():
-        from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPretrainedModel
+        from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
 
     if is_tf_available():
         from .modeling_tf_opt import TFOPTModel, TFOPTPretrainedModel

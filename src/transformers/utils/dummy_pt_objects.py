@@ -3014,7 +3014,7 @@ class OPTModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class OPTPretrainedModel(metaclass=DummyObject):
+class OPTPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
