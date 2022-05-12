@@ -84,6 +84,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -122,6 +123,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -136,7 +138,7 @@ jobs:
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -154,6 +156,7 @@ jobs:
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -173,7 +176,7 @@ jobs:
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -191,6 +194,7 @@ jobs:
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -222,6 +226,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -258,6 +263,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -549,7 +555,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -571,7 +577,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -587,7 +593,6 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
@@ -607,7 +612,7 @@ jobs:
     run_examples_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -623,7 +628,6 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
@@ -785,7 +789,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -833,7 +837,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -859,7 +863,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -881,6 +885,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_config_docstrings.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
 
@@ -915,7 +920,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 tests/*layoutlmv2* --dist=loadfile -s --make-reports=tests_layoutlmv2 --durations=100
+                    python -m pytest -n 1 tests/models/*layoutlmv2* --dist=loadfile -s --make-reports=tests_layoutlmv2 --durations=100
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -925,7 +930,7 @@ jobs:
 # TPU JOBS
     run_examples_tpu:
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -945,7 +950,7 @@ jobs:
 
     cleanup-gke-jobs:
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         steps:
             - gcp-gke/install
             - gcp-gke/update-kubeconfig-with-credentials:

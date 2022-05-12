@@ -337,8 +337,9 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 self._config.hidden_size // num_encoder_attention_heads,
             )
 
+            mask_dtype = common_inputs["attention_mask"].dtype
             common_inputs["attention_mask"] = torch.cat(
-                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
             common_inputs["past_key_values"] = [
                 (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)

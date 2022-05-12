@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -26,10 +32,20 @@ _import_structure = {
     "tokenization_openai": ["OpenAIGPTTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_openai_fast"] = ["OpenAIGPTTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_openai"] = [
         "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OpenAIGPTDoubleHeadsModel",
@@ -40,7 +56,12 @@ if is_torch_available():
         "load_tf_weights_in_openai_gpt",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_openai"] = [
         "TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFOpenAIGPTDoubleHeadsModel",
@@ -56,10 +77,20 @@ if TYPE_CHECKING:
     from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
     from .tokenization_openai import OpenAIGPTTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_openai_fast import OpenAIGPTTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
@@ -70,7 +101,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_openai_gpt,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_openai import (
             TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,

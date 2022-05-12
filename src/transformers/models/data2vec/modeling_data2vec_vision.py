@@ -1140,14 +1140,14 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Data2VecVisionFeatureExtractor, Data2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoFeatureExtractor, Data2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = Data2VecVisionFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
         >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
