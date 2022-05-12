@@ -63,7 +63,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_mctct import MCTCTFeatureExtractor
-        from .processing_mctct import MCTCTProcessor
 
     try:
         if not is_torch_available():
