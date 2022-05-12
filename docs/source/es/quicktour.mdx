@@ -80,7 +80,7 @@ Importa [`pipeline`] y especifica la tarea que deseas completar:
 ```py
 >>> from transformers import pipeline
 
->>> clasificador = pipeline('sentiment-analysis', model="pysentimiento/robertuito-sentiment-analysis")
+>>> clasificador = pipeline("sentiment-analysis", model="pysentimiento/robertuito-sentiment-analysis")
 ```
 
 El pipeline descarga y almacena en caché el [modelo preentrenado](https://huggingface.co/pysentimiento/robertuito-sentiment-analysis) y tokeniza para análisis de sentimiento. Si no hubieramos elegido un modelo el pipeline habría elegido uno por defecto. Ahora puedes usar `clasificador` en tu texto objetivo:
