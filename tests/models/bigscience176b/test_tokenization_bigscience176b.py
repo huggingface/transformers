@@ -22,7 +22,7 @@ from transformers import BigScience176BTokenizer, BigScience176BTokenizerFast
 from transformers.models.bigscience176b.tokenization_bigscience176b import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
