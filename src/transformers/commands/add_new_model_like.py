@@ -1255,8 +1255,8 @@ def create_new_model_like(
 
     if disabled_fx_test:
         print(
-            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works "
-            "for your new model."
+            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works"
+            " for your new model."
         )
 
     # 4. Add model to auto classes
@@ -1532,7 +1532,8 @@ def get_user_input():
     )
 
     all_frameworks = get_user_field(
-        f"Should we add a version of your new model in all the frameworks implemented by {old_model_type} ({old_frameworks})?",
+        "Should we add a version of your new model in all the frameworks implemented by"
+        f" {old_model_type} ({old_frameworks})?",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",

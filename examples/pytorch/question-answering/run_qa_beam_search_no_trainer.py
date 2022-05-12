@@ -116,8 +116,10 @@ def parse_args():
         "--max_seq_length",
         type=int,
         default=384,
-        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-        " sequences shorter will be padded if `--pad_to_max_lengh` is passed.",
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
+            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+        ),
     )
     parser.add_argument(
         "--pad_to_max_length",
@@ -190,9 +192,11 @@ def parse_args():
         "--null_score_diff_threshold",
         type=float,
         default=0.0,
-        help="The threshold used to select the null answer: if the best answer has a score that is less than "
-        "the score of the null answer minus this threshold, the null answer is selected for this example. "
-        "Only useful when `version_2_with_negative=True`.",
+        help=(
+            "The threshold used to select the null answer: if the best answer has a score that is less than "
+            "the score of the null answer minus this threshold, the null answer is selected for this example. "
+            "Only useful when `version_2_with_negative=True`."
+        ),
     )
     parser.add_argument(
         "--version_2_with_negative",
@@ -203,22 +207,28 @@ def parse_args():
         "--max_answer_length",
         type=int,
         default=30,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
+        help=(
+            "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        ),
     )
     parser.add_argument(
         "--max_train_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of training examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"

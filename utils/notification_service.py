@@ -180,7 +180,10 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "text": (
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
+                    f" {self.time}."
+                ),
                 "emoji": True,
             },
             "accessory": {

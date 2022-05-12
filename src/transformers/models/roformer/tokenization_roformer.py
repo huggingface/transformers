@@ -31,10 +31,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
         "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt",
-        "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt",
-        "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt",
+        "junnyu/roformer_chinese_char_small": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_chinese_char_base": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_discriminator": (
+            "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_generator": (
+            "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -144,8 +152,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])

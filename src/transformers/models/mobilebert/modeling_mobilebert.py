@@ -1188,7 +1188,8 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
         if "next_sentence_label" in kwargs:
             warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
+                " `labels` instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("next_sentence_label")

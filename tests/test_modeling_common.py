@@ -1440,7 +1440,12 @@ class ModelTesterMixin:
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
                             ),
-                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -1629,7 +1634,8 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
         else:
             raise ValueError(
-                f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
+                f" {type(tf_outputs)} instead."
             )
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
