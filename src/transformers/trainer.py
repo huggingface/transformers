@@ -1755,8 +1755,8 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
                 )
             elif is_sagemaker_mp_enabled():
-                    state_dict = torch.load(best_model_path)
-                    self.model_wrapped.load_state_dict(state_dict)
+                state_dict = torch.load(best_model_path)
+                self.model_wrapped.load_state_dict(state_dict)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
@@ -1994,6 +1994,7 @@ class Trainer:
             return
 
         import glob
+
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
             if is_sagemaker_mp_enabled()
@@ -2016,8 +2017,10 @@ class Trainer:
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 if is_sagemaker_mp_enabled():
+
                     def opt_load_hook(mod, opt):
                         opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
                     self.optimizer.load_state_dict(
