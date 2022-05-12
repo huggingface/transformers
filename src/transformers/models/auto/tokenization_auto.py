@@ -107,7 +107,6 @@ else:
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("tapex", ("TapexTokenizer", None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
-            ("opt", ("GPT2Tokenizer", None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -138,6 +137,7 @@ else:
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("opt", ("GPT2Tokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
