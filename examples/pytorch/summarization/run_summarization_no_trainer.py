@@ -111,20 +111,22 @@ def parse_args():
         "--ignore_pad_token_for_loss",
         type=bool,
         default=True,
-        help="Whether to ignore the tokens corresponding to " "padded labels in the loss computation or not.",
+        help="Whether to ignore the tokens corresponding to padded labels in the loss computation or not.",
     )
     parser.add_argument(
         "--max_source_length",
         type=int,
         default=1024,
-        help="The maximum total input sequence length after "
-        "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded.",
+        help=(
+            "The maximum total input sequence length after "
+            "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded."
+        ),
     )
     parser.add_argument(
         "--source_prefix",
         type=str,
         default=None,
-        help="A prefix to add before every source text " "(useful for T5 models).",
+        help="A prefix to add before every source text (useful for T5 models).",
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -139,18 +141,22 @@ def parse_args():
         "--max_target_length",
         type=int,
         default=128,
-        help="The maximum total sequence length for target text after "
-        "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
-        "during ``evaluate`` and ``predict``.",
+        help=(
+            "The maximum total sequence length for target text after "
+            "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
+            "during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--val_max_target_length",
         type=int,
         default=None,
-        help="The maximum total sequence length for validation "
-        "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
-        "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
-        "param of ``model.generate``, which is used during ``evaluate`` and ``predict``.",
+        help=(
+            "The maximum total sequence length for validation "
+            "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
+            "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
+            "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--max_length",
@@ -165,8 +171,10 @@ def parse_args():
         "--num_beams",
         type=int,
         default=None,
-        help="Number of beams to use for evaluation. This argument will be "
-        "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``.",
+        help=(
+            "Number of beams to use for evaluation. This argument will be "
+            "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--pad_to_max_length",

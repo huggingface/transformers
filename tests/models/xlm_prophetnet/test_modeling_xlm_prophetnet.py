@@ -102,8 +102,18 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
 
         tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased-xglue-ntg")
 
-        EN_SENTENCE = "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after January 14, 2020, according to the official portal of the organization. From that day, users of this system will not be able to receive security updates, which could make their computers vulnerable to cyber attacks."
-        RU_SENTENCE = "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7 после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми к кибератакам."
+        EN_SENTENCE = (
+            "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after"
+            " January 14, 2020, according to the official portal of the organization. From that day, users of this"
+            " system will not be able to receive security updates, which could make their computers vulnerable to"
+            " cyber attacks."
+        )
+        RU_SENTENCE = (
+            "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7"
+            " после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи"
+            " этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми"
+            " к кибератакам."
+        )
         ZH_SENTENCE = (
             "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
         )
@@ -132,8 +142,9 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True) for g in summary_ids_beam1
         ]
         EXPECTED_TITLE_EN_BEAM1_TOK = "▁Microsoft ▁to ▁end ▁free ▁support ▁for ▁Windows ▁7".split(" ")
-        EXPECTED_TITLE_RU_BEAM1_TOK = "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года".split(
-            " "
+        EXPECTED_TITLE_RU_BEAM1_TOK = (
+            "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года"
+            .split(" ")
         )
         EXPECTED_TITLE_ZH_BEAM1_TOK = "微软 公司 打算 终止 对 Windows ▁7 操作 系统的 免费 支持".split(" ")
         self.assertListEqual(

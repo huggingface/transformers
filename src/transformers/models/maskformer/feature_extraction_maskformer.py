@@ -253,8 +253,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             if not valid_segmentation_maps:
                 raise ValueError(
-                    "Segmentation maps must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
-                    "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
+                    "Segmentation maps must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single"
+                    " example),`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of"
+                    " examples)."
                 )
 
         is_batched = bool(
@@ -591,7 +592,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
         results: List[Dict[str, Tensor]] = []
-        for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
+        for mask_probs, pred_scores, pred_labels in zip(mask_probs, pred_scores, pred_labels):
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
                 mask_probs, pred_scores, pred_labels, object_mask_threshold, num_labels
             )

@@ -87,8 +87,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     freeze_feature_encoder: bool = field(
@@ -122,15 +124,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     audio_column_name: str = field(
@@ -144,7 +150,10 @@ class DataTrainingArguments:
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
-            "help": "Truncate audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+            "help": (
+                "Truncate audio files that are longer than `max_duration_in_seconds` seconds to"
+                " 'max_duration_in_seconds`"
+            )
         },
     )
     min_duration_in_seconds: float = field(
@@ -153,10 +162,12 @@ class DataTrainingArguments:
     preprocessing_only: bool = field(
         default=False,
         metadata={
-            "help": "Whether to only do data preprocessing and skip training. "
-            "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
-            "so that the cached datasets can consequently be loaded in distributed training"
+            "help": (
+                "Whether to only do data preprocessing and skip training. This is especially useful when data"
+                " preprocessing errors out in distributed training due to timeout. In this case, one should run the"
+                " preprocessing in a non-distributed setup with `preprocessing_only=True` so that the cached datasets"
+                " can consequently be loaded in distributed training"
+            )
         },
     )
     train_split_name: str = field(

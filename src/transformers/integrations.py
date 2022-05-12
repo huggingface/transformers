@@ -389,7 +389,8 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
                 logger.warning(
-                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available metrics are {format_metrics.keys()}"
+                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available"
+                    f" metrics are {format_metrics.keys()}"
                 )
         best_score = False
         if best_trial["run_id"] is not None:
@@ -458,7 +459,8 @@ class TensorBoardCallback(TrainerCallback):
         has_tensorboard = is_tensorboard_available()
         if not has_tensorboard:
             raise RuntimeError(
-                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
+                " install tensorboardX."
             )
         if has_tensorboard:
             try:
@@ -811,7 +813,8 @@ class MLflowCallback(TrainerCallback):
         self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
         logger.debug(
-            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run}, tags={self._nested_run}"
+            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
+            f" tags={self._nested_run}"
         )
         if state.is_world_process_zero:
             if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
@@ -831,9 +834,10 @@ class MLflowCallback(TrainerCallback):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. '
-                        f"MLflow's log_param() only accepts values no longer than 250 characters so we dropped this attribute. "
-                        f"You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and avoid this message."
+                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                        " log_param() only accepts values no longer than 250 characters so we dropped this attribute."
+                        " You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and"
+                        " avoid this message."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
@@ -861,7 +865,7 @@ class MLflowCallback(TrainerCallback):
                 else:
                     logger.warning(
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
-                        f"MLflow's log_metric() only accepts float and int types so we dropped this attribute."
+                        "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
             self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 

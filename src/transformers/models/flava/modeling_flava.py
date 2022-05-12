@@ -369,7 +369,8 @@ class PatchEmbeddings(nn.Module):
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
@@ -1207,12 +1208,14 @@ class FlavaModel(FlavaPreTrainedModel):
 
         if not isinstance(config.text_config, FlavaTextConfig):
             raise ValueError(
-                f"config.text_config is expected to be of type FlavaTextConfig but is of type {type(config.text_config)}."
+                "config.text_config is expected to be of type FlavaTextConfig but is of type"
+                f" {type(config.text_config)}."
             )
 
         if not isinstance(config.image_config, FlavaImageConfig):
             raise ValueError(
-                f"config.image_config is expected to be of type FlavaImageConfig but is of type {type(config.image_config)}."
+                "config.image_config is expected to be of type FlavaImageConfig but is of type"
+                f" {type(config.image_config)}."
             )
 
         if not isinstance(config.multimodal_config, FlavaMultimodalConfig):
@@ -1832,8 +1835,9 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
         if input_ids_masked is None and input_ids is not None:
             logger.warning(
-                "`input_ids_masked` isn't passed which means MLM loss won't be calculated correctly"
-                "Setting it to `input_ids` so that model can work. Please pass it if this is unintentional. This is usually OKAY if you are doing inference on unmasked text..."
+                "`input_ids_masked` isn't passed which means MLM loss won't be calculated correctlySetting it to"
+                " `input_ids` so that model can work. Please pass it if this is unintentional. This is usually OKAY if"
+                " you are doing inference on unmasked text..."
             )
             input_ids_masked = input_ids
 

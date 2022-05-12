@@ -524,7 +524,8 @@ def check_all_decorator_order():
     if len(errors) > 0:
         msg = "\n".join(errors)
         raise ValueError(
-            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+            "The parameterized decorator (and its variants) should always be first, but this is not the case in the"
+            f" following files:\n{msg}"
         )
 
 

@@ -93,8 +93,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -119,14 +121,15 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input evaluation data file to evaluate the metrics (rouge) on "
-            "(a jsonlines or csv file)."
+            "help": (
+                "An optional input evaluation data file to evaluate the metrics (rouge) on (a jsonlines or csv file)."
+            )
         },
     )
     test_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input test data file to evaluate the metrics (rouge) on " "(a jsonlines or csv file)."
+            "help": "An optional input test data file to evaluate the metrics (rouge) on (a jsonlines or csv file)."
         },
     )
     overwrite_cache: bool = field(
@@ -139,60 +142,76 @@ class DataTrainingArguments:
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
-            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total sequence length for target text after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-            "during ``evaluate`` and ``predict``."
+            "help": (
+                "The maximum total sequence length for validation target text after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+                "during ``evaluate`` and ``predict``."
+            )
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to model maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-            "efficient on GPU but very bad for TPU."
+            "help": (
+                "Whether to pad all samples to model maximum sentence length. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+                "efficient on GPU but very bad for TPU."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+                "value if set."
+            )
         },
     )
     num_beams: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
-            "which is used during ``evaluate`` and ``predict``."
+            "help": (
+                "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
+                "which is used during ``evaluate`` and ``predict``."
+            )
         },
     )
     ignore_pad_token_for_loss: bool = field(

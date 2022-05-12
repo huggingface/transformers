@@ -87,15 +87,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
 
@@ -117,9 +121,11 @@ class ModelArguments:
     model_name_or_path: str = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization. Can be a local path to a pytorch_model.bin or a "
-            "checkpoint identifier on the hub. "
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization. Can be a local path to a pytorch_model.bin or a "
+                "checkpoint identifier on the hub. "
+                "Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -132,8 +138,10 @@ class ModelArguments:
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
-            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            "help": (
+                "Override some existing default config settings when a model is trained from scratch. Example: "
+                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            )
         },
     )
     cache_dir: Optional[str] = field(
@@ -148,20 +156,26 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     image_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The size (resolution) of each image. If not specified, will use `image_size` of the configuration."
+            "help": (
+                "The size (resolution) of each image. If not specified, will use `image_size` of the configuration."
+            )
         },
     )
     patch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The size (resolution) of each patch. If not specified, will use `patch_size` of the configuration."
+            "help": (
+                "The size (resolution) of each patch. If not specified, will use `patch_size` of the configuration."
+            )
         },
     )
     encoder_stride: Optional[int] = field(
