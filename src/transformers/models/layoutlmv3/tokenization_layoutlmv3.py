@@ -1196,11 +1196,13 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
             if pair_token_boxes:
                 pair_token_boxes = [self.sep_token_box] + pair_token_boxes + [self.sep_token_box]
+            token_boxes = token_boxes + pair_token_boxes if pair else token_boxes
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+            token_boxes = token_boxes + pair_token_boxes if pair else token_boxes
 
         # Add visual labels
         # We hardcode the number of visual tokens here to (224/16)**2 + 1 = 197
@@ -1209,7 +1211,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         # Build output dictionary
         encoded_inputs["input_ids"] = sequence
-        encoded_inputs["bbox"] = token_boxes + pair_token_boxes
+        encoded_inputs["bbox"] = token_boxes
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
