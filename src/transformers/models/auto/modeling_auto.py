@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("yolos", "YolosModel"),
         ("dpt", "DPTModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("glpn", "GLPNModel"),
@@ -61,6 +62,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineModel"),
         ("roformer", "RoFormerModel"),
         ("clip", "CLIPModel"),
+        ("flava", "FlavaModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("deit", "DeiTModel"),
         ("luke", "LukeModel"),
@@ -130,6 +132,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("flava", "FlavaForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
@@ -386,6 +389,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
+        ("yolos", "YolosForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
     ]
 )
@@ -595,6 +599,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("ibert", "IBertForMultipleChoice"),
+        ("deberta-v2", "DebertaV2ForMultipleChoice"),
     ]
 )
 

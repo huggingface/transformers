@@ -3,12 +3,13 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
+    "accelerate": "accelerate>=0.7.1",
     "black": "black~=22.0",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "deepspeed": "deepspeed>=0.6.0",
+    "deepspeed": "deepspeed>=0.6.4",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",
@@ -47,6 +48,7 @@ deps = {
     "ray[tune]": "ray[tune]",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
+    "rjieba": "rjieba",
     "rouge-score": "rouge-score",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
