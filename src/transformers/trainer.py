@@ -1400,6 +1400,16 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
+        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+            if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+                model.load_state_dict(state_dict)
+                # release memory
+                del state_dict
+            else:
+                # We load the sharded checkpoint
+                load_sharded_checkpoint(model, resume_from_checkpoint)
+
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
@@ -1665,6 +1675,8 @@ class Trainer:
                 xm.rendezvous("load_best_model_at_end")
             elif args.local_rank != -1:
                 dist.barrier()
+            elif is_sagemaker_mp_enabled():
+                smp.barrier()
 
             self._load_best_model()
 
@@ -1708,6 +1720,9 @@ class Trainer:
         if self.args.deepspeed:
             # will be resumed in deepspeed_init
             pass
+        elif is_sagemaker_mp_enabled():
+            # will be resumed after model is wrapped
+            pass
         elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             # We load the model state dict on the CPU to avoid an OOM error.
             state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
@@ -1738,6 +1753,9 @@ class Trainer:
                 self.deepspeed.load_checkpoint(
                     self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
                 )
+            elif is_sagemaker_mp_enabled():
+                    state_dict = torch.load(best_model_path)
+                    self.model_wrapped.load_state_dict(state_dict)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
@@ -1745,9 +1763,12 @@ class Trainer:
                 load_result = self.model.load_state_dict(state_dict, strict=False)
                 self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
-            # Best model is a sharded checkpoint
-            load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
-            self._issue_warnings_after_load(load_result)
+            if is_sagemaker_mp_enabled():
+                load_sharded_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
+            else:
+                # Best model is a sharded checkpoint
+                load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
+                self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
                 f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
@@ -1885,17 +1906,21 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if smp.rdp_rank() == 0:
-                # Consolidate the state dict on all processed of rdp_rank 0
-                opt_state_dict = self.optimizer.state_dict()
-                # Save it and the scheduler on the main process
-                if self.args.should_save:
-                    torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
-                    with warnings.catch_warnings(record=True) as caught_warnings:
-                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                    reissue_pt_warnings(caught_warnings)
-                    if self.do_grad_scaling:
-                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            smp.barrier()
+            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
+                smp.save(
+                    opt_state_dict,
+                    os.path.join(output_dir, OPTIMIZER_NAME),
+                    partial=True,
+                    v3=smp.state.cfg.shard_optimizer_state,
+                )
+            if self.args.should_save:
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                reissue_pt_warnings(caught_warnings)
+                if self.do_grad_scaling:
+                    torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -1944,6 +1969,7 @@ class Trainer:
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
         os.makedirs(output_dir, exist_ok=True)
+
         local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
         if local_rank == -1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
@@ -1966,9 +1992,13 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
-        if os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME)) and os.path.isfile(
-            os.path.join(checkpoint, SCHEDULER_NAME)
-        ):
+        import glob
+        checkpoint_file_exists = (
+            glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
+            if is_sagemaker_mp_enabled()
+            else os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+        )
+        if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
@@ -1984,9 +2014,14 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
-                self.optimizer.load_state_dict(
-                    torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
-                )
+                if is_sagemaker_mp_enabled():
+                    def opt_load_hook(mod, opt):
+                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+                    self.model_wrapped.register_post_step_hook(opt_load_hook)
+                else:
+                    self.optimizer.load_state_dict(
+                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                    )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
