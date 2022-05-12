@@ -2,7 +2,7 @@ import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers.convert_slow_tokenizer import SpmConverter
+from transformers.convert_slow_tokenizer import SentencePieceExtractor, SpmConverter
 from transformers.testing_utils import get_tests_dir
 
 
@@ -12,6 +12,19 @@ class FakeOriginalTokenizer:
 
 
 class ConvertSlowTokenizerTest(unittest.TestCase):
+    def test_extract_merges(self):
+        vocab = {
+            "ab": 1,
+            "cd": 2,
+            "ef": 3,
+            "abef": 4,
+            "abcd": 5,
+            "bcd": 6,
+            "abcdef": 7,
+        }
+        merges = SentencePieceExtractor._extract_merges(vocab)
+        self.assertEqual(merges, [("ab", "ef"), ("ab", "cd"), ("abcd", "ef")])
+
     def test_spm_converter_bytefallback_warning(self):
         spm_model_file_without_bytefallback = get_tests_dir("fixtures/test_sentencepiece.model")
         spm_model_file_with_bytefallback = get_tests_dir("fixtures/test_sentencepiece_with_bytefallback.model")

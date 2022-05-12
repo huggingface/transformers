@@ -43,19 +43,32 @@ class SentencePieceExtractor:
     def extract(self) -> Tuple[Dict[str, int], List[Tuple]]:
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        merges = SentencePieceExtractor._extract_merges(vocab)
 
-        # Merges
+        return vocab, merges
+
+    @staticmethod
+    def _extract_merges(vocab: Dict[str, int]) -> List[Tuple]:
+
+        prefixes = dict()
+        for word in vocab.keys():
+            for i in range(len(word)):
+                prefixes[word[: i + 1]] = {word} | prefixes.setdefault(word[: i + 1], set())
+
         merges = []
-        for piece_l in vocab.keys():
-            for piece_r in vocab.keys():
-                merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
-                if piece_id:
-                    merges += [(piece_l, piece_r, piece_id)]
+        for word in vocab.keys():
+            if len(prefixes[word]) > 1:
+                for candidate in prefixes[word]:
+                    if word != candidate:
+                        if candidate[len(word) :] in vocab:
+                            piece_id = vocab.get(candidate, None)
+                            merges += [(word, candidate[len(word) :], piece_id)]
+
         merges = sorted(merges, key=lambda val: val[2])
         merges = [(val[0], val[1]) for val in merges]
 
-        return vocab, merges
+        return merges
+
 
 
 def check_number_comma(piece: str) -> bool:
