@@ -401,10 +401,12 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
+
     tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
     )
+    tokenized_datasets.remove_columns(dataset.features.keys())
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
