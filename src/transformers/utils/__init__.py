@@ -38,6 +38,7 @@ from .generic import (
     TensorType,
     cached_property,
     find_labels,
+    flatten_dict,
     is_tensor,
     to_numpy,
     to_py_obj,

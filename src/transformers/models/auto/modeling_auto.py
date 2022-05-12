@@ -62,6 +62,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineModel"),
         ("roformer", "RoFormerModel"),
         ("clip", "CLIPModel"),
+        ("flava", "FlavaModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("deit", "DeiTModel"),
         ("luke", "LukeModel"),
@@ -131,6 +132,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("flava", "FlavaForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
@@ -597,6 +599,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("ibert", "IBertForMultipleChoice"),
+        ("deberta-v2", "DebertaV2ForMultipleChoice"),
     ]
 )
 

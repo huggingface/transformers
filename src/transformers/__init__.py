@@ -198,6 +198,14 @@ _import_structure = {
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
+    "models.flava": [
+        "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FlavaConfig",
+        "FlavaImageCodebookConfig",
+        "FlavaImageConfig",
+        "FlavaMultimodalConfig",
+        "FlavaTextConfig",
+    ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
@@ -372,7 +380,7 @@ _import_structure = {
         "TrainerControl",
         "TrainerState",
     ],
-    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "set_seed"],
+    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "enable_full_determinism", "set_seed"],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
@@ -568,6 +576,7 @@ else:
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
@@ -948,6 +957,7 @@ else:
         [
             "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DebertaV2ForMaskedLM",
+            "DebertaV2ForMultipleChoice",
             "DebertaV2ForQuestionAnswering",
             "DebertaV2ForSequenceClassification",
             "DebertaV2ForTokenClassification",
@@ -1035,6 +1045,18 @@ else:
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
+        ]
+    )
+    _import_structure["models.flava"].extend(
+        [
+            "FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FlavaForPreTraining",
+            "FlavaImageCodebook",
+            "FlavaImageModel",
+            "FlavaModel",
+            "FlavaMultimodalModel",
+            "FlavaPreTrainedModel",
+            "FlavaTextModel",
         ]
     )
     _import_structure["models.fnet"].extend(
@@ -2653,6 +2675,14 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.flava import (
+        FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FlavaConfig,
+        FlavaImageCodebookConfig,
+        FlavaImageConfig,
+        FlavaMultimodalConfig,
+        FlavaTextConfig,
+    )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
@@ -2809,7 +2839,7 @@ if TYPE_CHECKING:
         TrainerControl,
         TrainerState,
     )
-    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, set_seed
+    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, enable_full_determinism, set_seed
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
@@ -2973,6 +3003,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
+        from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
@@ -3296,6 +3327,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaV2ForMaskedLM,
+            DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,
@@ -3369,6 +3401,16 @@ if TYPE_CHECKING:
             FlaubertForTokenClassification,
             FlaubertModel,
             FlaubertWithLMHeadModel,
+        )
+        from .models.flava import (
+            FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlavaForPreTraining,
+            FlavaImageCodebook,
+            FlavaImageModel,
+            FlavaModel,
+            FlavaMultimodalModel,
+            FlavaPreTrainedModel,
+            FlavaTextModel,
         )
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
