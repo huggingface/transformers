@@ -1726,7 +1726,10 @@ class ProductIndexMap(IndexMap):
             raise ValueError("outer_index.batch_dims and inner_index.batch_dims " "must be the same.")
 
         super(ProductIndexMap, self).__init__(
-            indices=(inner_index.indices + outer_index.indices * inner_index.num_segments),
+            indices=(
+                inner_index.indices
+                + outer_index.indices * tf.cast(inner_index.num_segments, inner_index.indices.dtype)
+            ),
             num_segments=inner_index.num_segments * outer_index.num_segments,
             batch_dims=inner_index.batch_dims,
         )
@@ -1785,7 +1788,7 @@ def flatten(index, name="segmented_flatten"):
     for _ in range(index.batch_dims, index.indices.shape.rank):
         offset = tf.expand_dims(offset, -1)
 
-    indices = offset + index.indices
+    indices = tf.cast(offset, index.indices.dtype) + index.indices
     return IndexMap(indices=tf.reshape(indices, [-1]), num_segments=index.num_segments * batch_size, batch_dims=0)
 
 

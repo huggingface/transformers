@@ -1380,8 +1380,9 @@ class TFModelTesterMixin:
                 model_class,
                 return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
             )
-            if not any([tensor.dtype.is_integer for tensor in prepared_for_class.values()
-                        if isinstance(tensor, tf.Tensor)]):
+            if not any(
+                [tensor.dtype.is_integer for tensor in prepared_for_class.values() if isinstance(tensor, tf.Tensor)]
+            ):
                 return  # No integer inputs means no need for this test
 
             prepared_for_class = {
