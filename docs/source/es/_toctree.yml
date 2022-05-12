@@ -17,3 +17,7 @@
 - sections:
   - local: multilingual
     title: Modelos multilingües para inferencia
+  title: CONCEPTUAL GUIDES
+- sections:
+  - local: philosophy
+    title: Filosofía
