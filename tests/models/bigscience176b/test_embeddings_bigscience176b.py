@@ -47,6 +47,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         except BaseException:
             self.fail("Failed loading the model")
 
+    @require_torch
     @torch.no_grad()
     def test_embeddings(self):
         model = AutoModel.from_pretrained(self.path_bigscience_model)
@@ -299,6 +300,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
         # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
 
+    @require_torch
     @torch.no_grad()
     def test_hidden_states_transformers(self):
         # TODO ifelse device
@@ -351,6 +353,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
 
         self.assertDictEqual(MIN_MAX_DICT, output_dict)
 
+    @require_torch
     @torch.no_grad()
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
