@@ -1153,7 +1153,7 @@ def main():
             )
 
             # train
-            for (batch_idx, _) in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
+            for batch_idx, _ in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
 
                 cur_step += 1
                 batch = next(train_batches)

@@ -188,7 +188,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         self.config = config
 
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
-        for (src_key, dst_key) in renamed_keys:
+        for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: MaskFormerConfig):

@@ -134,7 +134,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 def load_entity_vocab(entity_vocab_path):
     entity_vocab = {}
     with open(entity_vocab_path, "r", encoding="utf-8") as f:
-        for (index, line) in enumerate(f):
+        for index, line in enumerate(f):
             title, _ = line.rstrip().split("\t")
             entity_vocab[title] = index
 

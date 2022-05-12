@@ -366,8 +366,8 @@ class CustomDPRReaderTokenizerMixin:
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
-        for (start_index, start_score) in enumerate(start_logits):
-            for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
+        for start_index, start_score in enumerate(start_logits):
+            for answer_length, end_score in enumerate(end_logits[start_index : start_index + max_answer_length]):
                 scores.append(((start_index, start_index + answer_length), start_score + end_score))
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []

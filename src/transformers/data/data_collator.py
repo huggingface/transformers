@@ -953,7 +953,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             )
 
         cand_indexes = []
-        for (i, token) in enumerate(input_tokens):
+        for i, token in enumerate(input_tokens):
             if token == "[CLS]" or token == "[SEP]":
                 continue
 
