@@ -3,7 +3,7 @@
     title: Quick tour
   - local: installation
     title: Instalación
-  title: Get started
+  title: Empezar
 - sections:
   - local: pipeline_tutorial
     title: Pipelines para inferencia
@@ -13,11 +13,19 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
-  title: Tutorials
+  title: Tutoriales
 - sections:
+  - sections:
+    - local: language_modeling
+      title: Modelado de lenguaje
+    title: Fine-tuning para tareas posteriores
   - local: multilingual
     title: Modelos multilingües para inferencia
-  title: CONCEPTUAL GUIDES
+  title: Guías prácticas
 - sections:
   - local: philosophy
     title: Filosofía
+  title: Guías conceptuales
+
+
+
