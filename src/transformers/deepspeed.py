@@ -388,7 +388,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     model = trainer.model
     args = trainer.args
 
-    # XXX: may be rework to just always deepcopy args.hf_deepspeed_config?
     if hasattr(trainer, "hf_deepspeed_config_orig"):
         hf_deepspeed_config = deepcopy(trainer.hf_deepspeed_config_orig)
     else:
@@ -428,14 +427,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         lr_scheduler=lr_scheduler,
     )
 
-    # print("INIT")
-    # from pprint import pprint
-    # pprint(kwargs)
-
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
-
-    # stash kwargs to enabled a later deepspeed_reinit
-    # trainer.deepspeed_initialize_kwargs = kwargs
 
     if resume_from_checkpoint is not None:
 
