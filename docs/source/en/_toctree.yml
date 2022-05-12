@@ -364,6 +364,8 @@
       title: WavLM
     - local: model_doc/xglm
       title: XGLM
+    - local: model_doc/glm
+      title: GLM
     - local: model_doc/xlm
       title: XLM
     - local: model_doc/xlm-prophetnet
