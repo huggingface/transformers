@@ -1553,15 +1553,15 @@ class TFModelTesterMixin:
                 feature_columns = 1 if isinstance(test_batch, tf.Tensor) else len(test_batch)
                 label_columns = 1 if isinstance(test_batch_labels, tf.Tensor) else len(test_batch_labels)
                 # Assert we discarded the unwanted extra column but kept everything else
-                if feature_columns + label_columns != len(input_dataset.features) - 1:
-                    breakpoint()
-                    print()
                 self.assertEqual(feature_columns + label_columns, len(input_dataset.features) - 1)
                 if isinstance(test_batch, dict):
                     self.assertNotIn("extra_unwanted_column", test_batch)
                 if isinstance(test_batch_labels, dict):
                     self.assertNotIn("extra_unwanted_column", test_batch_labels)
                 model.compile(optimizer="sgd", run_eagerly=True)
+                if isinstance(test_batch_labels, dict) and "aggregation_labels" in test_batch_labels:
+                    breakpoint()
+                    print()
                 model.train_on_batch(test_batch, test_batch_labels)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
