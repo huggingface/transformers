@@ -1731,12 +1731,15 @@ class Trainer:
             if self.deepspeed:
 
                 if self.model_wrapped is not None:
+                    # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
                     self.model_wrapped = None
 
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
                 deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                    self, num_training_steps=self.args.max_steps, resume_from_checkpoint=self.state.best_model_checkpoint
+                    self,
+                    num_training_steps=self.args.max_steps,
+                    resume_from_checkpoint=self.state.best_model_checkpoint,
                 )
                 self.model = deepspeed_engine.module
                 self.model_wrapped = deepspeed_engine
