@@ -137,7 +137,10 @@ else:
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-            ("bigscience176b", ("BigScience176BTokenizer", "BigScience176BTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "bigscience176b",
+                ("BigScience176BTokenizer", "BigScience176BTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",

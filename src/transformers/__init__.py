@@ -480,6 +480,7 @@ else:
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
+    _import_structure["models.bigscience176b"].append("BigScience176BTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
@@ -496,7 +497,6 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
-    _import_structure["models.bigscience176b"].append("BigScience176BTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
@@ -2063,17 +2063,6 @@ else:
             "TFGPTJForSequenceClassification",
             "TFGPTJModel",
             "TFGPTJPreTrainedModel",
-        ]
-    )
-    _import_structure["models.bigscience176b"].extend(
-        [
-            "TF_BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFBigScience176BDoubleHeadsModel",
-            "TFBigScience176BForSequenceClassification",
-            "TFBigScience176BLMHeadModel",
-            "TFBigScience176BMainLayer",
-            "TFBigScience176BModel",
-            "TFBigScience176BPreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
