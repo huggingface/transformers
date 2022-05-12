@@ -16,7 +16,7 @@ from transformers.onnx import (
     validate_model_outputs,
 )
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import require_onnx, require_rjieba, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
@@ -172,15 +172,19 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 PYTORCH_EXPORT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
-    ("bigbird", "google/bigbird-roberta-base"),
+    ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("convbert", "YituTech/conv-bert-base"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
     ("roberta", "roberta-base"),
+    ("roformer", "junnyu/roformer_chinese_base"),
+    ("mobilebert", "google/mobilebert-uncased"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("vit", "google/vit-base-patch16-224"),
+    ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
 }
@@ -198,6 +202,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("m2m-100", "facebook/m2m100_418M"),
     ("blenderbot-small", "facebook/blenderbot_small-90M"),
     ("blenderbot", "facebook/blenderbot-400M-distill"),
+    ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -284,6 +289,7 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_rjieba
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 

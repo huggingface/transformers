@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("clip", "CLIPProcessor"),
+        ("flava", "FLAVAProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
@@ -46,6 +47,12 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("unispeech", "Wav2Vec2Processor"),
+        ("unispeech-sat", "Wav2Vec2Processor"),
+        ("sew", "Wav2Vec2Processor"),
+        ("sew-d", "Wav2Vec2Processor"),
+        ("vilt", "ViltProcessor"),
+        ("wavlm", "Wav2Vec2Processor"),
     ]
 )
 

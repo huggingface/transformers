@@ -25,7 +25,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -36,6 +36,7 @@ from .utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
+    requires_backends,
 )
 
 
@@ -44,6 +45,39 @@ if is_torch_available():
 
 if is_tf_available():
     import tensorflow as tf
+
+
+def seed_worker(_):
+    """
+    Helper function to set worker seed during Dataloader initialization.
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    set_seed(worker_seed)
+
+
+def enable_full_determinism(seed: int):
+    """
+    Helper function for reproducible behavior during distributed training. See
+    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
+    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    """
+    # set seed first
+    set_seed(seed)
+
+    if is_torch_available():
+        #  Enable PyTorch deterministic mode. This potentially requires either the environment
+        #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # depending on the CUDA version, so we set them both here
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(True)
+
+        # Enable CUDNN deterministic mode
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    if is_tf_available():
+        tf.config.experimental.enable_op_determinism()
 
 
 def set_seed(seed: int):
@@ -355,6 +389,7 @@ class TrainerMemoryTracker:
     stages = {
         "__init__": "init",
         "train": "train",
+        "_inner_training_loop": "train",
         "evaluate": "eval",
         "predict": "test",
     }
@@ -582,3 +617,78 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+def find_executable_batch_size(
+    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+):
+    """
+    Args:
+    A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
+    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    its first argument.
+        function (`callable`, *optional*)
+            A function to wrap
+        starting_batch_size (`int`, *optional*)
+            The batch size to try and fit into memory
+        auto_find_batch_size (`bool`, *optional*)
+            If False, will just execute `function`
+    """
+    if function is None:
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            auto_find_batch_size=auto_find_batch_size,
+        )
+
+    if auto_find_batch_size:
+        requires_backends(find_executable_batch_size, "accelerate")
+        import accelerate.memory_utils as mem_utils
+
+        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+
+    return functools.partial(function, batch_size=starting_batch_size)
+
+
+class FSDPOption(ExplicitEnum):
+    FULL_SHARD = "full_shard"
+    SHARD_GRAD_OP = "shard_grad_op"
+    OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"
+
+
+class RemoveColumnsCollator:
+    """Wrap the data collator to remove unused columns before they are passed to the collator."""
+
+    def __init__(
+        self,
+        data_collator,
+        signature_columns,
+        logger=None,
+        model_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
+        self.data_collator = data_collator
+        self.signature_columns = signature_columns
+        self.logger = logger
+        self.description = description
+        self.model_name = model_name
+        self.message_logged = False
+
+    def _remove_columns(self, feature: dict) -> dict:
+        if not self.message_logged and self.logger and self.model_name:
+            ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
+            if len(ignored_columns) > 0:
+                dset_description = "" if self.description is None else f"in the {self.description} set"
+                self.logger.info(
+                    f"The following columns {dset_description} don't have a corresponding argument in "
+                    f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                    f" If {', '.join(ignored_columns)} are not expected by `{self.model_name}.forward`, "
+                    " you can safely ignore this message."
+                )
+                self.message_logged = True
+        return {k: v for k, v in feature.items() if k in self.signature_columns}
+
+    def __call__(self, features: List[dict]):
+        features = [self._remove_columns(feature) for feature in features]
+        return self.data_collator(features)
