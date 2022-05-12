@@ -312,11 +312,11 @@ class OPTDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+            layer_head_mask (`torch.FloatTensor`, *optional*): mask for attention heads in a given layer of size
                 `(encoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
