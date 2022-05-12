@@ -87,6 +87,7 @@ from . import (
     mt5,
     nystromformer,
     openai,
+    opt,
     pegasus,
     perceiver,
     phobert,
