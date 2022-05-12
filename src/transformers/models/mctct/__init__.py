@@ -25,6 +25,7 @@ _import_structure = {
         "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MCTCTConfig",
     ],
+    "processing_mctct": ["MCTCTProcessor"],
 }
 
 
@@ -35,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_mctct"] = ["MCTCTFeatureExtractor"]
-    _import_structure["processing_mctct"] = ["MCTCTProcessor"]
 
 
 try:
@@ -54,6 +54,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig
+    from .processing_mctct import MCTCTProcessor
 
     try:
         if not is_speech_available():
