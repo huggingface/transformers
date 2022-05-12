@@ -22,16 +22,16 @@ La biblioteca fue diseñada con dos fuertes objetivos en mente:
 - Que sea tan fácil y rápida de utilizar como sea posible:
 
   - Hemos limitado enormemente el número de abstracciones que el usuario tiene que aprender. De hecho, no hay casi abstracciones,
-    solo tres clases estandar necesarias para usar cada modelo: [configuration](main_classes/configuration),
+    solo tres clases estándar necesarias para usar cada modelo: [configuration](main_classes/configuration),
     [models](main_classes/model) y [tokenizer](main_classes/tokenizer).
   - Todas estas clases pueden ser inicializadas de forma simple y unificada a partir de ejemplos pre-entrenados mediante el uso de un método
     `from_pretrained()` común de solicitud que se encargará de descargar (si es necesario), almacenar y cargar la solicitud de clase relacionada y datos asociados
     (configurations' hyper-parameters, tokenizers' vocabulary, and models' weights) a partir de un control pre-entrenado proporcionado en
     [Hugging Face Hub](https://huggingface.co/models) o de tu propio control guardado.
-  - Por encima de esas tres clases estandar, la biblioteca proporciona dos APIs: [`pipeline`] para usar rápidamente un modelo (junto a su configuracion y tokenizer asociados)
+  - Por encima de esas tres clases estándar, la biblioteca proporciona dos APIs: [`pipeline`] para usar rápidamente un modelo (junto a su configuracion y tokenizer asociados)
     sobre una tarea dada, y [`Trainer`]/`Keras.fit` para entrenar u optimizar de forma rápida un modelo dado.
   - Como consecuencia, esta biblioteca NO es una caja de herramientas modular de bloques individuales para redes neuronales. Si quieres extender/construir sobre la biblioteca,
-    usa simplemente los módulos regulares de Python/PyTorch/TensorFlow/Keras y emplea las clases estandar de la biblioteca como punto de partida para reutilizar funcionalidades
+    usa simplemente los módulos regulares de Python/PyTorch/TensorFlow/Keras y emplea las clases estándar de la biblioteca como punto de partida para reutilizar funcionalidades
     tales como abrir/guardar modelo.
     
 - Proporciona modelos modernos con rendimientos lo más parecido posible a los modelos originales:
