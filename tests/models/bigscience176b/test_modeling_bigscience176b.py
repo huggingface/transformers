@@ -37,6 +37,7 @@ if is_torch_available():
     )
 
 
+@require_torch
 class BigScience176BModelTester:
     def __init__(
         self,
