@@ -558,6 +558,10 @@ def retrieve_available_artifacts():
 
 
 if __name__ == "__main__":
+
+    # This env. variable is set in workflow file (under the job `send_results`).
+    ci_event = os.environ["CI_EVENT"]
+
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
@@ -664,6 +668,11 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
+    if ci_event == "push":
+        del additional_files["Examples directory"]
+        del additional_files["PyTorch pipelines"]
+        del additional_files["TensorFlow pipelines"]
+
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
@@ -712,7 +721,7 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-    message = Message("🤗 Results of the scheduled tests.", model_results, additional_results)
+    message = Message(f"🤗 Results of the {ci_event} tests.", model_results, additional_results)
 
     message.post()
     message.post_reply()
