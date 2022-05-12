@@ -503,7 +503,6 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
 
-
 def prepare_tapas_single_inputs_for_inference():
     # Here we prepare a single table-question pair to test TAPAS inference on:
     data = {
