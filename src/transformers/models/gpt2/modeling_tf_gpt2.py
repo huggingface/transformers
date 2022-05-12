@@ -1061,7 +1061,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         >>> embedding_layer = model.resize_token_embeddings(
         ...     len(tokenizer)
-        >>> )  # Update the model embeddings with the new vocabulary size
+        ... )  # Update the model embeddings with the new vocabulary size
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]
@@ -1240,7 +1240,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 

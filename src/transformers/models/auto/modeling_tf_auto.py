@@ -37,6 +37,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("roformer", "TFRoFormerModel"),
         ("convbert", "TFConvBertModel"),
         ("convnext", "TFConvNextModel"),
+        ("data2vec-vision", "TFData2VecVisionModel"),
         ("led", "TFLEDModel"),
         ("lxmert", "TFLxmertModel"),
         ("mt5", "TFMT5Model"),
@@ -163,6 +164,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("vit", "TFViTForImageClassification"),
         ("convnext", "TFConvNextForImageClassification"),
+        ("data2vec-vision", "TFData2VecVisionForImageClassification"),
     ]
 )
 
@@ -411,7 +413,9 @@ class TFAutoModelForImageClassification(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 
-AutoModelForImageClassification = auto_class_update(TFAutoModelForImageClassification, head_doc="image classification")
+TFAutoModelForImageClassification = auto_class_update(
+    TFAutoModelForImageClassification, head_doc="image classification"
+)
 
 
 class TFAutoModelForVision2Seq(_BaseAutoModelClass):
@@ -502,9 +506,9 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
         warnings.warn(
-            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
-            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+            " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
+            " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
         return super().from_config(config)
@@ -512,9 +516,9 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         warnings.warn(
-            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
-            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+            " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
+            " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

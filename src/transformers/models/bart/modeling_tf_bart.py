@@ -227,7 +227,10 @@ class TFBartAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                message=(
+                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                    f" {shape_list(attn_weights)}"
+                ),
             )
 
         if attention_mask is not None:
@@ -237,7 +240,10 @@ class TFBartAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
                     [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    message=(
+                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                        f" {shape_list(attention_mask)}"
+                    ),
                 )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
@@ -253,7 +259,10 @@ class TFBartAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
@@ -270,7 +279,10 @@ class TFBartAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                message=(
+                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                    f" {shape_list(attn_output)}"
+                ),
             )
 
         attn_output = tf.transpose(
@@ -751,7 +763,10 @@ class TFBartEncoder(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
                 len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(head_mask)[0]}.",
+                message=(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {shape_list(head_mask)[0]}."
+                ),
             )
 
         # encoder layers
@@ -946,7 +961,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
                     len(self.layers),
-                    message=f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for {shape_list(attn_mask)[0]}.",
+                    message=(
+                        f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for"
+                        f" {shape_list(attn_mask)[0]}."
+                    ),
                 )
 
         for idx, decoder_layer in enumerate(self.layers):

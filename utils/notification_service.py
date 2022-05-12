@@ -180,7 +180,10 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "text": (
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
+                    f" {self.time}."
+                ),
                 "emoji": True,
             },
             "accessory": {
@@ -561,6 +564,8 @@ if __name__ == "__main__":
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
+        # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+        models = [x.replace("models/", "models_") for x in models]
     except SyntaxError:
         Message.error_out()
         raise ValueError("Errored out.")

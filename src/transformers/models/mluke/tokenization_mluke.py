@@ -18,6 +18,7 @@
 import itertools
 import json
 import os
+from collections.abc import Mapping
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -341,7 +342,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
             self.max_entity_length = 2
         else:
             raise ValueError(
-                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification', 'entity_span_classification'] only."
+                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification',"
+                " 'entity_span_classification'] only."
             )
 
         self.max_mention_length = max_mention_length
@@ -706,7 +708,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             raise ValueError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
             raise ValueError(
-                "entity_spans should be given as a list of tuples " "containing the start and end character indices"
+                "entity_spans should be given as a list of tuples containing the start and end character indices"
             )
 
         if entities is not None:
@@ -1118,7 +1120,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
             if num_invalid_entities != 0:
                 logger.warning(
-                    f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the truncation of input tokens"
+                    f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the"
+                    " truncation of input tokens"
                 )
 
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_entity_len > max_entity_length:
@@ -1143,7 +1146,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             entity_position_ids = []
             entity_start_positions = []
             entity_end_positions = []
-            for (token_spans, offset) in (
+            for token_spans, offset in (
                 (valid_entity_token_spans, entity_token_offset),
                 (valid_pair_entity_token_spans, pair_entity_token_offset),
             ):
@@ -1253,7 +1256,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
+        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has be passed for padding
@@ -1293,7 +1296,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    f"Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
             for key, value in encoded_inputs.items():

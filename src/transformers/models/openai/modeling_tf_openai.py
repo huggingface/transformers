@@ -693,9 +693,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
         >>> inputs["mc_token_ids"] = tf.constant(
         ...     [inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1]
-        >>> )[
+        ... )[
         ...     None, :
-        >>> ]  # Batch size 1
+        ... ]  # Batch size 1
         >>> outputs = model(inputs)
         >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""
@@ -851,7 +851,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 

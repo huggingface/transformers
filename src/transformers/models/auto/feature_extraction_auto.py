@@ -47,6 +47,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
+        ("flava", "FlavaFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
@@ -61,6 +62,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "BeitFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("yolos", "YolosFeatureExtractor"),
     ]
 )
 

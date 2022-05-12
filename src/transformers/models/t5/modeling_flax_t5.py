@@ -977,7 +977,8 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         if decoder_input_ids is None:
             raise ValueError(
-                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed here."
+                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed"
+                " here."
             )
 
         # prepare encoder inputs
@@ -1243,7 +1244,7 @@ T5_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class FlaxT5Module(nn.Module):
@@ -1344,7 +1345,7 @@ FLAX_T5_MODEL_DOCSTRING = """
 
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
-    >>> ).input_ids
+    ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
     >>> # forward pass

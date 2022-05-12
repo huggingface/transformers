@@ -137,7 +137,8 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
+            f" `sequence_length`: {sequence_length}`"
         )
 
     # compute number of masked spans in batch
@@ -186,7 +187,7 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
     batch_size, sequence_length, hidden_size = features_shape
     if sequence_length <= 1:
         raise ValueError(
-            f"`features should have `sequence_length` > 1, but are of shape "
+            "`features should have `sequence_length` > 1, but are of shape "
             f"(batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
         )
 
@@ -386,7 +387,8 @@ class FlaxConvLayersCollection(nn.Module):
             raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
         else:
             raise ValueError(
-                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group',"
+                " 'layer']"
             )
 
     def __call__(self, hidden_states):
@@ -444,7 +446,8 @@ class FlaxWav2Vec2Attention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         dense = partial(
@@ -1081,7 +1084,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> hidden_states = model(input_values).last_hidden_state
     ```
 """
@@ -1200,7 +1203,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> logits = model(input_values).logits
     >>> predicted_ids = jnp.argmax(logits, axis=-1)
 
