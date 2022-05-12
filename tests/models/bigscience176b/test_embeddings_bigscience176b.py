@@ -48,7 +48,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
             self.fail("Failed loading the model")
 
     @require_torch
-    @torch.no_grad()
     def test_embeddings(self):
         model = AutoModel.from_pretrained(self.path_bigscience_model)
         model.eval()
@@ -274,9 +273,9 @@ class BigScienceEmbeddingTest(unittest.TestCase):
 
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         # position_ids = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]])
-
-        embeddings = model.word_embeddings(tensor_ids)
-        embeddings_ln = model.word_embeddings_layernorm(embeddings)  #
+        with torch.no_grad():            
+            embeddings = model.word_embeddings(tensor_ids)
+            embeddings_ln = model.word_embeddings_layernorm(embeddings)  #
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -301,7 +300,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
 
     @require_torch
-    @torch.no_grad()
     def test_hidden_states_transformers(self):
         # TODO ifelse device
         # cuda_available = torch.cuda.is_available()
@@ -340,7 +338,8 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
 
-        logits = model(tensor_ids.to(device))
+        with torch.no_grad():
+            logits = model(tensor_ids.to(device))
         output_dict = {
             "min": logits.last_hidden_state.min(dim=-1).values[0][0].item(),
             "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),
@@ -354,7 +353,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         self.assertDictEqual(MIN_MAX_DICT, output_dict)
 
     @require_torch
-    @torch.no_grad()
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
         # cuda_available = False
@@ -389,7 +387,8 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
 
         tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(device)
-        output = model(tensor_ids).logits
+        with torch.no_grad():
+            output = model(tensor_ids).logits
 
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
         if cuda_available:
