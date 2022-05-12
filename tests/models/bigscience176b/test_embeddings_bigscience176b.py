@@ -46,10 +46,8 @@ class BigScienceEmbeddingTest(unittest.TestCase):
             _ = AutoModel.from_pretrained(self.path_bigscience_model)
         except BaseException:
             self.fail("Failed loading the model")
-        # pass
 
     @torch.no_grad()
-    # @unittest.skip("demonstrating skipping")
     def test_embeddings(self):
         model = AutoModel.from_pretrained(self.path_bigscience_model)
         model.eval()
@@ -302,7 +300,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
 
     @torch.no_grad()
-    # @unittest.skip("demonstrating skipping")
     def test_hidden_states_transformers(self):
         # TODO ifelse device
         # cuda_available = torch.cuda.is_available()
@@ -355,7 +352,6 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         self.assertDictEqual(MIN_MAX_DICT, output_dict)
 
     @torch.no_grad()
-    # @unittest.skip("demonstrating skipping")
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
         # cuda_available = False
@@ -399,7 +395,3 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         else:
             self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
             self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
-
-
-if __name__ == "__main__":
-    unittest.main()
