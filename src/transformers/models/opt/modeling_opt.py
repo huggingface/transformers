@@ -399,7 +399,7 @@ OPT_START_DOCSTRING = r"""
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-class OPTPretrainedModel(PreTrainedModel):
+class OPTPreTrainedModel(PreTrainedModel):
     config_class = OPTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -502,7 +502,7 @@ OPT_INPUTS_DOCSTRING = r"""
 """
 
 
-class OPTDecoder(OPTPretrainedModel):
+class OPTDecoder(OPTPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OPTDecoderLayer`]
 
@@ -755,7 +755,7 @@ class OPTDecoder(OPTPretrainedModel):
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-class OPTModel(OPTPretrainedModel):
+class OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.decoder = OPTDecoder(config)
@@ -824,7 +824,7 @@ class OPTModel(OPTPretrainedModel):
         )
 
 
-class OPTForCausalLM(OPTPretrainedModel):
+class OPTForCausalLM(OPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head\.weight"]
 
     def __init__(self, config):
