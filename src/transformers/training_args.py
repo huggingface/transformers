@@ -87,6 +87,8 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
+    SGD = "sgd"
+    ADAGRAD = "adagrad"
 
 
 @dataclass
@@ -287,8 +289,7 @@ class TrainingArguments:
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
-            If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
-            model forward method.
+            Whether or not to automatically remove the columns unused by the model forward method.
 
             (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
@@ -446,6 +447,9 @@ class TrainingArguments:
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
+        full_determinism (`bool`, *optional*, defaults to `False`)
+            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
+            distributed training
     """
 
     output_dir: str = field(
@@ -812,6 +816,12 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": "Whether to automatically decrease the batch size in half and rerun the training loop again each time a CUDA Out-of-Memory was reached"
+        },
+    )
+    full_determinism: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed training"
         },
     )
 
