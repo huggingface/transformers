@@ -1300,7 +1300,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         if labels is not None:
             labels = tf.where(
                 labels == self.config.pad_token_id,
-                tf.fill(shape_list(labels), -100),
+                tf.cast(tf.fill(shape_list(labels), -100), labels.dtype),
                 labels,
             )
             use_cache = False
