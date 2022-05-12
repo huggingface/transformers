@@ -32,23 +32,23 @@ Si no fuese así, se espera que el código funcione para ambos backends sin ning
 El [`pipeline`] soporta muchas tareas comunes listas para usar:
 
 **Texto**:
-* Análisis de Sentimientos: clasifica la polaridad de un texto dado.
-* Generación de texto (solo en inglés): genera texto a partir de un input dado.
-* Name entity recognition (NER): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
-* Responder preguntas: extrae la respuesta del contexto dado un contexto y una pregunta.
-* Fill-mask: rellena el espacio faltante dado un texto con palabras enmascaradas.
-* Summarization: genera un resumen de una secuencia larga de texto o un documento.
-* Traducción: traduce un texto a otro idioma.
-* Extracción de características: crea una representación tensorial del texto.
+* Análisis de Sentimiento (Sentiment Analysis, en inglés): clasifica la polaridad de un texto dado.
+* Generación de Texto (Text Generation, en inglés): genera texto a partir de un input dado.
+* Reconocimiento de Entidades (Name Entity Recognition o NER, en inglés): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
+* Responder Preguntas (Question answering, en inglés): extrae la respuesta del contexto dado un contexto y una pregunta.
+* Rellenar Máscara (Fill-mask, en inglés): rellena el espacio faltante dado un texto con palabras enmascaradas.
+* Resumir (Summarization, en inglés): genera un resumen de una secuencia larga de texto o un documento.
+* Traducción (Translation, en inglés): traduce un texto a otro idioma.
+* Extracción de Características (Feature Extraction, en inglés): crea una representación tensorial del texto.
 
 **Imagen**:
-* Clasificación de imágenes: clasifica una imagen.
-* Segmentación de imágenes: clasifica cada pixel de una imagen.
-* Detección de objetos: detecta objetos dentro de una imagen.
+* Clasificación de Imágenes (Image Classification, en inglés): clasifica una imagen.
+* Segmentación de Imágenes (Image Segmentation, en inglés): clasifica cada pixel de una imagen.
+* Detección de Objetos (Object Detection, en inglés): detecta objetos dentro de una imagen.
 
 **Audio**:
-* Clasificación de audios: asigna una etiqueta a un segmento de audio.
-* Automatic speech recognition (ASR): transcribe datos de audio a un texto.
+* Clasificación de Audios (Audio Classification, en inglés): asigna una etiqueta a un segmento de audio.
+* Reconocimiento de Voz Automático (Automatic Speech Recognition o ASR, en inglés): transcribe datos de audio a un texto.
 
 <Tip>
 
@@ -80,25 +80,17 @@ Importa [`pipeline`] y especifica la tarea que deseas completar:
 ```py
 >>> from transformers import pipeline
 
->>> classifier = pipeline("sentiment-analysis")
+>>> clasificador = pipeline("sentiment-analysis", model="pysentimiento/robertuito-sentiment-analysis")
 ```
 
-El pipeline descarga y almacena en caché un [modelo preentrenado](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) por defecto y tokeniza para análisis de sentimiento. Ahora puedes usar `classifier` en tu texto objetivo:
+El pipeline descarga y almacena en caché el [modelo preentrenado](https://huggingface.co/pysentimiento/robertuito-sentiment-analysis) y tokeniza para análisis de sentimiento. Si no hubieramos elegido un modelo el pipeline habría elegido uno por defecto. Ahora puedes usar `clasificador` en tu texto objetivo:
 
 ```py
->>> classifier("We are very happy to show you the 🤗 Transformers library.")
-[{'label': 'POSITIVE', 'score': 0.9998}]
+>>> clasificador("Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.")
+[{'label': 'POS', 'score': 0.9916}]
 ```
 
-Para más de un enunciado entrega una lista de frases al [`pipeline`] que devolverá una lista de diccionarios:
-
-```py
->>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
->>> for result in results:
-...     print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
-label: POSITIVE, with score: 0.9998
-label: NEGATIVE, with score: 0.5309
-```
+Para más de un enunciado, entrega una lista al [`pipeline`] que devolverá una lista de diccionarios:
 
 El [`pipeline`] también puede iterar sobre un dataset entero. Comienza instalando la biblioteca [🤗 Datasets](https://huggingface.co/docs/datasets/):
 
@@ -112,7 +104,7 @@ Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres us
 >>> import torch
 >>> from transformers import pipeline
 
->>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
+>>> reconocedor_de_voz = pipeline("automatic-speech-recognition", model="jonatasgrosman/wav2vec2-large-xlsr-53-spanish", device=0)
 ```
 
 A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
@@ -120,29 +112,29 @@ A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggin
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="es-ES", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coincide con la frecuencia de muestreo con la que se entrenó `facebook/wav2vec2-base-960h`.
+Debemos asegurarnos de que la frecuencia de muestreo del conjunto de datos coincide con la frecuencia de muestreo con la que se entrenó `jonatasgrosman/wav2vec2-large-xlsr-53-spanish`.
 
 ```py
->>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
+>>> dataset = dataset.cast_column("audio", Audio(sampling_rate=reconocedor_de_voz.feature_extractor.sampling_rate))
 ```
 
-Los archivos de audio se cargan y remuestrean automáticamente cuando se llama a la columna `"audio"`.
-Extraigamos las matrices de forma de onda cruda de las primeras 4 muestras y pasémosla como una lista al pipeline:
+Los archivos de audio se cargan y remuestrean automáticamente cuando llamamos a la columna `"audio"`.
+Extraigamos las matrices de onda cruda (raw waveform, en inglés) de las primeras 4 muestras y pasémosla como una lista al pipeline:
 
 ```py
->>> result = speech_recognizer(dataset[:4]["audio"])
->>> print([d["text"] for d in result])
-['I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT', "FONDERING HOW I'D SET UP A JOIN TO HET WITH MY WIFE AND WHERE THE AP MIGHT BE", "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AND I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS", 'HOW DO I TURN A JOIN A COUNT']
+>>> resultado = reconocedor_de_voz(dataset[:4]["audio"])
+>>> print([d["text"] for d in resultado])
+['ahora buenas e a ver  tengo un problema como vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser', 'la aplicación no cargue salda de mi nueva cuenta', 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo aceder a mi cuenta no necesito inmediatamente', 'ora buena la aplicación no se carga la viladad no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puede hacer a mi cuenta']
 ```
 
 Para un dataset más grande, donde los inputs son de mayor tamaño (como en habla/audio o visión), querrás pasar un generador en lugar de una lista que carga todos los inputs en memoria. Ve la [documentación del pipeline](./main_classes/pipelines) para más información.
 
-### Use otro modelo y otro tokenizador en el pipeline
+### Usa otro modelo y otro tokenizador en el pipeline
 
-El [`pipeline`] puede adaptarse a cualquier modelo del [Model Hub](https://huggingface.co/models) haciendo más fácil adaptar el [`pipeline`] para otros casos de uso. Por ejemplo, si quisieras un modelo capaz de manejar texto en francés, usa los tags en el Model Hub para filtrar entre los modelos apropiados. El resultado mejor filtrado devuelve un [modelo BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingual fine-tuned para el análisis de sentimiento. Genial, ¡vamos a usar este modelo!
+El [`pipeline`] puede acomodarse a cualquier modelo del [Model Hub](https://huggingface.co/models) haciendo más fácil adaptar el [`pipeline`] para otros casos de uso. Por ejemplo, si quisieras un modelo capaz de manejar texto en francés, usa los tags en el Model Hub para filtrar entre los modelos apropiados. El resultado mejor filtrado devuelve un [modelo BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingual fine-tuned para el análisis de sentimiento. Genial, ¡vamos a usar este modelo!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
@@ -201,8 +193,8 @@ Carga un tokenizador con [`AutoTokenizer`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+>>> nombre_del_modelo = "nlptown/bert-base-multilingual-uncased-sentiment"
+>>> tokenizer = AutoTokenizer.from_pretrained(nombre_del_modelo)
 ```
 
 Después, el tokenizador convierte los tokens a números para construir un tensor que servirá como input para el modelo. Esto es conocido como el *vocabulario* del modelo.
@@ -210,11 +202,11 @@ Después, el tokenizador convierte los tokens a números para construir un tenso
 Pasa tu texto al tokenizador:
 
 ```py
->>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
+>>> encoding = tokenizer("Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.")
 >>> print(encoding)
-{'input_ids': [101, 11312, 10320, 12495, 19308, 10114, 11391, 10855, 10103, 100, 58263, 13299, 119, 102],
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+{'input_ids': [101, 10602, 14000, 13653, 43353, 10107, 10102, 47201, 10218, 10106, 18283, 10102, 100, 58263, 119, 102],
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
 El tokenizador devolverá un diccionario conteniendo:
@@ -342,7 +334,7 @@ Los outputs del modelo también se comportan como tuplas o diccionarios (e.g., p
 
 <frameworkcontent>
 <pt>
-Una vez que tu modelo esté fine-tuned puedes guardarlo con tu tokenizador usando [`PreTrainedModel.save_pretrained`]:
+Una vez que se haya hecho fine-tuning a tu modelo puedes guardarlo con tu tokenizador usando [`PreTrainedModel.save_pretrained`]:
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
@@ -359,7 +351,7 @@ Cuando quieras usar el modelo otra vez cárgalo con [`PreTrainedModel.from_pretr
 </pt>
 
 <tf>
-Una vez que tu modelo esté fine-tuned puedes guardarlo con tu tokenizador usando [`TFPreTrainedModel.save_pretrained`]:
+Una vez que se haya hecho fine-tuning a tu modelo puedes guardarlo con tu tokenizador usando [`TFPreTrainedModel.save_pretrained`]:
 
 ```py
 >>> tf_save_directory = "./tf_save_pretrained"
@@ -375,7 +367,7 @@ Cuando quieras usar el modelo otra vez cárgalo con [`TFPreTrainedModel.from_pre
 </tf>
 </frameworkcontent>
 
-Una característica particularmente cool de 🤗 Transformers es la habilidad de guardar el modelo y cargarlo como un modelo de PyTorch o TensorFlow. El parámetro `from_pt` o `from_tf` puede convertir el modelo de un framework al otro:
+Una característica particularmente interesante de 🤗 Transformers es la habilidad de guardar el modelo y cargarlo como un modelo de PyTorch o TensorFlow. El parámetro `from_pt` o `from_tf` puede convertir el modelo de un framework al otro:
 
 <frameworkcontent>
 <pt>
