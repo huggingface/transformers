@@ -26,17 +26,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigscience/BigScience176B": "https://huggingface.co/bigscience/BigScience176B/resolve/main/config.json",
-}
+# BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+#     "bigscience/BigScience176B": "https://huggingface.co/bigscience/BigScience176B/resolve/main/config.json",
+# }
+BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class BigScience176BConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [*BigScience176BModel*] or a
-    [*TFBigScience176BModel*]. It is used to instantiate a GPT-2 model according to the specified arguments, defining
-    the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the GPT-2 [small](https://huggingface.co/bigscience176b) architecture.
+    This is the configuration class to store the configuration of a [*BigScience176BModel*]. It is used to instantiate
+    a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to the BLOOM architecture
+    [bigscience/bigscience176b](https://huggingface.co/bigscience/bigscience176b).
 
     Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
     documentation from [*PretrainedConfig*] for more information.

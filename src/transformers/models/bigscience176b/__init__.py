@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -29,11 +29,20 @@ _import_structure = {
     ],
     "tokenization_bigscience176b": ["BigScience176BTokenizer"],
 }
-
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_bigscience176b_fast"] = ["BigScience176BTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_bigscience176b"] = [
         "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BigScience176BLMHeadModel",
@@ -49,10 +58,20 @@ if TYPE_CHECKING:
     )
     from .tokenization_bigscience176b import BigScience176BTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_bigscience176b_fast import BigScience176BTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_bigscience176b import (
             BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
             BigScience176BLMHeadModel,

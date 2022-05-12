@@ -291,12 +291,12 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "models/megatron_gpt2/test_modeling_megatron_gpt2.py",
     ],
     "models/bigscience176b/modeling_bigscience176b.py": [
-        "bigscience176b/test_embeddings_bigscience176b.py",
-        "bigscience176b/test_modeling_bigscience176b.py",
+        "models/bigscience176b/test_embeddings_bigscience176b.py",
+        "models/bigscience176b/test_modeling_bigscience176b.py",
     ],
     "models/bigscience176b/tokenization_bigscience176b.py": [
-        "bigscience176b/test_tokenization_bigscience176b.py",
-        "bigscience176b/test_tokenizer_bigscience176b.py",
+        "models/bigscience176b/test_tokenization_bigscience176b.py",
+        "models/bigscience176b/test_tokenizer_bigscience176b.py",
     ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
