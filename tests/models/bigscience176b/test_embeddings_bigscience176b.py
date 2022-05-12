@@ -2,8 +2,17 @@ import unittest
 
 import torch
 
-from transformers import AutoModel, AutoTokenizer
-from transformers.models.bigscience176b import BigScience176BLMHeadModel
+from transformers import AutoModel, AutoTokenizer, BigScience176BLMHeadModel, is_torch_available
+
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BigScience176BLMHeadModel,
+        BigScience176BModel,
+        BigScience176BTokenizer,
+    )
 
 
 class BigScienceEmbeddingTest(unittest.TestCase):

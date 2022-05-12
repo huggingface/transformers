@@ -4,7 +4,11 @@ from functools import lru_cache
 from itertools import accumulate
 
 import numpy as np
-import torch
+
+from transformers import is_torch_available
+
+if is_torch_available():
+    import torch
 
 
 def read_longs(f, n):
