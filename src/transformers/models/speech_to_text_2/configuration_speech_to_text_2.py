@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/s2t-wav2vec2-large-en-de": "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/config.json",
+    "facebook/s2t-wav2vec2-large-en-de": (
+        "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/config.json"
+    ),
     # See all Speech2Text models at https://huggingface.co/models?filter=speech2text2
 }
 

@@ -255,7 +255,8 @@ class OnnxExportTestCaseV2(TestCase):
 
             if torch_version < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
-                    f"Skipping due to incompatible PyTorch version. Minimum required is {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                    "Skipping due to incompatible PyTorch version. Minimum required is"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
                 )
 
         # Check the modality of the inputs and instantiate the appropriate preprocessor

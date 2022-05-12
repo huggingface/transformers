@@ -288,7 +288,8 @@ class BertTokenizerMismatchTest(unittest.TestCase):
             BertTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
             self.assertTrue(
                 cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
+                    " is called from."
                 )
             )
         EXAMPLE_BERT_ID = "bert-base-cased"
@@ -296,6 +297,7 @@ class BertTokenizerMismatchTest(unittest.TestCase):
             BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
             self.assertTrue(
                 cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
+                    " is called from."
                 )
             )
