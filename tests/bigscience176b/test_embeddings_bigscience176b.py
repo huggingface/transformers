@@ -394,6 +394,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         else:
             self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
             self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
-        
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,9 @@ from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
 
+# import deepspeed
+
+
 logging.set_verbosity_info()
 
 WEIGHTS_TO_AVERAGE_ENDSWITH = [
@@ -68,6 +71,16 @@ def layer_name_mapping(key, file):
     return f"h.{layer_number}." + key
 
 
+def get_dtype_size(dtype):
+    if dtype == torch.bool:
+        return 1 / 8
+    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    if bit_search is None:
+        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
+    bit_size = int(bit_search.groups()[0])
+    return bit_size // 8
+
+
 def convert_bigscience176b_checkpoint_to_pytorch(
     bigscience176b_checkpoint_path, bigscience176b_config_file, pytorch_dump_folder_path, shard_model
 ):
@@ -78,18 +91,21 @@ def convert_bigscience176b_checkpoint_to_pytorch(
         config = BigScience176BConfig.from_json_file(bigscience176b_config_file)
 
     if shard_model:
-        print("WARNING: we do not check if all the keys match after this step")
         file_names = os.listdir(bigscience176b_checkpoint_path)
         file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
 
         index_dict = {"weight_map": {}, "metadata": {}}
-        # step_layers = len(file_names) // n_shards
+        total_size = 0
+        dtype_size = get_dtype_size(config.dtype)
+
         missing_keys = None
 
         config = BigScience176BConfig()
 
         for j, file in enumerate(file_names):
+            print("Processing file: {}".format(file))
             tensors = None
+            # final_tensors = {}
 
             for i in range(config.pretraining_tp):
                 # load all TP files
@@ -116,10 +132,12 @@ def convert_bigscience176b_checkpoint_to_pytorch(
                             tensors[key] = torch.cat(
                                 [tensors[key], temp[key]], dim=cat_dim
                             )  # We concatenate these weights accross TP ranks
+
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                     tensors[key] = tensors[key] / config.pretraining_tp
+                # final_tensors['transformer.'+key] = tensors[key]
             torch.save(
                 tensors,
                 os.path.join(
@@ -127,13 +145,24 @@ def convert_bigscience176b_checkpoint_to_pytorch(
                     "pytorch_model_{}-of-{}.bin".format(str(j + 1).zfill(5), str(len(file_names)).zfill(5)),
                 ),
             )
+
+            tensor_size = 1
             for key in tensors.keys():
+                temp_tensor = tensors[key]
+                for ele in temp_tensor.size():
+                    tensor_size *= ele
+                total_size += dtype_size * tensor_size
+                if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                    tensors[key] = tensors[key] / config.pretraining_tp
+
                 if key not in index_dict["weight_map"]:
                     index_dict["weight_map"][key] = "pytorch_model_{}-of-{}.bin".format(
                         str(j + 1).zfill(5), str(len(file_names)).zfill(5)
                     )
+
         config = BigScience176BConfig()
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
+        index_dict["metadata"]["total_size"] = total_size
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
             f.write(config.to_json_string())
         with open(os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME + ".index.json"), "w", encoding="utf-8") as f:
@@ -141,13 +170,12 @@ def convert_bigscience176b_checkpoint_to_pytorch(
             f.write(json_config)
     else:
         model = BigScience176BModel(config)
-        print(model.state_dict().keys())
 
         file_names = os.listdir(bigscience176b_checkpoint_path)
         file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
 
         missing_keys = None
-        for file in file_names:
+        for i, file in enumerate(file_names):
             tensors = None
             for i in range(config.pretraining_tp):
                 # load all TP files
@@ -208,7 +236,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path to the TensorFlow checkpoint path.",
+        help="Path to the Megatron-LM checkpoint path.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

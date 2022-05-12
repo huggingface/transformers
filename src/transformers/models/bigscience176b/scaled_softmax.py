@@ -17,6 +17,7 @@
 import torch
 import torch.nn as nn
 
+
 class ScaledSoftmax(nn.Module):
     """
     fused operation: scaling + mask + softmax
@@ -30,6 +31,7 @@ class ScaledSoftmax(nn.Module):
         softmax_in_fp32: if true, softmax in performed at fp32 precision.
         scale: scaling factor used in input tensor scaling.
     """
+
     # custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
@@ -61,9 +63,7 @@ class ScaledSoftmax(nn.Module):
             ),
         )
 
-        assert (
-            self.scale is None or softmax_in_fp32
-        ), "softmax should be in fp32 when scaled"
+        assert self.scale is None or softmax_in_fp32, "softmax should be in fp32 when scaled"
 
     def forward(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
