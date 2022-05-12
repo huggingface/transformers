@@ -40,7 +40,12 @@ else:
         "SwinPreTrainedModel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_swin"] = [
         "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFSwinForImageClassification",
@@ -66,7 +71,12 @@ if TYPE_CHECKING:
             SwinPreTrainedModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSwinForImageClassification,
@@ -74,7 +84,6 @@ if TYPE_CHECKING:
             TFSwinModel,
             TFSwinPreTrainedModel,
         )
-
 
 else:
     import sys
