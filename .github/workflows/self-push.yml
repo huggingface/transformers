@@ -197,42 +197,39 @@ jobs:
           name: ${{ matrix.machines }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
 
-  run_tests_torch_cuda_extensions_gpu:
-    name: Torch CUDA extension tests
+  run_tests_torch_cuda_extensions_single_gpu:
+    name: Torch CUDA extension tests on single GPU
     needs: setup
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
       matrix:
-        machines: [single-gpu, multi-gpu]
+        machines: [single-gpu]
     runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
-      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      image: nvcr.io/nvidia/pytorch:21.03-py3
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
-      - name: Re-compile DeepSpeed
-        working-directory: /workspace
+      - name: Install dependencies
         run: |
-          pip install deepspeed # installs the deps correctly
-          rm -rf DeepSpeed
-          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          apt -y update && apt install -y libaio-dev
+          pip install --upgrade pip
+          pip install .[deepspeed-testing]
 
       - name: Are GPUs recognized by our DL frameworks
-        working-directory: /workspace/transformers
         run: |
           utils/print_env_pt.py
 
-      - name: Update clone
-        working-directory: /workspace/transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
       - name: Run all non-slow selected tests on GPU
-        working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
           python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
@@ -240,14 +237,64 @@ jobs:
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.machines }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
+          path: reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
+
+  run_tests_torch_cuda_extensions_multi_gpu:
+    name: Torch CUDA extension tests on multi GPUs
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [multi-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
+    container:
+      image: nvcr.io/nvidia/pytorch:21.03-py3
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install dependencies
+        run: |
+          apt -y update && apt install -y libaio-dev
+          pip install --upgrade pip
+          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
+          pip install .[testing,deepspeed,fairscale]
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          utils/print_env_pt.py
+
+      - name: Run all non-slow selected tests on GPU
+        # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
+        run: |
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.machines }}_run_tests_torch_cuda_extensions_gpu_test_reports
+          path: reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
 
   send_results:
     name: Send results to webhook
@@ -257,7 +304,8 @@ jobs:
         setup,
         run_tests_single_gpu,
         run_tests_multi_gpu,
-        run_tests_torch_cuda_extensions_gpu
+        run_tests_torch_cuda_extensions_single_gpu,
+        run_tests_torch_cuda_extensions_multi_gpu
     ]
     steps:
       - uses: actions/checkout@v2
