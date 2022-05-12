@@ -2023,7 +2023,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
                     bbox = information_first_truncated["bbox"][0]
-                    overflowing_bbox = information_first_truncated["bbox"][1]
+                    overflowing_bbox = information_first_truncated["bbox"][0]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
