@@ -5,7 +5,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import AutoTokenizer
-from utils_test_tokenizer import MMapIndexedDataset
+from .utils_test_tokenizer import MMapIndexedDataset
 
 
 # TO PORT ON transformers.test_utils ?
