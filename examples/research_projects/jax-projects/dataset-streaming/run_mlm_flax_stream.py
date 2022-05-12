@@ -281,7 +281,7 @@ def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
         i += len(tokenized_samples["input_ids"])
 
         # concatenate tokenized samples to list
-        samples = {k: samples[k] + tokenized_samples[k] for k in tokenized_samples.keys()}
+        samples = {k: samples[k] + tokenized_samples[k] for k in ['input_ids', 'attention_mask', 'special_tokens_mask']}
 
     # Concatenated tokens are split to lists of length `max_seq_length`.
     # Note that remainedr of % max_seq_length are thrown away.
