@@ -247,6 +247,7 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
+    "models.opt": ["OPTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -1323,6 +1324,14 @@ else:
             "load_tf_weights_in_openai_gpt",
         ]
     )
+    _import_structure["models.opt"].extend(
+        [
+            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OPTForCausalLM",
+            "OPTModel",
+            "OPTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -2373,7 +2382,6 @@ else:
             "FlaxBartPreTrainedModel",
         ]
     )
-
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -2382,6 +2390,7 @@ else:
             "FlaxBeitPreTrainedModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForCausalLM",
@@ -2718,6 +2727,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+    from .models.opt import OPTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -3630,6 +3640,7 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
+        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
