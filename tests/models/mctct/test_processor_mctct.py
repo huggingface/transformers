@@ -18,16 +18,16 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import MCTCTProcessor, is_speech_available
+from transformers import MCTCTProcessor, is_speech_available, is_torch_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizer
 from transformers.testing_utils import require_torch, require_torchaudio
 
-from .test_feature_extraction_mctct import floats_list
 
-
-if is_speech_available():
+if is_speech_available() and is_torch_available():
     from transformers import MCTCTFeatureExtractor
+
+    from .test_feature_extraction_mctct import floats_list
 
 
 @require_torch
