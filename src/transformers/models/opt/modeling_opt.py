@@ -474,9 +474,9 @@ OPT_INPUTS_DOCSTRING = r"""
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -514,9 +514,7 @@ class OPTDecoder(OPTPretrainedModel):
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
 
-        self.embed_positions = OPTLearnedPositionalEmbedding(
-            num_embeddings, config.d_model, self.padding_idx
-        )
+        self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.d_model, self.padding_idx)
 
         if config.word_embed_proj_dim != config.d_model:
             self.project_out = nn.Linear(config.d_model, config.word_embed_proj_dim, bias=False)
