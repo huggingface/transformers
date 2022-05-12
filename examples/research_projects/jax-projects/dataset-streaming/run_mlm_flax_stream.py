@@ -401,7 +401,6 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
-
     tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
