@@ -1516,7 +1516,11 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=False)
-            tf_inputs_dict = {key: val for key, val in tf_inputs_dict.items() if "head_mask" not in key and isinstance(val, tf.Tensor)}
+            tf_inputs_dict = {
+                key: val
+                for key, val in tf_inputs_dict.items()
+                if "head_mask" not in key and isinstance(val, tf.Tensor)
+            }
             tf_inputs_dict["extra_unwanted_column"] = list(tf_inputs_dict.values())[0]  # Use a random other tensor
             input_dataset = Dataset.from_dict(tf_inputs_dict)
             tf_dataset = model.prepare_tf_dataset(
