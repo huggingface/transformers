@@ -379,7 +379,6 @@ class RetriBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # This should not fail
 
                 with torch.no_grad():  # saves some time
-
                     # The following lines are different from the common's ones
                     model.embed_questions(**encoded_sequence)
                     model.embed_questions(**batch_encoded_sequence)
