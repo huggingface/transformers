@@ -75,8 +75,10 @@ def feature_extractor_class_from_name(class_name: str):
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
-            return getattr(module, class_name)
-            break
+            try:
+                return getattr(module, class_name)
+            except AttributeError:
+                continue
 
     for config, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
         if getattr(extractor, "__name__", None) == class_name:

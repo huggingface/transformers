@@ -65,7 +65,10 @@ def processor_class_from_name(class_name: str):
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
-            return getattr(module, class_name)
+            try:
+                return getattr(module, class_name)
+            except AttributeError:
+                continue
 
     for processor in PROCESSOR_MAPPING._extra_content.values():
         if getattr(processor, "__name__", None) == class_name:
