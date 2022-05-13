@@ -43,8 +43,8 @@ class OPTConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50272):
             Vocabulary size of the OPT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OPTModel`] or [`TFOPTModel`].
-        d_model (`int`, *optional*, defaults to 768):
+            `inputs_ids` passed when calling [`OPTModel`]
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.

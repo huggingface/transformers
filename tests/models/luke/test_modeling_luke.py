@@ -624,7 +624,10 @@ class LukeModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-        text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        text = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         span = (39, 42)
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
@@ -656,7 +659,10 @@ class LukeModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large", task="entity_classification")
-        text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        text = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         span = (39, 42)
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 

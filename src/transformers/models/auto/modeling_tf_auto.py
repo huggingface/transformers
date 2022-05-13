@@ -507,9 +507,9 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
         warnings.warn(
-            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
-            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+            " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
+            " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
         return super().from_config(config)
@@ -517,9 +517,9 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         warnings.warn(
-            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
-            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+            " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
+            " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

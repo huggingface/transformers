@@ -33,10 +33,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
         "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt",
-        "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt",
-        "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt",
+        "junnyu/roformer_chinese_char_small": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_chinese_char_base": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_discriminator": (
+            "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_generator": (
+            "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt"
+        ),
     }
 }
 

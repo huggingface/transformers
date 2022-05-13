@@ -854,7 +854,7 @@ jobs:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: black --check examples tests src utils
+            - run: black --check --preview examples tests src utils
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils

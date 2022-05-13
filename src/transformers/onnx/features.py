@@ -65,7 +65,8 @@ if is_tf_available():
     )
 if not is_torch_available() and not is_tf_available():
     logger.warning(
-        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models without one of these libraries installed."
+        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
+        " without one of these libraries installed."
     )
 
 
@@ -443,8 +444,7 @@ class FeaturesManager:
             task_to_automodel = FeaturesManager._TASKS_TO_TF_AUTOMODELS
         if task not in task_to_automodel:
             raise KeyError(
-                f"Unknown task: {feature}. "
-                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+                f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
         return task_to_automodel[task]
 
@@ -497,8 +497,7 @@ class FeaturesManager:
         model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(
-                f"{model.config.model_type} doesn't support feature {feature}. "
-                f"Supported values are: {model_features}"
+                f"{model.config.model_type} doesn't support feature {feature}. Supported values are: {model_features}"
             )
 
         return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]

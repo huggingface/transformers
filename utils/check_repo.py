@@ -93,8 +93,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeparableConv1D",  # Building part of bigger (tested) model.
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
-    "FlaxOPTForCausalLM",  #
-    "OPTDecoderWrapper",
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -525,7 +523,8 @@ def check_all_decorator_order():
     if len(errors) > 0:
         msg = "\n".join(errors)
         raise ValueError(
-            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+            "The parameterized decorator (and its variants) should always be first, but this is not the case in the"
+            f" following files:\n{msg}"
         )
 
 

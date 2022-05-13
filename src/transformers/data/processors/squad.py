@@ -57,7 +57,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
     """Check if this is the 'max context' doc span for the token."""
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span.start + doc_span.length - 1
         if position < doc_span.start:
             continue
@@ -79,7 +79,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     # return True
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span["start"] + doc_span["length"] - 1
         if position < doc_span["start"]:
             continue
@@ -120,7 +120,7 @@ def squad_convert_example_to_features(
     tok_to_orig_index = []
     orig_to_tok_index = []
     all_doc_tokens = []
-    for (i, token) in enumerate(example.doc_tokens):
+    for i, token in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
         if tokenizer.__class__.__name__ in [
             "RobertaTokenizer",
