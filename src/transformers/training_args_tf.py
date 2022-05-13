@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Optional, Tuple
 
 from .training_args import TrainingArguments
 from .utils import cached_property, is_tf_available, logging, tf_required
@@ -161,17 +161,17 @@ class TFTrainingArguments(TrainingArguments):
             Whether to activate the XLA compilation or not.
     """
 
-    tpu_name: str = field(
+    tpu_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of TPU"},
     )
 
-    tpu_zone: str = field(
+    tpu_zone: Optional[str] = field(
         default=None,
         metadata={"help": "Zone of TPU"},
     )
 
-    gcp_project: str = field(
+    gcp_project: Optional[str] = field(
         default=None,
         metadata={"help": "Name of Cloud TPU-enabled project"},
     )

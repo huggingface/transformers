@@ -37,6 +37,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
@@ -50,7 +51,7 @@ from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -61,7 +62,10 @@ def parse_args():
         "--dataset_name",
         type=str,
         default="cifar10",
-        help="The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private, dataset).",
+        help=(
+            "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
+            " dataset)."
+        ),
     )
     parser.add_argument("--train_dir", type=str, default=None, help="A folder containing the training data.")
     parser.add_argument("--validation_dir", type=str, default=None, help="A folder containing the validation data.")
@@ -69,15 +73,19 @@ def parse_args():
         "--max_train_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of training examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--train_val_split",
@@ -188,11 +196,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -362,6 +366,10 @@ def main():
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Figure out how many steps we should save the Accelerator states
     if hasattr(args.checkpointing_steps, "isdigit"):
         checkpointing_steps = args.checkpointing_steps
@@ -393,33 +401,39 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
+    starting_epoch = 0
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
             accelerator.load_state(args.resume_from_checkpoint)
-            resume_step = None
-            path = args.resume_from_checkpoint
+            path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-        if "epoch" in path:
-            args.num_train_epochs -= int(path.replace("epoch_", ""))
-        else:
-            resume_step = int(path.replace("step_", ""))
-            args.num_train_epochs -= resume_step // len(train_dataloader)
-            resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
+        # Extract `epoch_{i}` or `step_{i}`
+        training_difference = os.path.splitext(path)[0]
 
-    for epoch in range(args.num_train_epochs):
+        if "epoch" in training_difference:
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
+            resume_step = None
+        else:
+            resume_step = int(training_difference.replace("step_", ""))
+            starting_epoch = resume_step // len(train_dataloader)
+            resume_step -= starting_epoch * len(train_dataloader)
+
+    for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
-                continue
+            if args.resume_from_checkpoint and epoch == starting_epoch:
+                if resume_step is not None and step < resume_step:
+                    completed_steps += 1
+                    continue
             outputs = model(**batch)
             loss = outputs.loss
             # We keep track of the loss at each epoch
@@ -436,7 +450,7 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps}"
+                    output_dir = f"step_{completed_steps }"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
@@ -444,7 +458,11 @@ def main():
                     if args.push_to_hub and epoch < args.num_train_epochs - 1:
                         accelerator.wait_for_everyone()
                         unwrapped_model = accelerator.unwrap_model(model)
-                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                        unwrapped_model.save_pretrained(
+                            args.output_dir,
+                            is_main_process=accelerator.is_main_process,
+                            save_function=accelerator.save,
+                        )
                         if accelerator.is_main_process:
                             feature_extractor.save_pretrained(args.output_dir)
                             repo.push_to_hub(
@@ -459,7 +477,8 @@ def main():
         model.eval()
         samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             # If we are in a multiprocess environment, the last batch has duplicates
@@ -490,7 +509,9 @@ def main():
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 feature_extractor.save_pretrained(args.output_dir)
                 repo.push_to_hub(
@@ -506,7 +527,9 @@ def main():
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        unwrapped_model.save_pretrained(
+            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+        )
         if accelerator.is_main_process:
             feature_extractor.save_pretrained(args.output_dir)
             if args.push_to_hub:

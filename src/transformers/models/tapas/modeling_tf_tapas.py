@@ -38,7 +38,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -346,7 +346,7 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -519,8 +519,8 @@ class TFTapasLayer(tf.keras.layers.Layer):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers "
-                    "by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -1095,7 +1095,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         ... )
         >>> labels = tokenizer(
         ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="tf"
-        >>> )["input_ids"]
+        ... )["input_ids"]
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
@@ -1533,7 +1533,8 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                         per_example_additional_loss *= large_answer_loss_mask
                     else:
                         raise ValueError(
-                            "You have to specify numeric values and numeric values scale in order to calculate the regression loss"
+                            "You have to specify numeric values and numeric values scale in order to calculate the"
+                            " regression loss"
                         )
                 total_loss += tf.reduce_mean(per_example_additional_loss)
 
@@ -1723,10 +1724,13 @@ class ProductIndexMap(IndexMap):
           inner_index: IndexMap, must have the same shape as `outer_index`.
         """
         if outer_index.batch_dims != inner_index.batch_dims:
-            raise ValueError("outer_index.batch_dims and inner_index.batch_dims " "must be the same.")
+            raise ValueError("outer_index.batch_dims and inner_index.batch_dims must be the same.")
 
         super(ProductIndexMap, self).__init__(
-            indices=(inner_index.indices + outer_index.indices * inner_index.num_segments),
+            indices=(
+                inner_index.indices
+                + outer_index.indices * tf.cast(inner_index.num_segments, inner_index.indices.dtype)
+            ),
             num_segments=inner_index.num_segments * outer_index.num_segments,
             batch_dims=inner_index.batch_dims,
         )
@@ -1785,7 +1789,7 @@ def flatten(index, name="segmented_flatten"):
     for _ in range(index.batch_dims, index.indices.shape.rank):
         offset = tf.expand_dims(offset, -1)
 
-    indices = offset + index.indices
+    indices = tf.cast(offset, index.indices.dtype) + index.indices
     return IndexMap(indices=tf.reshape(indices, [-1]), num_segments=index.num_segments * batch_size, batch_dims=0)
 
 
@@ -2216,7 +2220,7 @@ def _calculate_expected_result(
         aggregation_op_only_probs = gumbel_dist.sample()
     else:
         # <float32>[batch_size, num_aggregation_labels - 1]
-        aggregation_op_only_probs = tf.nn.softmax(logits_aggregation[:, 1:] / config.aggregation_temperature, axis=-1)
+        aggregation_op_only_probs = stable_softmax(logits_aggregation[:, 1:] / config.aggregation_temperature, axis=-1)
     all_results = tf.concat(
         [
             tf.expand_dims(sum_result, axis=1),

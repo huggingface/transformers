@@ -189,8 +189,9 @@ python run_summarization.py  \
 
 🤗 [Accelerate](https://huggingface.co/docs/accelerate/index.html) is a PyTorch-only library that offers a unified method for training a model on several types of setups (CPU-only, multiple GPUs, TPUs) while maintaining complete visibility into the PyTorch training loop. Make sure you have 🤗 Accelerate installed if you don't already have it:
 
+> Note: As Accelerate is rapidly developing, the git version of accelerate must be installed to run the scripts
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 Instead of the `run_summarization.py` script, you need to use the `run_summarization_no_trainer.py` script. 🤗 Accelerate supported scripts will have a `task_no_trainer.py` file in the folder. Begin by running the following command to create and save a configuration file:

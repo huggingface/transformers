@@ -9,6 +9,8 @@ from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 if is_tf_available():
     import tensorflow as tf
 
+    from ..tf_utils import stable_softmax
+
 
 if is_torch_available():
     import torch
@@ -101,7 +103,7 @@ class FillMaskPipeline(Pipeline):
             outputs = outputs.numpy()
 
             logits = outputs[0, masked_index, :]
-            probs = tf.nn.softmax(logits, axis=-1)
+            probs = stable_softmax(logits, axis=-1)
             if target_ids is not None:
                 probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
                 probs = tf.expand_dims(probs, 0)
@@ -165,7 +167,7 @@ class FillMaskPipeline(Pipeline):
                 if len(input_ids) == 0:
                     logger.warning(
                         f"The specified target token `{target}` does not exist in the model vocabulary. "
-                        f"We cannot replace it with anything meaningful, ignoring it"
+                        "We cannot replace it with anything meaningful, ignoring it"
                     )
                     continue
                 id_ = input_ids[0]
