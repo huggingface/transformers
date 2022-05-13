@@ -106,7 +106,7 @@ nvidia-smi
 ```
 
 ```bash
-Tue Jan 11 08:58:05 2022       
+Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 | NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
 |-------------------------------+----------------------+----------------------+
@@ -118,7 +118,7 @@ Tue Jan 11 08:58:05 2022
 | N/A   37C    P0    39W / 300W |   2631MiB / 16160MiB |      0%      Default |
 |                               |                      |                  N/A |
 +-------------------------------+----------------------+----------------------+
-                                                                            
+
 +-----------------------------------------------------------------------------+
 | Processes:                                                                  |
 |  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
@@ -198,7 +198,7 @@ Next we have a look at another trick to save a little bit more GPU memory called
 
 Even when we set the batch size to 1 and use gradient accumulation we can still run out of memory when working with large models. In order to compute the gradients during the backward pass all activations from the forward pass are normally saved. This can create a big memory overhead. Alternatively, one could forget all activations during the forward pass and recompute them on demand during the backward pass. This would however add a significant computational overhead and slow down training.
 
-Gradient checkpointing strikes a compromise between the two approaches and saves strategically selected activations throughout the computational graph so only a fraction of the activations need to be re-computed for the gradients. See [this great article](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9) explaining the ideas behind gradient checkpointing. 
+Gradient checkpointing strikes a compromise between the two approaches and saves strategically selected activations throughout the computational graph so only a fraction of the activations need to be re-computed for the gradients. See [this great article](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9) explaining the ideas behind gradient checkpointing.
 
 To enable gradient checkpointing in the [`Trainer`] we only need ot pass it as a flag to the [`TrainingArguments`]. Everything else is handled under the hood:
 
@@ -314,7 +314,7 @@ We went from 15 GB memory usage to 5 GB - a 3x improvement while maintaining the
 
 ### 8-bit Adam
 
-Instead of aggregating optimizer states like Adafactor, 8-bit Adam keeps the full state and quantizes it. Quantization means that it stores the state with lower precision and dequantizes it only for the optimization. This is similar to the idea behind FP16 training where using variables with lower precision saves memory. 
+Instead of aggregating optimizer states like Adafactor, 8-bit Adam keeps the full state and quantizes it. Quantization means that it stores the state with lower precision and dequantizes it only for the optimization. This is similar to the idea behind FP16 training where using variables with lower precision saves memory.
 
 In contrast to the previous approaches is this one not integrated into the [`Trainer`] as a simple flag. We need to install the 8-bit optimizer and then pass it as a custom optimizer to the [`Trainer`]. Follow the installation guide in the Github [repo](https://github.com/facebookresearch/bitsandbytes) to install the `bitsandbytes` library that implements the 8-bit Adam optimizer.
 
@@ -394,7 +394,7 @@ GPU memory occupied: 5363 MB.
 ```
 
 Again, we get about a 3x memory improvement and even slightly higher throughput as using Adafactor. So we have seen how we can optimize the memory footprint of large models. The following plot summarizes all our experiments:
-    
+
 ![png](https://huggingface.co/datasets/lvwerra/repo-images/raw/main/gpu-memory-savings.png)
 
 ## Using 🤗 Accelerate
@@ -412,7 +412,7 @@ training_args = TrainingArguments(
 )
 ```
 
-The full example training loop with 🤗 Accelerate is only a handful of lines of code long: 
+The full example training loop with 🤗 Accelerate is only a handful of lines of code long:
 
 
 ```py
@@ -459,7 +459,7 @@ When we train models there are a two aspects we want to optimize at the same tim
 - Data throughput/training time
 - Model performance
 
-We have seen that each method changes the memory usage and throughput. In general we want to maximize the throughput (samples/second) to minimize the training cost. This is generally achieved by utilizing the GPU as much as possible and thus filling GPU memory to its limit. For example, as mentioned earlier, we only employ gradient accumulation when we want to use a batch size beyond the size of the GPU memory. If the desired batch size fits into memory then there is no reason to apply gradient accumulation which will only slow down training. 
+We have seen that each method changes the memory usage and throughput. In general we want to maximize the throughput (samples/second) to minimize the training cost. This is generally achieved by utilizing the GPU as much as possible and thus filling GPU memory to its limit. For example, as mentioned earlier, we only employ gradient accumulation when we want to use a batch size beyond the size of the GPU memory. If the desired batch size fits into memory then there is no reason to apply gradient accumulation which will only slow down training.
 
 The second objective is model performance. Just because we can does not mean we should use a large batch size. As part of hyperparameter tuning you should determine which batch size yields the best result and then optimize the throughput accordingly.
 
@@ -467,7 +467,7 @@ Sometimes, even when applying all the above tweaks the throughput on a given GPU
 
 ## Multi-GPU Training
 
-If your model fits on a single GPU scaling to many GPUs can be achieved fairly easily with data parallelism. The idea is very similar to gradient accumulation with the distinction that instead of running the forward and backward passes during the accumulation in sequence on a single machine they are performed in parallel on multiple machines. So each GPU gets a small batch, runs the forward and backward passes and then the gradients from all machines are aggregated and the model is optimized. You can combine this with all the methods we described before. For example, if you have 4 GPUs and use `per_device_train_batch_size=12` and `gradient_accumulation_steps=3` you will have an effective batch size of `4*12*3=144`. 
+If your model fits on a single GPU scaling to many GPUs can be achieved fairly easily with data parallelism. The idea is very similar to gradient accumulation with the distinction that instead of running the forward and backward passes during the accumulation in sequence on a single machine they are performed in parallel on multiple machines. So each GPU gets a small batch, runs the forward and backward passes and then the gradients from all machines are aggregated and the model is optimized. You can combine this with all the methods we described before. For example, if you have 4 GPUs and use `per_device_train_batch_size=12` and `gradient_accumulation_steps=3` you will have an effective batch size of `4*12*3=144`.
 
 The [`Trainer`] allows for distributed training and if you execute your [`Trainer`] training script on a machine with multiple GPUs it will automatically utilize all of them, hence the name `per_device_train_batch_size`. In 🤗 Accelerate you can configure the infrastructure setup with the following command:
 
@@ -479,7 +479,7 @@ Until now we have opperated under the assumption that we can fit the model onto 
 
 ## What if my model still does not fit?
 
-If the model does not fit on a single GPU with all the mentioned tricks there are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Model Parallelism" section](parallelism). 
+If the model does not fit on a single GPU with all the mentioned tricks there are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Model Parallelism" section](parallelism).
 
 This concludes the practical part of this guide for scaling the training of large models. The following section goes into more details on some of the aspects discussed above.
 
@@ -1036,7 +1036,30 @@ One of the important requirements to reach great training speed is the ability t
 - `DataLoader(pin_memory=True, ...)` which ensures that the data gets preloaded into the pinned memory on CPU and typically leads to much faster transfers from CPU to GPU memory.
 -  `DataLoader(num_workers=4, ...)` - spawn several workers to pre-load data faster - during training watch the GPU utilization stats and if it's far from 100% experiment with raising the number of workers. Of course, the problem could be elsewhere so a very big number of workers won't necessarily lead to a better performance.
 
-## Faster optimizer
+
+### Optimizers
+
+#### Faster optimizers
+
+- `torch.optim.AdamW`
+
+`torch.optim.AdamW` is faster than Transformers' `AdamW`
+
+- `apex.optimizers.FusedAdam` is supposed to be even faster
+
+https://nvidia.github.io/apex/optimizers.html
+
+XXX: benchmark once https://github.com/huggingface/transformers/issues/14539 is resolved
+
+
+#### Leaner Optimizers
+
+- [bitsandbytes](https://github.com/facebookresearch/bitsandbytes) uses 1/4 of normal AdamW optimizer's memory and otherwise performs on par with the normal optimizer quality-wise.
+
+   It's a bit tricky to integrate into Transformers since it requires an Embedding layer that includes a layer norm, which currently our models don't have. But other than that you just configure to use that optimizer instead of the normal one.
+
+
+#### Faster optimizer
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
 
