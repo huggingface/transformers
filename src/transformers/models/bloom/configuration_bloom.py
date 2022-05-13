@@ -1,6 +1,6 @@
 # coding=utf-8
 # Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class BLOOMConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [*BLOOMModel*]. It is used to instantiate a GPT-2
+    This is the configuration class to store the configuration of a [`BLOOMModel`]. It is used to instantiate a GPT-2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to the BLOOM architecture
     [bigscience/bloom](https://huggingface.co/bigscience/bloom).

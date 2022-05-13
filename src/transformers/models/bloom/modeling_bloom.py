@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -340,7 +339,6 @@ class BLOOMBlock(nn.Module):
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
         self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
-        # self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
         self.self_attention = BLOOMAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
@@ -408,7 +406,6 @@ class BLOOMBlock(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        # attention_bias = None
 
         attention_output = attn_outputs[0]
 
