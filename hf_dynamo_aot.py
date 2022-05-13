@@ -34,7 +34,7 @@ benchmarks = [
         [torch.bfloat16], # trilu not implemented for bfloat16
     ),
     (AutoConfig.from_pretrained("t5-small"), AutoModelForSeq2SeqLM, (4, 1024), [torch.bfloat16]),
-    (ReformerConfig(), AutoModelForMaskedLM, (8, 4096), []),
+    # (ReformerConfig(), AutoModelForMaskedLM, (8, 4096), []),
     (AutoConfig.from_pretrained("distilbert-base-uncased"),  AutoModelForMaskedLM, (8, 512), []),
     (AutoConfig.from_pretrained("roberta-base"),  AutoModelForMaskedLM, (16, 512), []),
     # (BigBirdConfig(attention_type="block_sparse"), AutoModelForMaskedLM, (2, 1024), [torch.bfloat16, torch.float16]), # Currently quite slow - needs investigation
@@ -45,7 +45,6 @@ benchmarks = [
     (AutoConfig.from_pretrained("google/mobilebert-uncased"), AutoModelForMaskedLM, (4, 512), []),
     (AutoConfig.from_pretrained("camembert-base"), AutoModelForMaskedLM, (8, 512), []),
     (AutoConfig.from_pretrained("microsoft/layoutlm-base-uncased"), AutoModelForMaskedLM, (8, 512), []),
-
 ]
 
 device = "cuda"
