@@ -18,6 +18,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 import contextlib
 import functools
+import glob
 import inspect
 import math
 import os
@@ -1302,7 +1303,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None:
+        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled():
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1403,10 +1404,7 @@ class Trainer:
 
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
             if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
-                model.load_state_dict(state_dict)
-                # release memory
-                del state_dict
+                self._load_from_checkpoint(resume_from_checkpoint, model)
             else:
                 # We load the sharded checkpoint
                 load_sharded_checkpoint(model, resume_from_checkpoint)
@@ -1700,7 +1698,11 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    def _load_from_checkpoint(self, resume_from_checkpoint):
+    def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+
+        if model is None: model = self.model
+        strict_load = True if is_sagemaker_mp_enabled() else False
+
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
             os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         ):
@@ -1721,27 +1723,26 @@ class Trainer:
         if self.args.deepspeed:
             # will be resumed in deepspeed_init
             pass
-        elif is_sagemaker_mp_enabled():
-            # will be resumed after model is wrapped
-            pass
         elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             # We load the model state dict on the CPU to avoid an OOM error.
             state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
-            load_result = self.model.load_state_dict(state_dict, strict=False)
-            self._issue_warnings_after_load(load_result)
-
+            load_result = model.load_state_dict(state_dict, strict=strict_load)
+            if not is_sagemaker_mp_enabled():
+                self._issue_warnings_after_load(load_result)
             # release memory
             del state_dict
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(self.model, resume_from_checkpoint, strict=False)
-            self._issue_warnings_after_load(load_result)
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=strict_load)
+            if not is_sagemaker_mp_enabled():
+                self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
-
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+        strict_load = True if is_sagemaker_mp_enabled() else False
+        model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
@@ -1754,21 +1755,16 @@ class Trainer:
                 self.deepspeed.load_checkpoint(
                     self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
                 )
-            elif is_sagemaker_mp_enabled():
-                state_dict = torch.load(best_model_path)
-                self.model_wrapped.load_state_dict(state_dict)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
                 # If the model is on the GPU, it still works!
-                load_result = self.model.load_state_dict(state_dict, strict=False)
-                self._issue_warnings_after_load(load_result)
+                load_result = model.load_state_dict(state_dict, strict=strict_load)
+                if not is_sagemaker_mp_enabled():
+                    self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
-            if is_sagemaker_mp_enabled():
-                load_sharded_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
-            else:
-                # Best model is a sharded checkpoint
-                load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
+            load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
+            if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
@@ -1992,8 +1988,6 @@ class Trainer:
         if self.deepspeed:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
-
-        import glob
 
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
