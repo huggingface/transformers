@@ -98,8 +98,9 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, model_results: Dict, additional_results: Dict):
+    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
         self.title = title
+        self.ci_title = ci_title
 
         # Failures and success of the modeling tests
         self.n_model_success = sum(r["success"] for r in model_results.values())
@@ -157,6 +158,10 @@ class Message:
     @property
     def header(self) -> Dict:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
+
+    @property
+    def ci_title_section(self) -> Dict:
+        return {"type": "section", "text": {"type": "mrkdwn", "text": self.ci_title}}
 
     @property
     def no_failures(self) -> Dict:
@@ -345,6 +350,9 @@ class Message:
     @property
     def payload(self) -> str:
         blocks = [self.header]
+
+        if self.ci_title:
+            blocks.append(self.ci_title_section)
 
         if self.n_model_failures > 0 or self.n_additional_failures > 0:
             blocks.append(self.failures)
@@ -724,7 +732,18 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-    message = Message(f"🤗 Results of the {ci_event} tests.", model_results, additional_results)
+    title = f"🤗 Results of the {ci_event} tests."
+    # Add PR title with a link for push CI
+    ci_title = os.environ.get("CI_TITLE")
+    commit_url = os.environ.get("CI_COMMIT_URL")
+    if ci_title is not None:
+        assert commit_url is not None
+        ci_title = ci_title.strip().split("\n")[0].strip()
+        ci_title = f"<{commit_url}|{ci_title}>"
+    else:
+        ci_title = ""
+
+    message = Message(title, ci_title, model_results, additional_results)
 
     message.post()
     message.post_reply()
