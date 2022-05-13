@@ -1529,6 +1529,7 @@ else:
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SplinterForQuestionAnswering",
+            "SplinterForSpanSelection",
             "SplinterLayer",
             "SplinterModel",
             "SplinterPreTrainedModel",
