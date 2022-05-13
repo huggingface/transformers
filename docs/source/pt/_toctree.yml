@@ -1,0 +1,16 @@
+- sections:
+  - local: installation
+    title: Instalação
+  title: Iniciar
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines para inferência
+  - local: training
+    title: Fine-tuning de um modelo pré-treinado
+  - local: accelerate
+    title: Treinamento distribuído com 🤗 Accelerate
+  title: Tutoriais
+- sections:
+  - local: multilingual
+    title: Modelos multilinguísticos para inferência
+  title: Guias práticos
