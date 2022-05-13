@@ -610,7 +610,10 @@ class TrainingArguments:
     use_ipex: bool = field(
         default=False,
         metadata={
-            "help": "Use Intel extension for PyTorch when it is available, installation: 'https://github.com/intel/intel-extension-for-pytorch'"
+            "help": (
+                "Use Intel extension for PyTorch when it is available, installation:"
+                " 'https://github.com/intel/intel-extension-for-pytorch'"
+            )
         },
     )
     bf16: bool = field(
@@ -984,7 +987,8 @@ class TrainingArguments:
 
         if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
             raise ValueError(
-                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU (no_cuda)"
+                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU"
+                " (no_cuda)"
             )
 
         if self.fp16 and self.bf16:
@@ -992,8 +996,8 @@ class TrainingArguments:
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
-                    " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use `--half_precision_backend"
-                    " cuda_amp` instead"
+                    " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
+                    " `--half_precision_backend cuda_amp` instead"
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
@@ -1014,7 +1018,8 @@ class TrainingArguments:
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
-                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation (`--fp16_full_eval`) can only be used on CUDA devices."
+                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
+                " (`--fp16_full_eval`) can only be used on CUDA devices."
             )
 
         if (

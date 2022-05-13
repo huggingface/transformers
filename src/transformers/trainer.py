@@ -543,7 +543,8 @@ class Trainer:
                 if args.use_ipex:
                     if not is_ipex_available():
                         raise ImportError(
-                            "Using Bf16 with IPEX but IPEX is not installed, please refer to https://github.com/intel/intel-extension-for-pytorch."
+                            "Using Bf16 with IPEX but IPEX is not installed, please refer to"
+                            " https://github.com/intel/intel-extension-for-pytorch."
                         )
             else:
                 if not is_apex_available():
