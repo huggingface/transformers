@@ -159,7 +159,6 @@ _import_structure = {
     "models.bloom": [
         "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BLOOMConfig",
-        "BLOOMTokenizer",
     ],
     "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
@@ -2657,7 +2656,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
-    from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig, BLOOMTokenizer
+    from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer

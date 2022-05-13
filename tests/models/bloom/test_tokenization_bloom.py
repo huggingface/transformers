@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import json
-import os
 import unittest
 
-from transformers import BLOOMTokenizer, BLOOMTokenizerFast
-from transformers.models.bloom.tokenization_bloom import VOCAB_FILES_NAMES
+from datasets import load_dataset
+
+from transformers import BLOOMTokenizerFast
+from transformers.models.bloom.tokenization_bloom_fast import PRETRAINED_VOCAB_FILES_MAP
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -28,114 +27,44 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BLOOMTokenizer
+    slow_tokenizer_class = None
     rust_tokenizer_class = BLOOMTokenizerFast
+    tokenizer_class = BLOOMTokenizerFast
     test_rust_tokenizer = True
-    from_pretrained_kwargs = {"add_prefix_space": True}
-    test_seq2seq = False
+    test_slow_tokenizer = False
+    special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
     def setUp(self):
         super().setUp()
-
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "<unk>",
-            "<|endoftext|>",
-        ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return BLOOMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        tokenizer = BLOOMTokenizerFast.from_pretrained(
+            PRETRAINED_VOCAB_FILES_MAP["main_location"]["bigscience/tokenizer"]
+        )
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return BLOOMTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
+    def test_encodings_from_sample_data(self):
+        """
+        Assert that the created tokens are the same than the hard-coded ones
+        """
+        tokenizer = self.get_rust_tokenizer()
 
-    def test_full_tokenizer(self):
-        tokenizer = BLOOMTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower newer"
-        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
-        self.assertListEqual(tokens, bpe_tokens)
+        INPUT_SENTENCES = ["The quick brown fox</s>", "jumps over the lazy dog</s>"]
+        TARGET_TOKENS = [[2175, 23714, 73173, 144252, 2], [77, 132619, 3478, 368, 109586, 35433, 2]]
 
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
+        self.assertListEqual(TARGET_TOKENS, computed_tokens)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            return
+        decoded_tokens = tokenizer.batch_decode(computed_tokens)
+        self.assertListEqual(decoded_tokens, INPUT_SENTENCES)
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-
-        sequence = "lower newer"
-
-        # Testing tokenization
-        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        # Testing conversion to ids without special tokens
-        ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        # Testing conversion to ids with special tokens
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-        ids = tokenizer.encode(sequence, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-        # Testing the unknown token
-        input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-    def test_pretokenized_inputs(self, *args, **kwargs):
-        # It's very difficult to mix/test pretokenization with byte-level
-        # And get both BLOOM and Roberta to work at the same time (mostly an issue of adding a space before the string)
-        pass
-
-    def test_padding(self, max_length=15):
+    def test_padding(self, max_length=6):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
+                # tokenizer_r.pad_token = None # Hotfixing padding = None
                 # Simple input
                 s = "This is a simple input"
                 s2 = ["This is a simple input 1", "This is a simple input 2"]
@@ -146,6 +75,17 @@ class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
 
                 # Simple input tests
+                try:
+                    tokenizer_r.encode(s, max_length=max_length)
+                    tokenizer_r.encode_plus(s, max_length=max_length)
+
+                    tokenizer_r.batch_encode_plus(s2, max_length=max_length)
+                    tokenizer_r.encode(p, max_length=max_length)
+                    tokenizer_r.batch_encode_plus(p2, max_length=max_length)
+                except ValueError:
+                    self.fail("BLOOM Tokenizer should be able to deal with padding")
+
+                tokenizer_r.pad_token = None  # Hotfixing padding = None
                 self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
 
                 # Simple input
@@ -175,6 +115,17 @@ class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
-    # tokenizer has no padding token
-    def test_padding_different_model_input_name(self):
-        pass
+    def test_encodings_from_xnli_dataset(self):
+        """
+        Tests the tokenizer downloaded from here:
+            - https://huggingface.co/bigscience/tokenizer/
+        """
+        tokenizer = self.get_rust_tokenizer()
+        ds = load_dataset("xnli", "all_languages", split="test", streaming=True)
+
+        sample_data = next(iter(ds))["premise"]  # pick up one data
+        input_text = list(sample_data.values())
+
+        output_tokens = list(map(tokenizer.encode, input_text))
+        predicted_text = list(map(lambda x: tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
+        self.assertListEqual(predicted_text, input_text)

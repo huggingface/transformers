@@ -37,19 +37,12 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "bloom": "https://huggingface.co/bloom/resolve/main/vocab.json",
-        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/vocab.json",
-        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/vocab.json",
-        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/vocab.json",
-        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/vocab.json",
+    "tokenizer_file": {
+        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
     },
-    "merges_file": {
-        "bloom": "https://huggingface.co/bloom/resolve/main/merges.txt",
-        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/merges.txt",
-        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/merges.txt",
-        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/merges.txt",
-        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/merges.txt",
+    "vocab_file": {"bloom": ""},
+    "tokenizer_config": {
+        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer_config.json",
     },
 }
 

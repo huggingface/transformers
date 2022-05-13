@@ -27,7 +27,6 @@ _import_structure = {
         "BLOOMConfig",
         "BLOOMOnnxConfig",
     ],
-    "tokenization_bloom": ["BLOOMTokenizer"],
 }
 try:
     if not is_tokenizers_available():
@@ -52,7 +51,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig, BLOOMOnnxConfig
-    from .tokenization_bloom import BLOOMTokenizer
 
     try:
         if not is_tokenizers_available():

@@ -23,7 +23,6 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_bloom import BLOOMTokenizer
 
 
 if TYPE_CHECKING:
@@ -35,19 +34,20 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
+    "main_location": {
+        "bigscience/tokenizer": "bigscience/tokenizer",
+    },
     "tokenizer_file": {
-        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
+        "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
     },
-    "vocab_file":{
-        "bloom": ""
-    },
+    "vocab_file": {"bigscience/tokenizer": ""},
     "tokenizer_config": {
-        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer_config.json",
-    }
+        "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer_config.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bloom": 1024,
+    "bigscience/tokenizer": 1024,
 }
 
 
@@ -106,7 +106,7 @@ class BLOOMTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = BLOOMTokenizer
+    slow_tokenizer_class = None
 
     def __init__(
         self,

@@ -139,7 +139,7 @@ else:
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "bloom",
-                ("BLOOMTokenizer", "BLOOMTokenizerFast" if is_tokenizers_available() else None),
+                (None, "BLOOMTokenizerFast" if is_tokenizers_available() else None),
             ),
             ("opt", ("GPT2Tokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
