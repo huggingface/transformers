@@ -444,7 +444,7 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         if dim % num_heads != 0:
             raise ValueError(
-                f"The hidden size ({dim}) is not a multiple of the number of attention " f"heads ({num_heads})"
+                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
             )
 
         self.num_attention_heads = num_heads
@@ -1002,7 +1002,7 @@ def normalize_data_format(value: str) -> str:
     data_format = value.lower()
     if data_format not in {"channels_first", "channels_last"}:
         raise ValueError(
-            "The `data_format` argument must be one of " '"channels_first", "channels_last". Received: ' + str(value)
+            'The `data_format` argument must be one of "channels_first", "channels_last". Received: ' + str(value)
         )
     return data_format
 
@@ -1231,7 +1231,8 @@ class TFSwinDecoder(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "Swin Model with a decoder on top for masked image modeling, as proposed in `SimMIM <https://arxiv.org/abs/2111.09886>`__.",
+    "Swin Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
+    " <https://arxiv.org/abs/2111.09886>`__.",
     SWIN_START_DOCSTRING,
 )
 class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
