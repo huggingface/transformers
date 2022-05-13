@@ -40,17 +40,13 @@ if is_flax_available():
 def prepare_opt_inputs_dict(
     config,
     input_ids,
-    decoder_input_ids=None,
     attention_mask=None,
-    decoder_attention_mask=None,
     head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
     if head_mask is None:
-        head_mask = np.ones((config.encoder_layers, config.encoder_attention_heads))
+        head_mask = np.ones((config.num_hidden_layers, config.num_attention_heads))
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -74,10 +70,12 @@ class FlaxOPTModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=32,
+        max_position_embeddings=20,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        embed_dim=16,
+        word_embed_proj_dim=16,
         initializer_range=0.02,
     ):
         self.parent = parent
@@ -97,20 +95,21 @@ class FlaxOPTModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.embed_dim = embed_dim
+        self.word_embed_proj_dim = word_embed_proj_dim
         self.initializer_range = initializer_range
-
+        self.is_encoder_decoder = False
+        
+    
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
         input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
 
         config = OPTConfig(
             vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
@@ -118,6 +117,9 @@ class FlaxOPTModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            embed_dim=self.embed_dim,
+            is_encoder_decoder=False,
+            word_embed_proj_dim=self.word_embed_proj_dim,
             initializer_range=self.initializer_range,
             use_cache=False,
         )
@@ -132,6 +134,11 @@ class FlaxOPTModelTester:
         max_length = 20
         model = model_class_name(config)
 
+        input_ids, attention_mask = (
+            inputs_dict["input_ids"],
+            inputs_dict["attention_mask"],
+        )
+        
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
         attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")
 
@@ -139,24 +146,22 @@ class FlaxOPTModelTester:
             jnp.arange(input_ids.shape[-1] - 1)[None, :],
             (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
-        outputs_cache = model.decode(
+        outputs_cache = model(
             input_ids[:, :-1],
-            encoder_outputs,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
 
         position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
-        outputs_cache_next = model.decode(
+        outputs_cache_next = model(
             input_ids[:, -1:],
-            encoder_outputs,
             attention_mask=attention_mask,
             past_key_values=outputs_cache.past_key_values,
             position_ids=position_ids,
         )
 
-        outputs = model.decode(input_ids, encoder_outputs)
+        outputs = model(input_ids)
 
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
@@ -164,8 +169,6 @@ class FlaxOPTModelTester:
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
         max_length = 20
         model = model_class_name(config)
-
-        encoder_outputs = model.encode(inputs_dict["input_ids"])
 
         input_ids, attention_mask = (
             inputs_dict["input_ids"],
@@ -180,36 +183,33 @@ class FlaxOPTModelTester:
             axis=-1,
         )
 
-        past_key_values = model.init_cache(input_ids.shape[0], max_length, encoder_outputs)
+        past_key_values = model.init_cache(input_ids.shape[0], max_length)
         position_ids = jnp.broadcast_to(
             jnp.arange(input_ids.shape[-1] - 1)[None, :],
             (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
-        outputs_cache = model.decode(
+        outputs_cache = model(
             input_ids[:, :-1],
-            encoder_outputs,
             attention_mask=attention_mask_cache,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
         position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
-        outputs_cache_next = model.decode(
+        outputs_cache_next = model(
             input_ids[:, -1:],
-            encoder_outputs,
             past_key_values=outputs_cache.past_key_values,
             attention_mask=attention_mask_cache,
             position_ids=position_ids,
         )
 
-        outputs = model.decode(input_ids, encoder_outputs, attention_mask=attention_mask)
+        outputs = model(input_ids, attention_mask=attention_mask)
 
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 @require_flax
 class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
-    is_encoder_decoder = True
     all_model_classes = (FlaxOPTModel,FlaxOPTForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = () if is_flax_available() else ()
 
@@ -226,11 +226,18 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
-    @slow
+    #@slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("", from_pt=True)
+            model = model_class_name.from_pretrained("facebook/opt-125m", from_pt=True)
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
+
+### Could either compare form the HF version or raw logits.
+# TODO Add model integration tests
+
+# TODO add embeddings tests
+
+# TODO add OPTGenerationTest
