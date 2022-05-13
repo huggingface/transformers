@@ -1761,7 +1761,7 @@ class Trainer:
                 state_dict = torch.load(best_model_path, map_location="cpu")
                 # If the model is on the GPU, it still works!
                 load_result = model.load_state_dict(state_dict, strict=strict_load)
-                if not is_sagemaker_mp_enabled():
+                if not strict_load:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
