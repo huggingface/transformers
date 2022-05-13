@@ -103,7 +103,7 @@ def export_pytorch(
         output (`Path`):
             Directory to store the exported ONNX model.
         cuda (`bool`):
-            Whether export on CUDA device. The export will be done on CPU by default.
+            Whether to export on CUDA device. The export will be done on CPU by default.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
