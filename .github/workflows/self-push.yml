@@ -22,8 +22,7 @@ env:
   PYTEST_TIMEOUT: 60
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
-  # TODO: Should we enable this?
-  # RUN_PT_TF_CROSS_TESTS: 1
+  RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
   setup:
@@ -147,7 +146,6 @@ jobs:
     runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
       image: huggingface/transformers-all-latest-gpu
-      # TODO: Should it be `all` or `0`. Same question for places in other workflow files.
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: NVIDIA-SMI
