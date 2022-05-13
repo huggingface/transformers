@@ -530,10 +530,11 @@ class OPTDecoder(OPTPreTrainedModel):
 
         self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.hidden_size, self.padding_idx)
 
-        if config.word_embed_proj_dim != config.hidden_size:
-            self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
-        else:
-            self.project_out = None
+        # Should be deleted
+        # if config.word_embed_proj_dim != config.hidden_size:
+        #     self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
+        # else:
+        #     self.project_out = None
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)
