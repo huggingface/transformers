@@ -37,12 +37,12 @@ from .configuration_opt import OPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 # Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -423,25 +423,6 @@ class OPTPreTrainedModel(PreTrainedModel):
         if isinstance(module, (OPTDecoder)):
             module.gradient_checkpointing = value
 
-
-OPT_GENERATION_EXAMPLE = r"""
-    Generation example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
-    >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-
-    >>> TEXTS_TO_GENERATE = "Hey, are you consciours? Can you talk to me?" "Hi there, my name is Barack"
-    >>> inputs = tokenizer([TEXTS_TO_GENERATE], max_length=1024, return_tensors="pt")
-
-    >>> # Generate
-    >>> generate_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
-    >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    'I'm not conscious.<\s>'
-    ```
-"""
 
 OPT_INPUTS_DOCSTRING = r"""
     Args:
@@ -933,19 +914,18 @@ class OPTForCausalLM(OPTPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import OPTTokenizer, OPTForCausalLM
-        # this needs fixing
+        >>> from transformers import GPT2Tokenizer, OPTForCausalLM
 
-        >>> tokenizer = OPTTokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-        >>> model = OPTForCausalLM.from_pretrained("ArthurZ/opt-350m")
-        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
 
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
+        >>> prompt = "Hey, are you consciours? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
