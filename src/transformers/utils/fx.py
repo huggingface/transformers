@@ -26,6 +26,7 @@ import torch
 from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx.proxy import ParameterProxy
 
 from .. import (
     CONFIG_MAPPING,
@@ -638,8 +639,6 @@ class HFTracer(Tracer):
         return rv
 
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
-        from torch.fx.proxy import ParameterProxy
-
         if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
