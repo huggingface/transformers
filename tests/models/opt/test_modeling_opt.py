@@ -344,7 +344,12 @@ class OPTGenerationTest(unittest.TestCase):
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
 
-        EXPECTED_OUTPUTS = ['Today is a beautiful day and I want to thank', 'In the city of Rome Canaver Canaver Canaver Canaver', 'Paris is the capital of France and Parisdylib', 'Computers and mobile phones have taken precedence over']
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to thank",
+            "In the city of Rome Canaver Canaver Canaver Canaver",
+            "Paris is the capital of France and Parisdylib",
+            "Computers and mobile phones have taken precedence over",
+        ]
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
@@ -363,7 +368,12 @@ class OPTGenerationTest(unittest.TestCase):
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
 
-        EXPECTED_OUTPUTS = ['Today is a beautiful day and I want to share', 'In the city of San Francisco, the city', 'Paris is the capital of France and the capital', 'Computers and mobile phones have taken over the']
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to share",
+            "In the city of San Francisco, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
+        ]
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
