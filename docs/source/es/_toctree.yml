@@ -15,6 +15,8 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
+  - local: model_sharing
+    title: Compartir un modelo
   title: Tutoriales
 - sections:
   - local: fast_tokenizers
