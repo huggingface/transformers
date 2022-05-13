@@ -2066,7 +2066,7 @@ class ModelTesterMixin:
 
             # Assert that the memory use on all devices is higher than it was when loaded only on CPU
             for n in range(torch.cuda.device_count()):
-                self.assertGreater(memory_after_parallelization[n], memory_at_start[n])
+                self.assertGreaterEqual(memory_after_parallelization[n], memory_at_start[n])
 
             # Assert that the memory use of device 0 is lower than it was when the entire model was loaded on it
             self.assertLess(memory_after_parallelization[0], memory_after_model_load[0])
