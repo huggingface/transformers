@@ -105,10 +105,10 @@ class OPTModelTester:
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.get_config()
-        inputs_dict = prepare_opt_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_opt_inputs_dict(config, input_ids)#, decoder_input_ids)
         return config, inputs_dict
 
     def get_config(self):
