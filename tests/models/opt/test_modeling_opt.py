@@ -39,11 +39,8 @@ if is_torch_available():
 def prepare_opt_inputs_dict(
     config,
     input_ids,
-    decoder_input_ids=None,
     attention_mask=None,
-    decoder_attention_mask=None,
     head_mask=None,
-    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -104,11 +101,8 @@ class OPTModelTester:
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
-
-        # decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
         config = self.get_config()
-        inputs_dict = prepare_opt_inputs_dict(config, input_ids)#, decoder_input_ids)
+        inputs_dict = prepare_opt_inputs_dict(config, input_ids)
         return config, inputs_dict
 
     def get_config(self):
@@ -213,21 +207,14 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
+            
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+            inputs["inputs_embeds"] = wte(input_ids)
+            
 
             with torch.no_grad():
                 model(**inputs)[0]
