@@ -484,7 +484,7 @@ OPT_START_DOCSTRING = r"""
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-class TFOPTPretrainedModel(TFPreTrainedModel):
+class TFOPTPreTrainedModel(TFPreTrainedModel):
     """
     TFOPT Pretrained Model that inheritates from transformers.TFPreTrainedModel
 
