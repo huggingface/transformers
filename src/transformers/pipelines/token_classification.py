@@ -201,7 +201,8 @@ class TokenClassificationPipeline(Pipeline):
         )
         if offset_mapping:
             model_inputs["offset_mapping"] = offset_mapping
-
+        if self.tokenizer.is_fast:
+            model_inputs["word_ids"] = model_inputs.word_ids()
         model_inputs["sentence"] = sentence
 
         return model_inputs
@@ -211,6 +212,7 @@ class TokenClassificationPipeline(Pipeline):
         special_tokens_mask = model_inputs.pop("special_tokens_mask")
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
+        word_ids = model_inputs.pop("word_ids", None)
         if self.framework == "tf":
             logits = self.model(model_inputs.data)[0]
         else:
@@ -221,6 +223,7 @@ class TokenClassificationPipeline(Pipeline):
             "special_tokens_mask": special_tokens_mask,
             "offset_mapping": offset_mapping,
             "sentence": sentence,
+            "word_ids": word_ids,
             **model_inputs,
         }
 
@@ -230,6 +233,7 @@ class TokenClassificationPipeline(Pipeline):
         logits = model_outputs["logits"][0].numpy()
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
+        word_ids = model_outputs["word_ids"]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
         special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
@@ -238,7 +242,8 @@ class TokenClassificationPipeline(Pipeline):
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
         pre_entities = self.gather_pre_entities(
-            sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+            sentence, input_ids, word_ids, scores, offset_mapping, special_tokens_mask,
+            aggregation_strategy,
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
         # Filter anything that is in self.ignore_labels
@@ -254,6 +259,7 @@ class TokenClassificationPipeline(Pipeline):
         self,
         sentence: str,
         input_ids: np.ndarray,
+        word_ids: Optional[List[int]],
         scores: np.ndarray,
         offset_mapping: Optional[List[Tuple[int, int]]],
         special_tokens_mask: np.ndarray,
@@ -279,7 +285,9 @@ class TokenClassificationPipeline(Pipeline):
                         start_ind = int(start_ind.numpy())
                         end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
-                if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
+                if word_ids is not None:
+                    is_subword = word_ids[idx] == word_ids[idx - 1] if idx > 0 else False
+                elif getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
                     # to fuse tokens
                     is_subword = len(word) != len(word_ref)
