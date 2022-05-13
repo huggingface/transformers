@@ -86,7 +86,7 @@ def get_all_tests():
     model_tests_folders = os.listdir(os.path.join(test_root_dir, "models"))
     model_test_folders = sorted(list(filter(os.path.isdir, [f"tests/models/{x}" for x in model_tests_folders])))
 
-    tests.remove("models")
+    tests.remove("tests/models")
     tests = model_test_folders + tests
 
     return tests
