@@ -337,10 +337,10 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
 
     def maybe_pad(self, pixel_values: tf.Tensor, height: int, width: int) -> tf.Tensor:
         if width % self.patch_size[1] != 0:
-            pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
+            pad_values = ((0, 0), (0, 0), (0, 0), (0, self.patch_size[1] - width % self.patch_size[1]))
             pixel_values = tf.pad(pixel_values, pad_values)
         if height % self.patch_size[0] != 0:
-            pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
+            pad_values = ((0, 0), (0, 0), (0, self.patch_size[0] - height % self.patch_size[0]), (0, 0))
             pixel_values = tf.pad(pixel_values, pad_values)
         return pixel_values
 
@@ -394,7 +394,7 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
     def maybe_pad(self, input_feature: tf.Tensor, height: int, width: int) -> tf.Tensor:
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            pad_values = ((0, 0), (0, height % 2), (0, width % 2), (0, 0))
             input_feature = tf.pad(input_feature, pad_values)
 
         return input_feature

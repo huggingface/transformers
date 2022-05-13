@@ -285,56 +285,76 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
             )
 
+    def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
+        model = model_class(config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+        hidden_states = outputs.hidden_states
+
+        expected_num_layers = getattr(
+            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
+        )
+        self.assertEqual(len(hidden_states), expected_num_layers)
+
+        # Swin has a different seq_length
+        patch_size = to_2tuple(config.patch_size)
+
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+
+        self.assertListEqual(
+            list(hidden_states[0].shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
+
+        reshaped_hidden_states = outputs.reshaped_hidden_states
+        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+
+        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+        reshaped_hidden_states = (
+            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        )
+        self.assertListEqual(
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
+
     def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # Swin has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
-
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
-
-            reshaped_hidden_states = outputs.reshaped_hidden_states
-            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
-
-            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            )
-            self.assertListEqual(
-                list(reshaped_hidden_states.shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        image_size = to_2tuple(self.model_tester.image_size)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
+            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
 
-            check_hidden_states_output(inputs_dict, config, model_class)
+            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+
+    def test_hidden_states_output_with_padding(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.patch_size = 3
+
+        image_size = to_2tuple(self.model_tester.image_size)
+        patch_size = to_2tuple(config.patch_size)
+
+        padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
+        padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
