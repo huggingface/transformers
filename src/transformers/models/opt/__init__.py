@@ -33,12 +33,34 @@ if is_torch_available():
         "OPTPreTrainedModel",
     ]
 
+if is_tf_available():
+    _import_structure["modeling_tf_opt"] = ["TFOPTModel", "TFOPTPretrainedModel"]
+
+if is_flax_available():
+    _import_structure["modeling_flax_opt"] = [
+        "FlaxOPTDecoderPreTrainedModel",
+        "FlaxOPTForCausalLM",
+        "FlaxOPTModel",
+        "FlaxOPTPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
 
     if is_torch_available():
         from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        
+    if is_tf_available():
+        from .modeling_tf_opt import TFOPTModel, TFOPTPretrainedModel
+
+    if is_flax_available():
+        from .modeling_flax_opt import (
+            FlaxOPTDecoderPreTrainedModel,
+            FlaxOPTForCausalLM,
+            FlaxOPTModel,
+            FlaxOPTPreTrainedModel,
+        )
 
 else:
     import sys
