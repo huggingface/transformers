@@ -14,7 +14,7 @@
 # limitations under the License.
 """ ProphetNet model configuration"""
 
-from typing import Optional, Union, Callable
+from typing import Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
