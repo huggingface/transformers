@@ -106,7 +106,6 @@ jobs:
           echo "${{ matrix.folders }}"
           echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
-          echo "$matrix_folders"
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
@@ -166,7 +165,6 @@ jobs:
           echo "${{ matrix.folders }}"
           echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
-          echo "$matrix_folders"
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
