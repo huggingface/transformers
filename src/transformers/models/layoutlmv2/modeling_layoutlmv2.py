@@ -1157,26 +1157,65 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         Returns:
 
-        Examples:
+        Example:
 
-        ```python
-        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification
-        >>> from PIL import Image
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
+        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        `python -m pip install torchvision tesseract`
 
-        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
-        >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            ```python
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification, set_seed
+            >>> from PIL import Image
+            >>> from datasets import load_dataset
+            
+            >>> set_seed(88)
+            
+            >>> datasets = load_dataset("nielsr/funsd", split="test")
+            >>> labels = datasets.features['ner_tags'].feature.names
+            >>> id2label = {v: k for v, k in enumerate(labels)}
 
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
-        >>> words = ["hello", "world"]
-        >>> boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-        >>> word_labels = [0, 1]
+            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+            >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=len(labels))
 
-        >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+            >>> data = datasets[0]
+            >>> image = Image.open(data["image_path"]).convert("RGB")
+            >>> words = data["words"]
+            >>> boxes = data["bboxes"]  # make sure to normalize your bounding boxes
+            >>> word_labels = data["ner_tags"]
+            >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, padding="max_length", truncation=True, return_tensors="pt")
 
-        >>> outputs = model(**encoding)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-        ```"""
+            >>> outputs = model(**encoding)
+            >>> logits, loss = outputs.logits, outputs.loss
+
+            >>> predicted_token_class_ids = logits.argmax(-1)
+            >>> predicted_tokens_classes = [id2label[t.item()] for t in predicted_token_class_ids[0]]
+            >>> predicted_tokens_classes[:20]
+            ['B-ANSWER',
+            'B-HEADER',
+            'B-HEADER',
+            'B-HEADER',
+            'B-HEADER',
+            'I-HEADER',
+            'B-HEADER',
+            'I-ANSWER',
+            'B-HEADER',
+            'I-ANSWER',
+            'B-HEADER',
+            'B-QUESTION',
+            'O',
+            'B-QUESTION',
+            'B-QUESTION',
+            'B-HEADER',
+            'I-ANSWER',
+            'B-HEADER',
+            'B-HEADER',
+            'B-HEADER']
+
+            >>> round(loss.item(), 2)
+            1.92
+
+            ```
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1275,7 +1314,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Example:
 
-        Passing the doctests requires installation of detectron2, torchvision and tesseract. Run the following to install them:
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
         `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
