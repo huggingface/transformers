@@ -542,10 +542,10 @@ class OPTDecoder(OPTPreTrainedModel):
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else f"cuda:{min(self.device_map.keys())}"
         self.last_device = f"cuda:{max(self.device_map.keys())}"
-        self.embed_tokens.to(self.first_device)
-        self.embed_positions.to(self.first_device)
+        self.embed_tokens = self.embed_tokens.to(self.first_device)
+        self.embed_positions = self.embed_positions.to(self.first_device)
         if self.project_in is not None:
-            self.project_in.to(self.first_device)
+            self.project_in = self.project_in.to(self.first_device)
         # Load onto devices
         for k, v in self.device_map.items():
             for block in v:
@@ -910,7 +910,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self.model_parallel = True
         self.first_device = self.model.first_device
         self.last_device = self.model.last_device
-        self.lm_head.to(self.first_device)
+        self.lm_head = self.lm_head.to(self.first_device)
 
     def deparallelize(self):
         self.model.deparallelize()
