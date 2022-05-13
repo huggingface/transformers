@@ -532,14 +532,16 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
         if json_output_file is not None:
             test_map = {}
             for test_file in test_files_to_run:
-                # `test_file` is a path to a test file, starting with `tests/`. For example,
-                #   - `tests/models/bert/test_modeling_bert.py`
-                #   - `tests/trainer/test_trainer.py`
+                # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
+                #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
+                #   - `tests/trainer/test_trainer.py` or `tests/trainer`
+                #   - `tests/test_modeling_common.py`
                 names = test_file.split(os.path.sep)
                 if names[1] == "models":
                     # take the part like `models/bert` for modeling tests
                     key = "/".join(names[1:3])
-                elif len(names) > 2:
+                elif len(names) > 2 or not test_file.endswith(".py"):
+                    # test folders under `tests` or python files under them
                     # take the part like tokenization, `pipeline`, etc. for other test categories
                     key = "/".join(names[1:2])
                 else:
