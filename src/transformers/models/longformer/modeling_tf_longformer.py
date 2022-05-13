@@ -2083,8 +2083,8 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
-        expected_output="' no'",
-        expected_loss=4.5,
+        expected_output="' Paris'",
+        expected_loss=0.44,
     )
     def call(
         self,
@@ -2325,8 +2325,8 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         checkpoint="hf-internal-testing/tiny-random-longformer",
         output_type=TFLongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="LABEL_0",
-        expected_loss=0.58,
+        expected_output="'LABEL_1'",
+        expected_loss=0.69,
     )
     def call(
         self,
@@ -2565,8 +2565,8 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         checkpoint="hf-internal-testing/tiny-random-longformer",
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0']",
-        expected_loss=0.62,
+        expected_output="['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']",
+        expected_loss=0.59,
     )
     def call(
         self,

@@ -1777,7 +1777,8 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
         >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
-        # Let's try a very long input.
+        
+        Let's try a very long input.
 
         >>> TXT = (
         ...     "My friends are <mask> but they eat too many carbs."
@@ -1856,8 +1857,8 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         checkpoint="jpelhaw/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="ORIGINAL",
-        expected_loss=0.08,
+        expected_output="'ORIGINAL'",
+        expected_loss=5.44,
     )
     def forward(
         self,
@@ -2124,8 +2125,8 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['Lead', 'Evidence', 'Lead', 'Evidence', 'Lead']",
-        expected_loss=0.01,
+        expected_output="['Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence']",
+        expected_loss=0.63,
     )
     def forward(
         self,
