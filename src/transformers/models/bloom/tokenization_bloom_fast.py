@@ -36,13 +36,13 @@ VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
-        "bloom": "https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles/resolve/main/tokenizer.json",
+        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
     },
     "vocab_file":{
         "bloom": ""
     },
     "tokenizer_config": {
-        "bloom": "https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles/resolve/main/tokenizer_config.json",
+        "bloom": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer_config.json",
     }
 }
 
