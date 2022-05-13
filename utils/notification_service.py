@@ -728,6 +728,7 @@ if __name__ == "__main__":
     # Add PR title with a link for push CI
     ci_title = os.environ.get("CI_TITLE")
     if ci_title is not None:
+        ci_title = ci_title.strip().split("\n")[0].strip()
         title = f"🤗 Results of the {ci_event} tests: {ci_title}."
 
     message = Message(title, model_results, additional_results)
