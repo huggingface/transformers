@@ -296,8 +296,7 @@ class OPTDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        # TODO: remove it as it is not used
-        # self.activation_dropout = config.activation_dropout 
+        self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
@@ -732,9 +731,6 @@ class OPTDecoder(OPTPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-
-        if self.project_out is not None:
-            hidden_states = self.project_out(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
