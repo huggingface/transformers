@@ -1273,37 +1273,47 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Returns:
 
-        Examples:
+        Example:
 
         Passing the doctests requires installation of detectron2, torchvision and tesseract. Run the following to install them:
         `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
-        Inference Example (Note the result is quite bad without further fine-tuning)
-        ```python
-        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
-        >>> from PIL import Image
-        >>> from datasets import load_dataset
+            ```python
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
+            >>> import torch
+            >>> from PIL import Image
+            >>> from datasets import load_dataset
 
-        >>> set_seed(88)
-        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> set_seed(88)
+            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-        >>> image_path = dataset["test"][0]["file"]
-        >>> image = Image.open(image_path).convert("RGB")
-        >>> question = "When is coffee break?"
-        >>> encoding = processor(image, question, return_tensors="pt")
-        
-        >>> outputs = model(**encoding)
-        >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
-        >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
-        >>> predicted_start_idx, predicted_end_idx
-        (154, 287)
-        >>> predicted_answer = processor.tokenizer.decode(encoding.input_ids.squeeze()[predicted_start_idx:predicted_end_idx+1])
-        >>> predicted_answer
-        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
-        ```"""
+            >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+            >>> image_path = dataset["test"][0]["file"]
+            >>> image = Image.open(image_path).convert("RGB")
+            >>> question = "When is coffee break?"
+            >>> encoding = processor(image, question, return_tensors="pt")
+            
+            >>> outputs = model(**encoding)
+            >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
+            >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
+            >>> predicted_start_idx, predicted_end_idx
+            (154, 287)
+            >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx:predicted_end_idx+1]
+            >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
+            >>> predicted_answer # results are not very good without further fine-tuning
+            'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
+            ```
+
+            ```python
+            >>> target_start_index = torch.tensor([7])
+            >>> target_end_index = torch.tensor([14])
+            >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
+            >>> loss = outputs.loss
+            >>> round(loss.item(), 2)
+            5.68
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
