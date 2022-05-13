@@ -281,7 +281,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
             output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        expected_shape = torch.Size((1, 11, 1024))
+        expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
@@ -348,8 +348,8 @@ class OPTGenerationTest(unittest.TestCase):
         GEN_OUTPUT = []
 
         tokenizer = GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-        for model in self.all_model_path:
-            model = OPTForCausalLM.from_pretrained(self.path_model)
+        for path_model in self.all_model_path:
+            model = OPTForCausalLM.from_pretrained(path_model)
             model = model.eval()
             model.config.eos_token_id = tokenizer.eos_token_id
 
