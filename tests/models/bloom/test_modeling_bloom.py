@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BLOOMLMHeadModel, BLOOMModel, BLOOMTokenizer
+    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BLOOMLMHeadModel, BLOOMModel, BLOOMTokenizerFast
 
 
 @require_torch
@@ -337,7 +337,7 @@ class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_batch_generation(self):
         model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
-        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
 
         tokenizer.padding_side = "left"
 
@@ -438,7 +438,7 @@ class BLOOMModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_bloom_sample(self):
-        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
         model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
@@ -466,7 +466,7 @@ class BLOOMModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_bloom_sample_max_time(self):
-        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
         model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
