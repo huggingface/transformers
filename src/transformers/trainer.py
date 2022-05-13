@@ -1403,11 +1403,7 @@ class Trainer:
         model = self._wrap_model(self.model_wrapped)
 
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
-            if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-                self._load_from_checkpoint(resume_from_checkpoint, model)
-            else:
-                # We load the sharded checkpoint
-                load_sharded_checkpoint(model, resume_from_checkpoint)
+            self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
