@@ -166,12 +166,12 @@
       title: BigBird
     - local: model_doc/bigbird_pegasus
       title: BigBirdPegasus
-    - local: model_doc/bigscience176b
-      title: BigScience176b
     - local: model_doc/blenderbot
       title: Blenderbot
     - local: model_doc/blenderbot-small
       title: Blenderbot Small
+    - local: model_doc/bloom
+      title: BLOOM
     - local: model_doc/bort
       title: BORT
     - local: model_doc/byt5

@@ -23,7 +23,7 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_bigscience176b import BigScience176BTokenizer
+from .tokenization_bloom import BLOOMTokenizer
 
 
 if TYPE_CHECKING:
@@ -36,38 +36,38 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bigscience176b": "https://huggingface.co/bigscience176b/resolve/main/vocab.json",
-        "bigscience176b-medium": "https://huggingface.co/bigscience176b-medium/resolve/main/vocab.json",
-        "bigscience176b-large": "https://huggingface.co/bigscience176b-large/resolve/main/vocab.json",
-        "bigscience176b-xl": "https://huggingface.co/bigscience176b-xl/resolve/main/vocab.json",
-        "distilbigscience176b": "https://huggingface.co/distilbigscience176b/resolve/main/vocab.json",
+        "bloom": "https://huggingface.co/bloom/resolve/main/vocab.json",
+        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/vocab.json",
+        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/vocab.json",
+        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/vocab.json",
+        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/vocab.json",
     },
     "merges_file": {
-        "bigscience176b": "https://huggingface.co/bigscience176b/resolve/main/merges.txt",
-        "bigscience176b-medium": "https://huggingface.co/bigscience176b-medium/resolve/main/merges.txt",
-        "bigscience176b-large": "https://huggingface.co/bigscience176b-large/resolve/main/merges.txt",
-        "bigscience176b-xl": "https://huggingface.co/bigscience176b-xl/resolve/main/merges.txt",
-        "distilbigscience176b": "https://huggingface.co/distilbigscience176b/resolve/main/merges.txt",
+        "bloom": "https://huggingface.co/bloom/resolve/main/merges.txt",
+        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/merges.txt",
+        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/merges.txt",
+        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/merges.txt",
+        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "bigscience176b": "https://huggingface.co/bigscience176b/resolve/main/tokenizer.json",
-        "bigscience176b-medium": "https://huggingface.co/bigscience176b-medium/resolve/main/tokenizer.json",
-        "bigscience176b-large": "https://huggingface.co/bigscience176b-large/resolve/main/tokenizer.json",
-        "bigscience176b-xl": "https://huggingface.co/bigscience176b-xl/resolve/main/tokenizer.json",
-        "distilbigscience176b": "https://huggingface.co/distilbigscience176b/resolve/main/tokenizer.json",
+        "bloom": "https://huggingface.co/bloom/resolve/main/tokenizer.json",
+        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/tokenizer.json",
+        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/tokenizer.json",
+        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/tokenizer.json",
+        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bigscience176b": 1024,
-    "bigscience176b-medium": 1024,
-    "bigscience176b-large": 1024,
-    "bigscience176b-xl": 1024,
-    "distilbigscience176b": 1024,
+    "bloom": 1024,
+    "bloom-medium": 1024,
+    "bloom-large": 1024,
+    "bloom-xl": 1024,
+    "distilbloom": 1024,
 }
 
 
-class BigScience176BTokenizerFast(PreTrainedTokenizerFast):
+class BLOOMTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
@@ -76,8 +76,8 @@ class BigScience176BTokenizerFast(PreTrainedTokenizerFast):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import BigScience176BTokenizerFast
-    >>> tokenizer = BigScience176BTokenizerFast.from_pretrained("bigscience176b")
+    >>> from transformers import BLOOMTokenizerFast
+    >>> tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']
@@ -113,7 +113,7 @@ class BigScience176BTokenizerFast(PreTrainedTokenizerFast):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (BigScience176B tokenizer detect beginning of words by the preceding space).
+            other word. (BLOOM tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
@@ -122,7 +122,7 @@ class BigScience176BTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = BigScience176BTokenizer
+    slow_tokenizer_class = BLOOMTokenizer
 
     def __init__(
         self,

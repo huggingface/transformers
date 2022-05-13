@@ -18,7 +18,7 @@ import datetime
 import math
 import unittest
 
-from transformers import BigScience176BConfig, is_torch_available
+from transformers import BLOOMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -29,16 +29,11 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BigScience176BLMHeadModel,
-        BigScience176BModel,
-        BigScience176BTokenizer,
-    )
+    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BLOOMLMHeadModel, BLOOMModel, BLOOMTokenizer
 
 
 @require_torch
-class BigScience176BModelTester:
+class BLOOMModelTester:
     def __init__(
         self,
         parent,
@@ -93,7 +88,7 @@ class BigScience176BModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return BigScience176BConfig.from_pretrained("bigscience176b")
+        return BLOOMConfig.from_pretrained("bloom")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -113,7 +108,7 @@ class BigScience176BModelTester:
         )
 
     def get_config(self, gradient_checkpointing=False):
-        return BigScience176BConfig(
+        return BLOOMConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
             n_embd=self.hidden_size,
@@ -133,8 +128,8 @@ class BigScience176BModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-    def create_and_check_bigscience176b_model(self, config, input_ids, input_mask, *args):
-        model = BigScience176BModel(config=config)
+    def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
+        model = BLOOMModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -143,8 +138,8 @@ class BigScience176BModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_bigscience176b_model_past(self, config, input_ids, input_mask, *args):
-        model = BigScience176BModel(config=config)
+    def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
+        model = BLOOMModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -175,8 +170,8 @@ class BigScience176BModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bigscience176b_model_attention_mask_past(self, config, input_ids, input_mask, *args):
-        model = BigScience176BModel(config=config)
+    def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
+        model = BLOOMModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -215,8 +210,8 @@ class BigScience176BModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bigscience176b_model_past_large_inputs(self, config, input_ids, input_mask, *args):
-        model = BigScience176BModel(config=config)
+    def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
+        model = BLOOMModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -248,7 +243,7 @@ class BigScience176BModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
-        model = BigScience176BLMHeadModel(config)
+        model = BLOOMLMHeadModel(config)
         model.to(torch_device)
         model.eval()
 
@@ -259,7 +254,7 @@ class BigScience176BModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
-        model = BigScience176BLMHeadModel(config)
+        model = BLOOMLMHeadModel(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -269,8 +264,8 @@ class BigScience176BModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
 
-    def create_and_check_bigscience176b_weight_initialization(self, config, *args):
-        model = BigScience176BModel(config)
+    def create_and_check_bloom_weight_initialization(self, config, *args):
+        model = BLOOMModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
         for key in model.state_dict().keys():
             if "c_proj" in key and "weight" in key:
@@ -294,55 +289,55 @@ class BigScience176BModelTester:
 
 
 @require_torch
-class BigScience176BModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BigScience176BModel, BigScience176BLMHeadModel) if is_torch_available() else ()
-    all_generative_model_classes = (BigScience176BLMHeadModel,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (BigScience176BLMHeadModel,) if is_torch_available() else ()
+    all_model_classes = (BLOOMModel, BLOOMLMHeadModel) if is_torch_available() else ()
+    all_generative_model_classes = (BLOOMLMHeadModel,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (BLOOMLMHeadModel,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
 
     def setUp(self):
-        self.model_tester = BigScience176BModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BigScience176BConfig, n_embd=37)
+        self.model_tester = BLOOMModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BLOOMConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_bigscience176b_model(self):
+    def test_bloom_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bigscience176b_model(*config_and_inputs)
+        self.model_tester.create_and_check_bloom_model(*config_and_inputs)
 
-    def test_bigscience176b_model_past(self):
+    def test_bloom_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bigscience176b_model_past(*config_and_inputs)
+        self.model_tester.create_and_check_bloom_model_past(*config_and_inputs)
 
-    def test_bigscience176b_model_att_mask_past(self):
+    def test_bloom_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bigscience176b_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_bloom_model_attention_mask_past(*config_and_inputs)
 
-    def test_bigscience176b_model_past_large_inputs(self):
+    def test_bloom_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bigscience176b_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_bloom_model_past_large_inputs(*config_and_inputs)
 
-    def test_bigscience176b_lm_head_model(self):
+    def test_bloom_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
-    def test_bigscience176b_gradient_checkpointing(self):
+    def test_bloom_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
-    def test_bigscience176b_weight_initialization(self):
+    def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bigscience176b_weight_initialization(*config_and_inputs)
+        self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
     @slow
     def test_batch_generation(self):
-        model = BigScience176BLMHeadModel.from_pretrained("bigscience176b")
+        model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
-        tokenizer = BigScience176BTokenizer.from_pretrained("bigscience176b")
+        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
 
         tokenizer.padding_side = "left"
 
@@ -399,20 +394,20 @@ class BigScience176BModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BigScience176BModel.from_pretrained(model_name)
+        for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = BLOOMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class BigScience176BModelLanguageGenerationTest(unittest.TestCase):
-    def _test_lm_generate_bigscience176b_helper(
+class BLOOMModelLanguageGenerationTest(unittest.TestCase):
+    def _test_lm_generate_bloom_helper(
         self,
         gradient_checkpointing=False,
         verify_outputs=True,
     ):
-        model = BigScience176BLMHeadModel.from_pretrained(
-            "bigscience176b",
+        model = BLOOMLMHeadModel.from_pretrained(
+            "bloom",
         )
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -434,17 +429,17 @@ class BigScience176BModelLanguageGenerationTest(unittest.TestCase):
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
-    def test_lm_generate_bigscience176b(self):
-        self._test_lm_generate_bigscience176b_helper()
+    def test_lm_generate_bloom(self):
+        self._test_lm_generate_bloom_helper()
 
     @slow
-    def test_lm_generate_bigscience176b_with_gradient_checkpointing(self):
-        self._test_lm_generate_bigscience176b_helper(gradient_checkpointing=True)
+    def test_lm_generate_bloom_with_gradient_checkpointing(self):
+        self._test_lm_generate_bloom_helper(gradient_checkpointing=True)
 
     @slow
-    def test_bigscience176b_sample(self):
-        tokenizer = BigScience176BTokenizer.from_pretrained("bigscience176b")
-        model = BigScience176BLMHeadModel.from_pretrained("bigscience176b")
+    def test_bloom_sample(self):
+        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+        model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -470,9 +465,9 @@ class BigScience176BModelLanguageGenerationTest(unittest.TestCase):
         )  # token_type_ids should change output
 
     @slow
-    def test_bigscience176b_sample_max_time(self):
-        tokenizer = BigScience176BTokenizer.from_pretrained("bigscience176b")
-        model = BigScience176BLMHeadModel.from_pretrained("bigscience176b")
+    def test_bloom_sample_max_time(self):
+        tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+        model = BLOOMLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)

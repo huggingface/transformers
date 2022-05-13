@@ -22,12 +22,12 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_bigscience176b": [
-        "BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BigScience176BConfig",
-        "BigScience176BOnnxConfig",
+    "configuration_bloom": [
+        "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BLOOMConfig",
+        "BLOOMOnnxConfig",
     ],
-    "tokenization_bigscience176b": ["BigScience176BTokenizer"],
+    "tokenization_bloom": ["BLOOMTokenizer"],
 }
 try:
     if not is_tokenizers_available():
@@ -35,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_bigscience176b_fast"] = ["BigScience176BTokenizerFast"]
+    _import_structure["tokenization_bloom_fast"] = ["BLOOMTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -43,20 +43,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_bigscience176b"] = [
-        "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BigScience176BLMHeadModel",
-        "BigScience176BModel",
-        "BigScience176BPreTrainedModel",
+    _import_structure["modeling_bloom"] = [
+        "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BLOOMLMHeadModel",
+        "BLOOMModel",
+        "BLOOMPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bigscience176b import (
-        BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BigScience176BConfig,
-        BigScience176BOnnxConfig,
-    )
-    from .tokenization_bigscience176b import BigScience176BTokenizer
+    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig, BLOOMOnnxConfig
+    from .tokenization_bloom import BLOOMTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -64,7 +60,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_bigscience176b_fast import BigScience176BTokenizerFast
+        from .tokenization_bloom_fast import BLOOMTokenizerFast
 
     try:
         if not is_torch_available():
@@ -72,11 +68,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_bigscience176b import (
-            BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigScience176BLMHeadModel,
-            BigScience176BModel,
-            BigScience176BPreTrainedModel,
+        from .modeling_bloom import (
+            BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BLOOMLMHeadModel,
+            BLOOMModel,
+            BLOOMPreTrainedModel,
         )
 
 else:

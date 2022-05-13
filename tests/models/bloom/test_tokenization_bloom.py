@@ -18,18 +18,18 @@ import json
 import os
 import unittest
 
-from transformers import BigScience176BTokenizer, BigScience176BTokenizerFast
-from transformers.models.bigscience176b.tokenization_bigscience176b import VOCAB_FILES_NAMES
+from transformers import BLOOMTokenizer, BLOOMTokenizerFast
+from transformers.models.bloom.tokenization_bloom import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class BigScience176BTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BigScience176BTokenizer
-    rust_tokenizer_class = BigScience176BTokenizerFast
+    tokenizer_class = BLOOMTokenizer
+    rust_tokenizer_class = BLOOMTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
@@ -74,11 +74,11 @@ class BigScience176BTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return BigScience176BTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return BLOOMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return BigScience176BTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return BLOOMTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -86,7 +86,7 @@ class BigScience176BTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = BigScience176BTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = BLOOMTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text, add_prefix_space=True)
@@ -128,7 +128,7 @@ class BigScience176BTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
-        # And get both BigScience176B and Roberta to work at the same time (mostly an issue of adding a space before the string)
+        # And get both BLOOM and Roberta to work at the same time (mostly an issue of adding a space before the string)
         pass
 
     def test_padding(self, max_length=15):

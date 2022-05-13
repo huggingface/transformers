@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BigScience176B model."""
+"""PyTorch BLOOM model."""
 
 import math
 from typing import Tuple
@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, Causa
 from ...modeling_utils import Conv1D, PreTrainedModel
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_bigscience176b import BigScience176BConfig
+from .configuration_bloom import BLOOMConfig
 from .fused_bias_gelu import bias_gelu_impl
 from .mpu_utils import split_tensor_along_last_dim
 from .scaled_softmax import ScaledSoftmax  # to define it locally?
@@ -37,14 +37,14 @@ from .scaled_softmax import ScaledSoftmax  # to define it locally?
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bigscience/BigScience176B"
-_CONFIG_FOR_DOC = "BigScience176BConfig"
-_TOKENIZER_FOR_DOC = "BigScience176BTokenizer"
+_CHECKPOINT_FOR_DOC = "bigscience/BLOOM"
+_CONFIG_FOR_DOC = "BLOOMConfig"
+_TOKENIZER_FOR_DOC = "BLOOMTokenizer"
 
-BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST = [
+BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
-    # "bigscience/BigScience176B",
-    # See all BigScience176B models at https://huggingface.co/models?filter=bigscience176b
+    # "bigscience/BLOOM",
+    # See all BLOOM models at https://huggingface.co/models?filter=bloom
 ]
 
 # Utility functions below:
@@ -99,7 +99,7 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
     return bias_dropout_add(x, bias, residual, prob, False)
 
 
-class BigScience176BAttention(nn.Module):
+class BLOOMAttention(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
 
@@ -289,7 +289,7 @@ class BigScience176BAttention(nn.Module):
         return outputs, output_bias  # a, present, (attentions)
 
 
-class BigScience176BMLP(nn.Module):
+class BLOOMMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -332,7 +332,7 @@ class BigScience176BMLP(nn.Module):
         return output, output_bias
 
 
-class BigScience176BBlock(nn.Module):
+class BLOOMBlock(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -341,10 +341,10 @@ class BigScience176BBlock(nn.Module):
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
         self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
         # self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
-        self.self_attention = BigScience176BAttention(config, layer_number=layer_number)
+        self.self_attention = BLOOMAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
-        self.mlp = BigScience176BMLP(config)
+        self.mlp = BLOOMMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.bias_dropout_fusion = config.bias_dropout_fusion
@@ -461,14 +461,14 @@ class BigScience176BBlock(nn.Module):
         return outputs  # hidden_states, present, attentions
 
 
-class BigScience176BPreTrainedModel(PreTrainedModel):
+class BLOOMPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BigScience176BConfig
+    config_class = BLOOMConfig
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -492,7 +492,7 @@ class BigScience176BPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the BigScience176B Paper Scheme:
+        # Reinitialize selected weights subject to the BLOOM Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
@@ -504,11 +504,11 @@ class BigScience176BPreTrainedModel(PreTrainedModel):
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BigScience176BModel):
+        if isinstance(module, BLOOMModel):
             module.gradient_checkpointing = value
 
 
-BIGSCIENCE176B_START_DOCSTRING = r"""
+BLOOM_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings etc.)
@@ -518,12 +518,12 @@ BIGSCIENCE176B_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BigScience176BConfig`]): Model configuration class with all the parameters of the model.
+        config ([`BLOOMConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-BIGSCIENCE176B_INPUTS_DOCSTRING = r"""
+BLOOM_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -533,7 +533,7 @@ BIGSCIENCE176B_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`BigScience176BTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`BLOOMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -596,19 +596,19 @@ PARALLELIZE_DOCSTRING = r"""
         device_map (`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the bigscience176b models have
-            the following number of attention modules:
+            have fewer attention modules mapped to it than other devices. For reference, the bloom models have the
+            following number of attention modules:
 
-                - bigscience176b: 12
-                - bigscience176b-medium: 24
-                - bigscience176b-large: 36
-                - bigscience176b-xl: 48
+                - bloom: 12
+                - bloom-medium: 24
+                - bloom-large: 36
+                - bloom-xl: 48
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using bigscience176b-xl, which has a total of 48 attention modules:
-    model = BigScience176BLMHeadModel.from_pretrained("bigscience176b-xl")
+    # Here is an example of a device map on a machine with 4 GPUs using bloom-xl, which has a total of 48 attention modules:
+    model = BLOOMLMHeadModel.from_pretrained("bloom-xl")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -624,8 +624,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with bigscience176b-large:
-    model = BigScience176BLMHeadModel.from_pretrained("bigscience176b-large")
+    # On a 4 GPU machine with bloom-large:
+    model = BLOOMLMHeadModel.from_pretrained("bloom-large")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -639,10 +639,10 @@ DEPARALLELIZE_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare BIGSCIENCE176B Model transformer outputting raw hidden-states without any specific head on top.",
-    BIGSCIENCE176B_START_DOCSTRING,
+    "The bare BLOOM Model transformer outputting raw hidden-states without any specific head on top.",
+    BLOOM_START_DOCSTRING,
 )
-class BigScience176BModel(BigScience176BPreTrainedModel):
+class BLOOMModel(BLOOMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -655,7 +655,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
 
         # Transformer blocks
-        self.h = nn.ModuleList([BigScience176BBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([BLOOMBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
@@ -707,7 +707,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(BIGSCIENCE176B_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -864,17 +864,17 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The BIGSCIENCE176B Model transformer with a language modeling head on top (linear layer with weights tied to the
-    input embeddings).
+    The BLOOM Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
     """,
-    BIGSCIENCE176B_START_DOCSTRING,
+    BLOOM_START_DOCSTRING,
 )
-class BigScience176BLMHeadModel(BigScience176BPreTrainedModel):
+class BLOOMLMHeadModel(BLOOMPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = BigScience176BModel(config)
+        self.transformer = BLOOMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Model parallel
@@ -938,7 +938,7 @@ class BigScience176BLMHeadModel(BigScience176BPreTrainedModel):
             "token_type_ids": token_type_ids,
         }
 
-    @add_start_docstrings_to_model_forward(BIGSCIENCE176B_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

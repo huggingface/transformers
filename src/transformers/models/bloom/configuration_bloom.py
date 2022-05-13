@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BigScience176B configuration"""
+""" BLOOM configuration"""
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -26,18 +26,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-# BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-#     "bigscience/BigScience176B": "https://huggingface.co/bigscience/BigScience176B/resolve/main/config.json",
+# BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+#     "bigscience/BLOOM": "https://huggingface.co/bigscience/BLOOM/resolve/main/config.json",
 # }
-BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class BigScience176BConfig(PretrainedConfig):
+class BLOOMConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [*BigScience176BModel*]. It is used to instantiate
-    a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to the BLOOM architecture
-    [bigscience/bigscience176b](https://huggingface.co/bigscience/bigscience176b).
+    This is the configuration class to store the configuration of a [*BLOOMModel*]. It is used to instantiate a GPT-2
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to the BLOOM architecture
+    [bigscience/bloom](https://huggingface.co/bigscience/bloom).
 
     Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
     documentation from [*PretrainedConfig*] for more information.
@@ -46,7 +46,7 @@ class BigScience176BConfig(PretrainedConfig):
     Args:
         vocab_size (*int*, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            *inputs_ids* passed when calling [*BigScience176BModel*] or [*TFBigScience176BModel*].
+            *inputs_ids* passed when calling [*BLOOMModel*] or [*TFBLOOMModel*].
         seq_length (*int*, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -99,19 +99,19 @@ class BigScience176BConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BigScience176BModel, BigScience176BConfig
+    >>> from transformers import BLOOMModel, BLOOMConfig
 
-    >>> # Initializing a BigScience176B configuration
-    >>> configuration = BigScience176BConfig()
+    >>> # Initializing a BLOOM configuration
+    >>> configuration = BLOOMConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = BigScience176BModel(configuration)
+    >>> model = BLOOMModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "bigscience176b"
+    model_type = "bloom"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "max_position_embeddings": "seq_length",
@@ -171,7 +171,7 @@ class BigScience176BConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-class BigScience176BOnnxConfig(OnnxConfigWithPast):
+class BLOOMOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
         config: PretrainedConfig,

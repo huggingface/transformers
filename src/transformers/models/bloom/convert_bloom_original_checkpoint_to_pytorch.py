@@ -22,7 +22,7 @@ import re
 
 import torch
 
-from transformers import BigScience176BConfig, BigScience176BModel
+from transformers import BLOOMConfig, BLOOMModel
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
@@ -81,17 +81,17 @@ def get_dtype_size(dtype):
     return bit_size // 8
 
 
-def convert_bigscience176b_checkpoint_to_pytorch(
-    bigscience176b_checkpoint_path, bigscience176b_config_file, pytorch_dump_folder_path, shard_model
+def convert_bloom_checkpoint_to_pytorch(
+    bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model
 ):
     # Construct model
-    if bigscience176b_config_file == "":
-        config = BigScience176BConfig()
+    if bloom_config_file == "":
+        config = BLOOMConfig()
     else:
-        config = BigScience176BConfig.from_json_file(bigscience176b_config_file)
+        config = BLOOMConfig.from_json_file(bloom_config_file)
 
     if shard_model:
-        file_names = os.listdir(bigscience176b_checkpoint_path)
+        file_names = os.listdir(bloom_checkpoint_path)
         file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
 
         index_dict = {"weight_map": {}, "metadata": {}}
@@ -100,7 +100,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(
 
         missing_keys = None
 
-        config = BigScience176BConfig()
+        config = BLOOMConfig()
 
         for j, file in enumerate(file_names):
             print("Processing file: {}".format(file))
@@ -110,7 +110,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(
             for i in range(config.pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bigscience176b_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())
@@ -160,7 +160,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(
                         str(j + 1).zfill(5), str(len(file_names)).zfill(5)
                     )
 
-        config = BigScience176BConfig()
+        config = BLOOMConfig()
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
         index_dict["metadata"]["total_size"] = total_size
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
@@ -169,9 +169,9 @@ def convert_bigscience176b_checkpoint_to_pytorch(
             json_config = json.dumps(index_dict, indent=2, sort_keys=True) + "\n"
             f.write(json_config)
     else:
-        model = BigScience176BModel(config)
+        model = BLOOMModel(config)
 
-        file_names = os.listdir(bigscience176b_checkpoint_path)
+        file_names = os.listdir(bloom_checkpoint_path)
         file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
 
         missing_keys = None
@@ -180,7 +180,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(
             for i in range(config.pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bigscience176b_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--bigscience176b_checkpoint_path",
+        "--bloom_checkpoint_path",
         default=None,
         type=str,
         required=True,
@@ -242,7 +242,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--bigscience176b_config_file",
+        "--bloom_config_file",
         default="",
         type=str,
         help="An optional config json file corresponding to the pre-trained model. \n"
@@ -254,9 +254,9 @@ if __name__ == "__main__":
         help="An optional setting to shard the output model \n" "This enables sharding the converted checkpoint",
     )
     args = parser.parse_args()
-    convert_bigscience176b_checkpoint_to_pytorch(
-        args.bigscience176b_checkpoint_path,
-        args.bigscience176b_config_file,
+    convert_bloom_checkpoint_to_pytorch(
+        args.bloom_checkpoint_path,
+        args.bloom_config_file,
         args.pytorch_dump_folder_path,
         args.shard_model,
     )

@@ -150,16 +150,16 @@ _import_structure = {
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
     ],
-    "models.bigscience176b": [
-        "BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BigScience176BConfig",
-        "BigScience176BTokenizer",
-    ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
+    ],
+    "models.bloom": [
+        "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BLOOMConfig",
+        "BLOOMTokenizer",
     ],
     "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
@@ -481,9 +481,9 @@ else:
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
-    _import_structure["models.bigscience176b"].append("BigScience176BTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
+    _import_structure["models.bloom"].append("BLOOMTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -841,12 +841,12 @@ else:
             "BigBirdPegasusPreTrainedModel",
         ]
     )
-    _import_structure["models.bigscience176b"].extend(
+    _import_structure["models.bloom"].extend(
         [
-            "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BigScience176BLMHeadModel",
-            "BigScience176BModel",
-            "BigScience176BPreTrainedModel",
+            "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BLOOMLMHeadModel",
+            "BLOOMModel",
+            "BLOOMPreTrainedModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -2651,17 +2651,13 @@ if TYPE_CHECKING:
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
-    from .models.bigscience176b import (
-        BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BigScience176BConfig,
-        BigScience176BTokenizer,
-    )
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig, BLOOMTokenizer
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -2953,9 +2949,9 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
-        from .models.bigscience176b import BigScience176BTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
+        from .models.bloom import BLOOMTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
@@ -3255,12 +3251,6 @@ if TYPE_CHECKING:
             BigBirdPegasusModel,
             BigBirdPegasusPreTrainedModel,
         )
-        from .models.bigscience176b import (
-            BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigScience176BLMHeadModel,
-            BigScience176BModel,
-            BigScience176BPreTrainedModel,
-        )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlenderbotForCausalLM,
@@ -3274,6 +3264,12 @@ if TYPE_CHECKING:
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,
+        )
+        from .models.bloom import (
+            BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BLOOMLMHeadModel,
+            BLOOMModel,
+            BLOOMPreTrainedModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

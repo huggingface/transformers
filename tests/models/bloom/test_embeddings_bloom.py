@@ -7,7 +7,7 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers import BigScience176BLMHeadModel
+    from transformers import BLOOMLMHeadModel
 
 
 @require_torch
@@ -357,7 +357,7 @@ class BigScienceEmbeddingTest(unittest.TestCase):
         cuda_available = torch.cuda.is_available()
         # cuda_available = False
         device = torch.device("cuda:3" if cuda_available else "cpu")
-        model = BigScience176BLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model = BLOOMLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
         EXAMPLE_IDS = [

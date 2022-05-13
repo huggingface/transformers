@@ -38,27 +38,27 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bigscience176b": "https://huggingface.co/bigscience176b/resolve/main/vocab.json",
-        "bigscience176b-medium": "https://huggingface.co/bigscience176b-medium/resolve/main/vocab.json",
-        "bigscience176b-large": "https://huggingface.co/bigscience176b-large/resolve/main/vocab.json",
-        "bigscience176b-xl": "https://huggingface.co/bigscience176b-xl/resolve/main/vocab.json",
-        "distilbigscience176b": "https://huggingface.co/distilbigscience176b/resolve/main/vocab.json",
+        "bloom": "https://huggingface.co/bloom/resolve/main/vocab.json",
+        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/vocab.json",
+        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/vocab.json",
+        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/vocab.json",
+        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/vocab.json",
     },
     "merges_file": {
-        "bigscience176b": "https://huggingface.co/bigscience176b/resolve/main/merges.txt",
-        "bigscience176b-medium": "https://huggingface.co/bigscience176b-medium/resolve/main/merges.txt",
-        "bigscience176b-large": "https://huggingface.co/bigscience176b-large/resolve/main/merges.txt",
-        "bigscience176b-xl": "https://huggingface.co/bigscience176b-xl/resolve/main/merges.txt",
-        "distilbigscience176b": "https://huggingface.co/distilbigscience176b/resolve/main/merges.txt",
+        "bloom": "https://huggingface.co/bloom/resolve/main/merges.txt",
+        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/merges.txt",
+        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/merges.txt",
+        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/merges.txt",
+        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bigscience176b": 1024,
-    "bigscience176b-medium": 1024,
-    "bigscience176b-large": 1024,
-    "bigscience176b-xl": 1024,
-    "distilbigscience176b": 1024,
+    "bloom": 1024,
+    "bloom-medium": 1024,
+    "bloom-large": 1024,
+    "bloom-xl": 1024,
+    "distilbloom": 1024,
 }
 
 
@@ -101,7 +101,7 @@ def get_pairs(word):
     return pairs
 
 
-class BigScience176BTokenizer(PreTrainedTokenizer):
+class BLOOMTokenizer(PreTrainedTokenizer):
     """
     Construct a GPT-2 tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -109,8 +109,8 @@ class BigScience176BTokenizer(PreTrainedTokenizer):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import BigScience176BTokenizer
-    >>> tokenizer = BigScience176BTokenizer.from_pretrained("bigscience176b")
+    >>> from transformers import BLOOMTokenizer
+    >>> tokenizer = BLOOMTokenizer.from_pretrained("bloom")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']
@@ -146,7 +146,7 @@ class BigScience176BTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (BigScience176B tokenizer detect beginning of words by the preceding space).
+            other word. (BLOOM tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
