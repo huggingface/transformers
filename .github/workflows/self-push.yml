@@ -20,358 +20,192 @@ env:
   OMP_NUM_THREADS: 8
   MKL_NUM_THREADS: 8
   PYTEST_TIMEOUT: 60
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
-  run_tests_torch_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      test_map: ${{ steps.set-matrix.outputs.test_map }}
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Cleanup
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+      - name: Fetch the tests to run
+        # TODO: add `git-python` in the docker images
+        run: |
+          pip install --upgrade git-python
+          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_fetched
+          path: test_preparation.txt
+
+      - id: set-matrix
+        name: Organize tests into models
+        # The `keys` is used as GitHub actions matrix for jobs, i.e. `models/bert`, `tokenization`, `pipeline`, etc.
+        # The `test_map` is used to get the actual identified test files under each key.
+        # If no test to run (so no `test_map.json` file), create a dummy map (empty matrix will fail)
+        run: |
+          if [ -f test_map.json ]; then
+              keys=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); d = list(test_map.keys()); print(d)')
+              test_map=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); print(test_map)')
+          else
+              keys=$(python3 -c 'keys = ["dummy"]; print(keys)')
+              test_map=$(python3 -c 'test_map = {"dummy": []}; print(test_map)')
+          fi
+          echo $keys
+          echo $test_map
+          echo "::set-output name=matrix::$keys"
+          echo "::set-output name=test_map::$test_map"
+
+  run_tests_single_gpu:
+    name: Model Tests on single GPU
+    needs: setup
+    # `dummy` means there is no test to run
+    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        machines: [single-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          apt install -y libsndfile1-dev espeak-ng
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-
-      - name: Launcher docker
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
       - name: Are GPUs recognized by our DL frameworks
+        working-directory: /transformers
         run: |
           utils/print_env_pt.py
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-      - name: Fetch the tests to run
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
         run: |
-          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+          echo "${{ matrix.folders }}"
+          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
-      - name: Report fetched tests
-        uses: actions/upload-artifact@v2
-        with:
-          name: test_fetched
-          path: test_preparation.txt
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Run all non-slow tests on GPU
+      - name: Run all non-slow selected tests on GPU
+        working-directory: /transformers
         run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu $(cat test_list.txt)
-          fi
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
-        run: cat reports/tests_torch_gpu/failures_short.txt
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_all_tests_torch_gpu_test_reports
-          path: reports
+          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
 
-#  run_tests_flax_gpu:
-#    runs-on: [self-hosted, docker-gpu-test, single-gpu]
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Set up Python 3.7
-#        uses: actions/setup-python@v2
-#        with:
-#          python-version: 3.7
-#
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
-#          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
-#
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 2
-#
-#      - name: NVIDIA-SMI
-#        continue-on-error: true
-#        run: |
-#          nvidia-smi
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-#          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
-#
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
-#
-#      - name: Run all non-slow tests on GPU
-#        run: |
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu $(cat test_list.txt)
-#          fi
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        run: cat reports/tests_flax_gpu/failures_short.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_flax_gpu_test_reports
-#          path: reports
-#
-#  run_tests_tf_gpu:
-#    runs-on: [self-hosted, docker-gpu, single-gpu]
-#    timeout-minutes: 120
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
-#          pip install https://github.com/kpu/kenlm/archive/master.zip
-#
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 2
-#
-#      - name: NVIDIA-SMI
-#        run: |
-#          nvidia-smi
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-#          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-#
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
-#
-#      - name: Run all non-slow tests on GPU
-#        env:
-#          TF_NUM_INTRAOP_THREADS: 8
-#          TF_NUM_INTEROP_THREADS: 1
-#        run: |
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu $(cat test_list.txt)
-#          fi
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        run: cat reports/tests_tf_gpu/failures_short.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_tf_gpu_test_reports
-#          path: reports
-
-
-  run_tests_torch_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+  run_tests_multi_gpu:
+    name: Model Tests on multi GPUs
+    needs: setup
+    # `dummy` means there is no test to run
+    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        machines: [multi-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
-          apt install -y libsndfile1-dev espeak-ng
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-      - name: Launcher docker
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-
       - name: NVIDIA-SMI
-        continue-on-error: true
         run: |
           nvidia-smi
 
       - name: Are GPUs recognized by our DL frameworks
+        working-directory: /transformers
         run: |
           utils/print_env_pt.py
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-      - name: Fetch the tests to run
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
         run: |
-          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+          echo "${{ matrix.folders }}"
+          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
-      - name: Report fetched tests
-        uses: actions/upload-artifact@v2
-        with:
-          name: test_fetched
-          path: test_preparation.txt
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Run all non-slow tests on GPU
+      - name: Run all non-slow selected tests on GPU
         env:
           MKL_SERVICE_FORCE_INTEL: 1
+        working-directory: /transformers
         run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
-          fi
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
-        run: cat reports/tests_torch_multi_gpu/failures_short.txt
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_all_tests_torch_multi_gpu_test_reports
-          path: reports
+          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
 
-#  run_tests_flax_multi_gpu:
-#    runs-on: [self-hosted, docker-gpu, multi-gpu]
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
-#          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
-#          pip install https://github.com/kpu/kenlm/archive/master.zip
-#
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 2
-#
-#      - name: NVIDIA-SMI
-#        continue-on-error: true
-#        run: |
-#          nvidia-smi
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-#          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
-#
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
-#
-#      - name: Run all non-slow tests on GPU
-#        run: |
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu $(cat test_list.txt)
-#          fi
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        run: cat reports/tests_flax_multi_gpu/failures_short.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_flax_multi_gpu_test_reports
-#          path: reports
-
-#  run_tests_tf_multi_gpu:
-#    runs-on: [self-hosted, docker-gpu, multi-gpu]
-#    timeout-minutes: 120
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
-#          pip install https://github.com/kpu/kenlm/archive/master.zip
-#
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 2
-#
-#      - name: NVIDIA-SMI
-#        run: |
-#          nvidia-smi
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-#          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-#
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
-#
-#      - name: Run all non-slow tests on GPU
-#        env:
-#          TF_NUM_INTRAOP_THREADS: 8
-#          TF_NUM_INTEROP_THREADS: 1
-#        run: |
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu $(cat test_list.txt)
-#          fi
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        run: cat reports/tests_tf_multi_gpu/failures_short.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_tf_multi_gpu_test_reports
-#          path: reports
-
-  run_tests_torch_cuda_extensions_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+  run_tests_torch_cuda_extensions_single_gpu:
+    name: Torch CUDA extension tests on single GPU
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [single-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
       image: nvcr.io/nvidia/pytorch:21.03-py3
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Launcher docker
+      - name: Checkout transformers
         uses: actions/checkout@v2
         with:
           fetch-depth: 2
@@ -390,46 +224,42 @@ jobs:
         run: |
           utils/print_env_pt.py
 
-      - name: Fetch the tests to run
+      - name: Run all non-slow selected tests on GPU
+        # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python utils/tests_fetcher.py --diff_with_last_commit --filters tests/deepspeed tests/extended | tee test_preparation.txt
-
-      - name: Report fetched tests
-        uses: actions/upload-artifact@v2
-        with:
-          name: test_fetched
-          path: test_preparation.txt
-
-      - name: Run all tests on GPU
-        run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu $(cat test_list.txt)
-          fi
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
-        run: cat reports/tests_torch_cuda_extensions_gpu/failures_short.txt
+        continue-on-error: true
+        run: cat reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_tests_torch_cuda_extensions_gpu_test_reports
-          path: reports
+          name: ${{ matrix.machines }}_run_tests_torch_cuda_extensions_gpu_test_reports
+          path: reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
 
   run_tests_torch_cuda_extensions_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    name: Torch CUDA extension tests on multi GPUs
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [multi-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machines }}']
     container:
       image: nvcr.io/nvidia/pytorch:21.03-py3
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Launcher docker
+      - name: Checkout transformers
         uses: actions/checkout@v2
         with:
           fetch-depth: 2
 
       - name: NVIDIA-SMI
-        continue-on-error: true
         run: |
           nvidia-smi
 
@@ -444,56 +274,46 @@ jobs:
         run: |
           utils/print_env_pt.py
 
-      - name: Fetch the tests to run
+      - name: Run all non-slow selected tests on GPU
+        # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python utils/tests_fetcher.py --diff_with_last_commit --filters tests/deepspeed tests/extended | tee test_preparation.txt
-
-      - name: Report fetched tests
-        uses: actions/upload-artifact@v2
-        with:
-          name: test_fetched
-          path: test_preparation.txt
-
-      - name: Run all tests on GPU
-        run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu $(cat test_list.txt)
-          fi
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machines }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
-        run: cat reports/tests_torch_cuda_extensions_multi_gpu/failures_short.txt
+        continue-on-error: true
+        run: cat reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_tests_torch_cuda_extensions_multi_gpu_test_reports
-          path: reports
-
+          name: ${{ matrix.machines }}_run_tests_torch_cuda_extensions_gpu_test_reports
+          path: reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
 
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
     needs: [
-        run_tests_torch_gpu,
-#        run_tests_tf_gpu,
-        run_tests_torch_multi_gpu,
-#        run_tests_tf_multi_gpu,
-        run_tests_torch_cuda_extensions_gpu,
+        setup,
+        run_tests_single_gpu,
+        run_tests_multi_gpu,
+        run_tests_torch_cuda_extensions_single_gpu,
         run_tests_torch_cuda_extensions_multi_gpu
     ]
     steps:
       - uses: actions/checkout@v2
-
       - uses: actions/download-artifact@v2
-
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          CI_EVENT: push
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
-          python utils/notification_service_deprecated.py push
+          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

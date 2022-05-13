@@ -60,8 +60,10 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="The config json file corresponding to the pre-trained mesh-tf model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "The config json file corresponding to the pre-trained mesh-tf model. \n"
+            "This specifies the model architecture."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

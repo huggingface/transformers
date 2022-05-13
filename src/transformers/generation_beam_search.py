@@ -183,13 +183,14 @@ class BeamSearchScorer(BeamScorer):
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
-                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1,"
+                " one should make use of `greedy_search` instead."
             )
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
-                f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
-                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                "`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be"
+                f" divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
             )
 
         if "max_length" in kwargs:
@@ -272,7 +273,8 @@ class BeamSearchScorer(BeamScorer):
 
             if beam_idx < self.group_size:
                 raise ValueError(
-                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id:"
+                    f" {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
@@ -419,13 +421,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
-                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1,"
+                " one should make use of `greedy_search` instead."
             )
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
-                f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
-                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                "`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be"
+                f" divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
             )
 
         if "max_length" in kwargs:
@@ -571,7 +574,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
             if beam_idx < self.group_size:
                 raise ValueError(
-                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id:"
+                    f" {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)

@@ -61,7 +61,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                    "translation_text": (
+                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                        " Beide Beide"
+                    )
                 }
             ],
         )
@@ -74,7 +77,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                    "translation_text": (
+                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                        " Beide Beide"
+                    )
                 }
             ],
         )
@@ -87,7 +93,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                    "translation_text": (
+                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
+                        " urine urine urine urine urine urine urine"
+                    )
                 }
             ],
         )
@@ -100,7 +109,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                    "translation_text": (
+                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
+                        " urine urine urine urine urine urine urine"
+                    )
                 }
             ],
         )
