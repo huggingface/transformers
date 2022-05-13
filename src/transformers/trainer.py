@@ -1765,7 +1765,7 @@ class Trainer:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
-            if not is_sagemaker_mp_enabled():
+            if not strict_load:
                 self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
