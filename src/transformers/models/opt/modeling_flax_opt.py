@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The Google Flax Team Authors And The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Fairseq Authors and The Google Flax Team Authors And The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -538,9 +538,7 @@ class FlaxOPTDecoder(nn.Module):
         embed_dim = self.config.hidden_size
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
-        # embed scale will be removed
-        # self.embed_scale = math.sqrt(self.config.hidden_size) if self.config.scale_embedding else 1.0
-
+        
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
@@ -626,14 +624,13 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
         hidden_states = jnp.zeros(input_shape + (self.config.hidden_size,))
-        attention_mask = attention_mask
+
         module_init_outputs = self.module.init(
             rngs,
             input_ids,
             attention_mask,
             position_ids,
-            hidden_states,
-            attention_mask,
+            # hidden_states,
             return_dict=False,
         )
         return module_init_outputs["params"]
@@ -675,7 +672,6 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
 
