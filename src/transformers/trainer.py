@@ -1700,7 +1700,8 @@ class Trainer:
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
 
-        if model is None: model = self.model
+        if model is None:
+            model = self.model
         strict_load = True if is_sagemaker_mp_enabled() else False
 
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
