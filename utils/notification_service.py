@@ -724,7 +724,13 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-    message = Message(f"🤗 Results of the {ci_event} tests.", model_results, additional_results)
+    title = f"🤗 Results of the {ci_event} tests."
+    # Add PR title with a link for push CI
+    ci_title = os.environ.get("CI_TITLE")
+    if ci_title is not None:
+        title = f"🤗 Results of the {ci_event} tests: {ci_title}."
+
+    message = Message(title, model_results, additional_results)
 
     message.post()
     message.post_reply()
