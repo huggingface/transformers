@@ -32,38 +32,22 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "bloom": "https://huggingface.co/bloom/resolve/main/vocab.json",
-        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/vocab.json",
-        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/vocab.json",
-        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/vocab.json",
-        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "bloom": "https://huggingface.co/bloom/resolve/main/merges.txt",
-        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/merges.txt",
-        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/merges.txt",
-        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/merges.txt",
-        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/merges.txt",
-    },
     "tokenizer_file": {
-        "bloom": "https://huggingface.co/bloom/resolve/main/tokenizer.json",
-        "bloom-medium": "https://huggingface.co/bloom-medium/resolve/main/tokenizer.json",
-        "bloom-large": "https://huggingface.co/bloom-large/resolve/main/tokenizer.json",
-        "bloom-xl": "https://huggingface.co/bloom-xl/resolve/main/tokenizer.json",
-        "distilbloom": "https://huggingface.co/distilbloom/resolve/main/tokenizer.json",
+        "bloom": "https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles/resolve/main/tokenizer.json",
     },
+    "vocab_file":{
+        "bloom": ""
+    },
+    "tokenizer_config": {
+        "bloom": "https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles/resolve/main/tokenizer_config.json",
+    }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "bloom": 1024,
-    "bloom-medium": 1024,
-    "bloom-large": 1024,
-    "bloom-xl": 1024,
-    "distilbloom": 1024,
 }
 
 
@@ -129,9 +113,10 @@ class BLOOMTokenizerFast(PreTrainedTokenizerFast):
         vocab_file=None,
         merges_file=None,
         tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
+        unk_token="<unk>",
+        bos_token="<s>",
+        eos_token="</s>",
+        pad_token="<pad>",
         add_prefix_space=False,
         **kwargs
     ):
@@ -142,6 +127,7 @@ class BLOOMTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
