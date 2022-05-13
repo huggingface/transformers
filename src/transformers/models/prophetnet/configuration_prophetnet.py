@@ -14,10 +14,10 @@
 # limitations under the License.
 """ ProphetNet model configuration"""
 
+from typing import Optional, Union, Callable
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from typing import Optional, Union, Callable
 
 
 logger = logging.get_logger(__name__)
