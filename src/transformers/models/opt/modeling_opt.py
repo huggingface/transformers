@@ -554,6 +554,21 @@ class OPTDecoder(OPTPreTrainedModel):
         if self.project_out is not None:
             self.project_out = self.project_out.to(self.last_device)
 
+    def deparallelize(self):
+        self.model_parallel = False
+        self.device_map = None
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        self.embed_tokens.to("cpu")
+        self.embed_positions.to("cpu")
+        if self.project_in is not None:
+            self.project_in.to("cpu")
+        for idx in range(len(self.layers)):
+            self.layers[idx] = self.layers[idx].to("cpu")
+        if self.project_out is not None:
+            self.project_out = self.project_out.to(self.last_device)
+        torch.cuda.empty_cache()
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -803,6 +818,14 @@ class OPTModel(OPTPreTrainedModel):
         self.first_device = self.decoder.first_device
         self.last_device = self.decoder.last_device
 
+    def deparallelize(self):
+        self.decoder.deparallelize()
+        self.decoder = self.decoder.to("cpu")
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        self.model_parallel = False
+        torch.cuda.empty_cache()
+
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
 
@@ -888,6 +911,13 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self.first_device = self.model.first_device
         self.last_device = self.model.last_device
         self.lm_head.to(self.first_device)
+
+    def deparallelize(self):
+        self.model.deparallelize()
+        self.model = self.model.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
+        self.model_parallel = False
+        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
