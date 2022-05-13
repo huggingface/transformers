@@ -32,8 +32,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_opt import OPTConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -405,6 +405,7 @@ OPT_START_DOCSTRING = r"""
 class OPTPreTrainedModel(PreTrainedModel):
     config_class = OPTConfig
     base_model_prefix = "model"
+    is_parallelizable = True
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
@@ -524,9 +525,34 @@ class OPTDecoder(OPTPreTrainedModel):
         self.layer_norm = None
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
         self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def parallelize(self, device_map=None):
+        # Check validity of device_map
+        self.device_map = (
+            get_device_map(len(self.layers), range(torch.cuda.device_count())) if device_map is None else device_map
+        )
+        assert_device_map(self.device_map, len(self.layers))
+        self.model_parallel = True
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else f"cuda:{min(self.device_map.keys())}"
+        self.last_device = f"cuda:{max(self.device_map.keys())}"
+        self.embed_tokens.to(self.first_device)
+        self.embed_positions.to(self.first_device)
+        if self.project_in is not None:
+            self.project_in.to(self.first_device)
+        # Load onto devices
+        for k, v in self.device_map.items():
+            for block in v:
+                self.layers[block] = self.layers[block].to(f"cuda:{k}") 
+    
+        if self.project_out is not None:
+            self.project_out = self.project_out.to(self.last_device)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -631,7 +657,11 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        if past_key_values is None:
+            past_key_values_length = 0
+            past_key_values = tuple([None] * len(self.layers))
+        else:
+            past_key_values_length = past_key_values[0][0].shape[2]
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -667,8 +697,17 @@ class OPTDecoder(OPTPreTrainedModel):
                         f" {head_mask.size()[0]}."
                     )
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for idx, (decoder_layer, layer_past) in enumerate(zip(self.layers, past_key_values)):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            if self.model_parallel:
+                torch.cuda.set_device(hidden_states.device)
+                if layer_past is not None:
+                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(hidden_states.device)
+                if isinstance(head_mask, torch.Tensor):
+                    head_mask = head_mask.to(hidden_states.device)
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
@@ -718,6 +757,11 @@ class OPTDecoder(OPTPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+            if self.model_parallel:
+                for k, v in self.device_map.items():
+                    if idx == v[-1] and f"cuda:{k}" != self.last_device:
+                        hidden_states = hidden_states.to(f"cuda:{k+1}")
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 
@@ -745,8 +789,19 @@ class OPTModel(OPTPreTrainedModel):
         super().__init__(config)
         self.decoder = OPTDecoder(config)
 
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def parallelize(self, device_map=None):
+        self.decoder.parallelize(device_map)
+        self.device_map = self.decoder.device_map
+        self.model_parallel = True
+        self.first_device = self.decoder.first_device
+        self.last_device = self.decoder.last_device
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
@@ -819,8 +874,20 @@ class OPTForCausalLM(OPTPreTrainedModel):
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def parallelize(self, device_map=None):
+        self.model.parallelize(device_map)
+        self.device_map = self.model.device_map
+        self.model_parallel = True
+        self.first_device = self.model.first_device
+        self.last_device = self.model.last_device
+        self.lm_head.to(self.first_device)
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
@@ -947,7 +1014,13 @@ class OPTForCausalLM(OPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.lm_head(outputs[0]).contiguous()
+        hidden_states = outputs[0]
+
+        if self.model_parallel:
+            torch.cuda.set_device(self.model.first_device)
+            hidden_states = hidden_states.to(self.lm_head.weight.device)
+
+        logits = self.lm_head(hidden_states).contiguous()
 
         loss = None
         if labels is not None:
