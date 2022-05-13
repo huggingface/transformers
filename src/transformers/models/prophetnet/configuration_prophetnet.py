@@ -107,8 +107,8 @@ class ProphetNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        activation_dropout: Optional[float]= 0.1,
-        activation_function: Optional[Union[str,Callable]] = "gelu",
+        activation_dropout: Optional[float] = 0.1,
+        activation_function: Optional[Union[str, Callable]] = "gelu",
         vocab_size: Optional[int] = 30522,
         hidden_size: Optional[int] = 1024,
         encoder_ffn_dim: Optional[int] = 4096,
@@ -123,7 +123,7 @@ class ProphetNetConfig(PretrainedConfig):
         init_std: Optional[float] = 0.02,
         is_encoder_decoder: Optional[bool] = True,
         add_cross_attention: Optional[bool] = True,
-        decoder_start_token_id = 0,
+        decoder_start_token_id=0,
         ngram: Optional[int] = 2,
         num_buckets: Optional[int] = 32,
         relative_max_distance: Optional[int] = 128,
