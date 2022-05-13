@@ -15,7 +15,6 @@
 """ ProphetNet model configuration"""
 
 
-from re import I
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from typing import Optional, Union, Callable
