@@ -1020,13 +1020,15 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         if not self.trainer_compatible:
             warnings.warn(
                 "The output of TransfoXL will be updated in v5 to support a single loss as first argument. In order"
-                "to use that updated output, please specify `trainer_compatible=True` as your configuration attribute.",
+                "to use that updated output, please specify `trainer_compatible=True` as your configuration"
+                " attribute.",
                 DeprecationWarning,
             )
 
-        assert (
-            self.sample_softmax <= 0
-        ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+        assert self.sample_softmax <= 0, (
+            "Sampling from the softmax is not implemented yet. Please look at issue: #3310:"
+            " https://github.com/huggingface/transformers/issues/3310"
+        )
 
         self.crit = ProjectedAdaptiveLogSoftmax(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
@@ -1261,7 +1263,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

@@ -4,7 +4,7 @@
 deps = {
     "Pillow": "Pillow",
     "accelerate": "accelerate>=0.7.1",
-    "black": "black~=22.0",
+    "black": "black~=22.0,>=22.3",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
@@ -44,7 +44,7 @@ deps = {
     "pytest": "pytest",
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
-    "python": "python>=3.6.0",
+    "python": "python>=3.7.0",
     "ray[tune]": "ray[tune]",
     "regex": "regex!=2019.12.17",
     "requests": "requests",

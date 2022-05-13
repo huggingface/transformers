@@ -574,7 +574,10 @@ class ReformerTesterMixin:
 
     @require_torch_multi_gpu
     @unittest.skip(
-        reason="Reformer does not work with data parallel (DP) because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035"
+        reason=(
+            "Reformer does not work with data parallel (DP) because of a bug in PyTorch:"
+            " https://github.com/pytorch/pytorch/issues/36035"
+        )
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass

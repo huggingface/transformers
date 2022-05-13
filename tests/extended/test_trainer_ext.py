@@ -278,7 +278,8 @@ class TestTrainerExt(TestCasePlus):
         self.assertGreater(
             gpu_total_mem_diff_bytes,
             bnb_saved_bytes * 0.8,  # add a safety margin, if it saved slightly less
-            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were {gpu_total_mem_diff_bytes}",
+            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were"
+            f" {gpu_total_mem_diff_bytes}",
         )
 
     def run_trainer(

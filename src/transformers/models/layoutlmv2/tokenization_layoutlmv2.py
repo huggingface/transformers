@@ -38,8 +38,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt",
-        "microsoft/layoutlmv2-large-uncased": "https://huggingface.co/microsoft/layoutlmv2-large-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlmv2-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt"
+        ),
+        "microsoft/layoutlmv2-large-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-large-uncased/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -255,8 +259,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -508,7 +512,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
                 raise ValueError(
-                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
+                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
+                    f" {len(text_pair)}."
                 )
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
             is_pair = bool(text_pair is not None)
@@ -1200,16 +1205,17 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg + "Please select another truncation strategy than "
+                        error_msg
+                        + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)
         elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             logger.warning(
-                f"Be aware, overflowing tokens are not returned for the setting you have chosen,"
+                "Be aware, overflowing tokens are not returned for the setting you have chosen,"
                 f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
-                f"truncation strategy. So the returned list will always be empty even if some "
-                f"tokens have been removed."
+                "truncation strategy. So the returned list will always be empty even if some "
+                "tokens have been removed."
             )
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
@@ -1231,7 +1237,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the second sequence has a length {len(pair_ids)}. "
                     f"Please select another truncation strategy than {truncation_strategy}, "
-                    f"for instance 'longest_first' or 'only_first'."
+                    "for instance 'longest_first' or 'only_first'."
                 )
 
         return (

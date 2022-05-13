@@ -137,6 +137,7 @@ else:
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("opt", ("GPT2Tokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
@@ -520,14 +521,14 @@ class AutoTokenizer:
             if tokenizer_auto_map is not None:
                 if not trust_remote_code:
                     raise ValueError(
-                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that repo "
-                        "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                        "the option `trust_remote_code=True` to remove this error."
+                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that"
+                        " repo on your local machine. Make sure you have read the code there to avoid malicious use,"
+                        " then set the option `trust_remote_code=True` to remove this error."
                     )
                 if kwargs.get("revision", None) is None:
                     logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                        "no malicious code has been contributed in a newer revision."
+                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure"
+                        " no malicious code has been contributed in a newer revision."
                     )
 
                 if use_fast and tokenizer_auto_map[1] is not None:

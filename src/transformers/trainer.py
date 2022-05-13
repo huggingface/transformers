@@ -109,16 +109,19 @@ from .trainer_utils import (
     HubStrategy,
     IntervalStrategy,
     PredictionOutput,
+    RemoveColumnsCollator,
     ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
     denumpify_detensorize,
+    enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
     number_of_arguments,
+    seed_worker,
     set_seed,
     speed_metrics,
 )
@@ -307,7 +310,7 @@ class Trainer:
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
         # Seed must be set before instantiating the model when using model
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -332,8 +335,9 @@ class Trainer:
         else:
             if model_init is not None:
                 warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
-                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
+                    " release.",
                     FutureWarning,
                 )
             self.model_init = model_init
@@ -544,7 +548,8 @@ class Trainer:
             else:
                 if not is_apex_available():
                     raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                        "Using FP16 with APEX but APEX is not installed, please refer to"
+                        " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
 
@@ -626,27 +631,31 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
-        if not self.args.remove_unused_columns:
-            return dataset
+    def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
-            self._signature_columns += ["label", "label_ids"]
+            self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
 
-        ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+        if not self.args.remove_unused_columns:
+            return dataset
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
         if len(ignored_columns) > 0:
-            dset_description = "" if description is None else f"in the {description} set "
+            dset_description = "" if description is None else f"in the {description} set"
             logger.info(
                 f"The following columns {dset_description} don't have a corresponding argument in "
                 f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
                 f" If {', '.join(ignored_columns)} are not expected by `{self.model.__class__.__name__}.forward`, "
-                f" you can safely ignore this message."
+                " you can safely ignore this message."
             )
 
-        columns = [k for k in self._signature_columns if k in dataset.column_names]
+        columns = [k for k in signature_columns if k in dataset.column_names]
 
         if version.parse(datasets.__version__) < version.parse("1.4.0"):
             dataset.set_format(
@@ -655,6 +664,24 @@ class Trainer:
             return dataset
         else:
             return dataset.remove_columns(ignored_columns)
+
+    def _get_collator_with_removed_columns(
+        self, data_collator: Callable, description: Optional[str] = None
+    ) -> Callable:
+        """Wrap the data collator in a callable removing unused columns."""
+        if not self.args.remove_unused_columns:
+            return data_collator
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        remove_columns_collator = RemoveColumnsCollator(
+            data_collator=data_collator,
+            signature_columns=signature_columns,
+            logger=logger,
+            description=description,
+            model_name=self.model.__class__.__name__,
+        )
+        return remove_columns_collator
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if self.train_dataset is None or not has_length(self.train_dataset):
@@ -742,8 +769,11 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
+        data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -758,7 +788,7 @@ class Trainer:
             return DataLoader(
                 train_dataset,
                 batch_size=self.args.per_device_train_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -769,10 +799,11 @@ class Trainer:
             train_dataset,
             batch_size=self._train_batch_size,
             sampler=train_sampler,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
+            worker_init_fn=seed_worker,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
@@ -818,9 +849,12 @@ class Trainer:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        data_collator = self.data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -834,7 +868,7 @@ class Trainer:
             return DataLoader(
                 eval_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -845,7 +879,7 @@ class Trainer:
             eval_dataset,
             sampler=eval_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
@@ -862,8 +896,12 @@ class Trainer:
                 The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the `model.forward()`
                 method are automatically removed. It must implement `__len__`.
         """
+        data_collator = self.data_collator
+
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="test")
 
         if isinstance(test_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -877,7 +915,7 @@ class Trainer:
             return DataLoader(
                 test_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -889,7 +927,7 @@ class Trainer:
             test_dataset,
             sampler=test_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             pin_memory=self.args.dataloader_pin_memory,
         )
@@ -1005,6 +1043,10 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizerNames.SGD:
+            optimizer_cls = torch.optim.SGD
+        elif args.optim == OptimizerNames.ADAGRAD:
+            optimizer_cls = torch.optim.Adagrad
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1055,7 +1097,8 @@ class Trainer:
         for key, value in params.items():
             if not hasattr(self.args, key):
                 logger.warning(
-                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in"
+                    " `TrainingArguments`."
                 )
                 continue
             old_attr = getattr(self.args, key, None)
@@ -1293,7 +1336,7 @@ class Trainer:
         model_reloaded = False
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
-            set_seed(args.seed)
+            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
             self.model = self.call_model_init(trial)
             model_reloaded = True
             # Reinitializes optimizer and scheduler
@@ -1364,7 +1407,8 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
         else:
             raise ValueError(
-                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+                "args.max_steps must be set to a positive value if dataloader does not have a length, was"
+                f" {args.max_steps}"
             )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
@@ -1372,7 +1416,8 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP (torch.distributed.launch)."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
+                    " (torch.distributed.launch)."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
@@ -1637,7 +1682,7 @@ class Trainer:
                     break
             if step < 0:
                 logger.warning(
-                    f"There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    "There seems to be not a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
                 )
@@ -1811,7 +1856,7 @@ class Trainer:
         local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
         if local_rank != -1:
             rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
-            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+            if not os.path.isfile(rng_file):
                 logger.info(
                     f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
                     "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
@@ -2300,8 +2345,9 @@ class Trainer:
                 # This must be called on all ranks
                 if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
-                        "deepspeed.save_16bit_model didn't save the model, since stage3_gather_16bit_weights_on_model_save=false. "
-                        "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
+                        "deepspeed.save_16bit_model didn't save the model, since"
+                        " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
+                        " zero_to_fp32.py to recover weights"
                     )
                     self.deepspeed.save_checkpoint(output_dir)
 

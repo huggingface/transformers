@@ -62,6 +62,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineModel"),
         ("roformer", "RoFormerModel"),
         ("clip", "CLIPModel"),
+        ("flava", "FlavaModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("deit", "DeiTModel"),
         ("luke", "LukeModel"),
@@ -92,6 +93,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLModel"),
         ("xlm-roberta", "XLMRobertaModel"),
         ("bart", "BartModel"),
+        ("opt", "OPTModel"),
         ("longformer", "LongformerModel"),
         ("roberta", "RobertaModel"),
         ("data2vec-text", "Data2VecTextModel"),
@@ -131,6 +133,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("flava", "FlavaForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
@@ -259,6 +262,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-prophetnet", "XLMProphetNetForCausalLM"),
         ("prophetnet", "ProphetNetForCausalLM"),
         ("bart", "BartForCausalLM"),
+        ("opt", "OPTForCausalLM"),
         ("mbart", "MBartForCausalLM"),
         ("pegasus", "PegasusForCausalLM"),
         ("marian", "MarianForCausalLM"),

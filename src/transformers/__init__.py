@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.19.0.dev0"
+__version__ = "4.20.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -198,6 +198,14 @@ _import_structure = {
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
+    "models.flava": [
+        "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FlavaConfig",
+        "FlavaImageCodebookConfig",
+        "FlavaImageConfig",
+        "FlavaMultimodalConfig",
+        "FlavaTextConfig",
+    ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
@@ -239,6 +247,7 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
+    "models.opt": ["OPTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -372,7 +381,7 @@ _import_structure = {
         "TrainerControl",
         "TrainerState",
     ],
-    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "set_seed"],
+    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "enable_full_determinism", "set_seed"],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
@@ -568,6 +577,7 @@ else:
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
@@ -1038,6 +1048,18 @@ else:
             "FlaubertWithLMHeadModel",
         ]
     )
+    _import_structure["models.flava"].extend(
+        [
+            "FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FlavaForPreTraining",
+            "FlavaImageCodebook",
+            "FlavaImageModel",
+            "FlavaModel",
+            "FlavaMultimodalModel",
+            "FlavaPreTrainedModel",
+            "FlavaTextModel",
+        ]
+    )
     _import_structure["models.fnet"].extend(
         [
             "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1300,6 +1322,14 @@ else:
             "OpenAIGPTModel",
             "OpenAIGPTPreTrainedModel",
             "load_tf_weights_in_openai_gpt",
+        ]
+    )
+    _import_structure["models.opt"].extend(
+        [
+            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OPTForCausalLM",
+            "OPTModel",
+            "OPTPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -2352,7 +2382,6 @@ else:
             "FlaxBartPreTrainedModel",
         ]
     )
-
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -2361,6 +2390,7 @@ else:
             "FlaxBeitPreTrainedModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForCausalLM",
@@ -2654,6 +2684,14 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.flava import (
+        FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FlavaConfig,
+        FlavaImageCodebookConfig,
+        FlavaImageConfig,
+        FlavaMultimodalConfig,
+        FlavaTextConfig,
+    )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
@@ -2689,6 +2727,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+    from .models.opt import OPTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -2810,7 +2849,7 @@ if TYPE_CHECKING:
         TrainerControl,
         TrainerState,
     )
-    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, set_seed
+    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, enable_full_determinism, set_seed
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
@@ -2974,6 +3013,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
+        from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
@@ -3372,6 +3412,16 @@ if TYPE_CHECKING:
             FlaubertModel,
             FlaubertWithLMHeadModel,
         )
+        from .models.flava import (
+            FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlavaForPreTraining,
+            FlavaImageCodebook,
+            FlavaImageModel,
+            FlavaModel,
+            FlavaMultimodalModel,
+            FlavaPreTrainedModel,
+            FlavaTextModel,
+        )
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
@@ -3590,6 +3640,7 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
+        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,

@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/trocr-base-handwritten": "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json",
+    "microsoft/trocr-base-handwritten": (
+        "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json"
+    ),
     # See all TrOCR models at https://huggingface.co/models?filter=trocr
 }
 

@@ -492,7 +492,10 @@ class TrainingSummary:
         if self.finetuned_from is None:
             model_card += "This model was trained from scratch on "
         else:
-            model_card += f"This model is a fine-tuned version of [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            model_card += (
+                "This model is a fine-tuned version of"
+                f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            )
 
         if self.dataset is None:
             model_card += "an unknown dataset."
@@ -875,9 +878,10 @@ def extract_hyperparameters_from_trainer(trainer):
     if trainer.args.adafactor:
         hyperparameters["optimizer"] = "Adafactor"
     else:
-        hyperparameters[
-            "optimizer"
-        ] = f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and epsilon={trainer.args.adam_epsilon}"
+        hyperparameters["optimizer"] = (
+            f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+            f" epsilon={trainer.args.adam_epsilon}"
+        )
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:
