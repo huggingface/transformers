@@ -480,14 +480,14 @@ class HFTracer(Tracer):
     regular PyTorch torch.fx.Proxy.
     """
 
+    # Feature flag for proxying accesses to buffer values
+    proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
     _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full_like", "eye"]
 
-    def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
+    def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
-        super().__init__(
-            autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions, enable_cpatching=enable_cpatching
-        )
+        super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
             torch_version = version.parse(importlib_metadata.version("torch"))
@@ -638,10 +638,43 @@ class HFTracer(Tracer):
         return rv
 
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
+        from torch.fx.proxy import ParameterProxy
+
         if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
-            return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+            # return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+            def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
+                for n, p in collection_to_search:
+                    if attr_val is p:
+                        if n not in parameter_proxy_cache:
+                            kwargs = {}
+                            if "proxy_factory_fn" in inspect.signature(self.create_proxy).parameters:
+                                kwargs["proxy_factory_fn"] = (
+                                    None
+                                    if not self.param_shapes_constant
+                                    else lambda node: ParameterProxy(self, node, n, attr_val)
+                                )
+                            val_proxy = self.create_proxy("get_attr", n, (), {}, **kwargs)  # type: ignore[arg-type]
+                            parameter_proxy_cache[n] = val_proxy
+                        return parameter_proxy_cache[n]
+                return None
+
+            if isinstance(attr_val, torch.nn.Parameter):
+                maybe_parameter_proxy = maybe_get_proxy_for_attr(
+                    attr_val, self.root.named_parameters(), parameter_proxy_cache
+                )
+                if maybe_parameter_proxy is not None:
+                    return maybe_parameter_proxy
+
+            if self.proxy_buffer_attributes and isinstance(attr_val, torch.Tensor):
+                maybe_buffer_proxy = maybe_get_proxy_for_attr(
+                    attr_val, self.root.named_buffers(), parameter_proxy_cache
+                )
+                if maybe_buffer_proxy is not None:
+                    return maybe_buffer_proxy
+
+            return attr_val
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward
