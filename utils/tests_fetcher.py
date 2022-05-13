@@ -66,6 +66,32 @@ def clean_code(content):
     return "\n".join(lines_to_keep)
 
 
+def get_all_tests():
+    """
+    Return a list of paths to all test folders and files under `tests`. All paths are rooted at `tests`.
+
+    - folders under `tests`: `tokenization`, `pipelines`, etc. The folder `models` is excluded.
+    - folders under `tests/models`: `bert`, `gpt2`, etc.
+    - test files under `tests`: `test_modeling_common.py`, `test_tokenization_common.py`, etc.
+    """
+    test_root_dir = os.path.join(PATH_TO_TRANFORMERS, "tests")
+
+    # test folders/files directly under `tests` folder
+    tests = os.listdir(test_root_dir)
+    tests = sorted(
+        list(filter(lambda x: os.path.isdir(x) or x.startswith("tests/test_"), [f"tests/{x}" for x in tests]))
+    )
+
+    # model specific test folders
+    model_tests_folders = os.listdir(os.path.join(test_root_dir, "models"))
+    model_test_folders = sorted(list(filter(os.path.isdir, [f"tests/models/{x}" for x in model_tests_folders])))
+
+    tests.remove("models")
+    tests = model_test_folders + tests
+
+    return tests
+
+
 def diff_is_docstring_only(repo, branching_point, filename):
     """
     Check if the diff is only in docstrings in a filename.
@@ -497,6 +523,12 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             f.write(" ".join(test_files_to_run))
 
         # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
+
+        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
+        # contains `tests` (i.e. when `setup.py` is changed).
+        if "tests" in test_files_to_run:
+            test_files_to_run = get_all_tests()
+
         if json_output_file is not None:
             test_map = {}
             for test_file in test_files_to_run:
