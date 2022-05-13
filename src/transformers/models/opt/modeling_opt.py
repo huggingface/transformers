@@ -296,7 +296,8 @@ class OPTDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.activation_dropout = config.activation_dropout
+        # TODO: remove it as it is not used
+        # self.activation_dropout = config.activation_dropout 
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
@@ -529,12 +530,6 @@ class OPTDecoder(OPTPreTrainedModel):
             num_embeddings = config.max_position_embeddings + 2
 
         self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.hidden_size, self.padding_idx)
-
-        # Should be deleted
-        # if config.word_embed_proj_dim != config.hidden_size:
-        #     self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
-        # else:
-        #     self.project_out = None
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)

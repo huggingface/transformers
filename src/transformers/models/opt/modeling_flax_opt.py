@@ -403,13 +403,14 @@ class FlaxOPTDecoderLayer(nn.Module):
             causal=True,
             dtype=self.dtype,
         )
+        self.do_layer_norm_before = self.config.do_layer_norm_before
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
+            self.config.ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
@@ -422,30 +423,38 @@ class FlaxOPTDecoderLayer(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         attention_mask: jnp.ndarray,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
 
+        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        if self.do_layer_norm_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # 350m applies layer norm AFTER attention
+        if not self.do_layer_norm_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
+        # hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
+        
+        
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        # 350m applies layer norm AFTER attention
+        if not self.do_layer_norm_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -470,8 +479,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -481,7 +488,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -494,8 +500,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
                     init_cache=init_cache,
                     output_attentions=output_attentions,
                     deterministic=deterministic,
@@ -505,14 +509,11 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions]
+        outputs = [hidden_states, all_hidden_states, all_self_attns]
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
@@ -543,6 +544,7 @@ class FlaxOPTDecoder(nn.Module):
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
+        # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
@@ -557,8 +559,6 @@ class FlaxOPTDecoder(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -581,8 +581,6 @@ class FlaxOPTDecoder(nn.Module):
         outputs = self.layers(
             hidden_states,
             attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
