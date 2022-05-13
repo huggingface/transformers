@@ -1702,7 +1702,7 @@ class Trainer:
 
         if model is None:
             model = self.model
-        strict_load = True if is_sagemaker_mp_enabled() else False
+        strict_load = is_sagemaker_mp_enabled()
 
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
             os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
@@ -1729,20 +1729,20 @@ class Trainer:
             state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
             load_result = model.load_state_dict(state_dict, strict=strict_load)
-            if not is_sagemaker_mp_enabled():
+            if not strict_load:
                 self._issue_warnings_after_load(load_result)
             # release memory
             del state_dict
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=strict_load)
-            if not is_sagemaker_mp_enabled():
+            if not strict_load:
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-        strict_load = True if is_sagemaker_mp_enabled() else False
+        strict_load = is_sagemaker_mp_enabled()
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
