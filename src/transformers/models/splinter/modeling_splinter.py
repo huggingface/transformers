@@ -992,7 +992,9 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, num_questions, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        SPLINTER_INPUTS_DOCSTRING.format("batch_size, num_questions, sequence_length")
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1027,10 +1029,14 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
 
         if question_positions is None:
             if start_positions is not None and end_positions is not None:
-                raise TypeError("For span selection training, question_positions must be specified to obtain the correct loss")
+                raise TypeError(
+                    "For span selection training, question_positions must be specified to obtain the correct loss"
+                )
 
             if input_ids is not None:
-                question_positions = torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1).unsqueeze(0)
+                question_positions = torch.argmax(
+                    (torch.eq(input_ids, self.question_token_id)).int(), dim=-1
+                ).unsqueeze(0)
             else:
                 raise TypeError("question_positions is required when input_embeds is specified")
 
@@ -1048,16 +1054,18 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
 
         sequence_output = outputs[0]
         batch_size, sequence_length, dim = sequence_output.size()
-        start_logits, end_logits = self.splinter_qass(sequence_output, question_positions) # [B, Q, S]
+        start_logits, end_logits = self.splinter_qass(sequence_output, question_positions)  # [B, Q, S]
 
         num_questions = question_positions.size(1)
         if attention_mask is not None:
-            attention_mask_for_each_question = attention_mask.unsqueeze(1).expand(batch_size, num_questions, sequence_length)
+            attention_mask_for_each_question = attention_mask.unsqueeze(1).expand(
+                batch_size, num_questions, sequence_length
+            )
             start_logits = start_logits + (1 - attention_mask_for_each_question) * -10000.0
             end_logits = end_logits + (1 - attention_mask_for_each_question) * -10000.0
 
         total_loss = None
-        if start_positions is not None and end_positions is not None: # [B, Q, S]
+        if start_positions is not None and end_positions is not None:  # [B, Q, S]
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             start_positions.clamp_(0, max(0, sequence_length - 1))
             end_positions.clamp_(0, max(0, sequence_length - 1))
@@ -1069,11 +1077,11 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=0)
             start_loss = loss_fct(
                 start_logits.view(batch_size * num_questions, sequence_length),
-                start_positions.view(batch_size * num_questions)
+                start_positions.view(batch_size * num_questions),
             )
             end_loss = loss_fct(
                 end_logits.view(batch_size * num_questions, sequence_length),
-                end_positions.view(batch_size * num_questions)
+                end_positions.view(batch_size * num_questions),
             )
             total_loss = (start_loss + end_loss) / 2
 

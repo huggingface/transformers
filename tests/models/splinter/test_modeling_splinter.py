@@ -116,15 +116,7 @@ class SplinterModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            start_positions,
-            end_positions,
-            question_positions
-        )
+        return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
 
     def create_and_check_model(
         self,
@@ -227,12 +219,31 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
         if return_labels:
             if issubclass(model_class, SplinterForSpanSelection):
-                inputs_dict["start_positions"] = torch.zeros(self.model_tester.batch_size, self.model_tester.num_questions, dtype=torch.long, device=torch_device)
-                inputs_dict["end_positions"] = torch.zeros(self.model_tester.batch_size, self.model_tester.num_questions, dtype=torch.long, device=torch_device)
-                inputs_dict["question_positions"] = torch.zeros(self.model_tester.batch_size, self.model_tester.num_questions, dtype=torch.long, device=torch_device)
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["question_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
             elif issubclass(model_class, SplinterForQuestionAnswering):
-                inputs_dict["start_positions"] = torch.zeros(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-                inputs_dict["end_positions"] = torch.zeros(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
 
         return inputs_dict
 
