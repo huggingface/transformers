@@ -512,6 +512,11 @@ class OPTDecoder(OPTPreTrainedModel):
         self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.hidden_size, self.padding_idx)
 
         if config.word_embed_proj_dim != config.hidden_size:
+            self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
+        else:
+            self.project_out = None
+            
+        if config.word_embed_proj_dim != config.hidden_size:
             self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)
         else:
             self.project_in = None
@@ -712,6 +717,9 @@ class OPTDecoder(OPTPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+                
+            if self.project_out is not None:
+                hidden_states = self.project_out(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
