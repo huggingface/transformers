@@ -27,7 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import SplinterConfig, SplinterForQuestionAnswering, SplinterForSpanSelection, SplinterModel
+    from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
     from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -159,7 +159,7 @@ class SplinterModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_for_span_selection(
+    def create_and_check_for_pretraining(
         self,
         config,
         input_ids,
@@ -169,7 +169,7 @@ class SplinterModelTester:
         end_positions,
         question_positions,
     ):
-        model = SplinterForSpanSelection(config=config)
+        model = SplinterForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -209,7 +209,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         (
             SplinterModel,
             SplinterForQuestionAnswering,
-            SplinterForSpanSelection,
+            SplinterForPreTraining,
         )
         if is_torch_available()
         else ()
@@ -218,7 +218,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if return_labels:
-            if issubclass(model_class, SplinterForSpanSelection):
+            if issubclass(model_class, SplinterForPreTraining):
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size,
                     self.model_tester.num_questions,
@@ -268,9 +268,9 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    def test_for_span_selection(self):
+    def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_span_selection(*config_and_inputs)
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -299,7 +299,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
-                if isinstance(model, SplinterForSpanSelection):
+                if isinstance(model, SplinterForPreTraining):
                     with self.assertRaises(TypeError):
                         # question_positions must not be None.
                         model(**inputs)[0]
@@ -334,8 +334,8 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         self.assertEqual(torch.argmax(output.end_logits), 12)
 
     @slow
-    def test_splinter_span_selection(self):
-        model = SplinterForSpanSelection.from_pretrained("tau/splinter-base-qass")
+    def test_splinter_pretraining(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
 
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
@@ -355,8 +355,8 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         self.assertEqual(torch.argmax(output.end_logits[0, 1]), 12)
 
     @slow
-    def test_splinter_span_selection_loss_requires_question_positions(self):
-        model = SplinterForSpanSelection.from_pretrained("tau/splinter-base-qass")
+    def test_splinter_pretraining_loss_requires_question_positions(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
 
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
@@ -373,8 +373,8 @@ class SplinterModelIntegrationTest(unittest.TestCase):
             )
 
     @slow
-    def test_splinter_span_selection_loss(self):
-        model = SplinterForSpanSelection.from_pretrained("tau/splinter-base-qass")
+    def test_splinter_pretraining_loss(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
 
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
@@ -396,8 +396,8 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(output.loss.item(), 0.0024, 4)
 
     @slow
-    def test_splinter_span_selection_loss_with_padding(self):
-        model = SplinterForSpanSelection.from_pretrained("tau/splinter-base-qass")
+    def test_splinter_pretraining_loss_with_padding(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
 
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"

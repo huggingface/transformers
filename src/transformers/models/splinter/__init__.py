@@ -42,7 +42,7 @@ else:
     _import_structure["modeling_splinter"] = [
         "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SplinterForQuestionAnswering",
-        "SplinterForSpanSelection",
+        "SplinterForPreTraining",
         "SplinterLayer",
         "SplinterModel",
         "SplinterPreTrainedModel",
@@ -69,8 +69,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForPreTraining,
             SplinterForQuestionAnswering,
-            SplinterForSpanSelection,
             SplinterLayer,
             SplinterModel,
             SplinterPreTrainedModel,

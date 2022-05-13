@@ -944,7 +944,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 
 
 @dataclass
-class SpanSelectionModelOutput(ModelOutput):
+class SplinterForPreTrainingOutput(ModelOutput):
     """
     Class for outputs of Splinter as a span selection model.
 
@@ -981,7 +981,7 @@ class SpanSelectionModelOutput(ModelOutput):
     """,
     SPLINTER_START_DOCSTRING,
 )
-class SplinterForSpanSelection(SplinterPreTrainedModel):
+class SplinterForPreTraining(SplinterPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1009,7 +1009,7 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SpanSelectionModelOutput]:
+    ) -> Union[Tuple, SplinterForPreTrainingOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size, num_questions)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1089,7 +1089,7 @@ class SplinterForSpanSelection(SplinterPreTrainedModel):
             output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return SpanSelectionModelOutput(
+        return SplinterForPreTrainingOutput(
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
