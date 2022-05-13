@@ -126,7 +126,7 @@ jobs:
     runs-on: ${{ matrix.machines }}
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
@@ -208,7 +208,7 @@ jobs:
     runs-on: ${{ matrix.machines }}
     container:
       image: huggingface/transformers-pytorch-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       # Set machine type, i.e. `single-gpu` or `multi-gpu`. Here we just remove `-docker`.
@@ -252,7 +252,7 @@ jobs:
     runs-on: ${{ matrix.machines }}
     container:
       image: huggingface/transformers-tensorflow-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       # Set machine type, i.e. `single-gpu` or `multi-gpu`. Here we just remove `-docker`.
