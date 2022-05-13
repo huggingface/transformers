@@ -77,14 +77,18 @@ class ModelArguments:
 
     text_model_name_or_path: str = field(
         metadata={
-            "help": "The text model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The text model checkpoint for weights initialization."
+                "Don't set if you want to train a model from scratch."
+            )
         },
     )
     vision_model_name_or_path: str = field(
         metadata={
-            "help": "The vision model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The vision model checkpoint for weights initialization."
+                "Don't set if you want to train a model from scratch."
+            )
         },
     )
     from_pt: bool = field(
@@ -107,7 +111,10 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -129,22 +136,28 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=72,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -519,7 +532,8 @@ def main():
 
         train_step_progress_bar.close()
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate:"
+            f" {train_metric['learning_rate']})"
         )
 
         # ======================== Evaluating ==============================

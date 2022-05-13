@@ -55,10 +55,14 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
+            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json"
+        ),
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
+            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -369,7 +373,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             if len(char_offsets) != len(processed_chars):
                 raise ValueError(
                     f"`char_offsets`: {char_offsets} and `processed_tokens`: {processed_chars}"
-                    f" have to be of the same length, but are: `len(offsets)`: "
+                    " have to be of the same length, but are: `len(offsets)`: "
                     f"{len(char_offsets)} and `len(processed_tokens)`: {len(processed_chars)}"
                 )
 
@@ -600,7 +604,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         tokens_to_add = []
         for token in new_tokens:
             if not isinstance(token, str):
-                raise ValueError(f"Token {token} has to be of type string, but is " f"of type {type(token)}.")
+                raise ValueError(f"Token {token} has to be of type string, but is of type {type(token)}.")
             assert isinstance(token, str)
             if (
                 token != self.unk_token

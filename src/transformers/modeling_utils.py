@@ -318,8 +318,8 @@ def get_checkpoint_shard_files(
             )
         except HTTPError:
             raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try again "
-                "after checking your internet connection."
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
+                " again after checking your internet connection."
             )
 
         cached_filenames.append(cached_filename)
@@ -560,7 +560,7 @@ class ModuleUtilsMixin:
     def _hook_rss_memory_pre_forward(module, *args, **kwargs):
         try:
             import psutil
-        except (ImportError):
+        except ImportError:
             raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
 
         process = psutil.Process(os.getpid())
@@ -572,7 +572,7 @@ class ModuleUtilsMixin:
     def _hook_rss_memory_post_forward(module, *args, **kwargs):
         try:
             import psutil
-        except (ImportError):
+        except ImportError:
             raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
 
         process = psutil.Process(os.getpid())
@@ -1060,7 +1060,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         uninitialized_encoder_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
             logger.info(
-                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder weights are correctly initialized."
+                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder"
+                " weights are correctly initialized."
             )
 
         def tie_encoder_to_decoder_recursively(
@@ -1106,7 +1107,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         continue
                     elif depth > 500:
                         raise ValueError(
-                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is a circular dependency between two or more `nn.Modules` of your model."
+                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is"
+                            " a circular dependency between two or more `nn.Modules` of your model."
                         )
                     else:
                         decoder_name = encoder_name = name
@@ -1226,8 +1228,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
-                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
+                " should either use a different resize function or make sure that `old_embeddings` are an instance of"
+                f" {nn.Embedding}."
             )
 
         # Build new embeddings
@@ -1295,8 +1298,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. "
-                f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. You"
+                " should either use a different resize function or make sure that `old_lm_head` are an instance of"
+                f" {nn.Linear}."
             )
 
         # Build new lm head
@@ -1905,20 +1909,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME} but "
-                                "there is a file for TensorFlow weights. Use `from_tf=True` to load this model from those "
-                                "weights."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {WEIGHTS_NAME} but there is a file for TensorFlow weights. Use `from_tf=True` to"
+                                " load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME} but "
-                                "there is a file for Flax weights. Use `from_flax=True` to load this model from those "
-                                "weights."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {WEIGHTS_NAME} but there is a file for Flax weights. Use `from_flax=True` to load"
+                                " this model from those weights."
                             )
                         else:
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME}, "
-                                f"{TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
+                                f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
                 else:
                     raise EnvironmentError(
@@ -1931,12 +1935,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             except ValueError:
                 raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
-                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
-                    f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
-                    f"{FLAX_WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
+                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
+                    f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
+                    f" {FLAX_WEIGHTS_NAME}.\nCheckout your internet connection or see how to run the library in"
+                    " offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError:
                 raise EnvironmentError(
@@ -2035,8 +2038,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError:
                     logger.error(
-                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed."
+                        " Please see https://pytorch.org/ and https://www.tensorflow.org/install/ for installation"
+                        " instructions."
                     )
                     raise
         elif from_flax:
@@ -2046,8 +2050,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model = load_flax_checkpoint_in_pytorch_model(model, resolved_archive_file)
             except ImportError:
                 logger.error(
-                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
-                    "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for"
+                    " installation instructions."
                 )
                 raise
         elif from_pt:
@@ -2252,26 +2257,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.info(
-                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -2281,9 +2288,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         return model, missing_keys, unexpected_keys, mismatched_keys, error_msgs

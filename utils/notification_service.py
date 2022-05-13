@@ -180,7 +180,10 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "text": (
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
+                    f" {self.time}."
+                ),
                 "emoji": True,
             },
             "accessory": {
@@ -378,7 +381,7 @@ class Message:
         print(json.dumps({"blocks": json.loads(payload)}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
             text="There was an issue running the tests.",
             blocks=payload,
         )
@@ -390,7 +393,7 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
             blocks=self.payload,
             text=text,
         )
@@ -436,7 +439,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -459,7 +462,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -494,7 +497,7 @@ def retrieve_artifact(name: str, gpu: Optional[str]):
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
     if gpu is not None:
-        name = f"{gpu}-gpu-docker_{name}"
+        name = f"{gpu}-gpu_{name}"
 
     _artifact = {}
 
@@ -528,8 +531,8 @@ def retrieve_available_artifacts():
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
-        if directory.startswith("single-gpu-docker"):
-            artifact_name = directory[len("single-gpu-docker") + 1 :]
+        if directory.startswith("single-gpu"):
+            artifact_name = directory[len("single-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
@@ -538,8 +541,8 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
-        elif directory.startswith("multi-gpu-docker"):
-            artifact_name = directory[len("multi-gpu-docker") + 1 :]
+        elif directory.startswith("multi-gpu"):
+            artifact_name = directory[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
@@ -558,6 +561,10 @@ def retrieve_available_artifacts():
 
 
 if __name__ == "__main__":
+
+    # This env. variable is set in workflow file (under the job `send_results`).
+    ci_event = os.environ["CI_EVENT"]
+
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
@@ -606,7 +613,7 @@ if __name__ == "__main__":
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 model_results[model]["job_link"] = github_actions_job_links.get(
-                    f"Model tests ({model}, {artifact_path['gpu']}-gpu-docker)"
+                    f"Model tests ({model}, {artifact_path['gpu']}-gpu)"
                 )
 
                 failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -664,6 +671,11 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
+    if ci_event == "push":
+        del additional_files["Examples directory"]
+        del additional_files["PyTorch pipelines"]
+        del additional_files["TensorFlow pipelines"]
+
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
@@ -686,7 +698,7 @@ if __name__ == "__main__":
         for artifact_path in available_artifacts[additional_files[key]].paths:
             if artifact_path["gpu"] is not None:
                 additional_results[key]["job_link"] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu-docker)"
+                    f"{key} ({artifact_path['gpu']}-gpu)"
                 )
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
@@ -712,7 +724,7 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-    message = Message("🤗 Results of the scheduled tests.", model_results, additional_results)
+    message = Message(f"🤗 Results of the {ci_event} tests.", model_results, additional_results)
 
     message.post()
     message.post_reply()

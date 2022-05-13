@@ -222,7 +222,10 @@ class LEDEncoderSelfAttention(nn.Module):
             seq_len,
             self.num_heads,
             self.one_sided_attn_window_size * 2 + 1,
-        ], f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        ], (
+            f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+            f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        )
 
         # compute local attention probs from global attention keys and contact over window dim
         if is_global_attn:
@@ -662,7 +665,11 @@ class LEDEncoderSelfAttention(nn.Module):
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             seq_len,
-        ], f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}."
+        ], (
+            "global_attn_scores have the wrong size. Size should be"
+            f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+            f" {global_attn_scores.size()}."
+        )
 
         global_attn_scores = global_attn_scores.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -705,7 +712,11 @@ class LEDEncoderSelfAttention(nn.Module):
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             self.head_dim,
-        ], f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
+        ], (
+            "global_attn_output tensor has the wrong size. Size should be"
+            f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+            f" {global_attn_output.size()}."
+        )
 
         global_attn_probs = global_attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
         global_attn_output = global_attn_output.view(
@@ -766,7 +777,8 @@ class LEDDecoderAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
@@ -837,7 +849,8 @@ class LEDDecoderAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -852,7 +865,8 @@ class LEDDecoderAttention(nn.Module):
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -873,7 +887,8 @@ class LEDDecoderAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = (
@@ -1007,7 +1022,7 @@ class LEDDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        # Self Attention
+        # Self-Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
@@ -1437,13 +1452,11 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
 
 LED_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
+    This model inherits from [`PreTrainedModel`]. See the superclass documentation for the generic methods the library
+    implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads etc.)
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for general usage and behavior.
 
     Parameters:
         config ([`LEDConfig`]):
@@ -1595,7 +1608,7 @@ LED_INPUTS_DOCSTRING = r"""
 
 class LEDEncoder(LEDPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    Transformer encoder consisting of *config.encoder_layers* self-attention layers. Each layer is a
     [`LEDEncoderLayer`].
 
     Args:
@@ -1643,7 +1656,7 @@ class LEDEncoder(LEDPreTrainedModel):
         self.post_init()
 
     def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
-        # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+        # longformer self-attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
         # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
         # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
         if attention_mask is not None:
@@ -1815,7 +1828,8 @@ class LEDEncoder(LEDPreTrainedModel):
         if head_mask is not None:
             if head_mask.size()[0] != len(self.layers):
                 raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {head_mask.size()[0]}."
                 )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -2071,7 +2085,8 @@ class LEDDecoder(LEDPreTrainedModel):
             if attn_mask is not None:
                 if attn_mask.size()[0] != len(self.layers):
                     raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                        f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)

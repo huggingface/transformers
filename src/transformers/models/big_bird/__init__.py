@@ -18,6 +18,7 @@
 from typing import TYPE_CHECKING
 
 from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
@@ -31,13 +32,28 @@ _import_structure = {
     "configuration_big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdOnnxConfig"],
 }
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_big_bird"] = ["BigBirdTokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_big_bird_fast"] = ["BigBirdTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_big_bird"] = [
         "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BigBirdForCausalLM",
@@ -53,7 +69,12 @@ if is_torch_available():
         "load_tf_weights_in_big_bird",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_big_bird"] = [
         "FlaxBigBirdForCausalLM",
         "FlaxBigBirdForMaskedLM",
@@ -69,13 +90,28 @@ if is_flax_available():
 if TYPE_CHECKING:
     from .configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdOnnxConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_big_bird import BigBirdTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_big_bird_fast import BigBirdTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_big_bird import (
             BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
             BigBirdForCausalLM,
@@ -91,7 +127,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_big_bird,
         )
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_big_bird import (
             FlaxBigBirdForCausalLM,
             FlaxBigBirdForMaskedLM,
