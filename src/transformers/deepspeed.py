@@ -278,8 +278,8 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
             raise ValueError(
-                f"Please correct the following DeepSpeed config values that mismatch TrainingArguments values:\n{mismatches}\n"
-                "The easiest method is to set these DeepSpeed config values to 'auto'."
+                "Please correct the following DeepSpeed config values that mismatch TrainingArguments"
+                f" values:\n{mismatches}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
 
 
@@ -340,7 +340,8 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     else:
         if hf_deepspeed_config.is_offload():
             logger.info(
-                "Detected ZeRO Offload and non-DeepSpeed optimizers: This combination should work as long as the custom optimizer has both CPU and GPU implementation (except LAMB)"
+                "Detected ZeRO Offload and non-DeepSpeed optimizers: This combination should work as long as the"
+                " custom optimizer has both CPU and GPU implementation (except LAMB)"
             )
 
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.

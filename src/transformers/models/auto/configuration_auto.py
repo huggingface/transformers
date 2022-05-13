@@ -98,6 +98,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertConfig"),
         ("mpnet", "MPNetConfig"),
         ("bart", "BartConfig"),
+        ("opt", "OPTConfig"),
         ("blenderbot", "BlenderbotConfig"),
         ("reformer", "ReformerConfig"),
         ("longformer", "LongformerConfig"),
@@ -190,6 +191,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("blenderbot", "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -301,6 +303,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mbart", "mBART"),
         ("megatron-bert", "MegatronBert"),
         ("bart", "BART"),
+        ("opt", "OPT"),
         ("reformer", "Reformer"),
         ("longformer", "Longformer"),
         ("roberta", "RoBERTa"),
@@ -534,7 +537,8 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
         lines = [
-            f"{indent}- [`{config_name}`] configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
+            f"{indent}- [`{config_name}`] configuration class:"
+            f" {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
             for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
@@ -555,7 +559,8 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             docstrings = "\n".join(lines)
         else:
             raise ValueError(
-                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current docstring is:\n{docstrings}"
+                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current"
+                f" docstring is:\n{docstrings}"
             )
         fn.__doc__ = docstrings
         return fn
@@ -678,9 +683,9 @@ class AutoConfig:
         if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
             if not trust_remote_code:
                 raise ValueError(
-                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
-                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                    "the option `trust_remote_code=True` to remove this error."
+                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that"
+                    " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
+                    " set the option `trust_remote_code=True` to remove this error."
                 )
             if kwargs.get("revision", None) is None:
                 logger.warning(

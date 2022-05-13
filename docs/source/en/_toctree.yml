@@ -270,6 +270,8 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
     - local: model_doc/gptj

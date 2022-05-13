@@ -328,8 +328,9 @@ class Trainer:
         else:
             if model_init is not None:
                 warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
-                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
+                    " release.",
                     FutureWarning,
                 )
             self.model_init = model_init
@@ -520,7 +521,8 @@ class Trainer:
             else:
                 if not is_apex_available():
                     raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                        "Using FP16 with APEX but APEX is not installed, please refer to"
+                        " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
 
@@ -1068,7 +1070,8 @@ class Trainer:
         for key, value in params.items():
             if not hasattr(self.args, key):
                 logger.warning(
-                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in"
+                    " `TrainingArguments`."
                 )
                 continue
             old_attr = getattr(self.args, key, None)
@@ -1361,7 +1364,8 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
         else:
             raise ValueError(
-                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+                "args.max_steps must be set to a positive value if dataloader does not have a length, was"
+                f" {args.max_steps}"
             )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
@@ -1369,7 +1373,8 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP (torch.distributed.launch)."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
+                    " (torch.distributed.launch)."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
@@ -1634,7 +1639,7 @@ class Trainer:
                     break
             if step < 0:
                 logger.warning(
-                    f"There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    "There seems to be not a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
                 )
@@ -2293,8 +2298,9 @@ class Trainer:
                 # This must be called on all ranks
                 if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
-                        "deepspeed.save_16bit_model didn't save the model, since stage3_gather_16bit_weights_on_model_save=false. "
-                        "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
+                        "deepspeed.save_16bit_model didn't save the model, since"
+                        " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
+                        " zero_to_fp32.py to recover weights"
                     )
                     self.deepspeed.save_checkpoint(output_dir)
 

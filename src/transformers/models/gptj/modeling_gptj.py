@@ -111,7 +111,8 @@ class GPTJAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_attention_heads
         if self.head_dim * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
+                f" `num_attention_heads`: {self.num_attention_heads})."
             )
         self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
 
@@ -967,7 +968,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
