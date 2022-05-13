@@ -977,7 +977,10 @@ class SplinterForPreTrainingOutput(ModelOutput):
 
 @add_start_docstrings(
     """
-    Splinter Model with a span selection head on top.
+    Splinter Model for the recurring span selection task
+    as done during the pretraining. The difference to the QA
+    task is that we do not have a question, but multiple question
+    tokens that replace the occurrences of recurring spans instead.
     """,
     SPLINTER_START_DOCSTRING,
 )

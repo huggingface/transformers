@@ -3805,6 +3805,7 @@ if TYPE_CHECKING:
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForQuestionAnswering,
+            SplinterForPreTraining,
             SplinterLayer,
             SplinterModel,
             SplinterPreTrainedModel,
