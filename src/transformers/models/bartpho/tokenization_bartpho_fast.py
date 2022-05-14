@@ -112,7 +112,6 @@ class BartphoTokenizerFast(XLMRobertaTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -128,22 +127,12 @@ class BartphoTokenizerFast(XLMRobertaTokenizerFast):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
-        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
-
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            _additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in _additional_special_tokens]
-            )
-
-        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }

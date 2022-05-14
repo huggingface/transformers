@@ -47,7 +47,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_input_output_texts(self, tokenizer):
         input_text = "This is a là test"
-        output_text = "This is a<unk><unk> test"
+        output_text = "This is a l<unk> test"
         return input_text, output_text
 
     def test_full_tokenizer(self):
@@ -58,5 +58,27 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [4, 5, 6, 3, 3, 7, 8, 3]
+        input_bpe_tokens = [475, 98, 6, 41, 3, 4, 264, 3]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 2000."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
