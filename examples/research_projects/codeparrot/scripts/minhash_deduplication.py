@@ -67,8 +67,7 @@ class DuplicationIndex:
     def get_duplicate_clusters(self) -> List[List[Dict]]:
         duplicate_clusters = []
         for base, duplicates in self.__duplicate_clusters.items():
-            cluster = list(duplicates)
-            cluster.append(base)
+            cluster = [base] + list(duplicates)
             # reformat the cluster to be a list of dict
             cluster = [{"base_index": el[0], "repo_name": el[1], "path": el[2]} for el in cluster]
             duplicate_clusters.append(cluster)
@@ -116,23 +115,38 @@ def jaccard_similarity(code1: str, code2: str) -> float:
     return len(tokens1 & tokens2) / len(tokens1 | tokens2)
 
 
-def find_cluster_extremes(cluster: List[Dict], dataset: Type[Dataset]) -> List[Dict]:
+_shared_dataset = None
+
+
+def _find_cluster_extremes_shared(cluster):
     """
     Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
     """
     extremes = []
     for element1 in cluster:
-        code1 = dataset[element1["base_index"]]["content"]
+        code1 = _shared_dataset[element1["base_index"]]["content"]
         for element2 in extremes:
-            code2 = dataset[element2["base_index"]]["content"]
+            code2 = _shared_dataset[element2["base_index"]]["content"]
             if jaccard_similarity(code1, code2) >= 0.85:
                 element2["copies"] += 1
                 break
         else:
-            element1["is_extreme"] = True
             element1["copies"] = 1
             extremes.append(element1)
     return extremes
+
+
+def multipro_find_extremes(cluster_list, dataset):
+    global _shared_dataset
+    _shared_dataset = dataset
+    extremes_list = []
+    with mp.Pool() as pool:
+        for extremes in tqdm(pool.imap_unordered(
+            _find_cluster_extremes_shared,
+            cluster_list,
+        ), total=len(cluster_list)):
+            extremes_list.append(extremes)
+    return extremes_list
 
 
 def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[List[Dict]]]:
@@ -166,17 +180,25 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[Lis
     duplicate_clusters = make_duplicate_clusters(dataset)
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
     # todo: make this multiprocessing, pay attention to memory usage
-    extreme_indices = set()
-    for cluster in tqdm(duplicate_clusters):
-        for el in find_cluster_extremes(cluster, dataset):
-            extreme_indices.add(el["base_index"])
-    remove_indices = duplicate_indices - extreme_indices
+    extreme_dict = {}
+    extremes_clusters = multipro_find_extremes(duplicate_clusters, dataset)
+    for extremes in extremes_clusters:
+        for element in extremes:
+            extreme_dict[element["base_index"]] = element
+    remove_indices = duplicate_indices - set(extreme_dict.keys())
     ds_filter = dataset.filter(lambda x, idx: idx not in remove_indices, with_indices=True)
+
+    # update duplicate_clusters
+    for cluster in duplicate_clusters:
+        for element in cluster:
+            element["is_extreme"] = element["base_index"] in extreme_dict
+            if element["is_extreme"]:
+                element["copies"] = extreme_dict[element["base_index"]]["copies"]
 
     print("Orginal dataset size: %d" % len(dataset))
     print("Duplicate cluster: %d" % len(duplicate_clusters))
     print("Files in duplicate cluster: %d" % len(duplicate_indices))
-    print("Unique files in duplicate cluster: %d" % len(extreme_indices))
+    print("Unique files in duplicate cluster: %d" % len(extreme_dict))
     print("Filtered dataset size: %d" % len(ds_filter))
 
     return ds_filter, duplicate_clusters
