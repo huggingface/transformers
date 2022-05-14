@@ -50,6 +50,7 @@ from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
+from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
@@ -93,6 +94,7 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -108,6 +110,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -188,6 +191,18 @@ SUPPORTED_TASKS = {
             },
         },
         "type": "text",
+    },
+     "visual-question-answering": {
+        "impl": VisualQuestionAnsweringPipeline,
+        "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {
+                "pt": "dandelin/vilt-b32-finetuned-vqa",
+                "tokenizer": "dandelin/vilt-b32-finetuned-vqa",
+            },
+        },
+        "type": "multimodal",
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
