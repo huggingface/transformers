@@ -15,22 +15,27 @@
 """ Tokenization classes for BARTpho-syllable model."""
 
 
-from typing import Any, Dict, Optional
-
-import sentencepiece as spm
-
 from ...tokenization_utils import AddedToken
-from ...utils import logging
-from ..xlm_roberta import XLMRobertaTokenizer
+from ...utils import is_sentencepiece_available, logging
+from ..xlm_roberta import XLMRobertaTokenizerFast
+
+
+if is_sentencepiece_available():
+    from .tokenization_bartpho import BartphoTokenizer
+else:
+    BartphoTokenizer = None
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
+    },
+    "tokenizer_file": {
+        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/tokenizer.json",
     },
 }
 
@@ -41,10 +46,12 @@ FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", 
 # fmt: on
 
 
-class BartphoTokenizer(XLMRobertaTokenizer):
+class BartphoTokenizerFast(XLMRobertaTokenizerFast):
     """
-    This tokenizer inherits from [`XLMRobertaTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
+    Construct a "fast" BARTpho tokenizer (backed by HuggingFace's *tokenizers* library).
+
+    This tokenizer inherits from [`XLMRobertaTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -86,35 +93,18 @@ class BartphoTokenizer(XLMRobertaTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-        sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
-    Attributes:
-        sp_model (`SentencePieceProcessor`):
-            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
+    slow_tokenizer_class = BartphoTokenizer
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
+        tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -122,59 +112,38 @@ class BartphoTokenizer(XLMRobertaTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        additional_special_tokens=None,
         **kwargs
-    ) -> None:
+    ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
         super().__init__(
             vocab_file,
+            tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
+            unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
-        # Original fairseq vocab and spm vocab must be "aligned":
-        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
-        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
-        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
-        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        # Keep order of special tokens for backward compatibility
-        self.fairseq_tokens_to_ids = {}
-        cnt = 0
-        for token in [bos_token, pad_token, eos_token, unk_token, sep_token, cls_token]:
-            if str(token) not in self.fairseq_tokens_to_ids:
-                self.fairseq_tokens_to_ids[str(token)] = cnt
-                cnt += 1
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
 
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
-
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
         self.lang_code_to_id = {
-            code: len(self.sp_model) + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-
-    @property
-    def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token

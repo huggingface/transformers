@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_tokenizers_available
 
 
 _import_structure = {}
@@ -31,6 +31,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_bartpho"] = ["BartphoTokenizer"]
 
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_bartpho_fast"] = ["BartphoTokenizerFast"]
+
 if TYPE_CHECKING:
     try:
         if not is_sentencepiece_available():
@@ -39,6 +47,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_bartpho import BartphoTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_bartpho_fast import BartphoTokenizerFast
 
 else:
     import sys

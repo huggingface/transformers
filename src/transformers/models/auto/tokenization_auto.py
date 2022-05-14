@@ -197,7 +197,13 @@ else:
             ),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
-            ("bartpho", ("BartphoTokenizer", None)),
+            (
+                "bartpho",
+                (
+                    "BartphoTokenizer" if is_sentencepiece_available() else None,
+                    "BartphoTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "barthez",
                 (

@@ -473,6 +473,7 @@ else:
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
+    _import_structure["models.bartpho"].append("BartphoTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
@@ -2922,6 +2923,7 @@ if TYPE_CHECKING:
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
+        from .models.bartpho import BartphoTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
