@@ -22,6 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
+from transformers.models.opt.modeling_opt import OPTDecoder
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -97,6 +98,9 @@ class OPTModelTester:
         self.embed_dim = embed_dim
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
+    
+    def get_large_model_config(self):
+        return OPTConfig.from_pretrained("facebook/opt-125m")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -178,9 +182,11 @@ class OPTModelTester:
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (OPTDecoder, OPTModel, OPTForCausalLM) if is_torch_available() else ()
     is_encoder_decoder = False
     test_pruning = False
     test_missing_keys = False
+    test_model_parallel = True
 
     def setUp(self):
         self.model_tester = OPTModelTester(self)
