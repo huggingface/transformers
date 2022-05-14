@@ -989,26 +989,42 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
+        
+        Example:
 
-        Examples:
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
+        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        `python -m pip install torchvision tesseract`
 
-        ```python
-        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification
-        >>> from PIL import Image
-        >>> import torch
-
-        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
-
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
-
-        >>> encoding = processor(image, return_tensors="pt")
-        >>> sequence_label = torch.tensor([1])
-
-        >>> outputs = model(**encoding, labels=sequence_label)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-        ```"""
+            ```python
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification, set_seed
+            >>> from PIL import Image
+            >>> import torch
+            >>> from datasets import load_dataset
+        
+            >>> set_seed(88)
+        
+            >>> dataset = load_dataset("rvl_cdip", split="train", streaming=True)
+            >>> data = next(iter(dataset))
+            >>> image = data["image"].convert("RGB")
+        
+            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=dataset.info.features["label"].num_classes)
+        
+            >>> encoding = processor(image, return_tensors="pt")
+            >>> sequence_label = torch.tensor([data["label"]])
+        
+            >>> outputs = model(**encoding, labels=sequence_label)
+        
+            >>> loss, logits = outputs.loss, outputs.logits
+            >>> predicted_idx = logits.argmax(dim=-1).item()
+            >>> predicted_answer = dataset.info.features["label"].names[4]  
+            >>> predicted_idx, predicted_answer
+            (4, 'advertisement')
+            >>> round(loss.item(), 2)
+            2.83          
+            ```
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
