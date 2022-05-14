@@ -141,10 +141,13 @@ def multipro_find_extremes(cluster_list, dataset):
     _shared_dataset = dataset
     extremes_list = []
     with mp.Pool() as pool:
-        for extremes in tqdm(pool.imap_unordered(
-            _find_cluster_extremes_shared,
-            cluster_list,
-        ), total=len(cluster_list)):
+        for extremes in tqdm(
+            pool.imap_unordered(
+                _find_cluster_extremes_shared,
+                cluster_list,
+            ),
+            total=len(cluster_list),
+        ):
             extremes_list.append(extremes)
     return extremes_list
 
