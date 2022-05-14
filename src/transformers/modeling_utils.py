@@ -2179,7 +2179,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ignore_mismatched_sizes,
         ):
             mismatched_keys = []
-            if ignore_mismatched_sizes:
+            if not ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
                     model_key = checkpoint_key
                     if remove_prefix_from_model:
