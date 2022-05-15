@@ -33,7 +33,7 @@ from jax.random import PRNGKey
 
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
-    FlaxBaseModelOutputWithPast,
+    FlaxMaskedLMOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -623,16 +623,26 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
-        hidden_states = jnp.zeros(input_shape + (self.config.hidden_size,))
 
         module_init_outputs = self.module.init(
             rngs,
             input_ids,
             attention_mask,
             position_ids,
-            # hidden_states,
             return_dict=False,
         )
+        
+        random_params = module_init_outputs["params"]
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
+        
         return module_init_outputs["params"]
 
     def init_cache(self, batch_size, max_length):
@@ -650,7 +660,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True 
         )
         return unfreeze(init_variables["cache"])
 
@@ -663,10 +673,10 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        train: bool = False,
         params: dict = None,
         past_key_values: dict = None,
         dropout_rng: PRNGKey = None,
+        deterministic: bool = True,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -704,7 +714,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=not train,
+            deterministic=deterministic,
             rngs=rngs,
             mutable=mutable,
         )
@@ -741,10 +751,12 @@ class FlaxOPTModule(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
+        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
+        init_cache=False,
     ):
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -761,6 +773,7 @@ class FlaxOPTModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=deterministic,
+            init_cache=init_cache
         )
 
         if not return_dict:
@@ -794,7 +807,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.model = FlaxOPTModel(config=self.config, dtype=self.dtype)
+        self.model = FlaxOPTModule(config=self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
@@ -807,7 +820,8 @@ class FlaxOPTForCausalLMModule(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        hidden_states: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,    # TODO Properly handle headmasks
+        input_embeds: Optional[jnp.ndarray] = None, # TODO add support for that 
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -819,7 +833,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
             input_ids,
             attention_mask,
             position_ids,
-            hidden_states,
+            head_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -830,7 +844,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]["decoder"]["embed_tokens"]["embedding"]
+            shared_embedding = self.model.variables["params"]['shared']["embedding"]
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
@@ -838,7 +852,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         if not return_dict:
             return (lm_logits,) + outputs[1:]
 
-        return FlaxBaseModelOutput(
+        return FlaxMaskedLMOutput(
             logits=lm_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
