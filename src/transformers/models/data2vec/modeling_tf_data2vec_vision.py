@@ -1279,7 +1279,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.data2vec_vision = TFData2VecVisionModel(config, add_pooling_layer=False, name="data2vec_vision")
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
 
         # FPNs
         self.fpn1 = tf.keras.Sequential(
@@ -1303,10 +1303,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
-        upsampled_logits = tf.image.resize(logits, size=shape_list(labels).shape[1:-1], method="bilinear")
+        upsampled_logits = tf.image.resize(logits, size=shape_list(labels)[1:-1], method="bilinear")
         if auxiliary_logits is not None:
             upsampled_auxiliary_logits = tf.image.resize(
-                auxiliary_logits, size=shape_list(labels).shape[1:-1], method="bilinear"
+                auxiliary_logits, size=shape_list(labels)[1:-1], method="bilinear"
             )
         # compute weighted loss
         loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction="none")

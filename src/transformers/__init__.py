@@ -1948,6 +1948,7 @@ else:
     _import_structure["models.data2vec"].extend(
         [
             "TFData2VecVisionForImageClassification",
+            "TFData2VecVisionForSemanticSegmentation",
             "TFData2VecVisionModel",
             "TFData2VecVisionPreTrainedModel",
         ]
@@ -4164,6 +4165,7 @@ if TYPE_CHECKING:
         )
         from .models.data2vec import (
             TFData2VecVisionForImageClassification,
+            TFData2VecVisionForSemanticSegmentation,
             TFData2VecVisionModel,
             TFData2VecVisionPreTrainedModel,
         )
