@@ -26,8 +26,10 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machines: [multi-gpu-docker, single-gpu-docker]
-    runs-on: ${{ matrix.machines }}
+        machine_type: [single-gpu, multi-gpu]
+    env:
+      MACHINE: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ env.MACHINE }}
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
