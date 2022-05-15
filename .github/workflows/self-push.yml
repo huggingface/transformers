@@ -73,7 +73,7 @@ jobs:
           echo "::set-output name=test_map::$test_map"
 
   run_tests_single_gpu:
-    name: Model Tests on single GPU
+    name: Model Tests
     needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
@@ -132,7 +132,7 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
-    name: Model Tests on multi GPUs
+    name: Model Tests
     needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
@@ -193,7 +193,7 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_torch_cuda_extensions_single_gpu:
-    name: Torch CUDA extension tests on single GPU
+    name: Torch CUDA extension tests
     needs: setup
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
@@ -242,7 +242,7 @@ jobs:
           path: reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   run_tests_torch_cuda_extensions_multi_gpu:
-    name: Torch CUDA extension tests on multi GPUs
+    name: Torch CUDA extension tests
     needs: setup
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
