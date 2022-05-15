@@ -71,8 +71,10 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machines: [single-gpu-docker]
-    runs-on: ${{ matrix.machines }}
+        machine_type: [single-gpu]
+    env:
+      MACHINE: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ env.MACHINE }}
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -124,8 +126,10 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machines: [multi-gpu-docker]
-    runs-on: ${{ matrix.machines }}
+        machine_type: [multi-gpu]
+    env:
+      MACHINE: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ env.MACHINE }}
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
