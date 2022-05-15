@@ -73,7 +73,7 @@ jobs:
           echo "::set-output name=test_map::$test_map"
 
   run_tests_single_gpu:
-    name: Model Tests
+    name: Model tests
     needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
@@ -132,7 +132,7 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
-    name: Model Tests
+    name: Model tests
     needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
