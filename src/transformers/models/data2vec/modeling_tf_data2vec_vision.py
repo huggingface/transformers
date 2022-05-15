@@ -1111,8 +1111,8 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], channels: int) -> None:
-        super().__init__()
+    def __init__(self, pool_scales: Tuple[int, ...], channels: int, **kwargs) -> None:
+        super().__init__(**kwargs)
         self.pool_scales = pool_scales
         self.channels = channels
 
@@ -1169,7 +1169,7 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
             self.fpn_convs.append(fpn_conv)
 
         self.fpn_bottleneck = TFData2VecVisionConvModule(
-            self.channels, kernel_size=3, padding=1, name="fpn_bottleneck"
+            self.channels, kernel_size=3, padding="same", name="fpn_bottleneck"
         )
 
     def psp_forward(self, inputs):
@@ -1239,21 +1239,21 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         conv_padding = (kernel_size // 2) * dilation
         convs = []
         convs.append(
-            TFData2VecVisionConvModule(self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation)
+            TFData2VecVisionConvModule(self.channels, kernel_size=kernel_size, padding="same", dilation=dilation)
         )
         for _ in range(self.num_convs - 1):
             convs.append(
                 TFData2VecVisionConvModule(
-                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                    self.channels, self.channels, kernel_size=kernel_size, padding="same", dilation=dilation
                 )
             )
         if self.num_convs == 0:
             self.convs = tf.identity
         else:
-            self.convs = convs
+            self.convs = tf.keras.Sequential(convs)
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
-                self.channels, kernel_size=kernel_size, padding=kernel_size // 2, name="conv_cat"
+                self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
             )
 
         self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
@@ -1263,7 +1263,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         hidden_states = encoder_hidden_states[self.in_index]
         output = self.convs(hidden_states)
         if self.concat_input:
-            output = self.conv_cat(tf.concat([hidden_states, output], dim=-1))
+            output = self.conv_cat(tf.concat([hidden_states, output], axis=-1))
         output = self.classifier(output)
         return output
 
@@ -1282,15 +1282,16 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         self.data2vec_vision = TFData2VecVisionModel(config, add_pooling_layer=False, name="data2vec_vision")
 
         # FPNs
-        self.fpn1 = [
-            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Activation("gelu"),
-            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-        ]
-        self.fpn2 = [
-            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-        ]
+        self.fpn1 = tf.keras.Sequential(
+            [
+                tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
+                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.Activation("gelu"),
+                tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
+            ]
+        )
+        self.fpn2 = tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2)
+
         self.fpn3 = tf.identity
         self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
 
@@ -1326,6 +1327,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         return loss
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1359,7 +1361,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> # logits are of shape (batch_size, height, width, num_labels)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
