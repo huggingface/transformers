@@ -16,12 +16,12 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import OPTConfig, is_flax_available
+from transformers import OPTConfig, is_flax_available, GPT2Tokenizer
 from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, slow, require_tokenizers, cached_property
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor,
 
 
 if is_flax_available():
@@ -237,7 +237,123 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 
 ### Could either compare form the HF version or raw logits.
 # TODO Add model integration tests
+@require_flax
+@require_tokenizers
+class OPTModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_tokenizer(self):
+        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
+
+    @slow
+    def test_inference_no_head(self):
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m")
+        input_ids = ([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        attention_mask = input_ids.ne(model.config.pad_token_id)
+        # TODO stop the gradients 
+        output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        expected_shape = jnp.Size((1, 11, 512))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = jnp.tensor(
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device="cpu"
+        )
+        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
 # TODO add embeddings tests
+@require_tokenizers
+@require_flax
+@slow
+class OPTEmbeddingsTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.path_model = "facebook/opt-350m"
+
+    def test_load_model(self):
+        try:
+            _ = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
+        except BaseException:
+            self.fail("Failed loading model")
+
+    def test_logits(self):
+        model = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
+        model = model.eval()
+        tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
+        tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
+        prompts = [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
+        input_ids = tokenizer(prompts, return_tensors="jax", padding=True).input_ids
+        logits = model(input_ids)[0].mean(axis=-1)
+        logits_meta = jnp.array(
+            [
+                [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
+                [-4.7073, -10.6276, -3.9415, -21.5242, -0.2822, -0.2822, -0.2822, -0.2822, -0.2822],
+                [0.6247, -3.4229, -8.9179, -1.4297, -14.1650, 1.4146, -9.0218, -0.2703, -0.2703],
+                [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
+            ]
+        )
+
+        assert jnp.allclose(logits, logits_meta, atol=1e-4)
 
 # TODO add OPTGenerationTest
+@slow
+class OPTGenerationTest(unittest.TestCase):
+    @property
+    def prompts(self):
+        return [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
+
+    def test_generation_pre_attn_layer_norm(self):
+        model_id = "facebook/opt-125m"
+
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to thank",
+            "In the city of Rome Canaver Canaver Canaver Canaver",
+            "Paris is the capital of France and Parisdylib",
+            "Computers and mobile phones have taken precedence over",
+        ]
+
+        predicted_outputs = []
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+
+        for prompt in self.prompts:
+            input_ids = tokenizer(prompt, return_tensors="jax").input_ids
+
+            generated_ids = model.generate(input_ids, max_length=10)
+
+            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            predicted_outputs += generated_string
+
+        self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    def test_generation_post_attn_layer_norm(self):
+        model_id = "facebook/opt-350m"
+
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to share",
+            "In the city of San Francisco, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
+        ]
+
+        predicted_outputs = []
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+
+        for prompt in self.prompts:
+            input_ids = tokenizer(prompt, return_tensors="jax").input_ids
+
+            generated_ids = model.generate(input_ids, max_length=10)
+
+            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            predicted_outputs += generated_string
+
+        self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
