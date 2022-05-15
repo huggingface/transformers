@@ -149,8 +149,6 @@ def convert_bloom_checkpoint_to_pytorch(
                 for ele in temp_tensor.size():
                     tensor_size *= ele
                 total_size += dtype_size * tensor_size
-                if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
-                    tensors[key] = tensors[key] / config.pretraining_tp
 
                 if key not in index_dict["weight_map"]:
                     index_dict["weight_map"][key] = "pytorch_model_{}-of-{}.bin".format(
