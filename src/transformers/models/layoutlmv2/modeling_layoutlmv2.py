@@ -825,8 +825,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
         Examples:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
-        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
+        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
 
@@ -850,9 +850,10 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
             >>> outputs = model(**encoding)
             >>> last_hidden_states = outputs.last_hidden_state
-             
+
             >>> last_hidden_states.shape
             torch.Size([1, 342, 768])
+
             >>> round(torch.sum(last_hidden_states).item(), 2)
             -3139.01
             ```
@@ -1007,11 +1008,11 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
-        
+
         Example:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
-        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
+        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
             ```python
@@ -1019,28 +1020,31 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             >>> from PIL import Image
             >>> import torch
             >>> from datasets import load_dataset
-        
+
             >>> set_seed(88)
-        
+
             >>> dataset = load_dataset("rvl_cdip", split="train", streaming=True)
             >>> data = next(iter(dataset))
             >>> image = data["image"].convert("RGB")
-        
+
             >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=dataset.info.features["label"].num_classes)
-        
+            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained(
+            ...     "microsoft/layoutlmv2-base-uncased", num_labels=dataset.info.features["label"].num_classes
+            ... )
+
             >>> encoding = processor(image, return_tensors="pt")
             >>> sequence_label = torch.tensor([data["label"]])
-        
+
             >>> outputs = model(**encoding, labels=sequence_label)
-        
+
             >>> loss, logits = outputs.loss, outputs.logits
             >>> predicted_idx = logits.argmax(dim=-1).item()
-            >>> predicted_answer = dataset.info.features["label"].names[4]  
+            >>> predicted_answer = dataset.info.features["label"].names[4]
             >>> predicted_idx, predicted_answer
             (4, 'advertisement')
+
             >>> round(loss.item(), 2)
-            2.83          
+            2.83
             ```
         """
 
@@ -1193,30 +1197,40 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         Example:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
-        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
+        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
             ```python
             >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification, set_seed
             >>> from PIL import Image
             >>> from datasets import load_dataset
-            
+
             >>> set_seed(88)
-            
+
             >>> datasets = load_dataset("nielsr/funsd", split="test")
-            >>> labels = datasets.features['ner_tags'].feature.names
+            >>> labels = datasets.features["ner_tags"].feature.names
             >>> id2label = {v: k for v, k in enumerate(labels)}
 
             >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
-            >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=len(labels))
+            >>> model = LayoutLMv2ForTokenClassification.from_pretrained(
+            ...     "microsoft/layoutlmv2-base-uncased", num_labels=len(labels)
+            ... )
 
             >>> data = datasets[0]
             >>> image = Image.open(data["image_path"]).convert("RGB")
             >>> words = data["words"]
             >>> boxes = data["bboxes"]  # make sure to normalize your bounding boxes
             >>> word_labels = data["ner_tags"]
-            >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, padding="max_length", truncation=True, return_tensors="pt")
+            >>> encoding = processor(
+            ...     image,
+            ...     words,
+            ...     boxes=boxes,
+            ...     word_labels=word_labels,
+            ...     padding="max_length",
+            ...     truncation=True,
+            ...     return_tensors="pt",
+            ... )
 
             >>> outputs = model(**encoding)
             >>> logits, loss = outputs.logits, outputs.loss
@@ -1247,7 +1261,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
             >>> round(loss.item(), 2)
             1.92
-
             ```
         """
 
@@ -1348,8 +1361,8 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Example:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
-        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
+        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
             ```python
@@ -1367,26 +1380,23 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
             >>> image = Image.open(image_path).convert("RGB")
             >>> question = "When is coffee break?"
             >>> encoding = processor(image, question, return_tensors="pt")
-            
+
             >>> outputs = model(**encoding)
             >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
             >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
             >>> predicted_start_idx, predicted_end_idx
             (154, 287)
-            >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx:predicted_end_idx+1]
+
+            >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
             >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
-            >>> predicted_answer # results are not very good without further fine-tuning
+            >>> predicted_answer  # results are not very good without further fine-tuning
             'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
             ```
 
             ```python
-            >>> target_start_index = torch.tensor([7])
-            >>> target_end_index = torch.tensor([14])
-            >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
-            >>> loss = outputs.loss
-            >>> round(loss.item(), 2)
-            5.68
-        """
+            >>> target_start_index = torch.tensor([7]) >>> target_end_index = torch.tensor([14]) >>> outputs =
+            model(**encoding, start_positions=target_start_index, end_positions=target_end_index) >>> loss =
+            outputs.loss >>> round(loss.item(), 2) 5.68"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
