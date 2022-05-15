@@ -23,12 +23,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 
 # Public API
@@ -40,8 +34,14 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
@@ -266,7 +266,8 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         self.attention_head_size = self.embed_dim // self.num_attention_heads
         if self.attention_head_size * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_attention_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_attention_heads})."
             )
 
         factor = config.initializer_factor
@@ -333,7 +334,7 @@ class TFCLIPAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        _attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        _attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -504,7 +505,6 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         input_shape = shape_list(input_ids)
 
@@ -552,11 +552,14 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         )
 
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
-
-        diag = tf.constant(0.0, shape=(seq_length,), dtype=dtype)
+        # It is possible with an unspecified sequence length for seq_length to be
+        # a runtime value, which is unsupported by tf.constant. Per the TensorFlow
+        # docs, tf.fill can handle runtime dynamic shapes:
+        # https://www.tensorflow.org/api_docs/python/tf/fill
+        diag = tf.cast(tf.fill((seq_length,), 0.0), dtype)
 
         # set an additive 2D attention mask with all places being masked
-        to_mask = tf.constant(-10000.0, shape=(seq_length, seq_length), dtype=dtype)
+        to_mask = tf.cast(tf.fill((seq_length, seq_length), -10000.0), dtype)
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
@@ -593,7 +596,6 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -632,7 +634,6 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         embedding_output = self.embeddings(pixel_values=pixel_values)
@@ -683,7 +684,6 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         if pixel_values is None:
@@ -709,12 +709,14 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
 
         if not isinstance(config.text_config, CLIPTextConfig):
             raise ValueError(
-                f"config.text_config is expected to be of type CLIPTextConfig but is of type {type(config.text_config)}."
+                "config.text_config is expected to be of type CLIPTextConfig but is of type"
+                f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, CLIPVisionConfig):
             raise ValueError(
-                f"config.vision_config is expected to be of type CLIPVisionConfig but is of type {type(config.vision_config)}."
+                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                f" {type(config.vision_config)}."
             )
 
         self.config = config
@@ -762,7 +764,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
 
         if input_ids is None:
@@ -796,7 +797,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -826,7 +826,6 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
 
         if input_ids is None:
@@ -968,8 +967,8 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -988,8 +987,8 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1030,8 +1029,8 @@ CLIP_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1058,7 +1057,6 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1089,6 +1087,18 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         )
 
         return outputs
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        output = self.call(inputs)
+        return self.serving_output(output)
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -1131,7 +1141,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
         """
         Method used for serving the model.
 
@@ -1153,7 +1163,6 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1235,7 +1244,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             }
         ]
     )
-    def serving(self, inputs):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFCLIPOutput:
         """
         Method used for serving the model.
 
@@ -1258,7 +1267,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1297,7 +1305,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1345,7 +1352,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1387,4 +1393,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFCLIPOutput) -> TFCLIPOutput:
+        # TODO: As is this currently fails with saved_model=True, because
+        # TensorFlow cannot trace through nested dataclasses. Reference:
+        # https://github.com/huggingface/transformers/pull/16886
         return output

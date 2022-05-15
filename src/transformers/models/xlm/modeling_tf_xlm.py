@@ -25,13 +25,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMultipleChoiceModelOutput,
@@ -51,8 +44,15 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_xlm import XLMConfig
 
 
@@ -92,8 +92,8 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         mask = padding_mask
     else:
         # assert lengths.max().item() <= slen
-        alen = tf.range(slen)
-        mask = tf.math.less(alen, tf.expand_dims(lengths, axis=1))
+        alen = tf.range(slen, dtype=lengths.dtype)
+        mask = alen < tf.expand_dims(lengths, axis=1)
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
@@ -187,7 +187,7 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
         mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
-        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        weights = stable_softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
@@ -263,7 +263,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         self.n_layers = config.n_layers
         self.max_position_embeddings = config.max_position_embeddings
         self.embed_init_std = config.embed_init_std
-        assert self.dim % self.n_heads == 0, "transformer dim must be a multiple of n_heads"
+        if self.dim % self.n_heads != 0:
+            raise ValueError("transformer dim must be a multiple of n_heads")
 
         # embeddings
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -360,7 +361,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         # removed: src_enc=None, src_len=None
 
@@ -667,8 +667,8 @@ XLM_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -707,7 +707,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         outputs = self.transformer(
             input_ids=input_ids,
@@ -843,7 +842,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -917,7 +915,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1025,7 +1022,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1150,7 +1146,6 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         return_dict=None,
         labels=None,
         training=False,
-        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1237,7 +1232,6 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         start_positions=None,
         end_positions=None,
         training=False,
-        **kwargs,
     ):
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):

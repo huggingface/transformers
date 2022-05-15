@@ -24,7 +24,6 @@ from parameterized import parameterized
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
-from transformers.file_utils import WEIGHTS_NAME, is_torch_bf16_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -35,11 +34,13 @@ from transformers.testing_utils import (
     get_gpu_count,
     mockenv_context,
     require_deepspeed,
+    require_optuna,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
+from transformers.utils import WEIGHTS_NAME, is_torch_bf16_available
 
 
 if is_torch_available():
@@ -363,6 +364,33 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
+    @require_optuna
+    def test_hyperparameter_search(self):
+        with mockenv_context(**self.dist_env_1_gpu):
+
+            ds_config_zero3_dict = self.get_config_dict(ZERO3)
+
+            # hyperparameter_search requires model_init() to recreate the model for each trial
+            def model_init():
+                config = RegressionModelConfig(a=0, b=0, double_output=False)
+                model = RegressionPreTrainedModel(config)
+                return model
+
+            trainer = get_regression_trainer(
+                local_rank=0,
+                fp16=True,
+                model_init=model_init,
+                deepspeed=ds_config_zero3_dict,
+            )
+
+            n_trials = 3
+            with CaptureLogger(deepspeed_logger) as cl:
+                with CaptureStd() as cs:
+                    trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
+
     # --- These tests need to run on both zero stages --- #
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
@@ -494,7 +522,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
-    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
+    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
 
         file_list = [WEIGHTS_NAME, "training_args.bin", "trainer_state.json", "config.json"]
@@ -506,7 +534,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         else:
             raise ValueError(f"unknown stage {stage}")
 
-        ds_file_list.append("zero_pp_rank_0_mp_rank_00_optim_states.pt")
+        if dtype == "bf16":
+            ds_file_list.append("bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt")
 
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
@@ -550,7 +579,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
 
         total = int(self.n_epochs * 64 / self.batch_size)
-        self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
+        self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage, dtype)
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_can_resume_training_errors(self, stage, dtype):

@@ -4,19 +4,30 @@ from typing import Callable, Dict, Optional, Tuple, Type, Union
 from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
+from ..models.beit import BeitOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.big_bird import BigBirdOnnxConfig
+from ..models.bigbird_pegasus import BigBirdPegasusOnnxConfig
+from ..models.blenderbot import BlenderbotOnnxConfig
+from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
+from ..models.convbert import ConvBertOnnxConfig
+from ..models.data2vec import Data2VecTextOnnxConfig
+from ..models.deit import DeiTOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.flaubert import FlaubertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.gptj import GPTJOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
+from ..models.mobilebert import MobileBertOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
+from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
@@ -31,8 +42,10 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForNextSentencePrediction,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -44,6 +57,7 @@ if is_tf_available():
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
         TFAutoModelForMultipleChoice,
+        TFAutoModelForNextSentencePrediction,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
@@ -51,7 +65,8 @@ if is_tf_available():
     )
 if not is_torch_available() and not is_tf_available():
     logger.warning(
-        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models without one of these libraries installed."
+        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
+        " without one of these libraries installed."
     )
 
 
@@ -96,6 +111,8 @@ class FeaturesManager:
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "masked-im": AutoModelForMaskedImageModeling,
+            "next-sentence-prediction": AutoModelForNextSentencePrediction,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -107,6 +124,7 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+            "next-sentence-prediction": TFAutoModelForNextSentencePrediction,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -115,7 +133,7 @@ class FeaturesManager:
             "default",
             "masked-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=AlbertOnnxConfig,
@@ -131,6 +149,169 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=BartOnnxConfig,
         ),
+        # BEiT cannot be used with the masked image modeling autoclass, so this feature is excluded here
+        "beit": supported_features_mapping("default", "image-classification", onnx_config_cls=BeitOnnxConfig),
+        "bert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            "next-sentence-prediction",
+            onnx_config_cls=BertOnnxConfig,
+        ),
+        "big-bird": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=BigBirdOnnxConfig,
+        ),
+        "bigbird-pegasus": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "sequence-classification",
+            "question-answering",
+            onnx_config_cls=BigBirdPegasusOnnxConfig,
+        ),
+        "blenderbot": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotOnnxConfig,
+        ),
+        "blenderbot-small": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=BlenderbotSmallOnnxConfig,
+        ),
+        "camembert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=CamembertOnnxConfig,
+        ),
+        "convbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ConvBertOnnxConfig,
+        ),
+        "data2vec-text": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=Data2VecTextOnnxConfig,
+        ),
+        "deit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=DeiTOnnxConfig
+        ),
+        "distilbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=DistilBertOnnxConfig,
+        ),
+        "electra": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ElectraOnnxConfig,
+        ),
+        "flaubert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=FlaubertOnnxConfig,
+        ),
+        "gpt2": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=GPT2OnnxConfig,
+        ),
+        "gptj": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "question-answering",
+            "sequence-classification",
+            onnx_config_cls=GPTJOnnxConfig,
+        ),
+        "gpt-neo": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            onnx_config_cls=GPTNeoOnnxConfig,
+        ),
+        "ibert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=IBertOnnxConfig,
+        ),
+        "layoutlm": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "marian": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            onnx_config_cls=MarianOnnxConfig,
+        ),
         "mbart": supported_features_mapping(
             "default",
             "default-with-past",
@@ -142,61 +323,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=MBartOnnxConfig,
         ),
-        "bert": supported_features_mapping(
+        "mobilebert": supported_features_mapping(
             "default",
             "masked-lm",
-            "causal-lm",
+            "next-sentence-prediction",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=BertOnnxConfig,
-        ),
-        "ibert": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "sequence-classification",
-            # "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=IBertOnnxConfig,
-        ),
-        "camembert": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "causal-lm",
-            "sequence-classification",
-            # "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=CamembertOnnxConfig,
-        ),
-        "distilbert": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "sequence-classification",
-            # "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=DistilBertOnnxConfig,
-        ),
-        "flaubert": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "causal-lm",
-            "sequence-classification",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=FlaubertOnnxConfig,
-        ),
-        "marian": supported_features_mapping(
-            "default",
-            "default-with-past",
-            "seq2seq-lm",
-            "seq2seq-lm-with-past",
-            "causal-lm",
-            "causal-lm-with-past",
-            onnx_config_cls=MarianOnnxConfig,
+            onnx_config_cls=MobileBertOnnxConfig,
         ),
         "m2m-100": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig
@@ -206,58 +341,38 @@ class FeaturesManager:
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=RobertaOnnxConfig,
         ),
+        "roformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "multiple-choice",
+            "question-answering",
+            "token-classification",
+            onnx_config_cls=RoFormerOnnxConfig,
+        ),
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
+        ),
+        "vit": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
         ),
         "xlm-roberta": supported_features_mapping(
             "default",
             "masked-lm",
             "causal-lm",
             "sequence-classification",
-            # "multiple-choice",
+            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=XLMRobertaOnnxConfig,
         ),
-        "gpt2": supported_features_mapping(
-            "default",
-            "default-with-past",
-            "causal-lm",
-            "causal-lm-with-past",
-            "sequence-classification",
-            "token-classification",
-            onnx_config_cls=GPT2OnnxConfig,
-        ),
-        "gpt-neo": supported_features_mapping(
-            "default",
-            "default-with-past",
-            "causal-lm",
-            "causal-lm-with-past",
-            "sequence-classification",
-            onnx_config_cls=GPTNeoOnnxConfig,
-        ),
-        "layoutlm": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "sequence-classification",
-            "token-classification",
-            onnx_config_cls=LayoutLMOnnxConfig,
-        ),
-        "electra": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "causal-lm",
-            "sequence-classification",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=ElectraOnnxConfig,
-        ),
-        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
@@ -329,11 +444,11 @@ class FeaturesManager:
             task_to_automodel = FeaturesManager._TASKS_TO_TF_AUTOMODELS
         if task not in task_to_automodel:
             raise KeyError(
-                f"Unknown task: {feature}. "
-                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+                f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
         return task_to_automodel[task]
 
+    @staticmethod
     def get_model_from_feature(
         feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:
@@ -382,8 +497,7 @@ class FeaturesManager:
         model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(
-                f"{model.config.model_type} doesn't support feature {feature}. "
-                f"Supported values are: {model_features}"
+                f"{model.config.model_type} doesn't support feature {feature}. Supported values are: {model_features}"
             )
 
         return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]

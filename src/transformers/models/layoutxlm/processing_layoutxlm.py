@@ -17,9 +17,9 @@ Processor class for LayoutXLM.
 """
 from typing import List, Optional, Union
 
-from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class LayoutXLMProcessor(ProcessorMixin):
@@ -86,8 +86,7 @@ class LayoutXLMProcessor(ProcessorMixin):
 
         if self.feature_extractor.apply_ocr and (word_labels is not None):
             raise ValueError(
-                "You cannot provide word labels "
-                "if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
             )
 
         # first, apply the feature extractor

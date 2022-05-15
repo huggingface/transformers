@@ -29,7 +29,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import cached_download, hf_hub_download
 from transformers import AutoFeatureExtractor, VanConfig, VanForImageClassification
 from transformers.models.van.modeling_van import VanLayerScaling
 from transformers.utils import logging
@@ -85,7 +85,8 @@ class ModuleTransfer:
 
         if len(dest_traced) != len(src_traced):
             raise Exception(
-                f"Numbers of operations are different. Source module has {len(src_traced)} operations while destination module has {len(dest_traced)}."
+                f"Numbers of operations are different. Source module has {len(src_traced)} operations while"
+                f" destination module has {len(dest_traced)}."
             )
 
         for dest_m, src_m in zip(dest_traced, src_traced):
@@ -139,7 +140,8 @@ def convert_weight_and_push(
         module_transfer(x)
         our_model = copy_parameters(from_model, our_model)
 
-    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+    if not torch.allclose(from_model(x), our_model(x).logits):
+        raise ValueError("The model logits don't match the original one.")
 
     checkpoint_name = name
     print(checkpoint_name)
@@ -168,7 +170,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -207,10 +209,18 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     }
 
     names_to_original_checkpoints = {
-        "van-tiny": "https://huggingface.co/Visual-Attention-Network/VAN-Tiny-original/resolve/main/van_tiny_754.pth.tar",
-        "van-small": "https://huggingface.co/Visual-Attention-Network/VAN-Small-original/resolve/main/van_small_811.pth.tar",
-        "van-base": "https://huggingface.co/Visual-Attention-Network/VAN-Base-original/resolve/main/van_base_828.pth.tar",
-        "van-large": "https://huggingface.co/Visual-Attention-Network/VAN-Large-original/resolve/main/van_large_839.pth.tar",
+        "van-tiny": (
+            "https://huggingface.co/Visual-Attention-Network/VAN-Tiny-original/resolve/main/van_tiny_754.pth.tar"
+        ),
+        "van-small": (
+            "https://huggingface.co/Visual-Attention-Network/VAN-Small-original/resolve/main/van_small_811.pth.tar"
+        ),
+        "van-base": (
+            "https://huggingface.co/Visual-Attention-Network/VAN-Base-original/resolve/main/van_base_828.pth.tar"
+        ),
+        "van-large": (
+            "https://huggingface.co/Visual-Attention-Network/VAN-Large-original/resolve/main/van_large_839.pth.tar"
+        ),
     }
 
     if model_name:
@@ -241,7 +251,10 @@ if __name__ == "__main__":
         "--model-name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, currently: van-tiny/small/base/large. If `None`, all of them will the converted.",
+        help=(
+            "The name of the model you wish to convert, it must be one of the supported resnet* architecture,"
+            " currently: van-tiny/small/base/large. If `None`, all of them will the converted."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -254,7 +267,10 @@ if __name__ == "__main__":
         "--van_dir",
         required=True,
         type=Path,
-        help="A path to VAN's original implementation directory. You can download from here: https://github.com/Visual-Attention-Network/VAN-Classification",
+        help=(
+            "A path to VAN's original implementation directory. You can download from here:"
+            " https://github.com/Visual-Attention-Network/VAN-Classification"
+        ),
     )
     parser.add_argument(
         "--push_to_hub",

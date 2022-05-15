@@ -23,7 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/segformer-b0-finetuned-ade-512-512": "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json",
+    "nvidia/segformer-b0-finetuned-ade-512-512": (
+        "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json"
+    ),
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 }
 
@@ -54,7 +56,7 @@ class SegformerConfig(PretrainedConfig):
             Patch size before each encoder block.
         strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 4, 8]):
+        num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 5, 8]):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to [4, 4, 4, 4]):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
@@ -122,8 +124,8 @@ class SegformerConfig(PretrainedConfig):
 
         if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
             warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be removed, "
-                "as the behaviour will default to that of reshape_last_stage = True.",
+                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
+                " removed, as the behaviour will default to that of reshape_last_stage = True.",
                 FutureWarning,
             )
 

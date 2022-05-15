@@ -3,7 +3,7 @@ name: Build documentation
 on:
   push:
     branches:
-      - master
+      - main
       - doc-builder*
       - v*-release
       - use_templates
@@ -15,5 +15,6 @@ jobs:
       commit_sha: ${{ github.sha }}
       package: transformers
       notebook_folder: transformers_doc
+      languages: en es pt
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}

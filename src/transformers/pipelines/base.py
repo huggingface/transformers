@@ -30,11 +30,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -140,7 +139,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for item in items:
             if set(item.keys()) != keys:
                 raise ValueError(
-                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
+                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} !="
+                    f" {keys})"
                 )
         # input_values, input_pixels, input_ids, ...
         padded = {}
@@ -880,7 +880,8 @@ class Pipeline(_ScikitCompat):
             supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             logger.error(
-                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are"
+                f" {supported_models}."
             )
 
     @abstractmethod
@@ -995,7 +996,8 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a dataset",
+                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
+                " dataset",
                 UserWarning,
             )
 
@@ -1059,7 +1061,8 @@ class ChunkPipeline(Pipeline):
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if num_workers > 1:
             logger.warning(
-                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable, setting `num_workers=1` to guarantee correctness."
+                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable,"
+                " setting `num_workers=1` to guarantee correctness."
             )
             num_workers = 1
         dataset = PipelineChunkIterator(inputs, self.preprocess, preprocess_params)

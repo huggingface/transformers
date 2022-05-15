@@ -24,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wavlm-base-960h": "https://huggingface.co/facebook/wavlm-base-960h/resolve/main/config.json",
+    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
     # See all WavLM models at https://huggingface.co/models?filter=wavlm
 }
 
@@ -34,7 +34,7 @@ class WavLMConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to instantiate an WavLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the WavLM
-    [facebook/wavlm-base-960h](https://huggingface.co/facebook/wavlm-base-960h) architecture.
+    [microsoft/wavlm-base](https://huggingface.co/microsoft/wavlm-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -290,10 +290,10 @@ class WavLMConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect. "
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
-                f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779

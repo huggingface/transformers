@@ -15,8 +15,7 @@
 # limitations under the License.
 """PyTorch CamemBERT model."""
 
-from ...file_utils import add_start_docstrings
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
     RobertaForMaskedLM,

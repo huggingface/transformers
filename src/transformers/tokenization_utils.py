@@ -23,7 +23,6 @@ import unicodedata
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
-from .file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -39,7 +38,7 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .utils import logging
+from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
@@ -251,7 +250,8 @@ class Trie:
         for end in offsets:
             if start > end:
                 logger.error(
-                    "There was a bug in Trie algorithm in tokenization. Attempting to recover. Please report it anyway."
+                    "There was a bug in Trie algorithm in tokenization. Attempting to recover. Please report it"
+                    " anyway."
                 )
                 continue
             elif start == end:
@@ -628,11 +628,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             else:
                 if is_split_into_words:
                     raise ValueError(
-                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_split_into_words=True`."
+                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when"
+                        " `is_split_into_words=True`."
                     )
                 else:
                     raise ValueError(
-                        f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+                        f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of"
+                        " integers."
                     )
 
         if return_offsets_mapping:

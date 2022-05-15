@@ -33,8 +33,7 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available, logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -380,7 +379,7 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing communication with GPU. " "We won't perform GPU memory tracing.")
+            logger.warning("Error while initializing communication with GPU. We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -627,7 +626,8 @@ class Benchmark(ABC):
 
         if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
             logger.warning(
-                "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
+                "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The"
+                " flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
             )
 
         self._print_fn = None
@@ -733,7 +733,8 @@ class Benchmark(ABC):
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
                 if self.args.is_tpu:
                     self.print_fn(
-                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10 inferences model.forward(..) calls) was measured."
+                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10"
+                        " inferences model.forward(..) calls) was measured."
                     )
 
             if self.args.memory:
@@ -752,7 +753,8 @@ class Benchmark(ABC):
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
                 if self.args.is_tpu:
                     self.print_fn(
-                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train loss=model.forward(...) + loss.backward() calls) was measured."
+                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train"
+                        " loss=model.forward(...) + loss.backward() calls) was measured."
                     )
 
             if self.args.memory:

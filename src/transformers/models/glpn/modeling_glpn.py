@@ -23,15 +23,16 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
 from .configuration_glpn import GLPNConfig
 
 
@@ -79,7 +80,7 @@ class GLPNDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -467,7 +468,7 @@ GLPN_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -708,18 +709,36 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
 
         ```python
         >>> from transformers import GLPNFeatureExtractor, GLPNForDepthEstimation
+        >>> import torch
+        >>> import numpy as np
         >>> from PIL import Image
         >>> import requests
-
-        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
-        >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
+        >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
+
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> predicted_depth = outputs.predicted_depth  # shape (batch_size, height, width)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     predicted_depth = outputs.predicted_depth
+
+        >>> # interpolate to original size
+        >>> prediction = torch.nn.functional.interpolate(
+        ...     predicted_depth.unsqueeze(1),
+        ...     size=image.size[::-1],
+        ...     mode="bicubic",
+        ...     align_corners=False,
+        ... )
+
+        >>> # visualize the prediction
+        >>> output = prediction.squeeze().cpu().numpy()
+        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
+        >>> depth = Image.fromarray(formatted)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

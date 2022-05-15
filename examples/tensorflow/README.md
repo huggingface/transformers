@@ -31,13 +31,13 @@ Here is the list of all our examples:
 
 | Task | Example datasets |
 |---|---|
-| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/language-modeling) | WikiText-2
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/multiple-choice) | SWAG 
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering) | SQuAD
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/summarization) | XSum 
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/text-classification) | GLUE
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/token-classification) | CoNLL NER
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/translation) | WMT
+| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling) | WikiText-2
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) | SWAG 
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) | SQuAD
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) | XSum 
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) | GLUE
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) | CoNLL NER
+| [**`translation`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) | WMT
 
 ## Coming soon
 

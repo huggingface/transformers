@@ -16,8 +16,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .file_utils import add_start_docstrings
 from .training_args import TrainingArguments
+from .utils import add_start_docstrings
 
 
 logger = logging.getLogger(__name__)
@@ -51,14 +51,18 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     generation_max_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
-            "to the `max_length` value of the model configuration."
+            "help": (
+                "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+                "to the `max_length` value of the model configuration."
+            )
         },
     )
     generation_num_beams: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
-            "to the `num_beams` value of the model configuration."
+            "help": (
+                "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+                "to the `num_beams` value of the model configuration."
+            )
         },
     )

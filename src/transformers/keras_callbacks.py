@@ -12,8 +12,8 @@ from tensorflow.keras.callbacks import Callback
 from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
-from .file_utils import get_full_repo_name
 from .modelcard import TrainingSummary
+from .utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -370,7 +370,7 @@ class PushToHubCallback(Callback):
 
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done:
-            logger.info("Waiting for existing upload to finish...")
+            self.last_job._process.terminate()  # Gotta go fast
             while not self.last_job.is_done:
                 sleep(1)
         self.model.save_pretrained(self.output_dir)

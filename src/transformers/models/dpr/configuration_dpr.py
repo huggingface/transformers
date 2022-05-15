@@ -21,12 +21,24 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/config.json",
-    "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/config.json",
-    "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/config.json",
-    "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/config.json",
-    "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/config.json",
-    "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/config.json",
+    "facebook/dpr-ctx_encoder-single-nq-base": (
+        "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/config.json"
+    ),
+    "facebook/dpr-question_encoder-single-nq-base": (
+        "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/config.json"
+    ),
+    "facebook/dpr-reader-single-nq-base": (
+        "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/config.json"
+    ),
+    "facebook/dpr-ctx_encoder-multiset-base": (
+        "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/config.json"
+    ),
+    "facebook/dpr-question_encoder-multiset-base": (
+        "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/config.json"
+    ),
+    "facebook/dpr-reader-multiset-base": (
+        "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/config.json"
+    ),
 }
 
 
@@ -35,7 +47,11 @@ class DPRConfig(PretrainedConfig):
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
 
     This is the configuration class to store the configuration of a [`DPRContextEncoder`], [`DPRQuestionEncoder`], or a
-    [`DPRReader`]. It is used to instantiate the components of the DPR model.
+    [`DPRReader`]. It is used to instantiate the components of the DPR model according to the specified arguments,
+    defining the model component architectures. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the DPRContextEncoder
+    [facebook/dpr-ctx_encoder-single-nq-base](https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base)
+    architecture.
 
     This class is a subclass of [`BertConfig`]. Please check the superclass for the documentation of all kwargs.
 

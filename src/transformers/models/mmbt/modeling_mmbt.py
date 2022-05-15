@@ -20,10 +20,9 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import ModuleUtilsMixin
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 
 
 logger = logging.get_logger(__name__)
@@ -171,7 +170,7 @@ MMBT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -269,7 +268,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
                 [torch.ones(input_modal_shape, device=device), encoder_attention_mask], dim=1
             )
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
         encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 

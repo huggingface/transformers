@@ -18,9 +18,8 @@
 import collections
 from typing import List, Optional, Union
 
-from ...file_utils import TensorType, add_end_docstrings, add_start_docstrings
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
@@ -31,32 +30,56 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -146,7 +169,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (`str` or `List[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
-        padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
@@ -176,7 +199,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
                 If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
                 is required by one of the truncation/padding parameters. If the model has no specific maximum input
                 length (like XLNet) truncation/padding to a maximum length will be deactivated.
-        return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -343,8 +366,8 @@ class CustomDPRReaderTokenizerMixin:
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
-        for (start_index, start_score) in enumerate(start_logits):
-            for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
+        for start_index, start_score in enumerate(start_logits):
+            for answer_length, end_score in enumerate(end_logits[start_index : start_index + max_answer_length]):
                 scores.append(((start_index, start_index + answer_length), start_score + end_score))
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []

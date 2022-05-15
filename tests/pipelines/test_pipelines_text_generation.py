@@ -34,7 +34,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs,
             [
                 {
-                    "generated_text": "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                    "generated_text": (
+                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                        " oscope. FiliFili@@"
+                    )
                 }
             ],
         )
@@ -45,13 +48,50 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             [
                 [
                     {
-                        "generated_text": "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                        "generated_text": (
+                            "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                            " oscope. FiliFili@@"
+                        )
                     }
                 ],
                 [
                     {
-                        "generated_text": "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                        "generated_text": (
+                            "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy"
+                            " oscope. oscope. FiliFili@@"
+                        )
                     }
+                ],
+            ],
+        )
+
+        outputs = text_generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_token_ids": ANY(list)},
+                {"generated_token_ids": ANY(list)},
+            ],
+        )
+        text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
+        text_generator.tokenizer.pad_token = "<pad>"
+        outputs = text_generator(
+            ["This is a test", "This is a second test"],
+            do_sample=True,
+            num_return_sequences=2,
+            batch_size=2,
+            return_tensors=True,
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
+                ],
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
                 ],
             ],
         )
@@ -66,7 +106,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs,
             [
                 {
-                    "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                    "generated_text": (
+                        "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
+                        " please,"
+                    )
                 }
             ],
         )
@@ -77,12 +120,18 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             [
                 [
                     {
-                        "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": (
+                            "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
+                            " please,"
+                        )
                     }
                 ],
                 [
                     {
-                        "generated_text": "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": (
+                            "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
+                            " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        )
                     }
                 ],
             ],

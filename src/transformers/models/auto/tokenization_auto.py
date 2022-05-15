@@ -22,11 +22,10 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -106,6 +105,7 @@ else:
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
+            ("tapex", ("TapexTokenizer", None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -136,6 +136,8 @@ else:
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("opt", ("GPT2Tokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "xlnet",
@@ -150,7 +152,13 @@ else:
             ("fsmt", ("FSMTTokenizer", None)),
             ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
-            ("deberta-v2", ("DebertaV2Tokenizer" if is_sentencepiece_available() else None, None)),
+            (
+                "deberta-v2",
+                (
+                    "DebertaV2Tokenizer" if is_sentencepiece_available() else None,
+                    "DebertaV2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("rag", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
@@ -234,6 +242,24 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "nystromformer",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "yoso",
+                (
+                    "AlbertTokenizer" if is_sentencepiece_available() else None,
+                    "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ]
     )
 
@@ -495,14 +521,14 @@ class AutoTokenizer:
             if tokenizer_auto_map is not None:
                 if not trust_remote_code:
                     raise ValueError(
-                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that repo "
-                        "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                        "the option `trust_remote_code=True` to remove this error."
+                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that"
+                        " repo on your local machine. Make sure you have read the code there to avoid malicious use,"
+                        " then set the option `trust_remote_code=True` to remove this error."
                     )
                 if kwargs.get("revision", None) is None:
                     logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                        "no malicious code has been contributed in a newer revision."
+                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure"
+                        " no malicious code has been contributed in a newer revision."
                     )
 
                 if use_fast and tokenizer_auto_map[1] is not None:

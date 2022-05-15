@@ -14,8 +14,7 @@
 
 import collections
 
-from .file_utils import ExplicitEnum, is_torch_available
-from .utils import logging
+from .utils import ExplicitEnum, is_torch_available, logging
 
 
 if is_torch_available():
@@ -286,7 +285,8 @@ class DebugUnderflowOverflow:
         # abort after certain batch if requested to do so
         if self.abort_after_batch_num is not None and self.batch_number > self.abort_after_batch_num:
             raise ValueError(
-                f"DebugUnderflowOverflow: aborting after {self.batch_number} batches due to `abort_after_batch_num={self.abort_after_batch_num}` arg"
+                f"DebugUnderflowOverflow: aborting after {self.batch_number} batches due to"
+                f" `abort_after_batch_num={self.abort_after_batch_num}` arg"
             )
 
 

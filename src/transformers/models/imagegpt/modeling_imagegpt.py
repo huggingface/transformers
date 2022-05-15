@@ -33,14 +33,14 @@ else:
     is_amp_available = False
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import logging
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -200,7 +200,8 @@ class ImageGPTAttention(nn.Module):
         self.split_size = self.embed_dim
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         self.scale_attn_weights = config.scale_attn_weights
@@ -609,7 +610,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -699,14 +700,14 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")
@@ -1000,7 +1001,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> samples = output[:, 1:].cpu().detach().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [n_px, n_px, 3]).astype(np.uint8) for s in samples
-        >>> ]  # convert color cluster tokens back to pixels
+        ... ]  # convert color cluster tokens back to pixels
         >>> f, axes = plt.subplots(1, batch_size, dpi=300)
 
         >>> for img, ax in zip(samples_img, axes):
@@ -1010,14 +1011,14 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")
@@ -1143,14 +1144,14 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")

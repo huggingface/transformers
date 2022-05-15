@@ -23,15 +23,16 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN, gelu
-from ...file_utils import (
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...utils import logging
 from .configuration_luke import LukeConfig
 
 
@@ -480,7 +481,7 @@ class LukeSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -544,7 +545,7 @@ class LukeIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -558,7 +559,7 @@ class LukeOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -708,7 +709,7 @@ class LukePooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -868,12 +869,13 @@ LUKE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any specific head on top.",
+    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any"
+    " specific head on top.",
     LUKE_START_DOCSTRING,
 )
 class LukeModel(LukePreTrainedModel):
@@ -952,11 +954,11 @@ class LukeModel(LukePreTrainedModel):
         >>> entities = [
         ...     "Beyoncé",
         ...     "Los Angeles",
-        >>> ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
+        ... ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
         >>> entity_spans = [
         ...     (0, 7),
         ...     (17, 28),
-        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        ... ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
 
         >>> encoding = tokenizer(
         ...     text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt"
@@ -1434,7 +1436,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> entity_spans = [
         ...     (0, 7),
         ...     (17, 28),
-        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        ... ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
         >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits

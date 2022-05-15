@@ -44,7 +44,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.18.0.dev0")
+check_min_version("4.20.0.dev0")
 
 require_version("datasets>=1.14.0", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
@@ -86,8 +86,9 @@ class DataTrainingArguments:
     eval_split_name: str = field(
         default="validation",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
-            "'validation'"
+            "help": (
+                "The name of the training data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     audio_column_name: str = field(
@@ -100,15 +101,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_length_seconds: float = field(
@@ -149,8 +154,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     freeze_feature_extractor: Optional[bool] = field(
@@ -227,10 +234,16 @@ def main():
     # Initialize our dataset and prepare it for the audio classification task.
     raw_datasets = DatasetDict()
     raw_datasets["train"] = load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        split=data_args.train_split_name,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     raw_datasets["eval"] = load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        split=data_args.eval_split_name,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:

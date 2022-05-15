@@ -49,6 +49,10 @@ class TrainingArguments:
         default=1024,
         metadata={"help": "Interval to save checkpoints. Measured as number of forward passes not training steps."},
     )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={"help": "States path if the training should continue from a checkpoint folder."},
+    )
 
 
 @dataclass
@@ -108,7 +112,10 @@ class HumanEvalArguments:
     device_int: Optional[int] = field(
         default=-1,
         metadata={
-            "help": "Determine which device to run the `text-generation` Pipeline on. -1 is CPU and any zero or positive number corresponds to which GPU device id to run on."
+            "help": (
+                "Determine which device to run the `text-generation` Pipeline on. -1 is CPU and any zero or positive"
+                " number corresponds to which GPU device id to run on."
+            )
         },
     )
 
