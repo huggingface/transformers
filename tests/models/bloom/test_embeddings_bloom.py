@@ -7,7 +7,7 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers import BLOOMLMHeadModel
+    from transformers import BLOOMLMHeadModel, BLOOMModel
 
 
 @require_torch
@@ -303,10 +303,9 @@ class BLOOMEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_hidden_states_transformers(self):
         # TODO ifelse device
-        # cuda_available = torch.cuda.is_available()
-        cuda_available = False
+        cuda_available = torch.cuda.is_available()
         device = torch.device("cuda:0" if cuda_available else "cpu")
-        model = BLOOMLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model = BLOOMModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
         EXAMPLE_IDS = [
@@ -340,7 +339,7 @@ class BLOOMEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
 
         with torch.no_grad():
-            logits = model(tensor_ids.to(device)).logits
+            logits = model(tensor_ids.to(device))
         output_dict = {
             "min": logits.last_hidden_state.min(dim=-1).values[0][0].item(),
             "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),

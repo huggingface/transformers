@@ -27,9 +27,6 @@ from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
 
-# import deepspeed
-
-
 logging.set_verbosity_info()
 
 WEIGHTS_TO_AVERAGE_ENDSWITH = [

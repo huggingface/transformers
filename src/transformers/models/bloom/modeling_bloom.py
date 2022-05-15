@@ -27,7 +27,6 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import Conv1D, PreTrainedModel
 from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_bloom import BLOOMConfig
 from .fused_bias_gelu import bias_gelu_impl
 from .mpu_utils import split_tensor_along_last_dim
@@ -42,8 +41,6 @@ _TOKENIZER_FOR_DOC = "BLOOMTokenizer"
 
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
-    # "bigscience/BLOOM",
-    # See all BLOOM models at https://huggingface.co/models?filter=bloom
 ]
 
 # Utility functions below:
@@ -66,10 +63,6 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     else:
         values_to_attend = 1.0 - padded_causal_mask
         return (values_to_attend * attention_scores) - 10000.0 * padded_causal_mask
-
-
-# def attention_mask_func(attention_scores, attention_mask):
-#     return attention_scores.masked_fill_(attention_mask, -10000.0)
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -132,7 +125,7 @@ class BLOOMAttention(nn.Module):
         coeff = self.layer_number
         self.norm_factor = math.sqrt(self.head_dim) * coeff
 
-        # self.scale_mask_softmax = nn.Softmax(dim=1)
+        # Scaled Softmax
         self.scale_mask_softmax = ScaledSoftmax(
             self.fp16,
             self.bf16,
@@ -144,7 +137,6 @@ class BLOOMAttention(nn.Module):
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
-        # TODO : Try a custom class
         self.dense = nn.Linear(self.hidden_size, self.hidden_size, dtype=dtype)
         self.skip_bias_add = config.skip_bias_add
         self.skip_bias_add_qkv = config.skip_bias_add_qkv
@@ -161,7 +153,8 @@ class BLOOMAttention(nn.Module):
         output_attentions=False,
     ):
         # hidden_states: [sq, b, h]
-        alibi = alibi.repeat(1, hidden_states.shape[1], 1).to(hidden_states.device)  # repeat with batch size
+        # alibi = alibi.repeat(1, hidden_states.shape[1], 1).to(hidden_states.device)  # repeat with batch size
+        alibi = alibi.repeat(hidden_states.shape[1], 1, 1).to(hidden_states.device)  # repeat with batch size
 
         bias = self.query_key_value.bias if not self.skip_bias_add_qkv else None
 
@@ -175,28 +168,33 @@ class BLOOMAttention(nn.Module):
 
         # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
         (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
+        query_layer, key_layer, value_layer = (
+            query_layer.transpose(0, 1),
+            key_layer.transpose(0, 1),
+            value_layer.transpose(0, 1),
+        )
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=0)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=0)
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
         if use_cache is True:
             present = (key_layer, value_layer)
         else:
             present = None
-
         # ===================================
         # Raw attention scores. [b, np, s, s]
         # ===================================
 
         # [b, np, sq, sk]
         output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
+        output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
         # [sq, b, np, hn] -> [sq, b * np, hn]
-        query_layer = query_layer.view(output_size[2], output_size[0] * output_size[1], -1)
+        query_layer = query_layer.contiguous().view(output_size[2], output_size[0] * output_size[1], -1)
         # [sk, b, np, hn] -> [sk, b * np, hn]
-        key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
+        key_layer = key_layer.contiguous().view(output_size[3], output_size[0] * output_size[1], -1)
 
         # alibi
         matmul_result = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
@@ -206,8 +204,8 @@ class BLOOMAttention(nn.Module):
 
         matmul_result = torch.baddbmm(
             matmul_result,
-            query_layer.transpose(0, 1),  # [b * np, sq, hn]
-            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            query_layer.transpose(1, 0),  # [b * np, sq, hn]
+            key_layer.transpose(1, 0).transpose(1, 2),  # [b * np, hn, sk]
             beta=beta,
             alpha=(1.0 / self.norm_factor),
         )
@@ -234,10 +232,10 @@ class BLOOMAttention(nn.Module):
         # [sk, b, np, hn] --> [b, np, sq, hn]
 
         # context layer shape: [b, np, sq, hn]
-        output_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), value_layer.size(3))
+        output_size = (value_layer.size(0), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
         # change view [sk, b * np, hn]
-        value_layer = value_layer.view(value_layer.size(0), output_size[0] * output_size[1], -1)
+        value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
         # change view [b * np, sq, sk]
         attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
@@ -279,11 +277,10 @@ class BLOOMAttention(nn.Module):
             output_tensor = output_tensor
             output_bias = self.dense.bias
         output = output_tensor
-        # output = self.dense(context_layer)
 
         outputs = (output, present)
         if output_attentions:
-            outputs += (None,)  # TODO not implemented yet
+            outputs += (attention_scores,)
 
         return outputs, output_bias  # a, present, (attentions)
 
@@ -296,7 +293,7 @@ class BLOOMMLP(nn.Module):
         self.skip_bias_add = config.skip_bias_add
         self.pretraining_tp = config.pretraining_tp
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size, dtype=dtype)
-        # self.activation_func = F.gelu
+
         self.activation_func = bias_gelu_impl
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size, dtype=dtype)
 
@@ -374,10 +371,6 @@ class BLOOMBlock(nn.Module):
             n_head, -1, -1
         )
 
-        # Select the part of the tensor that corresponds to our tensor parallel index.
-        # tp_world_size = mpu.get_tensor_model_parallel_world_size()
-        # tp_index = mpu.get_tensor_model_parallel_rank()
-        # alibi = alibi.reshape((tp_world_size, -1, *alibi.shape[1:]))[tp_index]
         alibi = alibi.to(dtype)
 
         return alibi
@@ -417,10 +410,6 @@ class BLOOMBlock(nn.Module):
         else:
             residual = hidden_states
 
-        # bias_dropout_add_func method simplifed for inference only (we remove the dropout)
-        # residual = hidden_states
-        # TODO implement dropout
-        # layernorm_input = attention_output + residual
         if self.bias_dropout_fusion:
             if self.training:
                 bias_dropout_add_func = bias_dropout_add_fused_train
@@ -583,56 +572,6 @@ BLOOM_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the bloom models have the
-            following number of attention modules:
-
-                - bloom: 12
-                - bloom-medium: 24
-                - bloom-large: 36
-                - bloom-xl: 48
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using bloom-xl, which has a total of 48 attention modules:
-    model = BLOOMLMHeadModel.from_pretrained("bloom-xl")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-        1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-        2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-        3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with bloom-large:
-    model = BLOOMLMHeadModel.from_pretrained("bloom-large")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6, 7],
-        1: [8, 9, 10, 11, 12, 13, 14, 15],
-        2: [16, 17, 18, 19, 20, 21, 22, 23],
-        3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
 
 
 @add_start_docstrings(
@@ -664,39 +603,6 @@ class BLOOMModel(BLOOMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.word_embeddings = self.word_embeddings.to(self.first_device)
-        self.word_embeddings_layernorm = self.word_embeddings_layernorm.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.word_embeddings = self.word_embeddings.to("cpu")
-        self.word_embeddings_layernorm = self.word_embeddings_layernorm.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.word_embeddings
@@ -843,10 +749,11 @@ class BLOOMModel(BLOOMPreTrainedModel):
 
         hidden_states = self.ln_f(hidden_states)
 
-        hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = hidden_states.view(output_shape)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
@@ -880,26 +787,6 @@ class BLOOMLMHeadModel(BLOOMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head

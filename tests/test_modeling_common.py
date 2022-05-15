@@ -470,6 +470,8 @@ class ModelTesterMixin:
             model.gradient_checkpointing_enable()
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            # inputs["input_ids"]
+            # input_tensor = inputs['input_ids'][0, :].unsqueeze(0)
             loss = model(**inputs).loss
             loss.backward()
 

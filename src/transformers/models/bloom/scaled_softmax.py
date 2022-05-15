@@ -44,7 +44,7 @@ class ScaledSoftmax(nn.Module):
         scale,
         max_positions,
     ):
-        super(ScaledSoftmax, self).__init__()
+        super().__init__()
         self.input_in_fp16 = input_in_fp16
         self.input_in_bf16 = input_in_bf16
         assert not (

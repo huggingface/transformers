@@ -97,15 +97,9 @@ class BLOOMModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = self.get_config(
-            gradient_checkpointing=gradient_checkpointing,
-        )
+        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        return (
-            config,
-            input_ids,
-            input_mask,
-        )
+        return (config, input_ids, input_mask)
 
     def get_config(self, gradient_checkpointing=False):
         return BLOOMConfig(
@@ -126,6 +120,7 @@ class BLOOMModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
+            dtype="float32",
         )
 
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
@@ -275,15 +270,9 @@ class BLOOMModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        (
-            config,
-            input_ids,
-            input_mask,
-        ) = config_and_inputs
+        config, input_ids, input_mask = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-        }
+        inputs_dict = {"input_ids": input_ids}
 
         return config, inputs_dict
 
@@ -296,7 +285,8 @@ class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     all_parallelizable_model_classes = (BLOOMLMHeadModel,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = True
+    test_model_parallel = False
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = BLOOMModelTester(self)
