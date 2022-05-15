@@ -821,24 +821,42 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        Return:
 
         Examples:
 
-        ```python
-        >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
-        >>> from PIL import Image
+        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the following to install them:
+        `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
+        `python -m pip install torchvision tesseract`
 
-        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+            ```python
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model, set_seed
+            >>> from PIL import Image
+            >>> import torch
+            >>> from datasets import load_dataset
 
-        >>> encoding = processor(image, return_tensors="pt")
+            >>> set_seed(88)
 
-        >>> outputs = model(**encoding)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
+            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+
+            >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+            >>> image_path = dataset["test"][0]["file"]
+            >>> image = Image.open(image_path).convert("RGB")
+
+            >>> encoding = processor(image, return_tensors="pt")
+
+            >>> outputs = model(**encoding)
+            >>> last_hidden_states = outputs.last_hidden_state
+             
+            >>> last_hidden_states.shape
+            torch.Size([1, 342, 768])
+            >>> round(torch.sum(last_hidden_states).item(), 2)
+            -3139.01
+            ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
