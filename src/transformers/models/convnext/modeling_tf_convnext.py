@@ -537,7 +537,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
-        >>> model = TFViTForImageClassification.from_pretrained("facebook/convnext-tiny-224")
+        >>> model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
