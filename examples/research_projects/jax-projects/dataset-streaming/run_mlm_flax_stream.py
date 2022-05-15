@@ -404,8 +404,8 @@ if __name__ == "__main__":
     tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
+        remove_columns=list(dataset.features.keys())
     )
-    tokenized_datasets.remove_columns(dataset.features.keys())
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
