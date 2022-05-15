@@ -103,7 +103,7 @@ def export_pytorch(
         output (`Path`):
             Directory to store the exported ONNX model.
         device (`str`):
-            The device on which the ONNX model will be exported.
+            The device on which the ONNX model will be exported. Either CPU(default) or CUDA.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -140,7 +140,7 @@ def export_pytorch(
             # TODO: Check when exporting QA we provide "is_pair=True"
             model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
             device = torch.device(device)
-            if device.type == "cuda" and torch.cuda.is_available():
+            if device.type=="cuda" and torch.cuda.is_available():
                 model.to(device)
                 model_inputs = dict((k, v.to(device)) for k, v in model_inputs.items())
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
@@ -298,7 +298,7 @@ def export(
             "Please install torch or tensorflow first."
         )
 
-    if is_tf_available() and isinstance(model, TFPreTrainedModel) and device == "cuda":
+    if is_tf_available() and isinstance(model, TFPreTrainedModel) and device=="cuda":
         raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
