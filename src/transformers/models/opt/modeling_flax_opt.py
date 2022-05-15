@@ -557,6 +557,7 @@ class FlaxOPTDecoder(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
+        head_mask=None,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -564,7 +565,7 @@ class FlaxOPTDecoder(nn.Module):
         deterministic: bool = True,
     ):
         input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
+        input_ids = input_ids.reshape(-1, input_shape[-1])                                                                    
 
         inputs_embeds = self.embed_tokens(input_ids)
 
@@ -590,7 +591,7 @@ class FlaxOPTDecoder(nn.Module):
             return outputs
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=outputs.last_hidden_state,                                      
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -672,6 +673,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         position_ids: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        head_mask: Optional[jnp.ndarray] = None,
         return_dict: Optional[bool] = None,
         params: dict = None,
         past_key_values: dict = None,
