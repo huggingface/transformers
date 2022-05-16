@@ -261,7 +261,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
     def default_tokenizer(self):
         return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
-    @slow
+    # @slow
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -270,10 +270,9 @@ class OPTModelIntegrationTests(unittest.TestCase):
             output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
-        )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        expected_slice = torch.tensor([[-0.1768,  0.4446,  0.2745,  0.4607,  0.4219,  0.0712, -0.0581, -0.0013,
+        0.0574,  0.2061,  0.3067]])
+        self.assertTrue(torch.allclose(output.mean(dim=-1), expected_slice, atol=1e-3))
 
 
 @require_tokenizers
@@ -295,6 +294,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
         model = model.eval()
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        tokenizer.add_special_tokens({"bos_token": "<s>"})
 
         prompts = [
             "Today is a beautiful day and I want to",
@@ -303,8 +303,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         input_ids = tokenizer(prompts, return_tensors="pt", padding=True).input_ids
-        logits = model(input_ids)[0].mean(dim=-1)
-        # logits_meta = torch.load(self.path_logits_meta)
+        logits = model(input_ids[:,1:])[0].mean(dim=-1)
         logits_meta = torch.Tensor(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
