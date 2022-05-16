@@ -526,12 +526,15 @@ class Trainer:
                         " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
-
-        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
-        if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
+        #BF16 + model parallelism in SageMaker: currently not supported, raise an error
+        if is_sagemaker_mp_enabled() and args.bf16:
             raise ValueError(
-                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
-                "along 'max_grad_norm': 0 in your hyperparameters."
+                "SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead "
+            )
+        #FP16 + model parallelism in SageMaker: need to provide fp16 to SM_HP_MP_PARAMETERS
+        if is_sagemaker_mp_enabled() and args.fp16 and not smp.state.cfg.fp16:
+            raise ValueError(
+                "Using FP16 with SageMaker Model Parallelism needx to have 'fp16: True' in SM_HP_MP_PARAMETERS"
             )
 
         # Label smoothing
@@ -915,7 +918,7 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer)
 
     def create_optimizer(self):
         """
@@ -1534,6 +1537,7 @@ class Trainer:
                 self._load_rng_state(resume_from_checkpoint)
 
             step = -1
+            step_done = False
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -1586,16 +1590,21 @@ class Trainer:
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
-
                         if self.do_grad_scaling:
                             # Reduce gradients first for XLA
                             if is_torch_tpu_available():
                                 gradients = xm._fetch_gradients(self.optimizer)
                                 xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
                             # AMP: gradients need unscaling
-                            self.scaler.unscale_(self.optimizer)
+                            if is_sagemaker_mp_enabled():
+                                if step_done or smp.pp_rank() == 0:
+                                    self.scaler.unscale_(self.optimizer)
+                            else:
+                                self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm"):
+                        if is_sagemaker_mp_enabled() and args.fp16:
+                            self.optimizer.clip_master_grads(args.max_grad_norm)
+                        elif hasattr(self.optimizer, "clip_grad_norm"):
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             self.optimizer.clip_grad_norm(args.max_grad_norm)
                         elif hasattr(model, "clip_grad_norm_"):
@@ -1621,6 +1630,7 @@ class Trainer:
                     elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
+                        step_done = True
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
                         optimizer_was_run = scale_before <= scale_after
@@ -2015,7 +2025,7 @@ class Trainer:
                 if is_sagemaker_mp_enabled():
 
                     def opt_load_hook(mod, opt):
-                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False)
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:

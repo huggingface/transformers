@@ -1027,9 +1027,10 @@ if is_sagemaker_mp_enabled():
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
         loss /= gradient_accumulation_steps
         if scaler is not None:
-            loss = scaler.scale(loss).squeeze()
-
-        model.backward(loss)
+            scaled_loss = scaler.scale(loss).squeeze()
+            model.backward(scaled_loss)
+        else:
+            model.backward(loss)
         return loss
 
     @smp.step()

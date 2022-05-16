@@ -55,7 +55,6 @@ def is_sagemaker_model_parallel_available():
 
 if is_sagemaker_model_parallel_available():
     import smdistributed.modelparallel.torch as smp
-
     smp.init()
 
 
