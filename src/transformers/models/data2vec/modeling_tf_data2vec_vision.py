@@ -1121,8 +1121,8 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
             pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
-                    TFAdaptiveAvgPool2D(output_shape=pool_scale),
-                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1),
+                    TFAdaptiveAvgPool2D(output_shape=pool_scale, name="adavptive_avgpool"),
+                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name="conv_module"),
                 ]
             )
 
@@ -1239,12 +1239,19 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         conv_padding = (kernel_size // 2) * dilation
         convs = []
         convs.append(
-            TFData2VecVisionConvModule(self.channels, kernel_size=kernel_size, padding="same", dilation=dilation)
+            TFData2VecVisionConvModule(
+                self.channels, kernel_size=kernel_size, padding="same", dilation=dilation, name="conv_module_1"
+            )
         )
-        for _ in range(self.num_convs - 1):
+        for i in range(self.num_convs - 1):
             convs.append(
                 TFData2VecVisionConvModule(
-                    self.channels, self.channels, kernel_size=kernel_size, padding="same", dilation=dilation
+                    self.channels,
+                    self.channels,
+                    kernel_size=kernel_size,
+                    padding="same",
+                    dilation=dilation,
+                    name=f"conv_module_{i+2}",
                 )
             )
         if self.num_convs == 0:
@@ -1288,9 +1295,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
                 tf.keras.layers.BatchNormalization(),
                 tf.keras.layers.Activation("gelu"),
                 tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-            ]
+            ],
+            name="fpn1",
         )
-        self.fpn2 = tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2)
+        self.fpn2 = tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2")
 
         self.fpn3 = tf.identity
         self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
@@ -1303,13 +1311,16 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
-        upsampled_logits = tf.image.resize(logits, size=shape_list(labels)[1:-1], method="bilinear")
+        if len(shape_list(labels)) > 3:
+            label_interp_shape = shape_list(labels)[1:-1]
+        else:
+            label_interp_shape = shape_list(labels)[-2:]
+
+        upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
         if auxiliary_logits is not None:
-            upsampled_auxiliary_logits = tf.image.resize(
-                auxiliary_logits, size=shape_list(labels)[1:-1], method="bilinear"
-            )
+            upsampled_auxiliary_logits = tf.image.resize(auxiliary_logits, size=label_interp_shape, method="bilinear")
         # compute weighted loss
-        loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction="none")
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
         # Copied from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
         # Utility to mask the index to ignore during computing the loss.
