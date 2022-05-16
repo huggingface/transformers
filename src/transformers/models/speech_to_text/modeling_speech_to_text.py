@@ -292,7 +292,8 @@ class Speech2TextAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -308,7 +309,8 @@ class Speech2TextAttention(nn.Module):
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -329,7 +331,8 @@ class Speech2TextAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -625,9 +628,9 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
 
-            If you want to change padding behavior, you should read [`modeling_speech_to_text._prepare_decoder_inputs`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
+            If you want to change padding behavior, you should read
+            [`modeling_speech_to_text._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
+            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -1024,9 +1027,10 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                assert attn_mask.size()[0] == (len(self.layers)), (
+                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                    f" {head_mask.size()[0]}."
+                )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1041,7 +1045,8 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
+                        " False`..."
                     )
                     use_cache = False
 

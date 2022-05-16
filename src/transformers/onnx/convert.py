@@ -68,7 +68,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
-                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+                "Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
@@ -114,7 +114,8 @@ def export_pytorch(
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
@@ -175,9 +176,13 @@ def export_pytorch(
                     message = str(err)
                     if (
                         message
-                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter."
+                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without"
+                        " setting use_external_data_format parameter."
                     ):
-                        message = "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter or try with torch 1.10+."
+                        message = (
+                            "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export"
+                            " without setting use_external_data_format parameter or try with torch 1.10+."
+                        )
                         raise RuntimeError(message)
                     else:
                         raise err
@@ -234,7 +239,8 @@ def export_tensorflow(
         raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
@@ -305,7 +311,8 @@ def export(
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
@@ -319,7 +326,8 @@ def export(
 
         if not config.is_torch_support_available:
             logger.warning(
-                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version}, got: {torch_version}"
+                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version},"
+                f" got: {torch_version}"
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
@@ -345,7 +353,8 @@ def validate_model_outputs(
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to validatethe model outputs.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")

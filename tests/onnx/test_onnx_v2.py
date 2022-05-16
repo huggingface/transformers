@@ -224,7 +224,7 @@ TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
-        for (name, model) in export_models_list:
+        for name, model in export_models_list:
             for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
                 name
             ).items():
@@ -255,7 +255,8 @@ class OnnxExportTestCaseV2(TestCase):
 
             if torch_version < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
-                    f"Skipping due to incompatible PyTorch version. Minimum required is {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                    "Skipping due to incompatible PyTorch version. Minimum required is"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
                 )
 
         # Check the modality of the inputs and instantiate the appropriate preprocessor

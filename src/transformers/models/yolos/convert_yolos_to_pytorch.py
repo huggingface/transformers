@@ -247,7 +247,10 @@ if __name__ == "__main__":
         "--yolos_name",
         default="yolos_s_200_pre",
         type=str,
-        help="Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre', 'yolos_s_300_pre', 'yolos_s_dWr', 'yolos_base'.",
+        help=(
+            "Name of the YOLOS model you'd like to convert. Should be one of 'yolos_ti', 'yolos_s_200_pre',"
+            " 'yolos_s_300_pre', 'yolos_s_dWr', 'yolos_base'."
+        ),
     )
     parser.add_argument(
         "--checkpoint_path", default=None, type=str, help="Path to the original state dict (.pth file)."

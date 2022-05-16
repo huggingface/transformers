@@ -18,6 +18,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 import contextlib
 import functools
+import glob
 import inspect
 import math
 import os
@@ -109,16 +110,19 @@ from .trainer_utils import (
     HubStrategy,
     IntervalStrategy,
     PredictionOutput,
+    RemoveColumnsCollator,
     ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
     denumpify_detensorize,
+    enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
     number_of_arguments,
+    seed_worker,
     set_seed,
     speed_metrics,
 )
@@ -300,7 +304,7 @@ class Trainer:
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
         # Seed must be set before instantiating the model when using model
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -325,8 +329,9 @@ class Trainer:
         else:
             if model_init is not None:
                 warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
-                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
+                    " release.",
                     FutureWarning,
                 )
             self.model_init = model_init
@@ -517,7 +522,8 @@ class Trainer:
             else:
                 if not is_apex_available():
                     raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                        "Using FP16 with APEX but APEX is not installed, please refer to"
+                        " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
 
@@ -599,27 +605,31 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
-        if not self.args.remove_unused_columns:
-            return dataset
+    def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
-            self._signature_columns += ["label", "label_ids"]
+            self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
 
-        ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+        if not self.args.remove_unused_columns:
+            return dataset
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
         if len(ignored_columns) > 0:
-            dset_description = "" if description is None else f"in the {description} set "
+            dset_description = "" if description is None else f"in the {description} set"
             logger.info(
                 f"The following columns {dset_description} don't have a corresponding argument in "
                 f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
                 f" If {', '.join(ignored_columns)} are not expected by `{self.model.__class__.__name__}.forward`, "
-                f" you can safely ignore this message."
+                " you can safely ignore this message."
             )
 
-        columns = [k for k in self._signature_columns if k in dataset.column_names]
+        columns = [k for k in signature_columns if k in dataset.column_names]
 
         if version.parse(datasets.__version__) < version.parse("1.4.0"):
             dataset.set_format(
@@ -628,6 +638,24 @@ class Trainer:
             return dataset
         else:
             return dataset.remove_columns(ignored_columns)
+
+    def _get_collator_with_removed_columns(
+        self, data_collator: Callable, description: Optional[str] = None
+    ) -> Callable:
+        """Wrap the data collator in a callable removing unused columns."""
+        if not self.args.remove_unused_columns:
+            return data_collator
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        remove_columns_collator = RemoveColumnsCollator(
+            data_collator=data_collator,
+            signature_columns=signature_columns,
+            logger=logger,
+            description=description,
+            model_name=self.model.__class__.__name__,
+        )
+        return remove_columns_collator
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if self.train_dataset is None or not has_length(self.train_dataset):
@@ -715,8 +743,11 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
+        data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -731,7 +762,7 @@ class Trainer:
             return DataLoader(
                 train_dataset,
                 batch_size=self.args.per_device_train_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -742,10 +773,11 @@ class Trainer:
             train_dataset,
             batch_size=self._train_batch_size,
             sampler=train_sampler,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
+            worker_init_fn=seed_worker,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
@@ -791,9 +823,12 @@ class Trainer:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        data_collator = self.data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -807,7 +842,7 @@ class Trainer:
             return DataLoader(
                 eval_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -818,7 +853,7 @@ class Trainer:
             eval_dataset,
             sampler=eval_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
@@ -835,8 +870,12 @@ class Trainer:
                 The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the `model.forward()`
                 method are automatically removed. It must implement `__len__`.
         """
+        data_collator = self.data_collator
+
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="test")
 
         if isinstance(test_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
@@ -850,7 +889,7 @@ class Trainer:
             return DataLoader(
                 test_dataset,
                 batch_size=self.args.eval_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
@@ -862,7 +901,7 @@ class Trainer:
             test_dataset,
             sampler=test_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
             pin_memory=self.args.dataloader_pin_memory,
         )
@@ -978,6 +1017,10 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizerNames.SGD:
+            optimizer_cls = torch.optim.SGD
+        elif args.optim == OptimizerNames.ADAGRAD:
+            optimizer_cls = torch.optim.Adagrad
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1028,7 +1071,8 @@ class Trainer:
         for key, value in params.items():
             if not hasattr(self.args, key):
                 logger.warning(
-                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in"
+                    " `TrainingArguments`."
                 )
                 continue
             old_attr = getattr(self.args, key, None)
@@ -1250,7 +1294,7 @@ class Trainer:
         model_reloaded = False
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
-            set_seed(args.seed)
+            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
             self.model = self.call_model_init(trial)
             model_reloaded = True
             # Reinitializes optimizer and scheduler
@@ -1262,7 +1306,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None:
+        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled():
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1321,7 +1365,8 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
         else:
             raise ValueError(
-                f"args.max_steps must be set to a positive value if dataloader does not have a length, was {args.max_steps}"
+                "args.max_steps must be set to a positive value if dataloader does not have a length, was"
+                f" {args.max_steps}"
             )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
@@ -1329,7 +1374,8 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP (torch.distributed.launch)."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
+                    " (torch.distributed.launch)."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
@@ -1360,6 +1406,9 @@ class Trainer:
             self.model.gradient_checkpointing_enable()
 
         model = self._wrap_model(self.model_wrapped)
+
+        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+            self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1594,7 +1643,7 @@ class Trainer:
                     break
             if step < 0:
                 logger.warning(
-                    f"There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    "There seems to be not a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
                 )
@@ -1626,6 +1675,8 @@ class Trainer:
                 xm.rendezvous("load_best_model_at_end")
             elif args.local_rank != -1:
                 dist.barrier()
+            elif is_sagemaker_mp_enabled():
+                smp.barrier()
 
             self._load_best_model()
 
@@ -1648,7 +1699,12 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    def _load_from_checkpoint(self, resume_from_checkpoint):
+    def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+
+        if model is None:
+            model = self.model
+        strict_load = is_sagemaker_mp_enabled()
+
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
             os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         ):
@@ -1673,20 +1729,22 @@ class Trainer:
             # We load the model state dict on the CPU to avoid an OOM error.
             state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
-            load_result = self.model.load_state_dict(state_dict, strict=False)
-            self._issue_warnings_after_load(load_result)
-
+            load_result = model.load_state_dict(state_dict, strict=strict_load)
+            if not strict_load:
+                self._issue_warnings_after_load(load_result)
             # release memory
             del state_dict
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(self.model, resume_from_checkpoint, strict=False)
-            self._issue_warnings_after_load(load_result)
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=strict_load)
+            if not strict_load:
+                self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
-
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+        strict_load = is_sagemaker_mp_enabled()
+        model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
@@ -1703,12 +1761,13 @@ class Trainer:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
                 # If the model is on the GPU, it still works!
-                load_result = self.model.load_state_dict(state_dict, strict=False)
-                self._issue_warnings_after_load(load_result)
+                load_result = model.load_state_dict(state_dict, strict=strict_load)
+                if not strict_load:
+                    self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
-            # Best model is a sharded checkpoint
-            load_result = load_sharded_checkpoint(self.model, self.state.best_model_checkpoint, strict=False)
-            self._issue_warnings_after_load(load_result)
+            load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
+            if not strict_load:
+                self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
                 f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
@@ -1768,7 +1827,7 @@ class Trainer:
         local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
         if local_rank != -1:
             rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
-            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+            if not os.path.isfile(rng_file):
                 logger.info(
                     f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
                     "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
@@ -1846,17 +1905,21 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if smp.rdp_rank() == 0:
-                # Consolidate the state dict on all processed of rdp_rank 0
-                opt_state_dict = self.optimizer.state_dict()
-                # Save it and the scheduler on the main process
-                if self.args.should_save:
-                    torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
-                    with warnings.catch_warnings(record=True) as caught_warnings:
-                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                    reissue_pt_warnings(caught_warnings)
-                    if self.do_grad_scaling:
-                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            smp.barrier()
+            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
+                smp.save(
+                    opt_state_dict,
+                    os.path.join(output_dir, OPTIMIZER_NAME),
+                    partial=True,
+                    v3=smp.state.cfg.shard_optimizer_state,
+                )
+            if self.args.should_save:
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                reissue_pt_warnings(caught_warnings)
+                if self.do_grad_scaling:
+                    torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -1905,6 +1968,7 @@ class Trainer:
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
         os.makedirs(output_dir, exist_ok=True)
+
         local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
         if local_rank == -1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
@@ -1927,9 +1991,12 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
-        if os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME)) and os.path.isfile(
-            os.path.join(checkpoint, SCHEDULER_NAME)
-        ):
+        checkpoint_file_exists = (
+            glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
+            if is_sagemaker_mp_enabled()
+            else os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+        )
+        if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
@@ -1945,9 +2012,16 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
-                self.optimizer.load_state_dict(
-                    torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
-                )
+                if is_sagemaker_mp_enabled():
+
+                    def opt_load_hook(mod, opt):
+                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+
+                    self.model_wrapped.register_post_step_hook(opt_load_hook)
+                else:
+                    self.optimizer.load_state_dict(
+                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                    )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
@@ -2253,8 +2327,9 @@ class Trainer:
                 # This must be called on all ranks
                 if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
-                        "deepspeed.save_16bit_model didn't save the model, since stage3_gather_16bit_weights_on_model_save=false. "
-                        "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
+                        "deepspeed.save_16bit_model didn't save the model, since"
+                        " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
+                        " zero_to_fp32.py to recover weights"
                     )
                     self.deepspeed.save_checkpoint(output_dir)
 

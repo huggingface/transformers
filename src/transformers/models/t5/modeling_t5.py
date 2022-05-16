@@ -809,9 +809,10 @@ class T5PreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+            " See T5 docs for more information"
+        )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):

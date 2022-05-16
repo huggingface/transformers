@@ -16,7 +16,6 @@
 
 import math
 import warnings
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -28,16 +27,17 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+    Wav2Vec2BaseModelOutput,
+    XVectorOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_wavlm import WavLMConfig
 
 
@@ -78,67 +78,6 @@ WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/wavlm-large",
     # See all WavLM models at https://huggingface.co/models?filter=wavlm
 ]
-
-
-@dataclass
-class WavLMBaseModelOutput(ModelOutput):
-    """
-    Output type of [`WavLMBaseModelOutput`], with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
-            Sequence of extracted feature vectors of the last convolutional layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    extract_features: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class XVectorOutput(ModelOutput):
-    """
-    Output type of [`Wav2Vec2ForXVector`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.xvector_output_dim)`):
-            Classification hidden states before AMSoftmax.
-        embeddings (`torch.FloatTensor` of shape `(batch_size, config.xvector_output_dim)`):
-            Utterance embeddings used for vector similarity-based retrieval.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    embeddings: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -1184,7 +1123,7 @@ WAVLM_INPUTS_DOCSTRING = r"""
     "The bare WavLM Model transformer outputting raw hidden-states without any specific head on top.",
     WAVLM_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM, WavLMBaseModelOutput->Wav2Vec2BaseModelOutput
 class WavLMModel(WavLMPreTrainedModel):
     def __init__(self, config: WavLMConfig):
         super().__init__(config)
@@ -1275,7 +1214,7 @@ class WavLMModel(WavLMPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=WavLMBaseModelOutput,
+        output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -1288,7 +1227,7 @@ class WavLMModel(WavLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, WavLMBaseModelOutput]:
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1325,7 +1264,7 @@ class WavLMModel(WavLMPreTrainedModel):
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return WavLMBaseModelOutput(
+        return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
