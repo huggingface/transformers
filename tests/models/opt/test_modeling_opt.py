@@ -284,7 +284,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
@@ -307,7 +307,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
         model = OPTForCausalLM.from_pretrained(self.path_model)
         model = model.eval()
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
-        tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
         prompts = [
             "Today is a beautiful day and I want to",
@@ -315,8 +314,8 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
-        input_ids = tokenizer(prompts, return_tensors="pt", padding=True).input_ids
-        logits = model(input_ids)[0].mean(dim=-1)
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(dim=-1)
         # logits_meta = torch.load(self.path_logits_meta)
         logits_meta = torch.Tensor(
             [
@@ -326,7 +325,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
                 [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
             ]
         )
-
         assert torch.allclose(logits, logits_meta, atol=1e-4)
 
 
