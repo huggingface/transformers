@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors, Microsoft Research, and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" WavLM model configuration"""
+""" Wav2Vec2Conformer model configuration"""
 
 import functools
 import operator
@@ -23,28 +23,31 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
+WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/wav2vec2-conformer-large-rel-pos": (
+        "https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos/resolve/main/config.json"
+    ),
 }
 
 
-class WavLMConfig(PretrainedConfig):
+class Wav2Vec2ConformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to instantiate an WavLM
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the WavLM
-    [microsoft/wavlm-base](https://huggingface.co/microsoft/wavlm-base) architecture.
+    This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to
+    instantiate an Wav2Vec2Conformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2Conformer
+    [facebook/wav2vec2-conformer-large-rel-pos](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32):
-            Vocabulary size of the WavLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`WavLMModel`]. Vocabulary size of the model. Defines the different tokens
-            that can be represented by the *inputs_ids* passed to the forward method of [`WavLMModel`].
+        vocab_size (`int`, *optional*):
+            Vocabulary size of the Wav2Vec2Conformer model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`Wav2Vec2ConformerModel`]. Vocabulary size of the
+            model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
+            method of [`Wav2Vec2ConformerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -61,7 +64,7 @@ class WavLMConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`WavLMForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2ConformerForCTC`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -82,10 +85,10 @@ class WavLMConfig(PretrainedConfig):
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
         conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
+            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
         conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
+            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether the 1D convolutional layers have a bias.
@@ -94,18 +97,16 @@ class WavLMConfig(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
-            True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
-            False` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
-            masked. Approximately `mask_time_prob * sequence_length // mask_time_length` feature vectors will be masked
-            along the time axis. This is only relevant if `apply_spec_augment is True`.
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+            actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
         mask_time_min_masks (`int`, *optional*, defaults to 2),:
@@ -113,11 +114,18 @@ class WavLMConfig(PretrainedConfig):
             irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
-            be masked. Approximately `mask_time_prob * hidden_size // mask_time_length` feature vectors will be masked
-            along the time axis. This is only relevant if `apply_spec_augment is True`.
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+            True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
+        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
+            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
         num_codevectors_per_group (`int`, *optional*, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (`int`, *optional*, defaults to 2):
@@ -134,16 +142,16 @@ class WavLMConfig(PretrainedConfig):
             Dimensionality of the final projection of both the quantized and the transformer features.
         diversity_loss_weight (`int`, *optional*, defaults to 0.1):
             The weight of the codebook diversity loss component.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`WavLMForCTC`].
+            instance of [`Wav2Vec2ConformerForCTC`].
         ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
             Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
             occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`WavLMForCTC`].
+            of [`Wav2Vec2ConformerForCTC`].
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`WavLMForSequenceClassification`].
+            instance of [`Wav2Vec2ConformerForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
         tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
@@ -158,8 +166,8 @@ class WavLMConfig(PretrainedConfig):
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
         add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
-            warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
+            Whether a convolutional network should be stacked on top of the Wav2Vec2Conformer Encoder. Can be very
+            useful for warm-starting Wav2Vec2Conformer for SpeechEncoderDecoder models.
         adapter_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):
@@ -170,32 +178,37 @@ class WavLMConfig(PretrainedConfig):
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
+        position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
+            Can be specified to `relative` or `rotary` for relative or rotary position embeddings respectively. If left
+            `None` no relative position embedding is applied.
+        rotary_embedding_base (`int`, *optional*, defaults to 10000):
+            If `"rotary"` position embeddings are used, defines the size of the embedding base.
+        max_source_positions (`int`, *optional*, defaults to 5000):
+            if `"relative"` position embeddings are used, defines the maximum source input positions.
+        conv_depthwise_kernel_size (`int`, defaults to 31):
+            Kernel size of convolutional depthwise 1D layer in Conformer blocks.
+        conformer_conv_dropout (`float`, defaults to 0.1):
+            The dropout probability for all convolutional layers in Conformer blocks.
 
     Example:
 
     ```python
+    >>> from transformers import Wav2Vec2ConformerModel, Wav2Vec2ConformerConfig
 
-    ```
+    >>> # Initializing a Wav2Vec2Conformer facebook/wav2vec2-conformer-large-rel-pos style configuration
+    >>> configuration = Wav2Vec2ConformerConfig()
 
-    Example:
-
-    ```python
-    >>> from transformers import WavLMModel, WavLMConfig
-
-    >>> # Initializing a WavLM facebook/wavlm-base-960h style configuration
-    >>> configuration = WavLMConfig()
-
-    >>> # Initializing a model from the facebook/wavlm-base-960h style configuration
-    >>> model = WavLMModel(configuration)
+    >>> # Initializing a model from the facebook/wav2vec2-conformer-large-rel-pos style configuration
+    >>> model = Wav2Vec2ConformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "wavlm"
+    model_type = "wav2vec2-conformer"
 
     def __init__(
         self,
-        vocab_size=32,
+        vocab_size=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -218,15 +231,13 @@ class WavLMConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
-        num_buckets=320,
-        max_bucket_distance=800,
-        do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
         mask_time_min_masks=2,
         mask_feature_prob=0.0,
         mask_feature_length=10,
+        mask_feature_min_masks=0,
         num_codevectors_per_group=320,
         num_codevector_groups=2,
         contrastive_logits_temperature=0.1,
@@ -234,7 +245,7 @@ class WavLMConfig(PretrainedConfig):
         codevector_dim=256,
         proj_codevector_dim=256,
         diversity_loss_weight=0.1,
-        ctc_loss_reduction="mean",
+        ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
@@ -242,7 +253,6 @@ class WavLMConfig(PretrainedConfig):
         tdnn_kernel=(5, 3, 3, 1, 1),
         tdnn_dilation=(1, 2, 3, 1, 1),
         xvector_output_dim=512,
-        num_ctc_classes=80,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -251,6 +261,11 @@ class WavLMConfig(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
+        position_embeddings_type="relative",
+        rotary_embedding_base=10000,
+        max_source_positions=5000,
+        conv_depthwise_kernel_size=31,
+        conformer_conv_dropout=0.1,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -261,8 +276,6 @@ class WavLMConfig(PretrainedConfig):
         self.conv_stride = list(conv_stride)
         self.conv_kernel = list(conv_kernel)
         self.conv_bias = conv_bias
-        self.num_buckets = num_buckets
-        self.max_bucket_distance = max_bucket_distance
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_feat_extract_layers = len(self.conv_dim)
@@ -278,11 +291,11 @@ class WavLMConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        self.num_ctc_classes = num_ctc_classes
         self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
-        self.classifier_proj_size = classifier_proj_size
+        self.max_source_positions = max_source_positions
+        self.position_embeddings_type = position_embeddings_type
+        self.rotary_embedding_base = rotary_embedding_base
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -296,6 +309,10 @@ class WavLMConfig(PretrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
+        # Conformer-block related
+        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
+        self.conformer_conv_dropout = conformer_conv_dropout
+
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
@@ -303,6 +320,7 @@ class WavLMConfig(PretrainedConfig):
         self.mask_time_min_masks = mask_time_min_masks
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         # parameters for pretraining with codevector quantized representations
         self.num_codevectors_per_group = num_codevectors_per_group
