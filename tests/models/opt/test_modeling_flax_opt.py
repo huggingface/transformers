@@ -21,7 +21,7 @@ from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM
 from transformers.testing_utils import require_flax, slow, require_tokenizers, cached_property
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor,
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
@@ -237,8 +237,8 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 
 ### Could either compare form the HF version or raw logits.
 # TODO Add model integration tests
-@require_flax
-@require_tokenizers
+# @require_flax
+# @require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):

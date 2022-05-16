@@ -546,7 +546,9 @@ class FlaxOPTDecoder(nn.Module):
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
+        
         # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
+        # should take attention mask as inputs ? 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
@@ -573,7 +575,7 @@ class FlaxOPTDecoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids)
 
-        # embed positions
+        # embed positions TODO should take the attention mask as an input
         positions = self.embed_positions(position_ids + self.offset)
 
         hidden_states = inputs_embeds + positions
@@ -765,11 +767,12 @@ class FlaxOPTModule(nn.Module):
         init_cache=False,
     ):
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        # if else should be avoided in jax code? 
+        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # output_hidden_states = (
+        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        # )
+        # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
         decoder_outputs = self.decoder(
             input_ids=input_ids,
