@@ -1,47 +1,157 @@
-<!---
-Copyright 2021 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 -->
 
-# Model Parallelism
+# Efficient Training on Multiple GPUs
 
-
-## Parallelism overview
-
-In the modern machine learning the various approaches to parallelism are used to:
-1. fit very large models onto limited hardware - e.g. t5-11b is 45GB in just model params
-2. significantly speed up training - finish training that would take a year in hours
+When training on a single GPU is too slow or the model weights don't fit in a single GPUs memory we use a mutli-GPU setup. Switching from a single GPU to multiple requires some form of parallelism as the work needs to be distributed. There are several techniques to achieve parallism such as data, tensor, or pipeline parallism. However, there is no one solution to fit them all and which settings works best depends on the hardware you are running on. While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
 
 We will first discuss in depth various 1D parallelism techniques and their pros and cons and then look at how they can be combined into 2D and 3D parallelism to enable an even faster training and to support even bigger models. Various other powerful alternative approaches will be presented.
-
-While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
-
 
 ## Concepts
 
 The following is the brief description of the main concepts that will be described later in depth in this document.
 
-1. DataParallel (DP) - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
-2. TensorParallel (TP) - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
-3. PipelineParallel (PP) - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
-5. Sharded DDP - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
+1. **DataParallel (DP)** - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
+2. **TensorParallel (TP)** - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
+3. **PipelineParallel (PP)** - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
+4. **Zero Redundancy Optimizer (ZeRO)** - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
+5. **Sharded DDP** - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
+
+Before diving deeper into the specifics of each concept we first have a look at the rough decision process when training large models on a large infrastructure. 
+
+## Scalability Strategy
+
+**⇨ Single Node / Multi-GPU**
+* Model fits onto a single GPU:
+
+    1. DDP - Distributed DP
+    2. ZeRO - may or may not be faster depending on the situation and configuration used
+
+* Model doesn't fit onto a single GPU:
+
+    1. PP
+    2. ZeRO
+    3. TP
+
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+    TP is almost always used within a single node. That is TP size <= gpus per node.
+
+* Largest Layer not fitting into a single GPU:
+
+    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
+    2. With ZeRO see the same entry for "Single GPU" above
+
+
+**⇨ Multi-Node / Multi-GPU**
+
+* When you have fast inter-node connectivity:
+
+    1. ZeRO - as it requires close to no modifications to the model
+    2. PP+TP+DP - less communications, but requires massive changes to the model
+
+* when you have slow inter-node connectivity and still low on GPU memory:
+
+    1. DP+PP+TP+ZeRO-1
+
 
 
 ## Data Parallelism
 
-Most users with just 2 GPUs already enjoy the increased training speed up thanks to `DataParallel` (DP) and `DistributedDataParallel` (DDP) that are almost trivial to use. This is a built-in feature of Pytorch.
+Most users with just 2 GPUs already enjoy the increased training speed up thanks to `DataParallel` (DP) and `DistributedDataParallel` (DDP) that are almost trivial to use. This is a built-in feature of Pytorch. Note that in general it is advised to use DDP as it is better maintained and works for all models while DP might fail for some models. [PyTorch documentation](https://pytorch.org/docs/master/generated/torch.nn.DataParallel.html) itself recommends the use of DDP.
+
+### DP vs DDP
+
+`DistributedDataParallel` (DDP) is typically faster than `DataParallel` (DP), but it is not always the case:
+* while DP is python threads-based, DDP is multiprocess-based - and as such it has no python threads limitations, such as GIL
+* on the other hand a slow inter-connectivity between the GPU cards could lead to an actual slower outcome with DDP
+
+Here are the main differences in the inter-GPU communication overhead between the two modes:
+
+[DDP](https://pytorch.org/docs/master/notes/ddp.html):
+
+- At the start time the main process replicates the model once from gpu 0 to the rest of gpus
+- Then for each batch:
+   1. each gpu consumes each own mini-batch of data directly
+   2. during `backward`, once the local gradients are ready, they are then averaged across all processes
+
+[DP](https://pytorch.org/docs/master/generated/torch.nn.DataParallel.html):
+
+For each batch:
+   1. gpu 0 reads the batch of data and then sends a mini-batch to each gpu
+   2. replicates the up-to-date model from gpu 0 to each gpu
+   3. runs `forward` and sends output from each gpu to gpu 0, computes loss
+   4. scatters loss from gpu 0 to all gpus, runs `backward`
+   5. sends gradients from each gpu to gpu 0 and averages those
+
+The only communication DDP performs per batch is sending gradients, whereas DP does 5 different data exchanges per batch.
+
+DP copies data within the process via python threads, whereas DDP copies data via [torch.distributed](https://pytorch.org/docs/master/distributed.html).
+
+Under DP gpu 0 performs a lot more work than the rest of the gpus, thus resulting in under-utilization of gpus.
+
+You can use DDP across multiple machines, but this is not the case with DP.
+
+There are other differences between DP and DDP but they aren't relevant to this discussion.
+
+If you want to go really deep into understanding these 2 modes, this [article](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/) is highly recommended, as it has great diagrams, includes multiple benchmarks and profiler outputs on various hardware, explains all the nuances that you may need to know.
+
+Let's look at an actual benchmark:
+
+| Type   | NVlink | Time |
+| :----- | -----  | ---: |
+| 2:DP   | Y      | 110s |
+| 2:DDP  | Y      | 101s |
+| 2:DDP  | N      | 131s |
+
+
+Analysis:
+
+Here DP is ~10% slower than DDP w/ NVlink, but ~15% faster than DDP w/o NVlink
+
+The real difference will depend on how much data each GPU needs to sync with the others - the more there is to sync, the more a slow link will slow down the total runtime.
+
+Here is the full benchmark code and outputs:
+
+`NCCL_P2P_DISABLE=1` was used to disable the NVLink feature on the corresponding benchmark.
+
+```
+
+# DP
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
+python examples/pytorch/language-modeling/run_clm.py \
+--model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
+
+{'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
+
+# DDP w/ NVlink
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
+python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+--model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
+
+{'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
+
+# DDP w/o NVlink
+rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
+python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+--model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
+
+{'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
+```
+
+Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`)
+Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## ZeRO Data Parallelism
 
@@ -356,7 +466,7 @@ One very important aspect is that FlexFlow is designed for optimizing DNN parall
 
 So the promise is very attractive - it runs a 30min simulation on the cluster of choice and it comes up with the best strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan for that. And then you can train. A different setup will have its own custom optimization.
 
-🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/fx.py), which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
+🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
 
 
 ## Which Strategy To Use When
