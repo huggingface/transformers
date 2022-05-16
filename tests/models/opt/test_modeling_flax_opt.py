@@ -246,17 +246,18 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
     # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float32)
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = jnp.not_equal(input_ids,model.config.pad_token_id)
         # TODO stop the gradients 
         output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = jnp.array(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]
+        expected_slice = jnp.array([-0.1768,  0.4446,  0.2745,  0.4607,  0.4219,  0.0712, -0.0581, -0.0013,
+        0.0574,  0.2061,  0.3067]
         )
-        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(jnp.allclose(output.mean(axis=-1), expected_slice, atol=1e-3))
+
 
 # TODO add embeddings tests
 @require_tokenizers
