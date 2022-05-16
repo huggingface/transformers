@@ -133,7 +133,7 @@ class PreprocessingArguments:
         },
     )
     dataset_name: Optional[str] = field(
-        default="codeparrot", metadata={"help": "Folder or name of dataset to process."}
+        default="transformersbook/codeparrot", metadata={"help": "Folder or name of dataset to process."}
     )
     output_dir: Optional[str] = field(
         default="codeparrot-clean", metadata={"help": "Folder to save processed processed dataset."}
@@ -150,6 +150,16 @@ class PreprocessingArguments:
     )
     alpha_frac: Optional[float] = field(
         default=0.25, metadata={"help": "Maximum fraction of non-alphanumeric characters, otherwise file is filtered."}
+    )
+    min_token_ratio: Optional[float] = field(
+        default=1.5, metadata={"help": "Minimum character token ratio for the file, otherwise file is filtered."}
+    )
+    filter_proba: Optional[float] = field(
+        default=0.7, metadata={"help": "Probability for filtering config, test and uncommon files."}
+    )
+    tokenizer: Optional[str] = field(
+        default="lvwerra/codeparrot",
+        metadata={"help": "Name or path to the tokenizer."},
     )
 
 

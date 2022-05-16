@@ -37,20 +37,25 @@ Additionally, sure you have git-lfs installed. You can find instructions for how
 The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files with less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
 
 ### Preprocessing
-The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374):
+The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374) and some new ones:
 
 - exact deduplication using each file's hash
 - filtering files with max line length > 1000
 - filtering files with mean line length > 100
 - fraction of alphanumeric characters < 0.25
 - containing the word "auto-generated" or similar in the first 5 lines
+- filtering with a probability of 0.7 of files with a mention of "test file" or "configuration file" or similar in the first 5 lines
+- filtering with a probability of 0.7 of files with high occurence of the keywords "test " or "config" 
+- filtering with a probability of 0.7  of files without a mention of the keywords `def` , `for`, `while`  and `class`
+- filtering files that use the assignment operator `=` less than 5 times 
+- filtering files with ratio between number of characters and number of tokens after tokenization < 1.5 (the average ratio is 3.6)
 
-The script to process the full dataset can be found in `scripts/preprocessing.py`. Executing the script on 16 vCPUs takes roughly 3h and removes 70% of the original dataset. The cleaned [train](https://huggingface.co/datasets/lvwerra/codeparrot-clean-train) and [validation](https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid) splits are also available on the Hub if you want to skip this step or use the data for another project.
+The script to process the full dataset can be found in `scripts/preprocessing.py`. Executing the script on 16 vCPUs takes roughly 3h and removes 70% of the original dataset. The cleaned [train](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-train-v2) and [validation](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-valid-v2) splits are also available on the Hub if you want to skip this step or use the data for another project.
 
 To execute the preprocessing run the following command:
 ```bash
 python scripts/preprocessing.py \
---dataset_name lvwerra/codeparrot \
+--dataset_name transformersbook/codeparrot \
 --output_dir codeparrot-clean
 ```
 During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have more than 500GB free disk space to execute it.
