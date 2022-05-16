@@ -28,7 +28,12 @@ _import_structure = {
 }
 
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_wav2vec2_conformer"] = [
         "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2ConformerForAudioFrameClassification",
@@ -46,7 +51,12 @@ if TYPE_CHECKING:
         Wav2Vec2ConformerConfig,
     )
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_wav2vec2_conformer import (
             WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ConformerForAudioFrameClassification,
