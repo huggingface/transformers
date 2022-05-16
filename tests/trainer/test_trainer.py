@@ -1901,6 +1901,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             self.ray_hyperparameter_search()
 
 
+@slow
 @require_torch
 @require_sigopt
 class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
