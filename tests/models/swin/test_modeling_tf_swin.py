@@ -12,26 +12,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Swin model. """
+""" Testing suite for the TF 2.0 Swin model. """
 
-import copy
+
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import SwinConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+if is_tf_available():
+    import tensorflow as tf
 
-    from transformers import SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
-    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.swin.modeling_tf_swin import (
+        TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFSwinForImageClassification,
+        TFSwinForMaskedImageModeling,
+        TFSwinModel,
+        to_2tuple,
+    )
+
 
 if is_vision_available():
     from PIL import Image
@@ -39,15 +46,7 @@ if is_vision_available():
     from transformers import AutoFeatureExtractor
 
 
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-            setattr(configs_no_init, key, 1e-10)
-    return configs_no_init
-
-
-class SwinModelTester:
+class TFSwinModelTester:
     def __init__(
         self,
         parent,
@@ -74,7 +73,7 @@ class SwinModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
-    ):
+    ) -> None:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
@@ -134,9 +133,7 @@ class SwinModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = SwinModel(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFSwinModel(config=config)
         result = model(pixel_values)
 
         expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (4 ** (len(config.depths) - 1))
@@ -146,43 +143,37 @@ class SwinModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = SwinForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFSwinForImageClassification(config)
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
-@require_torch
-class SwinModelTest(ModelTesterMixin, unittest.TestCase):
+@require_tf
+class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            SwinModel,
-            SwinForImageClassification,
-            SwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
         )
-        if is_torch_available()
+        if is_tf_available()
         else ()
     )
-    fx_compatible = True
 
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = SwinModelTester(self)
+        self.model_tester = TFSwinModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
 
     def test_config(self):
@@ -201,8 +192,8 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Swin does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -210,16 +201,16 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -235,10 +226,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
             expected_num_attentions = len(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
@@ -248,10 +236,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_attentions = True
             window_size_squared = config.window_size**2
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
             self.assertEqual(len(attentions), expected_num_attentions)
 
@@ -265,10 +250,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
@@ -288,12 +270,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
+        outputs = model(**self._prepare_for_class(inputs_dict, model_class))
         hidden_states = outputs.hidden_states
 
         expected_num_layers = getattr(
@@ -315,15 +292,17 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
         batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = (
-            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        )
+
+        reshaped_hidden_states = tf.reshape(reshaped_hidden_states[0], (batch_size, num_channels, height * width))
+        reshaped_hidden_states = tf.transpose(reshaped_hidden_states, (0, 2, 1))
+
         self.assertListEqual(
             list(reshaped_hidden_states.shape[-2:]),
             [num_patches, self.model_tester.embed_dim],
         )
 
     def test_hidden_states_output(self):
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         image_size = to_2tuple(self.model_tester.image_size)
@@ -338,7 +317,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
-    def test_hidden_states_output_with_padding(self):
+    def test_inputs_requiring_padding(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.patch_size = 3
 
@@ -363,28 +342,14 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwinModel.from_pretrained(model_name)
+        for model_name in TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFSwinModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
 
 @require_vision
-@require_torch
-class SwinModelIntegrationTest(unittest.TestCase):
+@require_tf
+class TFSwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
@@ -395,18 +360,17 @@ class SwinModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = SwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
+        model = TFSwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = tf.TensorShape((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expected_slice = tf.constant([-0.0948, -0.6454, -0.0921])
+        self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
