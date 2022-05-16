@@ -60,6 +60,16 @@ python scripts/preprocessing.py \
 ```
 During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have more than 500GB free disk space to execute it.
 
+### Pretokenization
+The tokenization of the data might be slow during the training especially for small models. We provide code to pretokenize the data beforehand in `scripts/pretokenizing.py`, but this step is optional. The dataset is downloaded and stored locally and the tokenized data is pushed to the hub. The tokenized clean [train](https://huggingface.co/datasets/loubnabnl/tokenized-codeparrot-train) and [validation](https://huggingface.co/datasets/loubnabnl/tokenized-codeparrot-valid) datasets are available if you want to use them directly.
+
+To execute the pretokenization, for the clean train data for instance, run the following command:
+```bash
+python scripts/pretokenizing.py \
+--dataset_name lvwerra/codeparrot-clean-train \
+--tokenized_data_repo tokenized-codeparrot-train
+```
+
 ## Tokenizer
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
@@ -82,7 +92,8 @@ python scripts/initialize_model.py \
 ```
 This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the the hub.
 
-Now that the dataset, tokenizer, and model are ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
+We can either pass the name of a text dataset or a pretokenized dataset which speeds up training a bit.
+Now that the tokenizer and model are also ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
 
 First you need to configure `accelerate` and login to Weights & Biases:
 
@@ -94,7 +105,7 @@ wandb login
 Note that during the `accelerate` configuration we enabled FP16. Then to train the large model you can run
 
 ```bash
-python scripts/codeparrot_training.py
+accelerate launch scripts/codeparrot_training.py
 ```
 
 If you want to train the small model you need to make some modifications:
