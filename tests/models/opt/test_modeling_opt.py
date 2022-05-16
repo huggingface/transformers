@@ -309,6 +309,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
+        # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
         inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(dim=-1)
         # logits_meta = torch.load(self.path_logits_meta)
