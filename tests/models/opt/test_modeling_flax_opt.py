@@ -234,11 +234,8 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
-
-### Could either compare form the HF version or raw logits.
-# TODO Add model integration tests
-# @require_flax
-# @require_tokenizers
+@require_flax
+@require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
     # @cached_property
     def default_tokenizer(self):
@@ -260,9 +257,9 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
 
 # TODO add embeddings tests
-@require_tokenizers
-@require_flax
-@slow
+# @require_tokenizers
+# @require_flax
+# @slow
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -276,9 +273,10 @@ class OPTEmbeddingsTest(unittest.TestCase):
 
     def test_logits(self):
         model = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
-        model = model.eval()
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        tokenizer.add_special_tokens({"bos_token": "<s>"})
+        
 
         prompts = [
             "Today is a beautiful day and I want to",
@@ -297,7 +295,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             ]
         )
 
-        assert jnp.allclose(logits, logits_meta, atol=1e-4)
+        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
 # TODO add OPTGenerationTest
 @slow

@@ -313,7 +313,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             ]
         )
 
-        assert torch.allclose(logits, logits_meta, atol=1e-4)
+        self.assertTrue(torch.allclose(logits, logits_meta, atol=1e-4))
 
 
 @slow
