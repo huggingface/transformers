@@ -880,7 +880,11 @@ class MLflowCallback(TrainerCallback):
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if self._auto_end_run and self._ml_flow and self._ml_flow.active_run() is not None:
+        if (
+            self._auto_end_run
+            and callable(getattr(self._ml_flow, "active_run", None))
+            and self._ml_flow.active_run() is not None
+        ):
             self._ml_flow.end_run()
 
 
