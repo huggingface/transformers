@@ -270,7 +270,6 @@ def _long_tensor(tok_lst):
 @require_sentencepiece
 @require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
-
     @slow
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
