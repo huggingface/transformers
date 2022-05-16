@@ -7,6 +7,7 @@ from pathlib import Path
 import datasets
 import torch
 from datasets import load_dataset
+from torch.optim import AdamW
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
 
@@ -15,7 +16,7 @@ from accelerate import Accelerator, DistributedType
 from arguments import TrainingArguments
 from huggingface_hub import Repository
 from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
-from torch.optim import AdamW
+
 
 class ConstantLengthDataset(IterableDataset):
     """
@@ -88,6 +89,7 @@ class ConstantLengthDataset(IterableDataset):
                     self.current_size += 1
                     yield torch.tensor(input_ids)
 
+
 class ShuffleDataset(IterableDataset):
     """
     Shuffled version of an Iterable Dataset.
@@ -95,11 +97,12 @@ class ShuffleDataset(IterableDataset):
             dataset (ConstantLengthDataset): Iterable Dataset.
             buffer_size (int): buffer size for shuffling.
     """
+
     def __init__(self, dataset, buffer_size):
         super().__init__()
         self.dataset = dataset
         self.buffer_size = buffer_size
-        
+
     def __iter__(self):
         shuffle_buffer = []
         try:
@@ -120,8 +123,9 @@ class ShuffleDataset(IterableDataset):
             while len(shuffle_buffer) > 0:
                 yield shuffle_buffer.pop()
         except GeneratorExit:
-              pass
-            
+            pass
+
+
 def setup_logging(args):
     project_name = args.model_ckpt.split("/")[-1]
     logger = logging.getLogger(__name__)
@@ -220,7 +224,7 @@ def evaluate(args):
 
 
 # Accelerator
-accelerator = Accelerator(log_with=["wandb", "tensorboard"])
+accelerator = Accelerator(log_with=["wandb", "tensorboard"], logging_dir=f"{args.save_dir}/log")
 acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 # Settings
