@@ -406,7 +406,6 @@ class FlaxOPTDecoderLayer(nn.Module):
         self.do_layer_norm_before = self.config.do_layer_norm_before
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
-        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
@@ -427,6 +426,8 @@ class FlaxOPTDecoderLayer(nn.Module):
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
+        
+        
         residual = hidden_states
 
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
@@ -445,12 +446,17 @@ class FlaxOPTDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        
+        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        if self.do_layer_norm_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        
         hidden_states = self.fc2(hidden_states)
-        # hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
-        
-        
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+        
         hidden_states = residual + hidden_states
         # 350m applies layer norm AFTER attention
         if not self.do_layer_norm_before:
@@ -525,8 +531,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         )
 
 
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder with Bart->OPT
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
     embed_tokens: nn.Embed
