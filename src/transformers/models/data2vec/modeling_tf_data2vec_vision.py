@@ -1235,8 +1235,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
         self.in_index = in_index
-
-        conv_padding = (kernel_size // 2) * dilation
+        
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
