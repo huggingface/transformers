@@ -1266,6 +1266,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerModel.freeze_feature_encoder
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1273,6 +1274,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         """
         self.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerModel._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1384,8 +1386,8 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 @add_start_docstrings(
     """Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.""", WAV2VEC2_CONFORMER_START_DOCSTRING
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining with Wav2Vec2->Wav2Vec2Conformer,wav2vec2-base->wav2vec2-conformer-rel-pos-large,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
@@ -1400,12 +1402,14 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForPreTraining.set_gumbel_temperature
     def set_gumbel_temperature(self, temperature: int):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
         self.quantizer.temperature = temperature
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForPreTraining.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1414,6 +1418,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     @staticmethod
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForPreTraining.compute_contrastive_logits
     def compute_contrastive_logits(
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
@@ -1436,6 +1441,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2ConformerForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2-base->wav2vec2-conformer-rel-pos-large,wav2vec2->wav2vec2_conformer
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1592,8 +1598,8 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
     """Wav2Vec2Conformer Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
     def __init__(self, config):
         super().__init__(config)
 
@@ -1615,6 +1621,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForCTC.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1631,6 +1638,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         expected_output=_CTC_EXPECTED_OUTPUT,
         expected_loss=_CTC_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1711,8 +1719,8 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
     """,
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
     def __init__(self, config):
         super().__init__(config)
 
@@ -1731,6 +1739,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForSequenceClassification.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1756,6 +1765,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
         expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1824,8 +1834,8 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
     """,
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
     def __init__(self, config):
         super().__init__(config)
 
@@ -1842,6 +1852,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForAudioFrameClassification.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1849,6 +1860,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         """
         self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForAudioFrameClassification.freeze_base_model with wav2vec2->wav2vec2_conformer
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1866,6 +1878,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         modality="audio",
         expected_output=_FRAME_EXPECTED_OUTPUT,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2->wav2vec2_conformer
     def forward(
         self,
         input_values: Optional[torch.Tensor],
