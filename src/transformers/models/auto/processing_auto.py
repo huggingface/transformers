@@ -51,6 +51,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("wavlm", "Wav2Vec2Processor"),
     ]

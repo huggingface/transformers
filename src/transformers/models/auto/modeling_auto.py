@@ -118,6 +118,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
         ("wav2vec2", "Wav2Vec2Model"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
         ("xglm", "XGLMModel"),
         ("xlm", "XLMModel"),
@@ -169,6 +170,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
@@ -623,6 +625,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechForSequenceClassification"),
         ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
     ]
 )
@@ -637,6 +640,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechForCTC"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("wav2vec2", "Wav2Vec2ForCTC"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
         ("wavlm", "WavLMForCTC"),
     ]
 )
@@ -647,6 +651,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForAudioFrameClassification"),
         ("wavlm", "WavLMForAudioFrameClassification"),
     ]
 )
@@ -657,6 +662,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wav2vec2", "Wav2Vec2ForXVector"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForXVector"),
         ("wavlm", "WavLMForXVector"),
     ]
 )
