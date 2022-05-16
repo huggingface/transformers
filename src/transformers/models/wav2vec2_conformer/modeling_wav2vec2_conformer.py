@@ -1971,7 +1971,6 @@ class TDNNLayer(nn.Module):
     """,
     WAV2VEC2_CONFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
 class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1992,6 +1991,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1999,6 +1999,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         """
         self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.freeze_base_model with wav2vec2->wav2vec2_conformer
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -2007,6 +2008,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         for param in self.wav2vec2_conformer.parameters():
             param.requires_grad = False
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector._get_tdnn_output_lengths with wav2vec2->wav2vec2_conformer
     def _get_tdnn_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the TDNN layers
@@ -2031,6 +2033,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         modality="audio",
         expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
     def forward(
         self,
         input_values: Optional[torch.Tensor],
