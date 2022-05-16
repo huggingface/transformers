@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2Conformer model."""
+""" PyTorch Wav2Vec2-Conformer model."""
 
 import math
 import warnings
@@ -502,8 +502,8 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
                 if self.pe.dtype != x.dtype or self.pe.device != x.device:
                     self.pe = self.pe.to(dtype=x.dtype, device=x.device)
                 return
-        # Suppose `i` means to the position of query vecotr and `j` means the
-        # position of key vector. We use position relative positions when keys
+        # Suppose `i` is the position of query vector and `j` is the
+        # position of key vector. We use positive relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pe_positive = torch.zeros(x.size(1), self.d_model)
         pe_negative = torch.zeros(x.size(1), self.d_model)
@@ -516,7 +516,7 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
         pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
 
-        # Reserve the order of positive indices and concat both positive and
+        # Reverse the order of positive indices and concat both positive and
         # negative indices. This is used to support the shifting trick
         # as in https://arxiv.org/abs/1901.02860
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)

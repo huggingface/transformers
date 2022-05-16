@@ -277,7 +277,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("speech_to_text", "Speech2Text"),
         ("vit", "ViT"),
         ("wav2vec2", "Wav2Vec2"),
-        ("wav2vec2-conformer", "Wav2Vec2ConformerConformer"),
+        ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),
         ("led", "LED"),
