@@ -131,7 +131,7 @@ def create_dataloaders(args):
     return train_dataloader, eval_dataloader
 
 
-def get_grouped_params(model, args, no_decay=["bias", "LayerNorm.weight"]):
+def get_grouped_params(model, args, no_decay=["bias", "ln_1.weight", "ln_2.weight", "ln_f.weight"]):
     params_with_wd, params_without_wd = [], []
     for n, p in model.named_parameters():
         if any(nd in n for nd in no_decay):
