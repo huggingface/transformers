@@ -445,6 +445,8 @@ class FlaxOPTDecoderLayer(nn.Module):
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Fully Connected
+        hidden_states_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
         residual = hidden_states
         
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
@@ -457,7 +459,8 @@ class FlaxOPTDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         
-        hidden_states = residual + hidden_states
+        hidden_states = (residual + hidden_states).reshape(hidden_states_shape)
+        # hidden_states = residual + hidden_states
         # 350m applies layer norm AFTER attention
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
@@ -480,12 +483,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             FlaxOPTDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
         self.layerdrop = self.config.layerdrop
-        
-        # TODO CHECK if that is the correct way of doing this 
-        if self.config.word_embed_proj_dim != self.config.hidden_size:
-            self.project_out = nn.Dense(self.config.hidden_size, self.config.word_embed_proj_dim, bias=False)
-        else: 
-            self.project_out = None
             
     def __call__(
         self,
@@ -496,6 +493,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
+        project_out:nn.Module = None
     ):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -521,8 +519,8 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if self.project_out is not None:
-                outputs = self.project_out(outputs)
+        if project_out is not None:
+            hidden_states = project_out(hidden_states)
                 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -542,8 +540,8 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
 
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
-    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    offset : int = 2
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -554,27 +552,34 @@ class FlaxOPTDecoder(nn.Module):
         
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        
-        # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
-        # should take attention mask as inputs ? 
         self.embed_tokens = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
+            self.config.vocab_size,
+            self.config.word_embed_proj_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
+        # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
+        # should take attention mask as inputs ? 
         # TODO FIXME as FlaxOPTLearnedPositionalEmbedding
+        # Why is this not passed as embed_tokens ? Initialising it here but why? 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
+        # TODO CHECK if that is the correct way of doing this 
+        # if self.config.word_embed_proj_dim != self.config.hidden_size:
+        #     self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
+        # else: 
+        #     self.project_out = None
+            
         if self.config.word_embed_proj_dim != self.config.hidden_size:
-            self.project_in = nn.Dense(self.config.word_embed_proj_dim, self.config.hidden_size, bias=False)
+            self.project_in = nn.Dense(self.config.hidden_size, use_bias=False)
+            self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
             
         else:
-            self.project_int = None
+            self.project_in = None
+            self.project_out = None
             
         self.layers = FlaxOPTDecoderLayerCollection(self.config, self.dtype)
 
@@ -611,6 +616,7 @@ class FlaxOPTDecoder(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            project_out=self.project_out
         )
         
 
@@ -764,13 +770,7 @@ class FlaxOPTModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.shared = nn.Embed(
-            self.config.vocab_size,
-            self.config.hidden_size,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-
-        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype) 
 
     def _get_decoder_module(self):
         return self.decoder
@@ -874,7 +874,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]['shared']["embedding"]
+            shared_embedding = self.model.variables["params"]['decoder']['embed_tokens']["embedding"]
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
