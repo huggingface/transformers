@@ -345,7 +345,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
                     if self.framework == "tf":
-                        if isinstance(v, np.ndarray) and v.dtype == object and np.ndim(v) == 1:
+                        if isinstance(v, np.ndarray) and v.dtype == object:
                             tensor = tf.constant(v, dtype=tf.int32)
                         else:
                             tensor = tf.constant(v)
@@ -353,7 +353,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                             tensor = tf.cast(tensor, tf.int32)
                         fw_args[k] = tf.expand_dims(tensor, 0)
                     elif self.framework == "pt":
-                        if isinstance(v, np.ndarray) and v.dtype == object and np.ndim(v) == 1:
+                        if isinstance(v, np.ndarray) and v.dtype == object:
                             tensor = torch.tensor(v.astype(np.int64))
                         else:
                             tensor = torch.tensor(v)

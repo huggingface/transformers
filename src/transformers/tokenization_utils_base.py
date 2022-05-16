@@ -704,7 +704,7 @@ class BatchEncoding(UserDict):
                     value = [value]
 
                 if not is_tensor(value):
-                    if as_tensor == np.asarray and np.ndim(value) > 1:
+                    if as_tensor == np.asarray:
                         tensor = as_tensor(value, dtype=object)
                     else:
                         tensor = as_tensor(value)
