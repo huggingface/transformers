@@ -171,7 +171,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-# Copied from transformers.models.wav2vec2.convert_wav2vec2_original_pytorch_checkpoint_to_pytroch.load_conv_layer
+# Copied from transformers.models.wav2vec2.convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.load_conv_layer
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
@@ -212,7 +212,6 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
-# Copied from transformers.models.wav2vec2.convert_wav2vec2_original_pytorch_checkpoint_to_pytroch.load_conv_layer with Wav2Vec2->Wav2Vec2Conformer
 @torch.no_grad()
 def convert_wav2vec2_conformer_checkpoint(
     checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
