@@ -1895,16 +1895,20 @@ class GeneralizedRCNN(nn.Module):
             "pad_value": kwargs.get("pad_value", 0),
             "padding": kwargs.get("padding", None),
         }
+
+        current_device = images.device
+
         preds_per_image = torch.tensor([p.size(0) for p in boxes])
-        boxes = pad_list_tensors(boxes, preds_per_image, **subset_kwargs)
-        classes = pad_list_tensors(classes, preds_per_image, **subset_kwargs)
-        class_probs = pad_list_tensors(class_probs, preds_per_image, **subset_kwargs)
-        attrs = pad_list_tensors(attrs, preds_per_image, **subset_kwargs)
-        attr_probs = pad_list_tensors(attr_probs, preds_per_image, **subset_kwargs)
-        roi_features = pad_list_tensors(roi_features, preds_per_image, **subset_kwargs)
+        boxes = pad_list_tensors(boxes, preds_per_image, **subset_kwargs).to(current_device)
+        classes = pad_list_tensors(classes, preds_per_image, **subset_kwargs).to(current_device)
+        class_probs = pad_list_tensors(class_probs, preds_per_image, **subset_kwargs).to(current_device)
+        attrs = pad_list_tensors(attrs, preds_per_image, **subset_kwargs).to(current_device)
+        attr_probs = pad_list_tensors(attr_probs, preds_per_image, **subset_kwargs).to(current_device)
+        roi_features = pad_list_tensors(roi_features, preds_per_image, **subset_kwargs).to(current_device)
         subset_kwargs["padding"] = None
-        preds_per_image = pad_list_tensors(preds_per_image, None, **subset_kwargs)
-        sizes = pad_list_tensors(image_shapes, None, **subset_kwargs)
+        preds_per_image = pad_list_tensors(preds_per_image, None, **subset_kwargs).to(current_device)
+        sizes = pad_list_tensors(image_shapes, None, **subset_kwargs).to(current_device)
+
         normalized_boxes = norm_box(boxes, original_sizes)
         return OrderedDict(
             {
