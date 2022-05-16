@@ -102,8 +102,8 @@ def export_pytorch(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
-        device (`str`):
-            The device on which the ONNX model will be exported. Either CPU(default) or CUDA.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -285,8 +285,8 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
-        device (`str`):
-            The device on which the ONNX model will be exported(CUDA only works for PyTorch). The export will be done on CPU by default.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`. Only PyTorch is supported for export on CUDA devices.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
