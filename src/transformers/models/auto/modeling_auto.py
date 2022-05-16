@@ -173,6 +173,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("unispeech", "UniSpeechForPreTraining"),
+        ("splinter", "SplinterForPreTraining"),
     ]
 )
 

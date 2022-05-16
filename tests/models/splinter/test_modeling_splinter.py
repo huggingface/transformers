@@ -424,4 +424,12 @@ class SplinterModelIntegrationTest(unittest.TestCase):
             end_positions=end_positions_with_padding,
             question_positions=question_positions_with_padding,
         )
+
         self.assertAlmostEqual(output.loss.item(), output_with_padding.loss.item(), 4)
+
+        # Note that the original code uses 0 to denote padded question tokens
+        # and their start and end positions. As the pad_token_id of the model's
+        # config is used for the losse's ignore_index in SplinterForPreTraining,
+        # we add this test to ensure anybody making changes to the default
+        # value of the config, will be aware of the implication.
+        self.assertEqual(model.config.pad_token_id, 0)
