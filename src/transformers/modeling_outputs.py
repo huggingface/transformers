@@ -975,7 +975,7 @@ class DepthEstimatorOutput(ModelOutput):
 @dataclass
 class Wav2Vec2BaseModelOutput(ModelOutput):
     """
-    Output type of [`Wav2Vec2BaseModelOutput`], with potential hidden states and attentions.
+    Base class for models that have been trained with the Wav2Vec2 loss objective.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
