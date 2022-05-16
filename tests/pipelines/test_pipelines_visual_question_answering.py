@@ -50,35 +50,47 @@ class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
         qa = VisualQuestionAnsweringArgumentHandler()
         image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image2 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        query = "How many cats are there?"
+        question = "How many cats are there?"
 
         for image in [image1, image2]:
-            output = qa(images=image, queries=query)
-            self.assertEqual(type(output), list)
-            self.assertEqual(len(output), 1)
-            for item in output:
-                self.assertEqual(type(item["image"]), Image.Image)
-                self.assertEqual(type(item["query"]), str)
+            output = qa(image=image, question=question)
+            self.assert_helper(output, expected_output_size=1)
 
-        output = qa(images=[image1, image2], queries=[query, query])
+        output = qa(image=[image1, image2], question=[question, question])
+        self.assert_helper(output, expected_output_size=2)
+        
+        output = qa(image=image1, question=[question, question])
+        self.assert_helper(output, expected_output_size=2)
+        
+        output = qa(image=[image1, image2], question=question)
+        self.assert_helper(output, expected_output_size=2)
+        
+        output = qa([{"image": image1, "question": question}, {"image": image2, "question": question}])
+        self.assert_helper(output, expected_output_size=2)
+        
+        output = qa({"image": image1, "question": question})
+        self.assert_helper(output, expected_output_size=1)
+        
+    
+    def assert_helper(self, output, expected_output_size):
         self.assertEqual(type(output), list)
-        self.assertEqual(len(output), 2)
+        self.assertEqual(len(output), expected_output_size)
         for item in output:
-            self.assertEqual(type(item["image"]), Image.Image)
-            self.assertEqual(type(item["query"]), str)
+            self.assertEqual(type(item), dict)
+            self.assertIn("image", item)
+            self.assertIn("question", item)
 
     def test_argument_handler_error_handling(self):
         qa = VisualQuestionAnsweringArgumentHandler()
         image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image2 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        query = "How many cats are there?"
+        question = "How many cats are there?"
 
         with self.assertRaises(ValueError):
-            qa(images=[image1, image2], queries=query)
-            qa(images=[image1, image2], queries=[query])
-            qa(images=image1, queries=[query, query])
-            qa(images=[image1], queries=[query, query])
-            qa(images=[image1, image2], queries=[query, query, query])
+            qa(image=[image1, image2], question=[question, question, question])
+            qa(image=[image1], question=[question, question])
+            qa(image=[image1], question=[question, question])
+            qa({"random_key1": image1, "random_key2": question})
 
 
 @is_pipeline_test
@@ -87,50 +99,56 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa", top_k=2)
-        images = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        queries = "How many cats are there?"
-        return vqa_pipeline, (images, queries)
+        vqa_pipeline = pipeline("visual-question-answering", model="sijunhe/tiny-vilt-random-vqa")
+        examples = [
+            {
+                "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "question": "How many cats are there?"
+            },
+            {
+                "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "question": "How many cats are there?"
+            }
+        ]
+        return vqa_pipeline, examples
 
     def run_pipeline_test(self, vqa_pipeline, examples):
-        images, queries = examples
-        outputs = vqa_pipeline(images, queries)
+        outputs = vqa_pipeline(examples, top_k=1)
         self.assertEqual(
             outputs,
             [
-                {"score": ANY(float), "label": ANY(str)},
-                {"score": ANY(float), "label": ANY(str)},
+                [{"score": ANY(float), "label": ANY(str)}],
+                [{"score": ANY(float), "label": ANY(str)}],
             ],
         )
 
     @require_torch
     def test_small_model_pt(self):
-        vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa", top_k=2)
-        # model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        # tokenizer = BertTokenizer.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        # feature_extractor = ViltFeatureExtractor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        # vqa_pipeline = VisualQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
+        vqa_pipeline = pipeline("visual-question-answering", model="sijunhe/tiny-vilt-random-vqa")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         query = "How many cats are there?"
-        expected_output_top_2 = [{'score': 0.9444, 'label': '2'}, {'label': '1', 'score': 0.0542}]
 
-        outputs = vqa_pipeline(images=image, queries=query, top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output_top_2)
+        outputs = vqa_pipeline(image=image, question=query, top_k=2)
+        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]])
 
-        outputs = vqa_pipeline(images=[image], queries=query, top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output_top_2)
-
-        outputs = vqa_pipeline(images=image, queries=[query], top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output_top_2)
-
-        outputs = vqa_pipeline(images=[image], queries=[query], top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output_top_2)
-
-        outputs = vqa_pipeline(images=[image, image], queries=[query, query], top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), [expected_output_top_2] * 2)
+        outputs = vqa_pipeline(image=[image, image], question=[query, query], top_k=2)
+        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2)
     
+    @slow
+    @require_torch
+    def test_large_model_pt(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        query = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=query, top_k=2)
+        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]])
+
+        outputs = vqa_pipeline(image=[image, image], question=[query, query], top_k=2)
+        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2)
+
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
         pass
 
