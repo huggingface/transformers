@@ -9,12 +9,10 @@ class TrainingArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot",
-        metadata={"help": "Model name or path of model to be trained."},
+        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be trained."}
     )
     save_dir: Optional[str] = field(
-        default="./",
-        metadata={"help": "Save dir where model repo is cloned and models updates are saved to."},
+        default="./", metadata={"help": "Save dir where model repo is cloned and models updates are saved to."}
     )
     dataset_name_train: Optional[str] = field(
         default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path of training dataset."}
@@ -39,7 +37,7 @@ class TrainingArguments:
     gradient_checkpointing: Optional[bool] = field(
         default=True, metadata={"help": "Use gradient checkpointing to reduce memory footprint."}
     )
-    max_train_steps: Optional[int] = field(default=50_000, metadata={"help": "Maximum number of training steps."})
+    max_train_steps: Optional[int] = field(default=50000, metadata={"help": "Maximum number of training steps."})
     max_eval_steps: Optional[int] = field(
         default=-1, metadata={"help": "Maximum number of evaluation steps. If -1 the full dataset is evaluated."}
     )
@@ -50,9 +48,9 @@ class TrainingArguments:
         metadata={"help": "Interval to save checkpoints. Measured as number of forward passes not training steps."},
     )
     resume_from_checkpoint: Optional[str] = field(
-        default=None,
-        metadata={"help": "States path if the training should continue from a checkpoint folder."},
+        default=None, metadata={"help": "States path if the training should continue from a checkpoint folder."}
     )
+    tokenized: Optional[bool] = field(default=False, metadata={"help": "If True the data is pretokenized."})
 
 
 @dataclass
@@ -62,8 +60,7 @@ class EvaluationArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot",
-        metadata={"help": "Model name or path of model to be evaluated."},
+        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
     )
     dataset_name: Optional[str] = field(
         default="lvwerra/codeparrot-clean-valid", metadata={"help": "Name or path of validation dataset."}
@@ -83,8 +80,7 @@ class HumanEvalArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot",
-        metadata={"help": "Model name or path of model to be evaluated."},
+        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
     )
     num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
     num_tasks: Optional[int] = field(
@@ -170,19 +166,36 @@ class TokenizerTrainingArguments:
     """
 
     base_tokenizer: Optional[str] = field(
-        default="gpt2",
-        metadata={"help": "Base tokenizer to build new tokenizer from."},
+        default="gpt2", metadata={"help": "Base tokenizer to build new tokenizer from."}
     )
     dataset_name: Optional[str] = field(
         default="transformersbook/codeparrot-train", metadata={"help": "Dataset to train tokenizer on."}
     )
     text_column: Optional[str] = field(default="content", metadata={"help": "Column containing text data to process."})
-    vocab_size: Optional[int] = field(default=200000, metadata={"help": "Number of examples to train tokenizer on."})
+    vocab_size: Optional[int] = field(default=200_000, metadata={"help": "Number of examples to train tokenizer on."})
     n_examples: Optional[int] = field(
         default=32768, metadata={"help": "Number of examples to train the tokenizer on."}
     )
     tokenizer_name: Optional[str] = field(default="codeparrot", metadata={"help": "Name of new tokenizer."})
     push_to_hub: Optional[bool] = field(default=True, metadata={"help": "Push saved tokenizer to the hub."})
+
+
+@dataclass
+class PretokenizationArguments:
+    """
+    Configuration for data pretokenization.
+    """
+
+    tokenizer_dir: Optional[str] = field(
+        default="lvwerra/codeparrot", metadata={"help": "Name or path to the tokenizer."}
+    )
+    dataset_name: Optional[str] = field(
+        default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path to the dataset to pretokenize."}
+    )
+    tokenized_data_repo: Optional[str] = field(
+        default="tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."}
+    )
+    num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
 
 
 @dataclass
@@ -192,8 +205,7 @@ class InitializationArguments:
     """
 
     config_name: Optional[str] = field(
-        default="gpt2-large",
-        metadata={"help": "Configuration to use for model initialization."},
+        default="gpt2-large", metadata={"help": "Configuration to use for model initialization."}
     )
     tokenizer_name: Optional[str] = field(
         default="lvwerra/codeparrot", metadata={"help": "Tokenizer attached to model."}
