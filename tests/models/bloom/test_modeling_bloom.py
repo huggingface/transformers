@@ -105,11 +105,9 @@ class BLOOMModelTester:
         return BLOOMConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
-            n_embd=self.hidden_size,
+            hidden_size=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            n_inner=self.intermediate_size,
-            activation_function=self.hidden_act,
             resid_pdrop=self.hidden_dropout_prob,
             attn_pdrop=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,

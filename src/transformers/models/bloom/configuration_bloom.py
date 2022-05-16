@@ -117,6 +117,7 @@ class BLOOMConfig(PretrainedConfig):
         "max_position_embeddings": "seq_length",
         "num_hidden_layers": "n_layer",
         "n_head": "num_attention_heads",
+        "hidden_size": "n_embed",
     }
 
     def __init__(

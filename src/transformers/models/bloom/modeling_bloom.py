@@ -224,6 +224,9 @@ class BLOOMAttention(nn.Module):
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
         attention_probs = self.attention_dropout(attention_probs)
 
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
         # =========================
         # Context layer. [sq, b, hp]
         # =========================
@@ -280,7 +283,7 @@ class BLOOMAttention(nn.Module):
 
         outputs = (output, present)
         if output_attentions:
-            outputs += (attention_scores,)
+            outputs += (attention_probs,)
 
         return outputs, output_bias  # a, present, (attentions)
 

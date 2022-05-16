@@ -56,13 +56,9 @@ class ScaledSoftmax(nn.Module):
         self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
-        self.register_buffer(
-            "causal_mask",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
+        self.causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+            1, 1, max_positions, max_positions
         )
-
         assert self.scale is None or softmax_in_fp32, "softmax should be in fp32 when scaled"
 
     def forward(self, input, mask):
