@@ -19,6 +19,7 @@
 import math
 import os
 import warnings
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
@@ -61,8 +62,9 @@ if is_pytorch_quantization_available():
         from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
     except OSError:
         logger.error(
-            "QDQBERT model are not usable since `pytorch_quantization` can't be loaded. "
-            "Please try to reinstall it following the instructions here: https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization."
+            "QDQBERT model are not usable since `pytorch_quantization` can't be loaded. Please try to reinstall it"
+            " following the instructions here:"
+            " https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization."
         )
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
@@ -173,8 +175,13 @@ class QDQBertEmbeddings(nn.Module):
             )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -501,7 +508,8 @@ class QDQBertLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -952,7 +960,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1325,7 +1333,8 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
 
         if "next_sentence_label" in kwargs:
             warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
+                " `labels` instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("next_sentence_label")

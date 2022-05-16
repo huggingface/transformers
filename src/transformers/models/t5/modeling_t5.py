@@ -809,9 +809,10 @@ class T5PreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+            " See T5 docs for more information"
+        )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -957,7 +958,7 @@ class T5Stack(T5PreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

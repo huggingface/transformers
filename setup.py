@@ -19,7 +19,7 @@ To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
-   
+
    If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
@@ -27,12 +27,13 @@ To create the package for pypi.
 
 3. Unpin specific versions from setup.py that use a git install.
 
-4. Commit these changes with the message: "Release: <VERSION>" and push.
+4. Checkout the release branch (v<RELEASE>-release, for example v4.19-release), and commit these changes with the 
+   message: "Release: <VERSION>" and push.
 
 5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin main
+   Push the tag to git: git push --tags origin v<RELEASE>-release
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -96,12 +97,13 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black~=22.0",
+    "accelerate>=0.7.1",
+    "black~=22.0,>=22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.6.0",
+    "deepspeed>=0.6.4",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -136,10 +138,11 @@ _deps = [
     "pytest",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.6.0",
+    "python>=3.7.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
@@ -288,6 +291,8 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "sacremoses",
+        "rjieba"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -365,7 +370,6 @@ extras["torchhub"] = deps_list(
     "protobuf",
     "regex",
     "requests",
-    "sacremoses",
     "sentencepiece",
     "torch",
     "tokenizers",
@@ -374,7 +378,6 @@ extras["torchhub"] = deps_list(
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
-    deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
@@ -383,20 +386,19 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
-    deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
 setup(
     name="transformers",
-    version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
-    author_email="thomas@huggingface.co",
-    description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
+    version="4.20.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
+    author_email="transformers@huggingface.co",
+    description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords="NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU",
+    keywords="NLP vision speech deep learning transformer pytorch tensorflow BERT GPT-2 Wav2Vec2 ViT",
     license="Apache",
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
@@ -405,7 +407,7 @@ setup(
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.6.0",
+    python_requires=">=3.7.0",
     install_requires=install_requires,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -415,7 +417,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

@@ -35,6 +35,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
@@ -56,11 +57,11 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.19.0.dev0")
+check_min_version("4.20.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -120,8 +121,10 @@ def parse_args():
         "--max_seq_length",
         type=int,
         default=384,
-        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-        " sequences shorter will be padded if `--pad_to_max_lengh` is passed.",
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
+            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+        ),
     )
     parser.add_argument(
         "--pad_to_max_length",
@@ -211,9 +214,11 @@ def parse_args():
         "--null_score_diff_threshold",
         type=float,
         default=0.0,
-        help="The threshold used to select the null answer: if the best answer has a score that is less than "
-        "the score of the null answer minus this threshold, the null answer is selected for this example. "
-        "Only useful when `version_2_with_negative=True`.",
+        help=(
+            "The threshold used to select the null answer: if the best answer has a score that is less than "
+            "the score of the null answer minus this threshold, the null answer is selected for this example. "
+            "Only useful when `version_2_with_negative=True`."
+        ),
     )
     parser.add_argument(
         "--version_2_with_negative",
@@ -224,22 +229,28 @@ def parse_args():
         "--max_answer_length",
         type=int,
         default=30,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
+        help=(
+            "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        ),
     )
     parser.add_argument(
         "--max_train_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of training examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
@@ -318,11 +329,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -741,6 +748,10 @@ def main():
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
+
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
     # Figure out how many steps we should save the Accelerator states
     if hasattr(args.checkpointing_steps, "isdigit"):

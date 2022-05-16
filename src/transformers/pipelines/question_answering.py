@@ -398,8 +398,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
             # Normalize logits and spans to retrieve the answer
-            start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
-            end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+            start_ = np.exp(start_ - start_.max(axis=-1, keepdims=True))
+            start_ = start_ / start_.sum()
+
+            end_ = np.exp(end_ - end_.max(axis=-1, keepdims=True))
+            end_ = end_ / end_.sum()
 
             if handle_impossible_answer:
                 min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())

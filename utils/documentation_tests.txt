@@ -1,5 +1,7 @@
 docs/source/en/quicktour.mdx
 docs/source/es/quicktour.mdx
+docs/source/en/pipeline_tutorial.mdx
+docs/source/en/autoclass_tutorial.mdx
 docs/source/en/task_summary.mdx
 docs/source/en/model_doc/speech_to_text.mdx
 docs/source/en/model_doc/t5.mdx
@@ -18,6 +20,7 @@ src/transformers/models/big_bird/modeling_big_bird.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/convnext/modeling_convnext.py
+src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deit/modeling_deit.py
@@ -32,6 +35,7 @@ src/transformers/models/marian/modeling_marian.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
+src/transformers/models/opt/modeling_opt.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
@@ -59,5 +63,5 @@ src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_with_lm/processing_wav2vec2_with_lm.py
-src/transformers/models/wavlm/modeling_wavlm.py
-src/transformers/models/ctrl/modeling_ctrl.py	
+src/transformers/models/wavlm/modeling_wavlm.py	
+src/transformers/models/yolos/modeling_yolos.py

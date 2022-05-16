@@ -54,6 +54,7 @@ from . import (
     electra,
     encoder_decoder,
     flaubert,
+    flava,
     fnet,
     fsmt,
     funnel,
@@ -86,6 +87,7 @@ from . import (
     mt5,
     nystromformer,
     openai,
+    opt,
     pegasus,
     perceiver,
     phobert,
@@ -136,5 +138,6 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    yolos,
     yoso,
 )

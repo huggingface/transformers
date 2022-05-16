@@ -1,4 +1,4 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Transformers
   - local: quicktour
@@ -60,9 +60,9 @@
   - local: serialization
     title: Export 🤗 Transformers models
   - local: performance
-    title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
-  - local: parallelism
-    title: Model Parallelism
+    title: Performance and scalability
+  - local: big_models
+    title: Instantiating a big model
   - local: benchmarks
     title: Benchmarks
   - local: migration
@@ -81,6 +81,12 @@
     title: "How to add a model to 🤗 Transformers?"
   - local: add_new_pipeline
     title: "How to add a pipeline to 🤗 Transformers?"
+  - local: perf_train_gpu_one
+    title: Training on one GPU
+  - local: perf_train_gpu_many
+    title: Training on many GPUs
+  - local: perf_hardware
+    title: Custom hardware for training
   - local: testing
     title: Testing
   - local: pr_checks
@@ -214,6 +220,8 @@
       title: Encoder Decoder Models
     - local: model_doc/flaubert
       title: FlauBERT
+    - local: model_doc/flava
+      title: FLAVA
     - local: model_doc/fnet
       title: FNet
     - local: model_doc/fsmt
@@ -266,6 +274,8 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
     - local: model_doc/gptj
@@ -378,6 +388,8 @@
       title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
+    - local: model_doc/yolos
+      title: YOLOS
     - local: model_doc/yoso
       title: YOSO
     title: Models
