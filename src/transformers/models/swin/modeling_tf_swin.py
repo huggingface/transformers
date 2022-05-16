@@ -1209,7 +1209,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         batch_size, _, _, num_input_channels = hidden_states.shape
         block_size_squared = self._block_size**2
         output_depth = int(num_input_channels / block_size_squared)
-        # When the number of output channels > 2, PyTorch's PixelShuffle and
+        # When the number of output channels >= 2, PyTorch's PixelShuffle and
         # TF's depth_to_space differ in their output as the order of channels selected for combining
         # is a permutation of the other c.f.
         # https://stackoverflow.com/questions/68272502/tf-depth-to-space-not-same-as-torchs-pixelshuffle-when-output-channels-1
@@ -1266,9 +1266,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        >>> model = TFSwinForMaskedImageModeling.from_pretrained(
-        ...     "microsoft/swin-tiny-patch4-window7-224"
-        ... )
+        >>> model = TFSwinForMaskedImageModeling.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
