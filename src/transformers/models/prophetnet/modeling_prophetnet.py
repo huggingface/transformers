@@ -345,7 +345,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`):
+        last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`, *optional*):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
         past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
@@ -398,7 +398,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    last_hidden_state_ngram: torch.FloatTensor = None
+    last_hidden_state_ngram: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
