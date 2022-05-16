@@ -14,23 +14,9 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
-    BertTokenizer,
-    ViltFeatureExtractor,
-    ViltForQuestionAnswering,
-    PreTrainedTokenizer,
-    is_vision_available,
-)
-from transformers.pipelines import VisualQuestionAnsweringPipeline, VisualQuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import (
-    is_pipeline_test,
-    nested_simplify,
-    require_torch,
-    require_tf,
-    require_vision,
-    slow,
-)
+from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
+from transformers.pipelines import VisualQuestionAnsweringArgumentHandler, pipeline
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -43,6 +29,7 @@ else:
         @staticmethod
         def open(*args, **kwargs):
             pass
+
 
 @is_pipeline_test
 class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
@@ -58,20 +45,19 @@ class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
 
         output = qa(image=[image1, image2], question=[question, question])
         self.assert_helper(output, expected_output_size=2)
-        
+
         output = qa(image=image1, question=[question, question])
         self.assert_helper(output, expected_output_size=2)
-        
+
         output = qa(image=[image1, image2], question=question)
         self.assert_helper(output, expected_output_size=2)
-        
+
         output = qa([{"image": image1, "question": question}, {"image": image2, "question": question}])
         self.assert_helper(output, expected_output_size=2)
-        
+
         output = qa({"image": image1, "question": question})
         self.assert_helper(output, expected_output_size=1)
-        
-    
+
     def assert_helper(self, output, expected_output_size):
         self.assertEqual(type(output), list)
         self.assertEqual(len(output), expected_output_size)
@@ -103,12 +89,12 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
         examples = [
             {
                 "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "question": "How many cats are there?"
+                "question": "How many cats are there?",
             },
             {
                 "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "question": "How many cats are there?"
-            }
+                "question": "How many cats are there?",
+            },
         ]
         return vqa_pipeline, examples
 
@@ -129,11 +115,15 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
         query = "How many cats are there?"
 
         outputs = vqa_pipeline(image=image, question=query, top_k=2)
-        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]])
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]]
+        )
 
         outputs = vqa_pipeline(image=[image, image], question=[query, query], top_k=2)
-        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2)
-    
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -142,13 +132,16 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
         query = "How many cats are there?"
 
         outputs = vqa_pipeline(image=image, question=query, top_k=2)
-        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]])
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]]
+        )
 
         outputs = vqa_pipeline(image=[image, image], question=[query, query], top_k=2)
-        self.assertEqual(outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2)
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2
+        )
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
         pass
-

@@ -803,6 +803,7 @@ AutoModelForTableQuestionAnswering = auto_class_update(
     checkpoint_for_example="google/tapas-base-finetuned-wtq",
 )
 
+
 class AutoModelForVisualQuestionAnswering(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 

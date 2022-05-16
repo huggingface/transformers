@@ -50,7 +50,6 @@ from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
-from .visual_question_answering import VisualQuestionAnsweringArgumentHandler, VisualQuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
@@ -61,6 +60,7 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
+from .visual_question_answering import VisualQuestionAnsweringArgumentHandler, VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -192,7 +192,7 @@ SUPPORTED_TASKS = {
         },
         "type": "text",
     },
-     "visual-question-answering": {
+    "visual-question-answering": {
         "impl": VisualQuestionAnsweringPipeline,
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
