@@ -26,6 +26,12 @@ class TrainingArguments:
     shuffle_buffer: Optional[int] = field(
         default=1000, metadata={"help": "Size of buffer used to shuffle streaming dataset."}
     )
+    batch_shuffle_buffer: Optional[int] = field(
+        default=100000, metadata={"help": "Size of buffer used to shuffle batch sequences of a streaming dataset."}
+    )
+    shuffle_batch: Optional[bool] = field(
+        default=True, metadata={"help": "If True the sequences inside batches are shuffled."}
+    )
     learning_rate: Optional[float] = field(default=2e-4, metadata={"help": "Learning rate fo training."})
     lr_scheduler_type: Optional[str] = field(default="cosine", metadata={"help": "Learning rate."})
     num_warmup_steps: Optional[int] = field(
