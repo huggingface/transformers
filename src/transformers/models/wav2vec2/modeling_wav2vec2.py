@@ -34,12 +34,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
     Wav2Vec2BaseModelOutput,
+    XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
     ModelOutput,
-    XVectorOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,

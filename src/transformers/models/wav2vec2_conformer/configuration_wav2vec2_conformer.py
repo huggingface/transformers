@@ -24,7 +24,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-conformer-large-rel-pos": "https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos/resolve/main/config.json",
+    "facebook/wav2vec2-conformer-large-rel-pos": (
+        "https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos/resolve/main/config.json"
+    ),
 }
 
 
@@ -301,10 +303,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect. "
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
-                f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
         # Conformer-block related
