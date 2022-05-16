@@ -703,9 +703,10 @@ class AutoConfig:
             return config_class.from_dict(config_dict, **kwargs)
         else:
             # Fallback: use pattern matching on the string.
-            for pattern, config_class in CONFIG_MAPPING.items():
+            # We go from longer names to shorter names to catch roberta before bert (for instance)
+            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
                 if pattern in str(pretrained_model_name_or_path):
-                    return config_class.from_dict(config_dict, **kwargs)
+                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
