@@ -1068,7 +1068,6 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = sequence_output.transpose(1, 2)
         batch_size, num_channels, sequence_length = sequence_output.shape
