@@ -23,7 +23,6 @@ import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
