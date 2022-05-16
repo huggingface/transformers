@@ -38,30 +38,30 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitFeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
-        ("deit", "DeiTFeatureExtractor"),
-        ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("vit", "ViTFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
-        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
-        ("flava", "FlavaFeatureExtractor"),
-        ("perceiver", "PerceiverFeatureExtractor"),
-        ("swin", "ViTFeatureExtractor"),
-        ("vit_mae", "ViTFeatureExtractor"),
-        ("segformer", "SegformerFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
-        ("van", "ConvNextFeatureExtractor"),
-        ("resnet", "ConvNextFeatureExtractor"),
-        ("regnet", "ConvNextFeatureExtractor"),
-        ("poolformer", "PoolFormerFeatureExtractor"),
-        ("maskformer", "MaskFormerFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("data2vec-vision", "BeitFeatureExtractor"),
+        ("deit", "DeiTFeatureExtractor"),
+        ("detr", "DetrFeatureExtractor"),
+        ("detr", "DetrFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
+        ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
+        ("maskformer", "MaskFormerFeatureExtractor"),
+        ("perceiver", "PerceiverFeatureExtractor"),
+        ("poolformer", "PoolFormerFeatureExtractor"),
+        ("regnet", "ConvNextFeatureExtractor"),
+        ("resnet", "ConvNextFeatureExtractor"),
+        ("segformer", "SegformerFeatureExtractor"),
+        ("speech_to_text", "Speech2TextFeatureExtractor"),
+        ("swin", "ViTFeatureExtractor"),
+        ("van", "ConvNextFeatureExtractor"),
+        ("vit", "ViTFeatureExtractor"),
+        ("vit_mae", "ViTFeatureExtractor"),
+        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
@@ -75,8 +75,10 @@ def feature_extractor_class_from_name(class_name: str):
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
-            return getattr(module, class_name)
-            break
+            try:
+                return getattr(module, class_name)
+            except AttributeError:
+                continue
 
     for config, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
         if getattr(extractor, "__name__", None) == class_name:
