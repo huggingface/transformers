@@ -1841,6 +1841,7 @@ else:
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "TF_MODEL_FOR_MASKED_LM_MAPPING",
             "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -2206,6 +2207,15 @@ else:
             "TFSpeech2TextForConditionalGeneration",
             "TFSpeech2TextModel",
             "TFSpeech2TextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.swin"].extend(
+        [
+            "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwinForImageClassification",
+            "TFSwinForMaskedImageModeling",
+            "TFSwinModel",
+            "TFSwinPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(
@@ -4071,6 +4081,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -4362,6 +4373,13 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
