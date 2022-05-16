@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
 
-
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -109,7 +108,6 @@ EncodedInput = List[int]
 TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
-
 
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -702,10 +700,18 @@ class BatchEncoding(UserDict):
             try:
                 if prepend_batch_axis:
                     value = [value]
-
                 if not is_tensor(value):
                     if as_tensor == np.asarray:
-                        tensor = as_tensor(value, dtype=object)
+                        is_value_rectangular = True
+                        for element in value:
+                            if not hasattr(element, "__len__"):
+                                break
+                            elif len(element) != len(value[0]):
+                                is_value_rectangular = False
+                        if is_value_rectangular:
+                            tensor = as_tensor(value)
+                        else:
+                            tensor = as_tensor(value, dtype=object)
                     else:
                         tensor = as_tensor(value)
 
@@ -1904,7 +1910,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if model_max_length is not None and isinstance(model_max_length, (int, float)):
-
                 model_max_length = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
                 # TODO(PVP) - uncomment following line in Transformers v5
                 # init_kwargs["model_max_length"] = model_max_length
@@ -2429,6 +2434,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -3230,7 +3236,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if self.padding_side == "right":
                 if return_attention_mask:
-
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
