@@ -410,6 +410,8 @@ if __name__ == "__main__":
     tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        load_from_cache_file=not data_args.overwrite_cache,
     )
 
     shuffle_seed = training_args.seed
@@ -568,8 +570,7 @@ if __name__ == "__main__":
             tokenized_datasets.set_epoch(shuffle_seed)
 
             training_iter = iter(tokenized_datasets)
-
-            eval_dataset = advance_iter_and_group_samples(training_iter, data_args.num_eval_samples, max_seq_length)
+            eval_samples = advance_iter_and_group_samples(training_iter, data_args.num_eval_samples, max_seq_length)
             samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
 
         # process input samples
