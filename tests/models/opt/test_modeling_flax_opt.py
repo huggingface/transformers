@@ -18,7 +18,7 @@ import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_flax_available, GPT2Tokenizer
 from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM
-from transformers.testing_utils import require_flax, slow, require_tokenizers, cached_property
+from transformers.testing_utils import require_flax, slow, require_tokenizers
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -240,21 +240,21 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 # @require_flax
 # @require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
-    @cached_property
+    # @cached_property
     def default_tokenizer(self):
         return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
-    @slow
+    # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m")
-        input_ids = ([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = input_ids.ne(model.config.pad_token_id)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True)
+        input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        attention_mask = jnp.not_equal(input_ids,model.config.pad_token_id)
         # TODO stop the gradients 
         output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        expected_shape = jnp.Size((1, 11, 512))
+        expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = jnp.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device="cpu"
+        expected_slice = jnp.array(
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]
         )
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 

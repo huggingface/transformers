@@ -743,13 +743,13 @@ class FlaxOPTModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.shared = nn.Embed(
+        self.embed_tokens = nn.Embed(
             self.config.vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
-        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.embed_tokens)
 
     def _get_decoder_module(self):
         return self.decoder
@@ -853,7 +853,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]['shared']["embedding"]
+            shared_embedding = self.model.variables["params"]['embed_tokens']["embedding"]
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
