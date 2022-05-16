@@ -1002,9 +1002,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y = {key: val for key, val in x.items() if key in label_kwargs}
             if not y and not self._using_dummy_loss:
                 raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
-            if len(y) == 1 and "labels" in y:
-                # "labels" will not be the name of one of the outputs, but it generally matches to the first output
-                _, y = y.popitem()
 
         if isinstance(y, dict):
             # Rename labels at this point to match output heads
@@ -1020,7 +1017,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             # This next block matches outputs to label keys. Tensorflow's standard method for doing this
             # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
-            if isinstance(y, dict):
+            if isinstance(y, dict) and len(y) == 1:
+                if list(y.keys())[0] in y_pred.keys():
+                    y_pred = y_pred[list(y.keys())[0]]
+                elif list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred[1]
+                else:
+                    y_pred = y_pred[0]
+                _, y = y.popitem()
+            elif isinstance(y, dict):
                 # If the labels are a dict, match keys from the output by name
                 y_pred = {key: val for key, val in y_pred.items() if key in y}
             elif isinstance(y, tuple) or isinstance(y, list):
@@ -1030,7 +1035,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 else:
                     y_pred = y_pred.to_tuple()
                 y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
-                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
             else:
                 # If the labels are a single tensor, match them to the first non-loss tensor in the output
                 if list(y_pred.keys())[0] == "loss":
@@ -1106,8 +1110,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y = {key: val for key, val in x.items() if key in label_kwargs}
             if not y and not self._using_dummy_loss:
                 raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
-            if len(y) == 1:
-                _, y = y.popitem()
 
         if isinstance(y, dict):
             # Rename labels at this point to match output heads
@@ -1122,7 +1124,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # This next block matches outputs to label keys. Tensorflow's standard method for doing this
         # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
-        if isinstance(y, dict):
+        if isinstance(y, dict) and len(y) == 1:
+            if list(y.keys())[0] in y_pred.keys():
+                y_pred = y_pred[list(y.keys())[0]]
+            elif list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred[1]
+            else:
+                y_pred = y_pred[0]
+            _, y = y.popitem()
+        elif isinstance(y, dict):
             # If the labels are a dict, match keys from the output by name
             y_pred = {key: val for key, val in y_pred.items() if key in y}
         elif isinstance(y, tuple) or isinstance(y, list):
@@ -1132,7 +1142,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             else:
                 y_pred = y_pred.to_tuple()
             y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         else:
             # If the labels are a single tensor, match them to the first non-loss tensor in the output
             if list(y_pred.keys())[0] == "loss":
