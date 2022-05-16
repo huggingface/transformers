@@ -18,14 +18,19 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_timm_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_timm_available
 
 
 _import_structure = {
     "configuration_deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
 }
 
-if is_timm_available():
+try:
+    if not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_deformable_detr"] = [
         "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DeformableDetrForObjectDetection",
@@ -37,7 +42,12 @@ if is_timm_available():
 if TYPE_CHECKING:
     from .configuration_deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
 
-    if is_timm_available():
+    try:
+        if not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_deformable_detr import (
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeformableDetrForObjectDetection,

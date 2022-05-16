@@ -647,7 +647,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
@@ -693,7 +694,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         if attn_weights.size() != (batch_size * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         # expand attention_mask
@@ -704,7 +706,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, tgt_len, src_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(batch_size, 1, tgt_len, src_len)}, but is"
+                    f" {attention_mask.size()}"
                 )
             attn_weights = attn_weights.view(batch_size, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, tgt_len, src_len)
@@ -727,7 +730,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         if attn_output.size() != (batch_size * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(batch_size, self.num_heads, tgt_len, self.head_dim)
