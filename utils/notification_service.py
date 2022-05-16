@@ -732,6 +732,9 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
+    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
+    pr_number_re = re.compile(r"\(#(\d+)\)$")
+
     title = f"🤗 Results of the {ci_event} tests."
     # Add PR title with a link for push CI
     ci_title = os.environ.get("CI_TITLE")
@@ -739,6 +742,13 @@ if __name__ == "__main__":
     if ci_title is not None:
         assert commit_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
+
+        # Find the PR number (if any) and change the url to the actual PR page.
+        numbers = pr_number_re.findall(ci_title)
+        if len(numbers) > 0:
+            pr_number = numbers[0]
+            commit_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
+
         ci_title = f"<{commit_url}|{ci_title}>"
     else:
         ci_title = ""
