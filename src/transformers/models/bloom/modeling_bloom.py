@@ -241,6 +241,7 @@ class BLOOMAttention(nn.Module):
         value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
         # change view [b * np, sq, sk]
+        old_attention_probs_size = attention_probs.size()
         attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
 
         # matmul: [b * np, sq, hn]
@@ -283,7 +284,7 @@ class BLOOMAttention(nn.Module):
 
         outputs = (output, present)
         if output_attentions:
-            outputs += (attention_probs,)
+            outputs += (attention_probs.view(old_attention_probs_size),)
 
         return outputs, output_bias  # a, present, (attentions)
 
@@ -703,7 +704,7 @@ class BLOOMModel(BLOOMPreTrainedModel):
                 if isinstance(head_mask, torch.Tensor):
                     head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states.transpose(1, 0),)
 
             if self.gradient_checkpointing and self.training:
 
@@ -754,7 +755,7 @@ class BLOOMModel(BLOOMPreTrainedModel):
 
         # Add last hidden state
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states.transpose(1, 0),)
 
         hidden_states = hidden_states.view(output_shape)
 
