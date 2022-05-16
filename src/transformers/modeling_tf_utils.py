@@ -1002,7 +1002,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y = {key: val for key, val in x.items() if key in label_kwargs}
             if not y and not self._using_dummy_loss:
                 raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
-            if len(y) == 1:
+            if len(y) == 1 and "labels" in y:
+                # "labels" will not be the name of one of the outputs, but it generally matches to the first output
                 _, y = y.popitem()
 
         if isinstance(y, dict):
