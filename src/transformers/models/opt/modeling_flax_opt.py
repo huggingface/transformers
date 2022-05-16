@@ -602,7 +602,8 @@ class FlaxOPTDecoder(nn.Module):
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
         # embed positions TODO should take the attention mask as an input
-        positions = self.embed_positions(position_ids + self.offset)
+        position_ids = (position_ids + self.offset) * ~ (input_ids == 1)
+        positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
 
