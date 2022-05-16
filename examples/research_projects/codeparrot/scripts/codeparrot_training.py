@@ -327,7 +327,7 @@ for step, batch in enumerate(train_dataloader, start=1):
             {
                 "steps": completed_steps,
                 "loss/train": loss_tracking,
-                "lr": get_lr(),
+                "lr": lr,
                 "tflops": tflops,
                 "time_per_iteration": elapsed_time,
             },
