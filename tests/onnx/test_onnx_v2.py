@@ -294,7 +294,7 @@ class OnnxExportTestCaseV2(TestCase):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
-    # @slow
+    @slow
     @require_torch
     @require_vision
     @require_rjieba
