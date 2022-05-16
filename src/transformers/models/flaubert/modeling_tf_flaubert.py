@@ -34,7 +34,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -182,8 +182,8 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         mask = padding_mask
     else:
         # assert lengths.max().item() <= slen
-        alen = tf.range(slen)
-        mask = tf.math.less(alen, tf.expand_dims(lengths, axis=1))
+        alen = tf.range(slen, dtype=lengths.dtype)
+        mask = alen < tf.expand_dims(lengths, axis=1)
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
@@ -361,7 +361,7 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
         mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
-        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        weights = stable_softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to

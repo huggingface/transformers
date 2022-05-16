@@ -34,7 +34,7 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from .tf_utils import shape_list
+from .tf_utils import shape_list, stable_softmax
 from .utils import ModelOutput, logging
 
 
@@ -599,8 +599,9 @@ class TFGenerationMixin:
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
             raise AttributeError(
-                "You tried to generate sequences with a model that does not have a LM Head. "
-                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
+                "You tried to generate sequences with a model that does not have a LM Head. Please use another model"
+                " class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`,"
+                " `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
@@ -696,15 +697,17 @@ class TFGenerationMixin:
         if do_sample is False:
             if num_beams == 1:
                 # no_beam_search greedy generation conditions
-                assert (
-                    num_return_sequences == 1
-                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+                assert num_return_sequences == 1, (
+                    "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences >"
+                    " 1. Please set num_return_sequences = 1"
+                )
 
             else:
                 # beam_search greedy generation conditions
-                assert (
-                    num_beams >= num_return_sequences
-                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+                assert num_beams >= num_return_sequences, (
+                    "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams"
+                    " >= num_return_sequences"
+                )
 
         # create attention mask if necessary
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
@@ -794,9 +797,11 @@ class TFGenerationMixin:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
-        assert (
-            cur_len < max_length
-        ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+        assert cur_len < max_length, (
+            f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that"
+            " `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or"
+            " `config.max_length = ...`"
+        )
 
         return self._generate_beam_search(
             input_ids,
@@ -2030,7 +2035,7 @@ class TFGenerationMixin:
             if not use_xla:
                 input_ids = tf.reshape(generated.concat(), (-1, batch_size))
                 input_ids = tf.transpose(input_ids[: current_pos[0]])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=current_pos[0])
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, current_pos[0])
 
             # argmax
             next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
@@ -2301,8 +2306,8 @@ class TFGenerationMixin:
             if not use_xla:
                 input_ids = tf.reshape(generated.concat(), (-1, batch_size))
                 input_ids = tf.transpose(input_ids[:cur_len])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=cur_len)
-            next_tokens_scores = logits_warper(input_ids, next_tokens_scores)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len)
+            next_tokens_scores = logits_warper(input_ids, next_tokens_scores, cur_len)
 
             # sample
             if seed is not None:
@@ -2726,7 +2731,7 @@ class TFGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(
-                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len=cur_len
+                flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs), cur_len
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
@@ -3060,7 +3065,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
             logits, sorted_indices, axis=-1, batch_dims=1
         )  # expects logits to be of dim (batch_size, vocab_size)
 
-        cumulative_probs = tf.math.cumsum(tf.nn.softmax(sorted_logits, axis=-1), axis=-1)
+        cumulative_probs = tf.math.cumsum(stable_softmax(sorted_logits, axis=-1), axis=-1)
 
         # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
         sorted_indices_to_remove = cumulative_probs > top_p

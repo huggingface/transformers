@@ -18,13 +18,13 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 import unittest
 
-from ..test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -489,9 +489,9 @@ from transformers import is_torch_available
 from transformers.utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from ..test_configuration_common import ConfigTester
-from ..generation.test_generation_utils import GenerationTesterMixin
-from ..test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():

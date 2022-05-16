@@ -14,7 +14,11 @@
 # limitations under the License.
 """ RoFormer model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -23,10 +27,18 @@ logger = logging.get_logger(__name__)
 ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/config.json",
     "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/config.json",
-    "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/config.json",
-    "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/config.json",
-    "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/config.json",
-    "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/config.json",
+    "junnyu/roformer_chinese_char_small": (
+        "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/config.json"
+    ),
+    "junnyu/roformer_chinese_char_base": (
+        "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/config.json"
+    ),
+    "junnyu/roformer_small_discriminator": (
+        "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/config.json"
+    ),
+    "junnyu/roformer_small_generator": (
+        "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/config.json"
+    ),
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 }
 
@@ -131,3 +143,20 @@ class RoFormerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.rotary_value = rotary_value
         self.use_cache = use_cache
+
+
+class RoFormerOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )

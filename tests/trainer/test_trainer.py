@@ -15,11 +15,13 @@
 
 import dataclasses
 import gc
+import json
 import math
 import os
 import random
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -65,7 +67,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
-from transformers.utils import WEIGHTS_NAME, is_apex_available, is_bitsandbytes_available
+from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, is_apex_available, is_bitsandbytes_available
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -161,11 +163,12 @@ class AlmostAccuracy:
 
 
 class RegressionModelConfig(PretrainedConfig):
-    def __init__(self, a=0, b=0, double_output=False, **kwargs):
+    def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
         self.a = a
         self.b = b
         self.double_output = double_output
+        self.random_torch = random_torch
         self.hidden_size = 1
 
 
@@ -263,14 +266,18 @@ if is_torch_available():
             super().__init__(config)
             self.a = nn.Parameter(torch.tensor(config.a).float())
             self.b = nn.Parameter(torch.tensor(config.b).float())
+            self.random_torch = config.random_torch
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
-            torch_rand = torch.randn(1).squeeze()
+            if self.random_torch:
+                torch_rand = torch.randn(1).squeeze()
             np_rand = np.random.rand()
             rand_rand = random.random()
 
-            y += 0.05 * torch_rand + 0.05 * torch.tensor(np_rand + rand_rand)
+            if self.random_torch:
+                y += 0.05 * torch_rand
+            y += 0.05 * torch.tensor(np_rand + rand_rand)
 
             if labels is None:
                 return (y,)
@@ -375,6 +382,25 @@ class TrainerIntegrationCommon:
                 _ = log.pop(key, None)
                 _ = log1.pop(key, None)
             self.assertEqual(log, log1)
+
+    def convert_to_sharded_checkpoint(self, folder):
+        # Converts a checkpoint of a regression model to a sharded checkpoint.
+        state_dict = torch.load(os.path.join(folder, WEIGHTS_NAME))
+        os.remove(os.path.join(folder, WEIGHTS_NAME))
+        keys = list(state_dict.keys())
+
+        shard_files = [
+            WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))
+        ]
+        index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
+
+        save_index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
+        with open(save_index_file, "w", encoding="utf-8") as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        for param_name, shard_file in zip(keys, shard_files):
+            torch.save({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
 
 
 @require_torch
@@ -996,33 +1022,95 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
-    @require_torch_non_multi_gpu
     def test_resume_training_with_randomness(self):
-        # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
-        # TODO: investigate why it fails for 2 GPUs?
+        # For more than 1 GPUs, since the randomness is introduced in the model and with DataParallel (which is used
+        # in this test for more than 2 GPUs), the calls to the torch RNG will happen in a random order (sometimes
+        # GPU 0 will call first and sometimes GPU 1).
+        random_torch = not torch.cuda.is_available() or torch.cuda.device_count() <= 1
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
-        config = RegressionModelConfig(a=0, b=2)
-        model = RegressionRandomPreTrainedModel(config)
+        with self.subTest("Test every step"):
+            config = RegressionModelConfig(a=0, b=2, random_torch=random_torch)
+            model = RegressionRandomPreTrainedModel(config)
 
-        tmp_dir = self.get_auto_remove_tmp_dir()
-        args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1)
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            tmp_dir = self.get_auto_remove_tmp_dir()
+            args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
 
-        trainer.train()
-        (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
 
-        model = RegressionRandomPreTrainedModel(config)
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
-        (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            model = RegressionRandomPreTrainedModel(config)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
 
-        self.assertAlmostEqual(a, a1, delta=1e-8)
-        self.assertAlmostEqual(b, b1, delta=1e-8)
+            self.assertAlmostEqual(a, a1, delta=1e-8)
+            self.assertAlmostEqual(b, b1, delta=1e-8)
+
+        with self.subTest("Test every epoch"):
+            config = RegressionModelConfig(a=0, b=2, random_torch=random_torch)
+            model = RegressionRandomPreTrainedModel(config)
+
+            tmp_dir = self.get_auto_remove_tmp_dir()
+            args = RegressionTrainingArguments(tmp_dir, save_strategy="epoch", learning_rate=0.1)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+
+            model = RegressionRandomPreTrainedModel(config)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+
+            checkpoints = [d for d in os.listdir(tmp_dir) if d.startswith("checkpoint-")]
+            # There should be one checkpoint per epoch.
+            self.assertEqual(len(checkpoints), 3)
+            checkpoint_dir = sorted(checkpoints, key=lambda x: int(x.replace("checkpoint-", "")))[0]
+
+            trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, checkpoint_dir))
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+
+            self.assertAlmostEqual(a, a1, delta=1e-8)
+            self.assertAlmostEqual(b, b1, delta=1e-8)
+
+    @slow
+    @require_torch_non_multi_gpu
+    def test_auto_batch_size_finder(self):
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+
+        SRC_DIR = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
+        )
+        sys.path.append(SRC_DIR)
+        import run_glue
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            testargs = f"""
+                run_glue.py
+                --model_name_or_path distilbert-base-uncased
+                --task_name mrpc
+                --do_train
+                --do_eval
+                --max_seq_len 128
+                --per_device_train_batch_size 4096
+                --learning_rate 2e-5
+                --num_train_epochs 1
+                --output_dir {tmpdir}
+                --auto_find_batch_size 0
+                """.split()
+            with self.assertRaises(RuntimeError):
+                with patch.object(sys, "argv", testargs):
+                    run_glue.main()
+
+        testargs[-1] = "1"
+        with patch.object(sys, "argv", testargs):
+            run_glue.main()
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -1037,6 +1125,31 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
 
         trainer.train(resume_from_checkpoint=False)
+
+    @require_torch_up_to_2_gpus
+    def test_resume_training_with_shard_checkpoint(self):
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            self.convert_to_sharded_checkpoint(checkpoint)
+
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_gpus
     def test_resume_training_with_gradient_accumulation(self):
@@ -1216,7 +1329,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_iterable_dataset(self):
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
-        train_dataset = SampleIterableDataset()
+        # Adding one column not used by the model should have no impact
+        train_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
         args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
         trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
@@ -1250,7 +1364,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
-        eval_dataset = SampleIterableDataset()
+        # Adding one column not used by the model should have no impact
+        eval_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
         args = RegressionTrainingArguments(output_dir="./examples")
         trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
@@ -1287,7 +1402,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
         # With a number of elements not a round multiple of the batch size
-        test_dataset = SampleIterableDataset(length=66)
+        # Adding one column not used by the model should have no impact
+        test_dataset = SampleIterableDataset(length=66, label_names=["labels", "extra"])
         preds = trainer.predict(test_dataset).predictions
         x = test_dataset.dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
@@ -1785,6 +1901,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             self.ray_hyperparameter_search()
 
 
+@slow
 @require_torch
 @require_sigopt
 class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):

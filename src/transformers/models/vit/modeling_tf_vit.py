@@ -32,7 +32,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_vit import ViTConfig
 
@@ -187,7 +187,8 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
             if getattr(height, "numpy", None) and getattr(width, "numpy", None):
                 if height != self.image_size[0] or width != self.image_size[1]:
                     raise ValueError(
-                        f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                        f"Input image size ({height}*{width}) doesn't match model"
+                        f" ({self.image_size[0]}*{self.image_size[1]})."
                     )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -260,7 +261,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = stable_softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
