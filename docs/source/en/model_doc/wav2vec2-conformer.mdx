@@ -10,23 +10,18 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Wav2Vec2Conformer
+# Wav2Vec2-Conformer
 
 ## Overview
 
-The Wav2Vec2Conformer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
+The Wav2Vec2-Conformer weights were released by the Meta AI team within the [Fairseq library](https://github.com/pytorch/fairseq/blob/main/examples/wav2vec/README.md#pre-trained-models).
 
 Tips:
 
-- Wav2Vec2Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
+- Wav2Vec2-Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
   as introduced in [Conformer: Convolution-augmented Transformer for Speech Recognition](https://arxiv.org/abs/2005.08100).
-- Wav2Vec2Conformer uses the same tokenizer and feature extractor as Wav2Vec2.
-- Wav2Vec2Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or
+- Wav2Vec2-Conformer uses the same tokenizer and feature extractor as Wav2Vec2.
+- Wav2Vec2-Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or
   rotary position embeddings by setting the correct `config.position_embeddings_type`.
 
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
