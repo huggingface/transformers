@@ -966,11 +966,8 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = (
-            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-            .sum(-2)
-            .view(batch_size, sequence_length, -1)
-        )
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
 
