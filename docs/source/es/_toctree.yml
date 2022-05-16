@@ -15,10 +15,14 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
+  - local: model_sharing
+    title: Compartir un modelo
   title: Tutoriales
 - sections:
   - local: fast_tokenizers
     title: Usa tokenizadores de 🤗 Tokenizers
+  - local: create_a_model
+    title: Crea una arquitectura personalizada
   - sections:
     - local: language_modeling
       title: Modelado de lenguaje
@@ -30,6 +34,3 @@
   - local: philosophy
     title: Filosofía
   title: Guías conceptuales
-
-
-
