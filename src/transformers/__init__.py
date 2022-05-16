@@ -692,7 +692,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_timm_objects) if not name.startswith("_")
     ]
 else:
-     _import_structure["models.deformable_detr"].extend(
+    _import_structure["models.deformable_detr"].extend(
         [
             "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeformableDetrForObjectDetection",
@@ -3518,7 +3518,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_objects import *
     else:
-        from .models.deformable_detr import(
+        from .models.deformable_detr import (
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
