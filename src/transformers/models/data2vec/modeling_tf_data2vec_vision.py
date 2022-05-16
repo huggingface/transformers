@@ -1235,7 +1235,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
         self.in_index = in_index
-        
+
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
