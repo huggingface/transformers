@@ -480,7 +480,13 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             FlaxOPTDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
         self.layerdrop = self.config.layerdrop
-
+        
+        # TODO CHECK if that is the correct way of doing this 
+        if self.config.word_embed_proj_dim != self.config.hidden_size:
+            self.project_out = nn.Dense(self.config.hidden_size, self.config.word_embed_proj_dim, bias=False)
+        else: 
+            self.project_out = None
+            
     def __call__(
         self,
         hidden_states,
@@ -515,6 +521,9 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        if self.project_out is not None:
+                outputs = self.project_out(outputs)
+                
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -549,14 +558,25 @@ class FlaxOPTDecoder(nn.Module):
         
         # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
         # should take attention mask as inputs ? 
+        self.embed_tokens = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
+        )
+        # TODO FIXME as FlaxOPTLearnedPositionalEmbedding
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
+        if self.config.word_embed_proj_dim != self.config.hidden_size:
+            self.project_in = nn.Dense(self.config.word_embed_proj_dim, self.config.hidden_size, bias=False)
+            
+        else:
+            self.project_int = None
+            
         self.layers = FlaxOPTDecoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -574,12 +594,12 @@ class FlaxOPTDecoder(nn.Module):
         input_ids = input_ids.reshape(-1, input_shape[-1])                                                                    
 
         inputs_embeds = self.embed_tokens(input_ids)
-
+        if self.project_in is not None:
+            inputs_embeds = self.project_in(inputs_embeds)
         # embed positions TODO should take the attention mask as an input
         positions = self.embed_positions(position_ids + self.offset)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
@@ -592,6 +612,7 @@ class FlaxOPTDecoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        
 
         if not return_dict:
             return outputs
@@ -743,13 +764,13 @@ class FlaxOPTModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.embed_tokens = nn.Embed(
+        self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
-        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.embed_tokens)
+        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
 
     def _get_decoder_module(self):
         return self.decoder
@@ -767,7 +788,7 @@ class FlaxOPTModule(nn.Module):
         init_cache=False,
     ):
 
-        # if else should be avoided in jax code? 
+        # if else should be avoided in jax code?
         # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         # output_hidden_states = (
         #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -853,7 +874,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]['embed_tokens']["embedding"]
+            shared_embedding = self.model.variables["params"]['shared']["embedding"]
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
