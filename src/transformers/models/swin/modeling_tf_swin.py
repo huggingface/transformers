@@ -705,14 +705,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
     def maybe_pad(self, hidden_states: tf.Tensor, height: int, width: int) -> Tuple[tf.Tensor, tf.Tensor]:
         pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = tf.constant(
-            [
-                [0, 0],
-                [0, pad_bottom],
-                [0, pad_right],
-                [0, 0],
-            ]
-        )
+        pad_values = tf.constant([[0, 0], [0, pad_bottom], [0, pad_right], [0, 0]])
         hidden_states = tf.pad(hidden_states, pad_values)
         pad_values = tf.reshape(pad_values, (-1,))
         return hidden_states, pad_values
@@ -1273,10 +1266,8 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        #FIXME - remove once model added to hub
-
         >>> model = TFSwinForMaskedImageModeling.from_pretrained(
-        ...     "microsoft/swin-tiny-patch4-window7-224", from_pt=True
+        ...     "microsoft/swin-tiny-patch4-window7-224"
         ... )
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2

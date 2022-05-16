@@ -149,11 +149,7 @@ class TFSwinModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -364,11 +360,7 @@ class TFSwinModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFSwinForImageClassification.from_pretrained(
-            "microsoft/swin-tiny-patch4-window7-224",
-            # FIXME - remove once model has been reviewed and weights pushed to the hub
-            from_pt=True,
-        )
+        model = TFSwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
