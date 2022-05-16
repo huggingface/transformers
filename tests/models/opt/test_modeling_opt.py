@@ -270,9 +270,6 @@ def _long_tensor(tok_lst):
 @require_sentencepiece
 @require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_tokenizer(self):
-        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
 
     @slow
     def test_inference_no_head(self):
