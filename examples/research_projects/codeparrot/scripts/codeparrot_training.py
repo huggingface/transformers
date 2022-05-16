@@ -25,9 +25,9 @@ class ConstantLengthDataset(IterableDataset):
             dataset (dataset.Dataset): Dataset with text files.
             infinite (bool): If True the iterator is reset after dataset reaches end else stops.
             seq_length (int): Length of token sequences to return.
-            num_of_sequences: Number of token sequences to keep in buffer.
-            chars_per_token: Number of characters per token used to estimate number of tokens in text buffer.
-            tokenized: If true we use a pretokenized dataset.
+            num_of_sequences (int): Number of token sequences to keep in buffer.
+            chars_per_token (int): Number of characters per token used to estimate number of tokens in text buffer.
+            tokenized (bool): If true we use a pretokenized dataset.
     """
 
     def __init__(
@@ -88,7 +88,40 @@ class ConstantLengthDataset(IterableDataset):
                     self.current_size += 1
                     yield torch.tensor(input_ids)
 
-
+class ShuffleDataset(IterableDataset):
+    """
+    Shuffled version of an Iterable Dataset.
+        Args:
+            dataset (ConstantLengthDataset): Iterable Dataset.
+            buffer_size (int): buffer size for shuffling.
+    """
+    def __init__(self, dataset, buffer_size):
+        super().__init__()
+        self.dataset = dataset
+        self.buffer_size = buffer_size
+        
+    def __iter__(self):
+        shuffle_buffer = []
+        try:
+            dataset_iter = iter(self.dataset)
+            for i in range(self.buffer_size):
+                shuffle_buffer.append(next(dataset_iter))
+        except:
+            self.buffer_size = len(shuffle_buffer)
+        try:
+            while True:
+                try:
+                    item = next(dataset_iter)
+                    evict_idx = random.randint(0, self.buffer_size - 1)
+                    yield shuffle_buffer[evict_idx]
+                    shuffle_buffer[evict_idx] = item
+                except StopIteration:
+                    break
+            while len(shuffle_buffer) > 0:
+                yield shuffle_buffer.pop()
+        except GeneratorExit:
+              pass
+            
 def setup_logging(args):
     project_name = args.model_ckpt.split("/")[-1]
     logger = logging.getLogger(__name__)
@@ -126,6 +159,8 @@ def create_dataloaders(args):
     valid_dataset = ConstantLengthDataset(
         tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
     )
+    if args.shuffle_batch:
+        train_dataset = ShuffleDataset(train_dataset, buffer_size=args.batch_shuffle_buffer)
     train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
