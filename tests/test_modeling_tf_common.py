@@ -718,65 +718,69 @@ class TFModelTesterMixin:
             self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
     def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        if not self.has_attentions:
+            pass
 
-        def check_decoder_attentions_output(outputs):
-            out_len = len(outputs)
-            self.assertEqual(min(out_len % 2, out_len % 5), 0)  # differentiation due to newly added cross_attentions
-            decoder_attentions = outputs.decoder_attentions
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-            )
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
+            encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+            decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+            encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        def check_encoder_attentions_output(outputs):
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+            def check_decoder_attentions_output(outputs):
+                out_len = len(outputs)
+                self.assertEqual(min(out_len % 2, out_len % 5), 0)  # differentiation due to newly added cross_attentions
+                decoder_attentions = outputs.decoder_attentions
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
 
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            out_len = len(outputs)
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
+            def check_encoder_attentions_output(outputs):
+                attentions = [
+                    t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+                ]
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
 
-            if self.is_encoder_decoder:
+            for model_class in self.all_model_classes:
+                inputs_dict["output_attentions"] = True
+                config.output_hidden_states = False
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                out_len = len(outputs)
+                self.assertEqual(config.output_hidden_states, False)
+                check_encoder_attentions_output(outputs)
+
+                if self.is_encoder_decoder:
+                    model = model_class(config)
+                    outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                    self.assertEqual(config.output_hidden_states, False)
+                    check_decoder_attentions_output(outputs)
+
+                # Check that output attentions can also be changed via the config
+                del inputs_dict["output_attentions"]
+                config.output_attentions = True
                 model = model_class(config)
                 outputs = model(self._prepare_for_class(inputs_dict, model_class))
                 self.assertEqual(config.output_hidden_states, False)
-                check_decoder_attentions_output(outputs)
+                check_encoder_attentions_output(outputs)
 
-            # Check that output attentions can also be changed via the config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
+                # Check attention is always last and order is fine
+                inputs_dict["output_attentions"] = True
+                config.output_hidden_states = True
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = True
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_hidden_states, True)
-            check_encoder_attentions_output(outputs)
+                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+                self.assertEqual(model.config.output_hidden_states, True)
+                check_encoder_attentions_output(outputs)
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -972,9 +976,10 @@ class TFModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
             # Not all models accept "labels" in the forward pass (yet :) )
             if "labels" in inspect.signature(model.call).parameters.keys():
@@ -986,15 +991,16 @@ class TFModelTesterMixin:
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                if self.has_attentions:
+                    tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                    dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                    check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-                )
+                    tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                    dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                    check_equivalence(
+                        model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                    )
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
