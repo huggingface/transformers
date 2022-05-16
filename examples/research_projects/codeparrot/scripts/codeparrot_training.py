@@ -256,13 +256,15 @@ if args.resume_from_checkpoint:
 model.train()
 completed_steps = 0
 t_start = time.time()
+loss_tracking = 0
 for step, batch in enumerate(train_dataloader, start=1):
     if args.resume_from_checkpoint and step < resume_step:
         continue  # we need to skip steps until we reach the resumed step
     loss = model(batch, labels=batch, use_cache=False).loss
-    log_metrics(
-        step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
-    )
+    avg_loss = loss.repeat(args.train_batch_size)
+    avg_loss = accelerator.gather(avg_loss).mean()
+    loss_tracking += avg_loss.item()
+    log_metrics(step, {"samples": step * samples_per_step, "loss_per_step/train": loss.item()})
     loss = loss / args.gradient_accumulation_steps
     if step % args.gradient_accumulation_steps != 0:
         # Prevent backward from doing gradient all_reduce in every step
@@ -272,16 +274,28 @@ for step, batch in enumerate(train_dataloader, start=1):
         else:
             accelerator.backward(loss)
     else:
+        loss_tracking = loss_tracking / args.gradient_accumulation_steps
+        lr = get_lr()
         accelerator.backward(loss)
         accelerator.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
-        completed_steps += 1
         elapsed_time = time.time() - t_start
         tflops = compute_tflops(elapsed_time, accelerator, args)
-        log_metrics(step, {"steps": completed_steps, "tflops": tflops, "time_per_iteration": elapsed_time})
+        log_metrics(
+            step,
+            {
+                "steps": completed_steps,
+                "loss/train": loss_tracking,
+                "lr": get_lr(),
+                "tflops": tflops,
+                "time_per_iteration": elapsed_time,
+            },
+        )
         t_start = time.time()
+        loss_tracking = 0
+        completed_steps += 1
     if step % args.save_checkpoint_steps == 0:
         logger.info("Evaluating and saving model checkpoint")
         eval_loss, perplexity = evaluate(args)
