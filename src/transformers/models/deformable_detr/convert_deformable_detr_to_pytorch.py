@@ -86,7 +86,13 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_deformable_detr_checkpoint(
-    checkpoint_path, single_scale, dilation, with_box_refine, two_stage, pytorch_dump_folder_path
+    checkpoint_path,
+    single_scale,
+    dilation,
+    with_box_refine,
+    two_stage,
+    pytorch_dump_folder_path,
+    push_to_hub,
 ):
     """
     Copy/paste/tweak model's weights to our Deformable DETR structure.
@@ -177,6 +183,8 @@ def convert_deformable_detr_checkpoint(
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
 
+    print("Everything ok!")
+
     # Save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -184,13 +192,14 @@ def convert_deformable_detr_checkpoint(
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     # Push to hub
-    model_name = "deformable-detr"
-    model_name += "-single-scale" if single_scale else ""
-    model_name += "-dc5" if dilation else ""
-    model_name += "-with-box-refine" if with_box_refine else ""
-    model_name += "-two-stage" if two_stage else ""
-    print("Pushing model to hub...")
-    model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
+    if push_to_hub:
+        model_name = "deformable-detr"
+        model_name += "-single-scale" if single_scale else ""
+        model_name += "-dc5" if dilation else ""
+        model_name += "-with-box-refine" if with_box_refine else ""
+        model_name += "-two-stage" if two_stage else ""
+        print("Pushing model to hub...")
+        model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
 
 
 if __name__ == "__main__":
@@ -199,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--checkpoint_path",
         type=str,
-        default="/home/niels/checkpoints/r50_deformable_detr-checkpoint.pth",
+        default="/home/niels/checkpoints/deformable_detr/r50_deformable_detr-checkpoint.pth",
         help="Path to Pytorch checkpoint (.pth file) you'd like to convert.",
     )
     parser.add_argument("--single_scale", action="store_true", help="Whether to set config.num_features_levels = 1.")
@@ -213,6 +222,9 @@ if __name__ == "__main__":
         required=True,
         help="Path to the folder to output PyTorch model.",
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
     args = parser.parse_args()
     convert_deformable_detr_checkpoint(
         args.checkpoint_path,
@@ -221,4 +233,5 @@ if __name__ == "__main__":
         args.with_box_refine,
         args.two_stage,
         args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )
