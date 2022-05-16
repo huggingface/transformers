@@ -235,9 +235,9 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.stages = []
-        drop_path_rates = [
-            x.tolist() for x in tf.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
-        ]
+        drop_path_rates = tf.linspace(0.0, config.drop_path_rate, sum(config.depths))
+        drop_path_rates = tf.split(drop_path_rates, config.depths)
+        drop_path_rates = [x.numpy().tolist() for x in drop_path_rates]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
