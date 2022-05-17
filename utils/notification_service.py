@@ -621,7 +621,8 @@ if __name__ == "__main__":
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 model_results[model]["job_link"] = github_actions_job_links.get(
-                    f"Model tests ({model}, {artifact_path['gpu']}-gpu)"
+                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
                 )
 
                 failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -643,10 +644,10 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-                        if re.search("_tf_", line):
+                        if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
 
-                        elif re.search("_flax_", line):
+                        elif re.search("test_modeling_flax_", line):
                             model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
 
                         elif re.search("test_modeling", line):
