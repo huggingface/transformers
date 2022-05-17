@@ -50,6 +50,8 @@ class BLOOMConfig(PretrainedConfig):
         seq_length (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
+        offset_alibi (`int`, *optional*, defaults to 100):
+            The padding added to the alibi positional embeddings to deal with cached input
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
@@ -124,6 +126,7 @@ class BLOOMConfig(PretrainedConfig):
         self,
         vocab_size=250880,
         seq_length=20,  # TODO remove it in the future
+        offset_alibi=100,
         hidden_size=64,  # 1024,
         n_layer=2,  # 24,
         n_head=8,  # 16,
@@ -165,6 +168,7 @@ class BLOOMConfig(PretrainedConfig):
         self.skip_bias_add_qkv = skip_bias_add_qkv
         self.attention_dropout = attention_dropout
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
+        self.offset_alibi = offset_alibi
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

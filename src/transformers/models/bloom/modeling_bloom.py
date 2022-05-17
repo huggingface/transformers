@@ -132,7 +132,8 @@ class BLOOMAttention(nn.Module):
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
-            config.seq_length + 100,
+            config.seq_length
+            + config.offset_alibi,  # To avoid cache problems: TODO: chack if this implementation is ok
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
@@ -153,7 +154,8 @@ class BLOOMAttention(nn.Module):
     ):
         # hidden_states: [sq, b, h]
         # alibi = alibi.repeat(1, hidden_states.shape[1], 1).to(hidden_states.device)  # repeat with batch size
-        alibi = alibi.repeat(hidden_states.shape[1], 1, 1).to(hidden_states.device)  # repeat with batch size
+        # alibi = alibi.repeat(hidden_states.shape[1], 1, 1).to(hidden_states.device)  # repeat with batch size
+        alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)  # repeat with batch size
 
         bias = self.query_key_value.bias if not self.skip_bias_add_qkv else None
 
@@ -167,11 +169,11 @@ class BLOOMAttention(nn.Module):
 
         # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
         (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
-        query_layer, key_layer, value_layer = (
-            query_layer.transpose(0, 1),
-            key_layer.transpose(0, 1),
-            value_layer.transpose(0, 1),
-        )
+        # query_layer, key_layer, value_layer = (
+        #     query_layer.transpose(0, 1),
+        #     key_layer.transpose(0, 1),
+        #     value_layer.transpose(0, 1),
+        # )
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -239,17 +241,18 @@ class BLOOMAttention(nn.Module):
         value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
         # change view [b * np, sq, sk]
-        old_attention_probs_size = attention_probs.size()
-        attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
+        attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
 
         # matmul: [b * np, sq, hn]
-        context_layer = torch.bmm(attention_probs, value_layer.transpose(0, 1))
+        context_layer = torch.bmm(attention_probs_reshaped, value_layer.transpose(0, 1))
+        # context_layer = torch.bmm(attention_probs, value_layer)
 
         # change view [b, np, sq, hn]
         context_layer = context_layer.view(*output_size)
 
         # [b, np, sq, hn] --> [sq, b, np, hn]
         context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
+        # context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
 
         # [sq, b, np, hn] --> [sq, b, hp]
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
@@ -278,10 +281,11 @@ class BLOOMAttention(nn.Module):
         else:
             output_tensor = output_tensor
             output_bias = self.dense.bias
-        output = output_tensor
+        output = output_tensor.transpose(1, 0)
         outputs = (output, present)
         if output_attentions:
-            outputs += (attention_probs.view(old_attention_probs_size),)
+            outputs += (attention_probs,)
+            # outputs += (attention_probs,)
 
         return outputs, output_bias  # a, present, (attentions)
 
@@ -336,7 +340,7 @@ class BLOOMBlock(nn.Module):
         dtype = getattr(torch, config.dtype)
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
-        self.alibi = self._build_alibi_tensor(config.seq_length + 100, config.n_head, dtype=dtype)
+        self.alibi = self._build_alibi_tensor(config.seq_length + config.offset_alibi, config.n_head, dtype=dtype)
         self.self_attention = BLOOMAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
@@ -675,7 +679,8 @@ class BLOOMModel(BLOOMPreTrainedModel):
             inputs_embeds = self.word_embeddings(input_ids)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
-        hidden_states = hidden_states.transpose(0, 1).contiguous()
+        # hidden_states = hidden_states.transpose(0, 1)
+        # hidden_states = hidden_states.transpose(0, 1).contiguous()
 
         if token_type_ids is not None:
             token_type_embeds = self.word_embeddings(token_type_ids)
@@ -701,7 +706,9 @@ class BLOOMModel(BLOOMPreTrainedModel):
                 if isinstance(head_mask, torch.Tensor):
                     head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.transpose(1, 0),)
+                # all_hidden_states = all_hidden_states + (hidden_states.permute(1, 0, 2),)
+                # all_hidden_states = all_hidden_states + (hidden_states.view(output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
 
@@ -749,10 +756,13 @@ class BLOOMModel(BLOOMPreTrainedModel):
                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         # Add last hidden state
-        hidden_states = self.ln_f(hidden_states).transpose(1, 0)
+        hidden_states = self.ln_f(hidden_states)
+        # hidden_states = self.ln_f(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+            # all_hidden_states = all_hidden_states + (hidden_states.view(output_shape),)
+            # all_hidden_states = all_hidden_states + (hidden_states.permute(1, 0, 2),)
 
         hidden_states = hidden_states.view(output_shape)
 
