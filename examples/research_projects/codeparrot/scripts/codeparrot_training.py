@@ -110,7 +110,7 @@ class ShuffleDataset(IterableDataset):
             dataset_iter = iter(self.dataset)
             for i in range(self.buffer_size):
                 shuffle_buffer.append(next(dataset_iter))
-        except:
+        except StopIteration:
             self.buffer_size = len(shuffle_buffer)
         try:
             while True:
