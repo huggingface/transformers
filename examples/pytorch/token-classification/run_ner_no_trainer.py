@@ -223,6 +223,11 @@ def parse_args():
         action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
+    parser.add_argument(
+        "--ignore_mismatched_sizes",
+        action="store_true",
+        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -383,6 +388,7 @@ def main():
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
+            ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         )
     else:
         logger.info("Training new model from scratch")
