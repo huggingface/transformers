@@ -29,6 +29,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torch_available, logging
 
+
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
