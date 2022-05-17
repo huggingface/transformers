@@ -38,7 +38,6 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_opt"] = [
-        "FlaxOPTDecoderPreTrainedModel",
         "FlaxOPTForCausalLM",
         "FlaxOPTModel",
         "FlaxOPTPreTrainedModel",
@@ -55,11 +54,7 @@ if TYPE_CHECKING:
         from .modeling_tf_opt import TFOPTModel, TFOPTPreTrainedModel
 
     if is_flax_available():
-        from .modeling_flax_opt import (
-            FlaxOPTForCausalLM,
-            FlaxOPTModel,
-            FlaxOPTPreTrainedModel,
-        )
+        from .modeling_flax_opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
 
 else:
     import sys

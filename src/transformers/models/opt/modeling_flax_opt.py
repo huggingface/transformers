@@ -106,6 +106,8 @@ OPT_INPUTS_DOCSTRING = r"""
 """
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
+
+
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
@@ -772,8 +774,8 @@ class FlaxOPTForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    OPT Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g
-    for autoregressive tasks.
+    OPT Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g for
+    autoregressive tasks.
     """,
     OPT_START_DOCSTRING,
 )
