@@ -2255,7 +2255,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             error_msg = "\n\t".join(error_msgs)
             if "size mismatch" in error_msg:
                 error_msg += (
-                    "\n\tYou may consider specifying ignore_mismatched_sizes=True in the model from_pretrained method."
+                    "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
