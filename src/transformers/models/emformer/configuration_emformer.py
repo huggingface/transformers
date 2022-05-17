@@ -24,7 +24,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "anton-l/emformer-base-librispeech": "https://huggingface.co/anton-l/emformer-base-librispeech/resolve/main/config.json",
+    "anton-l/emformer-base-librispeech": (
+        "https://huggingface.co/anton-l/emformer-base-librispeech/resolve/main/config.json"
+    ),
 }
 
 
@@ -289,10 +291,10 @@ class EmformerConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect. "
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
-                f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
@@ -335,7 +337,6 @@ class EmformerConfig(PretrainedConfig):
         self.lstm_dropout = lstm_dropout
 
         self.joiner_activation = joiner_activation
-
 
     @property
     def inputs_to_logits_ratio(self):

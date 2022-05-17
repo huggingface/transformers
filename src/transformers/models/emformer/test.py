@@ -14,4 +14,3 @@ model = EmformerModel(config)
 features = feature_extractor(waveform, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**features)
-

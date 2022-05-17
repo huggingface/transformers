@@ -23,17 +23,13 @@ import torch
 from torchaudio.pipelines import EMFORMER_RNNT_BASE_LIBRISPEECH, RNNTBundle
 from torchaudio.prototype.pipelines import EMFORMER_RNNT_BASE_MUSTC, EMFORMER_RNNT_BASE_TEDLIUM3
 
-from transformers import (
-    EmformerConfig,
-    EmformerFeatureExtractor,
-    EmformerForRNNT,
-    logging,
-)
+from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, logging
+
 
 NAME2BUNDLE = {
     "base_librispeech": EMFORMER_RNNT_BASE_LIBRISPEECH,
     "base_mustc": EMFORMER_RNNT_BASE_MUSTC,
-    "base_tedlium": EMFORMER_RNNT_BASE_TEDLIUM3
+    "base_tedlium": EMFORMER_RNNT_BASE_TEDLIUM3,
 }
 
 
@@ -137,7 +133,6 @@ def convert_weights(bundle: RNNTBundle, config: EmformerConfig) -> EmformerForRN
     model.joiner.linear.load_state_dict(decoder.joiner.linear.state_dict())
 
     return model
-
 
 
 @torch.no_grad()

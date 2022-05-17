@@ -1156,10 +1156,7 @@ class EmformerModel(EmformerPreTrainedModel):
                 hidden_states.shape[1], attention_mask, add_adapter=False
             )
 
-        hidden_states, lengths = self.encoder(
-            hidden_states,
-            reduced_lengths
-        )
+        hidden_states, lengths = self.encoder(hidden_states, reduced_lengths)
 
         print("transformer_out", hidden_states.sum(), hidden_states.shape)
         print("transformer_lengths", lengths)
@@ -1172,8 +1169,8 @@ class EmformerModel(EmformerPreTrainedModel):
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            #hidden_states=encoder_outputs.hidden_states,
-            #attentions=encoder_outputs.attentions,
+            # hidden_states=encoder_outputs.hidden_states,
+            # attentions=encoder_outputs.attentions,
         )
 
 
@@ -1213,23 +1210,19 @@ class RNNTCustomLSTM(torch.nn.Module):
     ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         r"""Forward pass.
 
-        B: batch size;
-        T: maximum sequence length in batch;
-        D: feature dimension of each input sequence element.
+        B: batch size; T: maximum sequence length in batch; D: feature dimension of each input sequence element.
 
         Args:
             input (torch.Tensor): with shape `(T, B, D)`.
             state (List[torch.Tensor] or None): list of tensors
-                representing internal state generated in preceding invocation
-                of ``forward``.
+                representing internal state generated in preceding invocation of ``forward``.
 
         Returns:
             (torch.Tensor, List[torch.Tensor]):
                 torch.Tensor
                     output, with shape `(T, B, hidden_dim)`.
                 List[torch.Tensor]
-                    list of tensors representing internal state generated
-                    in current invocation of ``forward``.
+                    list of tensors representing internal state generated in current invocation of ``forward``.
         """
         if state is None:
             B = input.size(1)
@@ -1274,10 +1267,7 @@ class RNNTPredictor(torch.nn.Module):
 
     """
 
-    def __init__(
-        self,
-        config: EmformerConfig
-    ) -> None:
+    def __init__(self, config: EmformerConfig) -> None:
         super().__init__()
         self.embedding = torch.nn.Embedding(config.vocab_size, config.symbol_embedding_dim)
         self.input_layer_norm = torch.nn.LayerNorm(config.symbol_embedding_dim)
@@ -1306,9 +1296,7 @@ class RNNTPredictor(torch.nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
         r"""Forward pass.
 
-        B: batch size;
-        U: maximum sequence length in batch;
-        D: feature dimension of each input sequence element.
+        B: batch size; U: maximum sequence length in batch; D: feature dimension of each input sequence element.
 
         Args:
             input (torch.Tensor): target sequences, with shape `(B, U)` and each element
@@ -1316,19 +1304,18 @@ class RNNTPredictor(torch.nn.Module):
             lengths (torch.Tensor): with shape `(B,)` and i-th element representing
                 number of valid frames for i-th batch element in ``input``.
             state (List[List[torch.Tensor]] or None, optional): list of lists of tensors
-                representing internal state generated in preceding invocation
-                of ``forward``. (Default: ``None``)
+                representing internal state generated in preceding invocation of ``forward``. (Default: ``None``)
 
         Returns:
             (torch.Tensor, torch.Tensor, List[List[torch.Tensor]]):
                 torch.Tensor
                     output encoding sequences, with shape `(B, U, output_dim)`
                 torch.Tensor
-                    output lengths, with shape `(B,)` and i-th element representing
-                    number of valid elements for i-th batch element in output encoding sequences.
+                    output lengths, with shape `(B,)` and i-th element representing number of valid elements for i-th
+                    batch element in output encoding sequences.
                 List[List[torch.Tensor]]
-                    output states; list of lists of tensors
-                    representing internal state generated in current invocation of ``forward``.
+                    output states; list of lists of tensors representing internal state generated in current invocation
+                    of ``forward``.
         """
         input_tb = input.permute(1, 0)
         embedding_out = self.embedding(input_tb)
@@ -1371,10 +1358,8 @@ class RNNTJoiner(torch.nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""Forward pass for training.
 
-        B: batch size;
-        T: maximum source sequence length in batch;
-        U: maximum target sequence length in batch;
-        D: dimension of each source and target sequence encoding.
+        B: batch size; T: maximum source sequence length in batch; U: maximum target sequence length in batch; D:
+        dimension of each source and target sequence encoding.
 
         Args:
             source_encodings (torch.Tensor): source encoding sequences, with
@@ -1390,11 +1375,11 @@ class RNNTJoiner(torch.nn.Module):
                 torch.Tensor
                     joint network output, with shape `(B, T, U, output_dim)`.
                 torch.Tensor
-                    output source lengths, with shape `(B,)` and i-th element representing
-                    number of valid elements along dim 1 for i-th batch element in joint network output.
+                    output source lengths, with shape `(B,)` and i-th element representing number of valid elements
+                    along dim 1 for i-th batch element in joint network output.
                 torch.Tensor
-                    output target lengths, with shape `(B,)` and i-th element representing
-                    number of valid elements along dim 2 for i-th batch element in joint network output.
+                    output target lengths, with shape `(B,)` and i-th element representing number of valid elements
+                    along dim 2 for i-th batch element in joint network output.
         """
         joint_encodings = source_encodings.unsqueeze(2).contiguous() + target_encodings.unsqueeze(1).contiguous()
         activation_out = self.activation(joint_encodings)
@@ -1419,9 +1404,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _gen_next_token_probs(
-        self, enc_out: torch.Tensor, predictor_out, device: torch.device
-    ) -> torch.Tensor:
+    def _gen_next_token_probs(self, enc_out: torch.Tensor, predictor_out, device: torch.device) -> torch.Tensor:
         one_tensor = torch.tensor([1], device=device)
         joined_out, _, _ = self.joiner(
             enc_out,
@@ -1472,25 +1455,25 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
         rnn_lengths = torch.tensor([1], device=self.device)
         token = self.blank_token
-        predictor_out, _, predictor_state = self.predictor(torch.tensor([[token]], device=self.device), rnn_lengths, None)
+        predictor_out, _, predictor_state = self.predictor(
+            torch.tensor([[token]], device=self.device), rnn_lengths, None
+        )
 
         logits = []
         time_step = 0
         while time_step < n_time_steps:
-            next_token_probs = self._gen_next_token_probs(encoder_out[0][:, time_step : time_step + 1], predictor_out, device)
+            next_token_probs = self._gen_next_token_probs(
+                encoder_out[0][:, time_step : time_step + 1], predictor_out, device
+            )
             token = next_token_probs.argmax(-1)
             if token != self.blank_token:
                 # if the joiner outputs a real token, then record it and move to the next RNN state
                 logits.append(next_token_probs)
                 predictor_out, _, predictor_state = self.predictor(
-                    torch.tensor([[token]], device=device),
-                    rnn_lengths,
-                    predictor_state
+                    torch.tensor([[token]], device=device), rnn_lengths, predictor_state
                 )
             else:
                 # if the joiner outputs a blank token, then move to the next encoder output frame
                 time_step += 1
 
-        return CausalLMOutput(
-            loss=None, logits=logits, hidden_states=None, attentions=None
-        )
+        return CausalLMOutput(loss=None, logits=logits, hidden_states=None, attentions=None)
