@@ -31,6 +31,8 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
 src/transformers/models/hubert/modeling_hubert.py
+src/transformers/models/longformer/modeling_longformer.py
+src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
