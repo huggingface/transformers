@@ -25,16 +25,16 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "groupvit-gcc-yfcc": "https://huggingface.co/groupvit-gcc-yfcc/resolve/main/config.json",
+    "nvidia/groupvit-gccyfcc": "https://huggingface.co/nvidia/groupvit-gccyfcc/resolve/main/config.json",
 }
 
 
 class GroupViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an GroupViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GroupViT
-    [groupvit-gcc-yfcc](https://huggingface.co/groupvit-gcc-yfcc) architecture.
+    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an
+    GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the GroupViT
+    [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -42,8 +42,8 @@ class GroupViTTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the GroupViT text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`GroupViTModel`].
+            Vocabulary size of the GroupViT text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`GroupViTModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -74,10 +74,10 @@ class GroupViTTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroupViTTextModel, GroupViTTextConfig
 
-    >>> # Initializing a GroupViTTextModel with groupvit-gcc-yfcc style configuration
+    >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTTextConfig()
 
-    >>> # Initializing a GroupViTTextConfig from the groupvit-gcc-yfcc style configuration
+    >>> # Initializing a GroupViTTextConfig from the nvidia/groupvit-gccyfcc style configuration
     >>> model = GroupViTTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -139,10 +139,10 @@ class GroupViTTextConfig(PretrainedConfig):
 
 class GroupViTVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an GroupViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GroupViT
-    [groupvit-gcc-yfcc](https://huggingface.co/groupvit-gcc-yfcc) architecture.
+    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an
+    GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the GroupViT
+    [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -186,10 +186,10 @@ class GroupViTVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroupViTVisionModel, GroupViTVisionConfig
 
-    >>> # Initializing a GroupViTVisionModel with groupvit-gcc-yfcc style configuration
+    >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTVisionConfig()
 
-    >>> # Initializing a GroupViTVisionModel model from the groupvit-gcc-yfcc style configuration
+    >>> # Initializing a GroupViTVisionModel model from the nvidia/groupvit-gccyfcc style configuration
     >>> model = GroupViTVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -267,8 +267,8 @@ class GroupViTVisionConfig(PretrainedConfig):
 
 class GroupViTConfig(PretrainedConfig):
     r"""
-    [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate
-    GroupViT model according to the specified arguments, defining the text model and vision model configs.
+    [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
+    instantiate GroupViT model according to the specified arguments, defining the text model and vision model configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -281,7 +281,8 @@ class GroupViTConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original GroupViT implementation.
+            The inital value of the *logit_scale* paramter. Default is used as per the original GroupViT
+            implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -321,8 +322,8 @@ class GroupViTConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: GroupViTTextConfig, vision_config: GroupViTVisionConfig, **kwargs):
         r"""
-        Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit vision model
-        configuration.
+        Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit
+        vision model configuration.
 
         Returns:
             [`GroupViTConfig`]: An instance of a configuration object

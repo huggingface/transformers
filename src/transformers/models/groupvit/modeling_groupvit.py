@@ -16,15 +16,15 @@
 
 
 import collections.abc
-from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, Set
 import math
-import numpy as np
+from dataclasses import dataclass
+from typing import Any, Optional, Set, Tuple, Union
 
+import numpy as np
 import torch
-from torch.nn import functional as F
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -41,10 +41,10 @@ from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViT
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "groupvit-gcc-yfcc"
+_CHECKPOINT_FOR_DOC = "nvidia/groupvit-gccyfcc"
 
 GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "groupvit-gcc-yfcc",
+    "nvidia/groupvit-gccyfcc",
     # See all GroupViT models at https://huggingface.co/models?filter=groupvit
 ]
 
@@ -286,9 +286,7 @@ class GroupViTAssignAttention(nn.Module):
         raw_attn = (q @ k.transpose(-2, -1)) * self.scale
 
         attn = self.get_attn(raw_attn)
-        hard_attn = attn.clone()
         soft_attn = self.get_attn(raw_attn, gumbel=False, hard=False)
-        attn_dict = {"hard": hard_attn, "soft": soft_attn}
 
         attn = attn / (attn.sum(dim=-1, keepdim=True) + self.assign_eps)
 
@@ -298,7 +296,7 @@ class GroupViTAssignAttention(nn.Module):
 
         out = self.proj(out)
 
-        return out, attn_dict
+        return out, soft_attn
 
 
 class GroupViTTokenAssign(nn.Module):
@@ -387,9 +385,11 @@ class GroupViTOutput(ModelOutput):
             </Tip>
 
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`GroupViTTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`GroupViTTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`GroupViTVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`GroupViTVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`GroupViTTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -929,13 +929,20 @@ class GroupViTStage(nn.Module):
 
         x, group_token = self.split_x(cat_x)
 
-        attn_dict = None
+        # attn_dict = None
+        # if self.downsample is not None:
+        #     x, attn_dict = self.downsample(x, group_token)
+
+        # outputs = (x, group_token)
+        # if output_attentions:
+        #     outputs = outputs + (attn_dict["soft"] if attn_dict is not None else None,)
+        attn = None
         if self.downsample is not None:
-            x, attn_dict = self.downsample(x, group_token)
+            x, attn = self.downsample(x, group_token)
 
         outputs = (x, group_token)
         if output_attentions:
-            outputs = outputs + (attn_dict["soft"] if attn_dict is not None else None,)
+            outputs = outputs + (attn,)
 
         return outputs
 
@@ -1212,7 +1219,7 @@ class GroupViTVisionEncoder(nn.Module):
             hidden_states = layer_outputs[0]
             group_tokens = layer_outputs[1]
 
-            if output_attentions:
+            if output_attentions and layer_outputs[2] is not None:
                 all_groupings = all_groupings + (layer_outputs[2],)
 
         if output_hidden_states:
@@ -1447,8 +1454,8 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, GroupViTTextModel
 
-        >>> model = GroupViTTextModel.from_pretrained("groupvit-gcc-yfcc")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("groupvit-gcc-yfcc")
+        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -1556,8 +1563,8 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, GroupViTVisionModel
 
-        >>> model = GroupViTVisionModel.from_pretrained("groupvit-gcc-yfcc")
-        >>> processor = CLIPProcessor.from_pretrained("groupvit-gcc-yfcc")
+        >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1641,8 +1648,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("groupvit-gcc-yfcc")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("groupvit-gcc-yfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1688,8 +1695,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("groupvit-gcc-yfcc")
-        >>> processor = CLIPProcessor.from_pretrained("groupvit-gcc-yfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1741,8 +1748,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("groupvit-gcc-yfcc")
-        >>> processor = CLIPProcessor.from_pretrained("groupvit-gcc-yfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

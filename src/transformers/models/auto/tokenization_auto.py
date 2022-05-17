@@ -225,6 +225,7 @@ else:
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
+            ),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
             (
                 "perceiver",

@@ -166,12 +166,6 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
-    "models.groupvit": [
-        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GroupViTConfig",
-        "GroupViTTextConfig",
-        "GroupViTVisionConfig",
-    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
@@ -204,6 +198,12 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.groupvit": [
+        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroupViTConfig",
+        "GroupViTTextConfig",
+        "GroupViTVisionConfig",
+    ],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -839,15 +839,6 @@ if is_torch_available():
             "CLIPVisionModel",
         ]
     )
-    _import_structure["models.groupvit"].extend(
-        [
-            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GroupViTModel",
-            "GroupViTPreTrainedModel",
-            "GroupViTTextModel",
-            "GroupViTVisionModel",
-        ]
-    )
     _import_structure["models.convbert"].extend(
         [
             "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1072,6 +1063,15 @@ if is_torch_available():
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.groupvit"].extend(
+        [
+            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroupViTModel",
+            "GroupViTPreTrainedModel",
+            "GroupViTTextModel",
+            "GroupViTVisionModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -1839,15 +1839,6 @@ if is_tf_available():
             "TFCLIPVisionModel",
         ]
     )
-    _import_structure["models.groupvit"].extend(
-        [
-            "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFGroupViTModel",
-            "TFGroupViTPreTrainedModel",
-            "TFGroupViTTextModel",
-            "TFGroupViTVisionModel",
-        ]
-    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1983,6 +1974,15 @@ if is_tf_available():
             "TFGPTJForSequenceClassification",
             "TFGPTJModel",
             "TFGPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.groupvit"].extend(
+        [
+            "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGroupViTModel",
+            "TFGroupViTPreTrainedModel",
+            "TFGroupViTTextModel",
+            "TFGroupViTVisionModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -2356,16 +2356,6 @@ if is_flax_available():
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
-    _import_structure["models.groupvit"].extend(
-        [
-            "FlaxGroupViTModel",
-            "FlaxGroupViTPreTrainedModel",
-            "FlaxGroupViTTextModel",
-            "FlaxGroupViTTextPreTrainedModel",
-            "FlaxGroupViTVisionModel",
-            "FlaxGroupViTVisionPreTrainedModel",
-        ]
-    )
     _import_structure["models.distilbert"].extend(
         [
             "FlaxDistilBertForMaskedLM",
@@ -2395,6 +2385,16 @@ if is_flax_available():
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
+    _import_structure["models.groupvit"].extend(
+        [
+            "FlaxGroupViTModel",
+            "FlaxGroupViTPreTrainedModel",
+            "FlaxGroupViTTextModel",
+            "FlaxGroupViTTextPreTrainedModel",
+            "FlaxGroupViTVisionModel",
+            "FlaxGroupViTVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -2585,12 +2585,6 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
-    from .models.groupvit import (
-        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GroupViTConfig,
-        GroupViTTextConfig,
-        GroupViTVisionConfig,
-    )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
@@ -2624,6 +2618,12 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.groupvit import (
+        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroupViTConfig,
+        GroupViTTextConfig,
+        GroupViTVisionConfig,
+    )
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -3163,13 +3163,6 @@ if TYPE_CHECKING:
             CLIPTextModel,
             CLIPVisionModel,
         )
-        from .models.groupvit import (
-            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GroupViTModel,
-            GroupViTPreTrainedModel,
-            GroupViTTextModel,
-            GroupViTVisionModel,
-        )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
@@ -3357,6 +3350,13 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.groupvit import (
+            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroupViTModel,
+            GroupViTPreTrainedModel,
+            GroupViTTextModel,
+            GroupViTVisionModel,
         )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

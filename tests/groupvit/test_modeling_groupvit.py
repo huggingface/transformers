@@ -25,12 +25,7 @@ import numpy as np
 import requests
 import transformers
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ..test_configuration_common import ConfigTester
@@ -208,7 +203,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), len(self.model_tester.depths))
+            self.assertEqual(len(attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -219,7 +214,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), len(self.model_tester.depths))
+            self.assertEqual(len(attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
 
             out_len = len(outputs)
 
@@ -237,7 +232,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), len(self.model_tester.depths))
+            self.assertEqual(len(self_attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
             for i, self_attn in enumerate(self_attentions):
                 if self_attn is None:
                     continue
@@ -685,7 +680,7 @@ def prepare_img():
 class GroupViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "groupvit-gcc-yfcc"
+        model_name = "nvidia/groupvit-gccyfcc"
         model = GroupViTModel.from_pretrained(model_name).to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
@@ -708,6 +703,6 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[13.3587,  6.3613]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

@@ -17,9 +17,9 @@ import argparse
 
 import torch
 import torch.nn.functional as F
-from GroupViT.utils.config import load_config
-from GroupViT.models import build_model
 
+from GroupViT.models import build_model
+from GroupViT.utils.config import load_config
 from transformers import GroupViTConfig, GroupViTModel
 
 
