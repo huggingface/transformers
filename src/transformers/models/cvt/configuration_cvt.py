@@ -30,7 +30,7 @@ class CvtConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CvtModel`]. It is used to instantiate a CvT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Cvt
+    defaults will yield a similar configuration to that of the CvT
     [microsoft/cvt-13](https://huggingface.co/microsoft/cvt-13) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
