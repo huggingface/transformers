@@ -50,7 +50,7 @@ from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
-from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .visual_question_answering import VisualQuestionAnsweringArgumentHandler, VisualQuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
@@ -200,6 +200,7 @@ SUPPORTED_TASKS = {
             "model": {
                 "pt": "dandelin/vilt-b32-finetuned-vqa",
                 "tokenizer": "dandelin/vilt-b32-finetuned-vqa",
+                "feature_extractor": "dandelin/vilt-b32-finetuned-vqa",
             },
         },
         "type": "multimodal",

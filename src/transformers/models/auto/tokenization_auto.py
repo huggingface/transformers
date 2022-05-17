@@ -261,6 +261,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ]
     )
 
