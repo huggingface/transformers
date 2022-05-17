@@ -236,7 +236,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 
 @require_flax
 @require_tokenizers
-class OPTModelIntegrationTests(unittest.TestCase):
+class FlaxOPTModelIntegrationTests(unittest.TestCase):
     # @slow
     def test_inference_no_head(self):
         model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float32)
@@ -253,7 +253,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 @require_tokenizers
 @require_flax
 # @slow
-class OPTEmbeddingsTest(unittest.TestCase):
+class FlaxOPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_model = "facebook/opt-350m"
@@ -289,7 +289,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
 
 
 @slow
-class OPTGenerationTest(unittest.TestCase):
+class FlaxOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
@@ -346,3 +346,27 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+        
+    
+    # @slow
+    def test_batch_generation(self):
+        model_id = "facebook/opt-350m"
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+
+        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model.do_sample = False
+        model.config.pad_token_id = model.config.eos_token_id
+
+        jit_generate = jax.jit(model.generate)
+
+        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+
+        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+
+        expected_string = [
+            "Hello this is a long string of words. I'm going to try to explain what I mean.",
+            "Hey, I'm not sure if I'm going to be able to do",
+        ]
+
+        self.assertListEqual(output_string, expected_string)
