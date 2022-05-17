@@ -116,6 +116,7 @@ from . import (
     t5,
     tapas,
     tapex,
+    trajectory_transformer,
     transfo_xl,
     trocr,
     unispeech,
