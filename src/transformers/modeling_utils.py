@@ -664,8 +664,12 @@ class ModuleUtilsMixin:
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
+        if self.config.use_torch_bfloat16_embeddings:
+            encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.bfloat16)
+        else:
+            encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(encoder_extended_attention_mask.dtype).min
 
         return encoder_extended_attention_mask
 
@@ -745,8 +749,16 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
+<<<<<<< HEAD
         extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
+=======
+        if self.config.use_torch_bfloat16_embeddings:
+            extended_attention_mask = extended_attention_mask.to(torch.bfloat16)
+        else:
+            extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+>>>>>>> 8c47cac41... make the data type of head_mask and attention_mask to bfloat16 when enabling use_torch_bfloat16_embeddings
         return extended_attention_mask
 
     def get_head_mask(
@@ -784,7 +796,10 @@ class ModuleUtilsMixin:
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
+        if self.config.use_torch_bfloat16_embeddings:
+            head_mask = head_mask.to(dtype=torch.bfloat16)
+        else:
+            head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
         return head_mask
 
     def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
