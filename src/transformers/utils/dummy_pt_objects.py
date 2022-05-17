@@ -3868,6 +3868,13 @@ class Speech2Text2PreTrainedModel(metaclass=DummyObject):
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SplinterForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SplinterForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
