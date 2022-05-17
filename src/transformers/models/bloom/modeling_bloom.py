@@ -43,9 +43,8 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
 ]
 
+
 # Utility functions below:
-
-
 def attention_mask_func(attention_scores, attention_mask, causal_mask):
     if attention_mask.dtype == torch.bool:
         attention_mask_bool = ~attention_mask
@@ -133,7 +132,7 @@ class BLOOMAttention(nn.Module):
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
-            config.seq_length,
+            config.seq_length + 100,
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
@@ -188,7 +187,7 @@ class BLOOMAttention(nn.Module):
         # ===================================
 
         # [b, np, sq, sk]
-        output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
+        # output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
         # [sq, b, np, hn] -> [sq, b * np, hn]
@@ -220,7 +219,6 @@ class BLOOMAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
 
-        # attention_probs = torch.nn.Softmax(dim=-1)(mask_output)
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
         attention_probs = self.attention_dropout(attention_probs)
 
@@ -281,7 +279,6 @@ class BLOOMAttention(nn.Module):
             output_tensor = output_tensor
             output_bias = self.dense.bias
         output = output_tensor
-
         outputs = (output, present)
         if output_attentions:
             outputs += (attention_probs.view(old_attention_probs_size),)
@@ -339,7 +336,7 @@ class BLOOMBlock(nn.Module):
         dtype = getattr(torch, config.dtype)
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
-        self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head, dtype=dtype)
+        self.alibi = self._build_alibi_tensor(config.seq_length + 100, config.n_head, dtype=dtype)
         self.self_attention = BLOOMAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
@@ -751,11 +748,11 @@ class BLOOMModel(BLOOMPreTrainedModel):
                     if i == v[-1] and "cuda:" + str(k) != self.last_device:
                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
-        hidden_states = self.ln_f(hidden_states)
-
         # Add last hidden state
+        hidden_states = self.ln_f(hidden_states).transpose(1, 0)
+
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.transpose(1, 0),)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = hidden_states.view(output_shape)
 
