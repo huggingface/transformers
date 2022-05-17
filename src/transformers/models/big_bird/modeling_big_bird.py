@@ -263,7 +263,7 @@ class BigBirdEmbeddings(nn.Module):
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
+                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
                 persistent=False,
             )
         # End copy
@@ -3099,7 +3099,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             # setting lengths logits to `-inf`
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
-                token_type_ids = torch.ones(logits_mask.size(), dtype=int) - logits_mask
+                token_type_ids = torch.ones(logits_mask.size(), dtype=int, device=logits_mask.device) - logits_mask
             logits_mask = logits_mask
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
