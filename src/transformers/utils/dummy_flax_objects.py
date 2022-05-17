@@ -794,6 +794,7 @@ class FlaxMT5Model(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+
 class FlaxOPTDecoderPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -820,6 +821,7 @@ class FlaxOPTPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
 
 class FlaxPegasusForConditionalGeneration(metaclass=DummyObject):
     _backends = ["flax"]

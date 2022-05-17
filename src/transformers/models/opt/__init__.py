@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
     if is_torch_available():
         from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
-        
+
     if is_tf_available():
         from .modeling_tf_opt import TFOPTModel, TFOPTPretrainedModel
 

@@ -1615,6 +1615,7 @@ class TFOpenAIGPTPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+
 class TFOPTModel(metaclass=DummyObject):
     _backends = ["tf"]
 
