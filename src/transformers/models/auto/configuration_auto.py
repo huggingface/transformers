@@ -113,7 +113,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinConfig"),
         ("t5", "T5Config"),
         ("tapas", "TapasConfig"),
-        ("tapex", "BartConfig"),
         ("trajectory_transformer", "TrajectoryTransformerConfig"),
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
