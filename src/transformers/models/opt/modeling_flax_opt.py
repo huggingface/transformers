@@ -772,12 +772,11 @@ class FlaxOPTForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    OPT Decoder Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g
+    OPT Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g
     for autoregressive tasks.
     """,
     OPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForCausalLM with Bart->OPT
 class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTForCausalLMModule
 
@@ -795,7 +794,6 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
             position_ids = make_positions(attention_mask, self.config.pad_token_id)
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
-            attention_mask = jnp.ones_like(input_ids)
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 
         return {
