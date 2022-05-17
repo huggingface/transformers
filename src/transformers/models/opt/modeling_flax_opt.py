@@ -603,8 +603,7 @@ class FlaxOPTDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids)
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
-
-        position_ids = make_positions(attention_mask,self.padding_idx)
+            
         positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
@@ -722,13 +721,15 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-
-        # prepare decoder inputs
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
+            
         if position_ids is None:
-            batch_size, sequence_length = input_ids.shape
-            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+            position_ids = make_positions(attention_mask, self.config.pad_token_id)
+        else:
+            position_ids += 2
+            # batch_size, seq_length = input_ids.shape
+            # position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)) + 2
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
@@ -791,7 +792,6 @@ class FlaxOPTModule(nn.Module):
         init_cache=False,
     ):
 
-        # if else should be avoided in jax code?
         # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         # output_hidden_states = (
         #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

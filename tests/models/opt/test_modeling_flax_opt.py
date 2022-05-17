@@ -237,13 +237,9 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 @require_flax
 @require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
-    # @cached_property
-    def default_tokenizer(self):
-        return GPT2Tokenizer.from_pretrained("patrickvonplaten/opt_gpt2_tokenizer")
-
     # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float16)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float32)
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = jnp.not_equal(input_ids,model.config.pad_token_id)
         output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
@@ -254,10 +250,8 @@ class OPTModelIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
-
-# TODO add embeddings tests
-# @require_tokenizers
-# @require_flax
+@require_tokenizers
+@require_flax
 # @slow
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
@@ -281,7 +275,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
+        inputs = tokenizer(prompts, return_tensors="jax", padding=True, add_special_tokens=False)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         logits_meta = jnp.array(
             [
@@ -293,7 +287,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
         )
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
-# TODO add OPTGenerationTest
+
 @slow
 class OPTGenerationTest(unittest.TestCase):
     @property
