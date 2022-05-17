@@ -36,7 +36,6 @@ class CvtConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
