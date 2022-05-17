@@ -426,11 +426,8 @@ def make_positions(mask, padding_idx: int):
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    # The series of casts and type-conversions here are carefully
-    # balanced to both work with ONNX export and XLA. In particular XLA
-    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
-    # how to handle the dtype kwarg in cumsum.
-    positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
+    positions = jnp.cumsum(mask, axis=1).astype(jnp.int32) + padding_idx
+    # positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
     return positions
 
 
