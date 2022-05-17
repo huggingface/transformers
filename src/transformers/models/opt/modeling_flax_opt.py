@@ -122,7 +122,7 @@ class FlaxOPTAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+
         dense = partial(
             nn.Dense,
             self.embed_dim,
