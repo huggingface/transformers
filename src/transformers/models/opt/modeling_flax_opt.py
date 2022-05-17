@@ -319,7 +319,7 @@ class FlaxOPTDecoderLayer(nn.Module):
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
+            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache, deterministic=deterministic
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
