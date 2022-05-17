@@ -63,6 +63,7 @@ else:
             ),
             ("bartpho", ("BartphoTokenizer", None)),
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
             ("bert-japanese", ("BertJapaneseTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
@@ -76,6 +77,7 @@ else:
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
+            ("bloom", (None, "BLOOMTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "camembert",
@@ -124,7 +126,9 @@ else:
             ("fsmt", ("FSMTTokenizer", None)),
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
@@ -146,21 +150,10 @@ else:
                 ),
             ),
             (
-                "squeezebert",
-                ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
-            ),
-            ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
-            ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
-            ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-            ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-            ("bloom", (None, "BLOOMTokenizerFast" if is_tokenizers_available() else None)),
-            ("opt", ("GPT2Tokenizer", None)),
-            ("transfo-xl", ("TransfoXLTokenizer", None)),
-            (
                 "mbart50",
                 (
-                  "MBart50Tokenizer" if is_sentencepiece_available() else None, 
-                  "MBart50TokenizerFast" if is_tokenizers_available() else None,
+                    "MBart50Tokenizer" if is_sentencepiece_available() else None,
+                    "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
@@ -182,6 +175,8 @@ else:
                 ),
             ),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
+            ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
+            ("opt", ("GPT2Tokenizer", None)),
             ("opt", ("GPT2Tokenizer", None)),
             (
                 "pegasus",
@@ -228,6 +223,10 @@ else:
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
             (
+                "squeezebert",
+                ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
+            ),
+            (
                 "t5",
                 (
                     "T5Tokenizer" if is_sentencepiece_available() else None,
@@ -236,6 +235,7 @@ else:
             ),
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
+            ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),

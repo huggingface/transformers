@@ -240,13 +240,15 @@ if __name__ == "__main__":
         "--bloom_config_file",
         default="",
         type=str,
-        help="An optional config json file corresponding to the pre-trained model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "An optional config json file corresponding to the pre-trained model. \n"
+            "This specifies the model architecture."
+        ),
     )
     parser.add_argument(
         "--shard_model",
         action="store_true",
-        help="An optional setting to shard the output model \n" "This enables sharding the converted checkpoint",
+        help="An optional setting to shard the output model \nThis enables sharding the converted checkpoint",
     )
     args = parser.parse_args()
     convert_bloom_checkpoint_to_pytorch(

@@ -116,7 +116,8 @@ class BLOOMAttention(nn.Module):
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
-                f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`: {self.num_heads})."
+                f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         # Layer-wise attention scaling
