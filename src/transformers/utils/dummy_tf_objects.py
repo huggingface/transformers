@@ -1626,7 +1626,7 @@ class TFOPTModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFOPTPretrainedModel(metaclass=DummyObject):
+class TFOPTPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
