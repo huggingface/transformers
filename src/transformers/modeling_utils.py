@@ -749,16 +749,11 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-<<<<<<< HEAD
-        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
-=======
         if self.config.use_torch_bfloat16_embeddings:
             extended_attention_mask = extended_attention_mask.to(torch.bfloat16)
         else:
-            extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
->>>>>>> 8c47cac41... make the data type of head_mask and attention_mask to bfloat16 when enabling use_torch_bfloat16_embeddings
+            extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(extended_attention_mask.dtype).min
         return extended_attention_mask
 
     def get_head_mask(

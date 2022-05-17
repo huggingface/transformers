@@ -468,6 +468,28 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_torch_bfloat16_embeddings(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                amp = torch.cuda.amp.autocast if torch_device == "cuda" else torch.cpu.amp.autocast
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                with amp():
+                    model.config.use_torch_bfloat16_embeddings = False
+                    first = model(**inputs)[0]
+                    model.config.use_torch_bfloat16_embeddings = True
+                    second = model(**inputs)[0]
+            out_1 = first.cpu().float().numpy()
+            out_2 = second.cpu().float().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 0.05)
+
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
             return

@@ -157,6 +157,7 @@ class ElectraEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
@@ -216,6 +217,8 @@ class ElectraEmbeddings(nn.Module):
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
+        if self.config.use_torch_bfloat16_embeddings:
+            embeddings = embeddings.to(dtype=torch.bfloat16)
         return embeddings
 
 
@@ -229,6 +232,7 @@ class ElectraSelfAttention(nn.Module):
                 f"heads ({config.num_attention_heads})"
             )
 
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -308,7 +312,10 @@ class ElectraSelfAttention(nn.Module):
             position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            if self.config.use_torch_bfloat16_embeddings:
+                positional_embedding = positional_embedding.to(dtype=torch.bfloat16)
+            else:
+                positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)

@@ -43,6 +43,7 @@ config_common_kwargs = {
     "torch_dtype": "float16",
     "use_bfloat16": True,
     "tf_legacy_loss": True,
+    "use_torch_bfloat16_embeddings": True,
     "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,

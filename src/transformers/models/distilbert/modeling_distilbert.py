@@ -97,6 +97,7 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 class Embeddings(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
+        self.config = config
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
         if config.sinusoidal_pos_embds:
@@ -136,6 +137,8 @@ class Embeddings(nn.Module):
         embeddings = word_embeddings + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
+        if self.config.use_torch_bfloat16_embeddings:
+            embeddings = embeddings.to(dtype=torch.bfloat16)
         return embeddings
 
 
