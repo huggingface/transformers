@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 from tqdm.auto import tqdm
 
-
 # Integrations must be imported before ML frameworks:
 from .integrations import (  # isort: split
     default_hp_search_backend,
@@ -2172,6 +2171,19 @@ class Trainer:
 
         return inputs
 
+    def torchdynamo_smart_context_manager(self):
+        """
+        A helper wrapper that creates an appropriate context manager for `torchdynamo`.
+        """
+        import torchdynamo
+        from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+        if self.args.use_torchdynamo:
+            ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
+        else:
+            ctx_manager = contextlib.nullcontext()
+        return ctx_manager
+
     def autocast_smart_context_manager(self):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
@@ -2213,8 +2225,9 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.autocast_smart_context_manager():
-            loss = self.compute_loss(model, inputs)
+        with self.torchdynamo_smart_context_manager():
+            with self.autocast_smart_context_manager():
+                loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -2907,8 +2920,9 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    with self.autocast_smart_context_manager():
-                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    with self.torchdynamo_smart_context_manager():
+                        with self.autocast_smart_context_manager():
+                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
                     if isinstance(outputs, dict):
@@ -2917,8 +2931,9 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.autocast_smart_context_manager():
-                        outputs = model(**inputs)
+                    with self.torchdynamo_smart_context_manager():
+                        with self.autocast_smart_context_manager():
+                            outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:

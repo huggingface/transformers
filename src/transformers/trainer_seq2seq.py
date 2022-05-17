@@ -183,8 +183,9 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():
-            with self.autocast_smart_context_manager():
-                outputs = model(**inputs)
+            with self.torchdynamo_smart_context_manager():
+                with self.autocast_smart_context_manager():
+                    outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
                     loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
