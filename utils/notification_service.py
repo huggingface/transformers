@@ -763,9 +763,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title} | Author: {ci_author}>"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title} | Author: {ci_author} | Merged by: {merged_by}>"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
 
     else:
         ci_title = ""
