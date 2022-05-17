@@ -454,8 +454,6 @@ class FlaxOPTDecoder(nn.Module):
         )
         # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
         # should take attention mask as inputs ?
-        # TODO FIXME as FlaxOPTLearnedPositionalEmbedding
-        # Why is this not passed as embed_tokens ? Initialising it here but why?
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
