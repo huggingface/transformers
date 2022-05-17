@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -120,7 +120,7 @@ class CvtModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        image_size = to_2tuple(self.image_size)
+        image_size = (self.image_size, self.image_size)
         height, width = image_size[0], image_size[1]
         for i in range(len(self.depth)):
             height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)

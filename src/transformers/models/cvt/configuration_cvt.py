@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 AnugunjNaman and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Cvt model configuration"""
+""" CvT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,22 +28,17 @@ CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CvtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CvtModel`]. It is used to instantiate a Cvt model
+    This is the configuration class to store the configuration of a [`CvtModel`]. It is used to instantiate a CvT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Cvt
+    defaults will yield a similar configuration to that of the CvT
     [microsoft/cvt-13](https://huggingface.co/microsoft/cvt-13) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_stages (`int`, *optional*, defaults to 3):
-            The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3]):
             The kernel size of each encoder's patch embedding.
         patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2]):
@@ -68,11 +63,7 @@ class CvtConfig(PretrainedConfig):
         qkv_bias (`List[bool]`, *optional*, defaults to [True, True, True]]):
             The bias bool for query, key and value in attentions
         cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
-            The bool for classification token
-        pos_embed (`List[bool]`, *optional*, defaults to [False, False, True]]):
-            The bool for position embeddings
-        cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
-            The bool for cls_token
+            Whether or not to add a classification token to the output of each of the last 3 stages.
         qkv_projection_method (`List[string]`, *optional*, defaults to 'dw_bn', 'dw_bn', 'dw_bn']]):
             The projection method for query, key and value Default is depth-wise convolutions with batch norm. For
             Linear projection use "avg".
@@ -90,7 +81,9 @@ class CvtConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        Example:
+
+
+    Example:
 
     ```python
     >>> from transformers import CvtModel, CvtConfig
@@ -108,7 +101,6 @@ class CvtConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_size=224,
         num_channels=3,
         patch_sizes=[7, 3, 3],
         patch_stride=[4, 2, 2],
@@ -122,7 +114,6 @@ class CvtConfig(PretrainedConfig):
         drop_path_rate=[0.0, 0.0, 0.1],
         qkv_bias=[True, True, True],
         cls_token=[False, False, True],
-        pos_embed=[False, False, False],
         qkv_projection_method=["dw_bn", "dw_bn", "dw_bn"],
         kernel_qkv=[3, 3, 3],
         padding_kv=[1, 1, 1],
@@ -134,7 +125,6 @@ class CvtConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.image_size = image_size
         self.num_channels = num_channels
         self.patch_sizes = patch_sizes
         self.patch_stride = patch_stride
@@ -148,7 +138,6 @@ class CvtConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.qkv_bias = qkv_bias
         self.cls_token = cls_token
-        self.pos_embed = pos_embed
         self.qkv_projection_method = qkv_projection_method
         self.kernel_qkv = kernel_qkv
         self.padding_kv = padding_kv

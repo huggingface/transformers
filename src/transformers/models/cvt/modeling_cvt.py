@@ -38,21 +38,21 @@ _CONFIG_FOR_DOC = "CvtConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "anugunj/cvt-13"
+_CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
 _EXPECTED_OUTPUT_SHAPE = [1, 384, 14, 14]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "anugunj/cvt-13"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "anugunj/cvt-13",
-    "anugunj/cvt-13-384-1k",
-    "anugunj/cvt-13-384-22k",
-    "anugunj/cvt-21",
-    "anugunj/cvt-21-384-1k",
-    "anugunj/cvt-21-384-22k",
+    "microsoft/cvt-13",
+    "microsoft/cvt-13-384-1k",
+    "microsoft/cvt-13-384-22k",
+    "microsoft/cvt-21",
+    "microsoft/cvt-21-384-1k",
+    "microsoft/cvt-21-384-22k",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
@@ -78,15 +78,7 @@ class BaseModelOutputWithCLSToken(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
@@ -105,6 +97,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath
 class CvtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -112,7 +105,7 @@ class CvtDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -123,7 +116,7 @@ class CvtEmbeddings(nn.Module):
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding, dropout_rate):
         super().__init__()
-        self.convolution_embeddings = ConvEmbeddings(
+        self.convolution_embeddings = CvtConvEmbeddings(
             patch_size=patch_size, num_channels=num_channels, embed_dim=embed_dim, stride=stride, padding=padding
         )
         self.dropout = nn.Dropout(dropout_rate)
@@ -134,14 +127,14 @@ class CvtEmbeddings(nn.Module):
         return hidden_state
 
 
-class ConvEmbeddings(nn.Module):
+class CvtConvEmbeddings(nn.Module):
     """
     Image to Conv Embedding.
     """
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
         super().__init__()
-        patch_size = to_2tuple(patch_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         self.patch_size = patch_size
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
         self.normalization = nn.LayerNorm(embed_dim)
@@ -468,7 +461,7 @@ class CvtStage(nn.Module):
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
 
         self.layers = nn.Sequential(
             *[
@@ -484,7 +477,7 @@ class CvtStage(nn.Module):
                     qkv_bias=config.qkv_bias[self.stage],
                     attention_drop_rate=config.attention_drop_rate[self.stage],
                     drop_rate=config.drop_rate[self.stage],
-                    drop_path_rate=dpr[self.stage],
+                    drop_path_rate=drop_path_rates[self.stage],
                     mlp_ratio=config.mlp_ratio[self.stage],
                     with_cls_token=config.cls_token[self.stage],
                 )

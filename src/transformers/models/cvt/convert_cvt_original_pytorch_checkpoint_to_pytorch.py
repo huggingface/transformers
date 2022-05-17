@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Cvt checkpoints from the original repository.
+"""Convert CvT checkpoints from the original repository.
 
 URL: https://github.com/microsoft/CvT"""
 
@@ -294,17 +294,14 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
 
     # For depth size 13 (13 = 1+2+10)
     if cvt_file.rsplit("/", 1)[-1][4:6] == "13":
-        config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 2, 10]
 
     # For depth size 21 (21 = 1+4+16)
     elif cvt_file.rsplit("/", 1)[-1][4:6] == "21":
-        config.image_size = int(cvt_file.rsplit("/", 1)[-1][7:10])
         config.depth = [1, 4, 16]
 
     # For wide cvt (similar to wide-resnet) depth size 24 (w24 = 2 + 2 20)
     else:
-        config.image_size = 384
         config.depth = [2, 2, 20]
         config.num_heads = [3, 12, 16]
         config.embed_dim = [192, 768, 1024]
