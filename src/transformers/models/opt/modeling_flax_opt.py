@@ -320,7 +320,10 @@ class FlaxOPTDecoderLayer(nn.Module):
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache, deterministic=deterministic
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            init_cache=init_cache,
+            deterministic=deterministic,
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
@@ -403,8 +406,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        
-            
         # # add hidden states from the last decoder layer
         # if output_hidden_states:
         #     all_hidden_states += (hidden_states,)
@@ -412,7 +413,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         outputs = [hidden_states, all_hidden_states, all_self_attns]
 
         return outputs
-    
+
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
@@ -429,7 +430,7 @@ def make_positions(mask, padding_idx: int):
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
     positions = jnp.cumsum(mask, axis=1).astype(jnp.int32) + padding_idx
-    #positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
+    # positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
     return positions
 
 
@@ -504,18 +505,18 @@ class FlaxOPTDecoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         if self.project_out is not None:
             hidden_state = self.project_out(hidden_state)
 
         if output_hidden_states:
             all_hidden_states += (hidden_state,)
-            
+
         outputs = [hidden_state, all_hidden_states, attentions]
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
-        
+
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_state,
             hidden_states=all_hidden_states,
