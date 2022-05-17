@@ -1029,18 +1029,14 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if question_positions is None:
-            if start_positions is not None and end_positions is not None:
-                raise TypeError(
-                    "For span selection training, question_positions must be specified to obtain the correct loss"
-                )
+        if question_positions is None and start_positions is not None and end_positions is not None:
+            raise TypeError("question_positions must be specified in order to calculate the loss")
 
-            if input_ids is not None:
-                question_positions = torch.argmax(
-                    (torch.eq(input_ids, self.question_token_id)).int(), dim=-1
-                ).unsqueeze(0)
-            else:
-                raise TypeError("question_positions is required when input_embeds is specified")
+        if question_positions is None and input_ids is None:
+            raise TypeError("question_positions must be specified when input_embeds is used")
+
+        if question_positions is None:
+            question_positions = self._prepare_question_positions(input_ids)
 
         outputs = self.splinter(
             input_ids,
@@ -1100,3 +1096,16 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def _prepare_question_positions(self, input_ids: torch.Tensor) -> torch.Tensor:
+        rows, flat_positions = torch.where(input_ids == self.config.question_token_id)
+        num_questions = torch.bincount(rows)
+        positions = torch.full(
+            (input_ids.size(0), num_questions.max()),
+            self.config.pad_token_id,
+            dtype=torch.long,
+            device=input_ids.device,
+        )
+        cols = torch.cat([torch.arange(n) for n in num_questions])
+        positions[rows, cols] = flat_positions
+        return positions

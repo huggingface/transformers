@@ -44,6 +44,7 @@ class SplinterModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        question_token_id=1,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -68,6 +69,7 @@ class SplinterModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.question_token_id = question_token_id
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -84,6 +86,7 @@ class SplinterModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[:, 1] = self.question_token_id
 
         input_mask = None
         if self.use_input_mask:
@@ -114,6 +117,7 @@ class SplinterModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            question_token_id=self.question_token_id,
         )
 
         return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
@@ -433,3 +437,21 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # we add this test to ensure anybody making changes to the default
         # value of the config, will be aware of the implication.
         self.assertEqual(model.config.pad_token_id, 0)
+
+    @slow
+    def test_splinter_pretraining_prepare_question_positions(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        input_ids = torch.tensor(
+            [
+                [101, 104, 1, 2, 104, 3, 4, 102],
+                [101, 1, 104, 2, 104, 3, 104, 102],
+                [101, 1, 2, 104, 104, 3, 4, 102],
+                [101, 1, 2, 3, 4, 5, 104, 102],
+            ]
+        )
+        question_positions = torch.tensor([[1, 4, 0], [2, 4, 6], [3, 4, 0], [6, 0, 0]], dtype=torch.long)
+        output_without_positions = model(input_ids)
+        output_with_positions = model(input_ids, question_positions=question_positions)
+        self.assertTrue((output_without_positions.start_logits == output_with_positions.start_logits).all())
+        self.assertTrue((output_without_positions.end_logits == output_with_positions.end_logits).all())
