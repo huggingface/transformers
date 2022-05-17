@@ -1035,7 +1035,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         if question_positions is None and input_ids is None:
             raise TypeError("question_positions must be specified when input_embeds is used")
 
-        if question_positions is None:
+        elif question_positions is None:
             question_positions = self._prepare_question_positions(input_ids)
 
         outputs = self.splinter(
