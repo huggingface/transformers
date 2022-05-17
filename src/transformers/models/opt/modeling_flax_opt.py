@@ -734,7 +734,6 @@ class FlaxOPTForCausalLMModule(nn.Module):
         attention_mask,
         position_ids,
         head_mask: Optional[jnp.ndarray] = None,  # TODO Properly handle headmasks
-        input_embeds: Optional[jnp.ndarray] = None,  # TODO add support for that
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,

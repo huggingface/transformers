@@ -17,11 +17,11 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
-from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM
 from transformers.testing_utils import require_flax, require_tokenizers, slow
-
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+
+
 
 
 if is_flax_available():
@@ -34,7 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel
+    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel,FlaxOPTForCausalLM
 
 
 def prepare_opt_inputs_dict(
@@ -53,6 +53,7 @@ def prepare_opt_inputs_dict(
         "head_mask": head_mask,
     }
 
+@require_flax
 
 class FlaxOPTModelTester:
     def __init__(
@@ -293,6 +294,7 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
+@require_flax
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
@@ -353,6 +355,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
+    # FIXME failing test
     # @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-125m"
@@ -372,9 +375,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         )
 
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
-        model.do_sample = False
-        model.config.pad_token_id = model.config.eos_token_id
-
         jit_generate = jax.jit(model.generate)
 
         output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
