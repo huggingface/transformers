@@ -628,9 +628,6 @@ class CvtModel(CvtPreTrainedModel):
         return_dict=None,
     ):
         r"""
-
-        Returns:
-
         Examples:
         ```python
         >>> from transformers import AutoFeatureExtractor, CvtModel
