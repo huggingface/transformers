@@ -62,6 +62,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
