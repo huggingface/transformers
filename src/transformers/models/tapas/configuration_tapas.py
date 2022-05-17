@@ -27,10 +27,18 @@ from ...configuration_utils import PretrainedConfig
 
 
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/tapas-base-finetuned-sqa": "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/config.json",
-    "google/tapas-base-finetuned-wtq": "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/config.json",
-    "google/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json",
-    "google/tapas-base-finetuned-tabfact": "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/config.json",
+    "google/tapas-base-finetuned-sqa": (
+        "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-wtq": (
+        "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-wikisql-supervised": (
+        "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-tabfact": (
+        "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/config.json"
+    ),
 }
 
 
@@ -38,7 +46,9 @@ class TapasConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TAPAS *tapas-base-finetuned-sqa* architecture.
+    defaults will yield a similar configuration to that of the TAPAS
+    [google/tapas-base-finetuned-sqa](https://huggingface.co/google/tapas-base-finetuned-sqa) architecture.
+
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 

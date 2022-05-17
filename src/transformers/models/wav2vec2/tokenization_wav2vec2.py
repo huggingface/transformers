@@ -61,7 +61,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-base-960h": (
+            "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -298,6 +300,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             word_offsets = None
             if output_word_offsets:
                 word_offsets = self._get_word_offsets(char_offsets, self.replace_word_delimiter_char)
+
+            # don't output chars if not set to True
+            if not output_char_offsets:
+                char_offsets = None
 
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
@@ -713,7 +719,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
+            "facebook/wav2vec2-base-960h": (
+                "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json"
+            ),
         },
     }
     model_input_names = ["input_values", "attention_mask"]
@@ -744,7 +752,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         warnings.warn(
-            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
+            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use"
+            " `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
             FutureWarning,
         )
 

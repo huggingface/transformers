@@ -31,7 +31,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -236,7 +236,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             attn_score = attn_score * (1.0 - attn_mask_t) - 1e30 * attn_mask_t
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = tf.nn.softmax(attn_score, axis=1)
+        attn_prob = stable_softmax(attn_score, axis=1)
         attn_prob = self.dropatt(attn_prob, training=training)
 
         # Mask heads if we want to
@@ -935,9 +935,10 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
         self.sample_softmax = config.sample_softmax
-        assert (
-            self.sample_softmax <= 0
-        ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+        assert self.sample_softmax <= 0, (
+            "Sampling from the softmax is not implemented yet. Please look at issue: #3310:"
+            " https://github.com/huggingface/transformers/issues/3310"
+        )
 
         self.crit = TFAdaptiveSoftmaxMask(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
@@ -1126,7 +1127,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 

@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import json
 import os
 import re
 import shutil
 import tempfile
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -144,7 +146,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     Example:
 
     ```py
-    >>> convert_file_size_to_int("1MB")
+    >>> convert_file_size_to_int("1MiB")
     1048576
     ```
     """
@@ -157,11 +159,14 @@ def convert_file_size_to_int(size: Union[int, str]):
     if size.upper().endswith("KIB"):
         return int(size[:-3]) * (2**10)
     if size.upper().endswith("GB"):
-        return int(size[:-2]) * (10**9)
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("MB"):
-        return int(size[:-2]) * (10**6)
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("KB"):
-        return int(size[:-2]) * (10**3)
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
@@ -313,13 +318,70 @@ def get_checkpoint_shard_files(
             )
         except HTTPError:
             raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try again "
-                "after checking your internet connection."
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
+                " again after checking your internet connection."
             )
 
         cached_filenames.append(cached_filename)
 
     return cached_filenames, sharded_metadata
+
+
+def load_sharded_checkpoint(model, folder, strict=True):
+    """
+    This is the same as
+    [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+    but for a sharded checkpoint.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`torch.nn.Module`): The model in which to load the checkpoint.
+        folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
+        strict (`bool`, *optional`, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+
+    Returns:
+        `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
+            - `missing_keys` is a list of str containing the missing keys
+            - `unexpected_keys` is a list of str containing the unexpected keys
+    """
+    # Load the index
+    index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
+    if not os.path.isfile(index_file):
+        raise ValueError(f"Can't find a checkpoint index ({WEIGHTS_INDEX_NAME}) in {folder}.")
+
+    with open(index_file, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    shard_files = list(set(index["weight_map"].values()))
+
+    # If strict=True, error before loading any of the state dicts.
+    loaded_keys = index["weight_map"].keys()
+    model_keys = model.state_dict().keys()
+    missing_keys = [key for key in model_keys if key not in loaded_keys]
+    unexpected_keys = [key for key in loaded_keys if key not in model_keys]
+    if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+        error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+        if len(missing_keys) > 0:
+            str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+            error_message += f"\nMissing key(s): {str_missing_keys}."
+        if len(unexpected_keys) > 0:
+            str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+        raise RuntimeError(error_message)
+
+    for shard_file in shard_files:
+        state_dict = torch.load(os.path.join(folder, shard_file))
+        model.load_state_dict(state_dict, strict=False)
+
+        # Make sure memory is fred before we load the next state dict.
+        del state_dict
+        gc.collect()
+
+    # Return the same thing as PyTorch load_state_dict function.
+    return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
 def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
@@ -400,6 +462,95 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     return error_msgs
 
 
+def find_submodule_and_param_name(model, long_key, start_prefix):
+    """
+    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
+    from the start of the key
+    """
+
+    if len(start_prefix) > 0 and long_key.startswith(start_prefix):
+        long_key = ".".join(long_key.split(".")[1:])
+
+    split_key = long_key.split(".")
+    submodule = model
+    while len(split_key) > 1:
+        if hasattr(submodule, split_key[0]):
+            submodule = getattr(submodule, split_key[0])
+            del split_key[0]
+        else:
+            submodule = None
+            break
+    if submodule == model:
+        submodule = None
+    return submodule, split_key[0]
+
+
+def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+    """
+    Moves `loaded_state_dict_keys` in model to meta device which frees up the memory taken by those params.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
+
+    # meta device was added in pt=1.9
+    require_version_core("torch>=1.9")
+
+    # dematerialize param storage for keys that are going to be replaced by state_dict, by
+    # putting those on the meta device
+    for k in loaded_state_dict_keys:
+        submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+        if submodule is not None:
+            # selectively switch to the meta device only those params/buffers that will
+            # be next replaced from state_dict. This a complex way to do p.to_("meta")
+            # since we have no in-place to_ for tensors.
+            new_val = getattr(submodule, param_name)
+            if isinstance(new_val, torch.nn.Parameter):
+                # isinstance returns False for Params on meta device, so switch after the check
+                new_val = torch.nn.Parameter(new_val.to("meta"))
+            else:
+                new_val = new_val.to("meta")
+            setattr(submodule, param_name, new_val)
+
+
+def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix):
+    """
+    This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
+    params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
+    params back to the normal device, but only for `loaded_state_dict_keys`.
+
+    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
+    `bert.pooler.dense.weight`
+
+    """
+
+    # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
+    # - deepspeed zero 3 support
+    # - need to copy metadata if any - see _load_state_dict_into_model
+    # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
+    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
+    #   they won't get loaded.
+
+    if is_deepspeed_zero3_enabled():
+        raise ValueError("low_cpu_mem_usage arg cannot currently be used with DeepSpeed ZeRO-3")
+
+    error_msgs = []
+
+    # materialize state_dict entries one by one on CPU
+    for k in loaded_state_dict_keys:
+        if k in state_dict:
+            submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
+            if submodule is not None:
+                param_dtype = getattr(submodule, param_name).dtype
+                new_val = state_dict[k].to(param_dtype)
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
+
+    return error_msgs
+
+
 class ModuleUtilsMixin:
     """
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
@@ -409,7 +560,7 @@ class ModuleUtilsMixin:
     def _hook_rss_memory_pre_forward(module, *args, **kwargs):
         try:
             import psutil
-        except (ImportError):
+        except ImportError:
             raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
 
         process = psutil.Process(os.getpid())
@@ -421,7 +572,7 @@ class ModuleUtilsMixin:
     def _hook_rss_memory_post_forward(module, *args, **kwargs):
         try:
             import psutil
-        except (ImportError):
+        except ImportError:
             raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
 
         process = psutil.Process(os.getpid())
@@ -499,7 +650,14 @@ class ModuleUtilsMixin:
 
         return encoder_extended_attention_mask
 
-    def create_extended_attention_mask_for_decoder(self, input_shape, attention_mask, device):
+    @staticmethod
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
+        if device is not None:
+            warnings.warn(
+                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+        else:
+            device = attention_mask.device
         batch_size, seq_length = input_shape
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -520,7 +678,9 @@ class ModuleUtilsMixin:
         extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
         return extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int], device: device) -> Tensor:
+    def get_extended_attention_mask(
+        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None
+    ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
@@ -529,12 +689,16 @@ class ModuleUtilsMixin:
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (`torch.device`):
-                The device of the input to the model.
 
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
+        if not (attention_mask.dim() == 2 and self.config.is_decoder):
+            # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
+            if device is not None:
+                warnings.warn(
+                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -544,7 +708,7 @@ class ModuleUtilsMixin:
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                extended_attention_mask = self.create_extended_attention_mask_for_decoder(
+                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )
             else:
@@ -637,13 +801,16 @@ class ModuleUtilsMixin:
         Returns:
             `int`: The total number of tokens.
         """
+        if not hasattr(self, "warnings_issued"):
+            self.warnings_issued = {}
         if self.main_input_name in input_dict:
             return input_dict[self.main_input_name].numel()
-        else:
+        elif "estimate_tokens" not in self.warnings_issued:
             logger.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
-            return 0
+            self.warnings_issued["estimate_tokens"] = True
+        return 0
 
     def floating_point_ops(
         self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
@@ -743,6 +910,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.warnings_issued = {}
 
     def post_init(self):
         """
@@ -892,7 +1060,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         uninitialized_encoder_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
             logger.info(
-                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder weights are correctly initialized."
+                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder"
+                " weights are correctly initialized."
             )
 
         def tie_encoder_to_decoder_recursively(
@@ -938,7 +1107,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         continue
                     elif depth > 500:
                         raise ValueError(
-                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is a circular dependency between two or more `nn.Modules` of your model."
+                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is"
+                            " a circular dependency between two or more `nn.Modules` of your model."
                         )
                     else:
                         decoder_name = encoder_name = name
@@ -1058,13 +1228,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
-                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
+                " should either use a different resize function or make sure that `old_embeddings` are an instance of"
+                f" {nn.Embedding}."
             )
 
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
+        new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -1127,15 +1298,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. "
-                f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. You"
+                " should either use a different resize function or make sure that `old_lm_head` are an instance of"
+                f" {nn.Linear}."
             )
 
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
         new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
-        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
+        new_lm_head = new_lm_head.to(old_lm_head.weight.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -1254,7 +1426,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        save_config: bool = True,
+        is_main_process: bool = True,
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
@@ -1268,10 +1440,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Arguments:
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
-            save_config (`bool`, *optional*, defaults to `True`):
-                Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
-                to call this function on all processes. In this case, set `save_config=True` only on the main process
-                to avoid race conditions.
+            is_main_process (`bool`, *optional*, defaults to `True`):
+                Whether the process calling this is the main process or not. Useful when in distributed training like
+                TPUs and need to call this function on all processes. In this case, set `is_main_process=True` only on
+                the main process to avoid race conditions.
             state_dict (nested dictionary of `torch.Tensor`):
                 The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
                 save parts of the model or if special precautions need to be taken when recovering the state dictionary
@@ -1304,6 +1476,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        if "save_config" in kwargs:
+            warnings.warn(
+                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
+            )
+            is_main_process = kwargs.pop("save_config")
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -1331,7 +1509,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if save_config:
+        if is_main_process:
             model_to_save.config.save_pretrained(save_directory)
 
         # Save the model
@@ -1350,7 +1528,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            if (
+                filename.startswith(WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+                and is_main_process
+            ):
                 os.remove(full_filename)
 
         # Save the model
@@ -1529,7 +1714,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
         >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
-        ```"""
+        ```
+
+        * `low_cpu_mem_usage` algorithm:
+
+        This is an experimental function that loads the model using ~1x model size CPU memory
+
+        Here is how it works:
+
+        1. save which state_dict keys we have
+        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
+        3. after the model has been instantiated switch to the meta device all params/buffers that
+        are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
+
+        """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1707,20 +1909,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME} but "
-                                "there is a file for TensorFlow weights. Use `from_tf=True` to load this model from those "
-                                "weights."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {WEIGHTS_NAME} but there is a file for TensorFlow weights. Use `from_tf=True` to"
+                                " load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME} but "
-                                "there is a file for Flax weights. Use `from_flax=True` to load this model from those "
-                                "weights."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {WEIGHTS_NAME} but there is a file for Flax weights. Use `from_flax=True` to load"
+                                " this model from those weights."
                             )
                         else:
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME}, "
-                                f"{TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
+                                f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
                 else:
                     raise EnvironmentError(
@@ -1733,12 +1935,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             except ValueError:
                 raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
-                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
-                    f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
-                    f"{FLAX_WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
+                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
+                    f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
+                    f" {FLAX_WEIGHTS_NAME}.\nCheckout your internet connection or see how to run the library in"
+                    " offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError:
                 raise EnvironmentError(
@@ -1778,6 +1979,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
+
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -1801,13 +2003,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+            if is_sharded:
+                loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
+            else:
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
             if low_cpu_mem_usage:
-                # save the keys
-                if is_sharded:
-                    loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
-                else:
-                    loaded_state_dict_keys = [k for k in state_dict.keys()]
-                    del state_dict  # free CPU memory - will reload again later
+                state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1825,11 +2026,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
 
-        if from_pt:
-            # restore default dtype
-            if dtype_orig is not None:
-                torch.set_default_dtype(dtype_orig)
-
         if from_tf:
             if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
@@ -1842,8 +2038,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError:
                     logger.error(
-                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed."
+                        " Please see https://pytorch.org/ and https://www.tensorflow.org/install/ for installation"
+                        " instructions."
                     )
                     raise
         elif from_flax:
@@ -1853,24 +2050,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model = load_flax_checkpoint_in_pytorch_model(model, resolved_archive_file)
             except ImportError:
                 logger.error(
-                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
-                    "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for"
+                    " installation instructions."
                 )
                 raise
         elif from_pt:
 
-            if low_cpu_mem_usage:
-                cls._load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
-            else:
-                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
-                    model,
-                    state_dict,
-                    resolved_archive_file,
-                    pretrained_model_name_or_path,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    sharded_metadata=sharded_metadata,
-                    _fast_init=_fast_init,
-                )
+            # restore default dtype
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
+
+            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
+                model,
+                state_dict,
+                loaded_state_dict_keys,  # XXX: rename?
+                resolved_archive_file,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                _fast_init=_fast_init,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1894,16 +2095,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cls,
         model,
         state_dict,
+        loaded_keys,
         resolved_archive_file,
         pretrained_model_name_or_path,
         ignore_mismatched_sizes=False,
         sharded_metadata=None,
         _fast_init=True,
+        low_cpu_mem_usage=False,
     ):
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-        loaded_keys = list(state_dict.keys()) if state_dict is not None else sharded_metadata["all_checkpoint_keys"]
         prefix = model.base_model_prefix
 
         def _fix_key(key):
@@ -1913,6 +2115,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("gamma", "weight")
             return key
 
+        original_loaded_keys = loaded_keys
         loaded_keys = [_fix_key(key) for key in loaded_keys]
 
         if len(prefix) > 0:
@@ -1963,7 +2166,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_to_load = getattr(model, cls.base_model_prefix)
             if any(key in expected_keys_not_prefixed for key in loaded_keys):
                 raise ValueError(
-                    "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
+                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
                     "properly saved?"
                 )
 
@@ -1994,22 +2197,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                         )
                         del state_dict[checkpoint_key]
-
             return mismatched_keys
+
+        if low_cpu_mem_usage:
+            model_state_dict = None  # free references to model's params to allow memory freeing
+            _move_model_to_meta(model, loaded_keys, start_prefix)
 
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
                 state_dict,
                 model_state_dict,
-                loaded_keys,
+                original_loaded_keys,
                 add_prefix_to_model,
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
             error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
         else:
-            # Sharded checkpoint
+            # Sharded checkpoint or whole but low_cpu_mem_usage==True
+
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
@@ -2018,17 +2225,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mismatched_keys = []
             for shard_file in resolved_archive_file:
                 state_dict = load_state_dict(shard_file)
+
+                if low_cpu_mem_usage:
+                    model_state_dict = model.state_dict()
+
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
                     state_dict,
                     model_state_dict,
-                    loaded_keys,
+                    original_loaded_keys,
                     add_prefix_to_model,
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,
                 )
-                error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
+                if low_cpu_mem_usage:
+                    error_msgs += _load_state_dict_into_meta_model(
+                        model_to_load, state_dict, loaded_keys, start_prefix
+                    )
+                else:
+                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
+                # force memory release
+                del state_dict
+                gc.collect()
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -2036,26 +2257,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.info(
-                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -2065,9 +2288,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         return model, missing_keys, unexpected_keys, mismatched_keys, error_msgs
@@ -2093,13 +2317,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @staticmethod
-    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file):
+    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file, start_prefix=""):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
-        Before it gets called we do:
+        Before you call it do:
 
-        1. save which state_dict keys we have
+        1. save which state_dict keys are available
         2. drop state_dict before model is created, since the latter takes 1x model size memory
 
         Here then we continue:
@@ -2110,58 +2334,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
         """
-        require_version_core("torch>=1.9")
-        if is_deepspeed_zero3_enabled():
-            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
 
-        # a helper util to find the last sub-module and the param/buffer name
-        def find_submodule_and_param_name(model, long_key):
-            split_key = long_key.split(".")
-            submodule = model
-            while len(split_key) > 1:
-                if hasattr(submodule, split_key[0]):
-                    submodule = getattr(submodule, split_key[0])
-                    del split_key[0]
-                else:
-                    submodule = None
-                    break
-            return submodule, split_key[0]
-
-        # dematerialize param storage for keys that are going to be replaced by state_dict, by
-        # putting those on the meta device
-        for k in loaded_state_dict_keys:
-            submodule, param_name = find_submodule_and_param_name(model, k)
-            if submodule is not None:
-                # selectively switch to the meta device only those params/buffers that will
-                # be next replaced from state_dict. This a complex way to do p.to_("meta")
-                # since we have no in-place to_ for tensors.
-                new_val = getattr(submodule, param_name)
-                if isinstance(new_val, torch.nn.Parameter):
-                    # isinstance returns False for Params on meta device, so switch after the check
-                    new_val = torch.nn.Parameter(new_val.to("meta"))
-                else:
-                    new_val = new_val.to("meta")
-                setattr(submodule, param_name, new_val)
-
-        # only now can load state_dict(s)
-        if not isinstance(resolved_archive_file, list):
-            resolved_archive_file = [resolved_archive_file]
-
-        for archive_file in resolved_archive_file:
-            state_dict = torch.load(archive_file, map_location="cpu")
-
-            # materialize state_dict entries one by one on CPU
-            for k in loaded_state_dict_keys:
-                if k in state_dict:
-                    submodule, param_name = find_submodule_and_param_name(model, k)
-                    if submodule is not None:
-                        param_dtype = getattr(submodule, param_name).dtype
-                        new_val = state_dict[k].to(param_dtype)
-                        if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                            new_val = torch.nn.Parameter(new_val)
-                        setattr(submodule, param_name, new_val)
-
-            del state_dict
+        _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
+        state_dict = load_state_dict(resolved_archive_file)
+        error_msgs = _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix)
+        return error_msgs
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):

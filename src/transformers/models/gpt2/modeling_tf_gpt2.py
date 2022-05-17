@@ -40,7 +40,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     ModelOutput,
@@ -129,7 +129,7 @@ class TFAttention(tf.keras.layers.Layer):
             attention_mask = tf.cast(attention_mask, dtype=w.dtype)
             w = w + attention_mask
 
-        w = tf.nn.softmax(w, axis=-1)
+        w = stable_softmax(w, axis=-1)
         w = self.attn_dropout(w, training=training)
 
         # Mask heads if we want to
@@ -655,6 +655,10 @@ GPT2_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
+            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for
+            `past_key_values`. In other words, the `attention_mask` always has to have the length:
+            `len(past_key_values) + len(input_ids)`
+
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
@@ -1057,7 +1061,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         >>> embedding_layer = model.resize_token_embeddings(
         ...     len(tokenizer)
-        >>> )  # Update the model embeddings with the new vocabulary size
+        ... )  # Update the model embeddings with the new vocabulary size
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]
@@ -1236,7 +1240,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 

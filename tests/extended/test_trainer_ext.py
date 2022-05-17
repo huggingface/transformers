@@ -17,10 +17,11 @@ import os
 import re
 import sys
 import unittest
+from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers.integrations import is_fairscale_available
+from transformers import AutoModel
 from transformers.testing_utils import (
     CaptureStderr,
     ExtendSysPath,
@@ -28,6 +29,9 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_gpu_count,
     get_torch_dist_unique_port,
+    require_apex,
+    require_bitsandbytes,
+    require_fairscale,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -36,7 +40,6 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
-from transformers.utils import is_apex_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -47,28 +50,6 @@ with ExtendSysPath(f"{bindir}/../../examples/pytorch/translation"):
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
-
-
-# a candidate for testing_utils
-def require_fairscale(test_case):
-    """
-    Decorator marking a test that requires fairscale
-    """
-    if not is_fairscale_available():
-        return unittest.skip("test requires fairscale")(test_case)
-    else:
-        return test_case
-
-
-# a candidate for testing_utils
-def require_apex(test_case):
-    """
-    Decorator marking a test that requires apex
-    """
-    if not is_apex_available():
-        return unittest.skip("test requires apex")(test_case)
-    else:
-        return test_case
 
 
 @require_torch
@@ -124,6 +105,7 @@ class TestTrainerExt(TestCasePlus):
         self.run_seq2seq_quick(distributed=True)
 
     # test --sharded_ddp w/o --fp16
+    @unittest.skip("Requires an update of the env running those tests")
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_sharded_ddp(self):
@@ -137,6 +119,7 @@ class TestTrainerExt(TestCasePlus):
         self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple --fp16")
 
     # test --sharded_ddp zero_dp_2 w/o --fp16
+    @unittest.skip("Requires an update of the env running those tests")
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_fully_sharded_ddp(self):
@@ -193,7 +176,7 @@ class TestTrainerExt(TestCasePlus):
         self.assertEqual(n_matches, data["n_matches"])
 
     @slow
-    def test_run_seq2seq_slow(self):
+    def test_run_seq2seq(self):
         output_dir = self.run_trainer(
             eval_steps=2,
             max_len=128,
@@ -217,6 +200,89 @@ class TestTrainerExt(TestCasePlus):
         contents = {os.path.basename(p) for p in contents}
         assert "generated_predictions.txt" in contents
         assert "predict_results.json" in contents
+
+    @slow
+    @require_bitsandbytes
+    def test_run_seq2seq_bnb(self):
+        from transformers.training_args import OptimizerNames
+
+        def train_and_return_metrics(optim: str) -> Tuple[int, float]:
+            from pathlib import Path
+
+            extra_args = (
+                f"--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
+                "False --adafactor False --log_level debug"
+            )
+
+            output_dir = self.run_trainer(
+                eval_steps=2,
+                max_len=128,
+                model_name=MARIAN_MODEL,
+                learning_rate=3e-4,
+                num_train_epochs=1,
+                distributed=True,  # force run in a new process
+                extra_args_str=extra_args,
+                do_eval=False,
+                do_predict=False,
+            )
+
+            # Check metrics
+            logs = TrainerState.load_from_json(Path(output_dir, "trainer_state.json")).log_history
+            gpu_peak_mem = logs[0]["train_mem_gpu_peaked_delta"]
+            gpu_alloc_mem = logs[0]["train_mem_gpu_alloc_delta"]
+
+            loss = logs[0]["train_loss"]
+            return gpu_peak_mem, gpu_alloc_mem, loss
+
+        gpu_peak_mem_orig, gpu_alloc_mem_orig, loss_orig = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
+        gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
+
+        gpu_peak_mem_diff_bytes = gpu_peak_mem_orig - gpu_peak_mem_bnb
+        gpu_peak_mem_diff_percent = gpu_peak_mem_diff_bytes / gpu_peak_mem_bnb
+
+        gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
+        gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
+
+        gpu_total_mem_diff_bytes = gpu_total_mem_orig - gpu_total_mem_bnb
+        gpu_total_mem_diff_percent = gpu_total_mem_diff_bytes / gpu_total_mem_bnb
+
+        # leave this for now if CI gets very different results
+        # print(f"{gpu_alloc_mem_orig=:010d} {gpu_peak_mem_orig=:010d} {gpu_alloc_mem_orig+gpu_peak_mem_orig=:010d}" )
+        # print(f" {gpu_alloc_mem_bnb=:010d}  {gpu_peak_mem_bnb=:010d}   {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=:010d}")
+        # print(f"{gpu_peak_mem_diff_bytes=}, {gpu_peak_mem_diff_percent=}")
+        # print(f"{gpu_total_mem_orig=}, {gpu_total_mem_bnb=}")
+        # print(f"{gpu_total_mem_diff_bytes=}, {gpu_total_mem_diff_percent=}")
+
+        self.assertGreater(
+            gpu_peak_mem_diff_percent,
+            10,  # basically a huge difference - got ~30x on my desktop
+            "should use very little peak gpu memory with BNB, compared to without it"
+            f"but got gpu_peak_mem_orig={gpu_peak_mem_orig} and gpu_peak_mem_bnb={gpu_peak_mem_bnb}",
+        )
+
+        self.assertGreater(
+            gpu_total_mem_diff_percent,
+            0.20,  # could easily be 0.50, but let's stay on the safe side
+            "Using BNB should use less total GPU memory than without it"
+            f"but got gpu_total_mem_orig={gpu_total_mem_orig} and gpu_total_mem_bnb={gpu_total_mem_bnb}",
+        )
+
+        self.assertEqual(
+            loss_orig, loss_bnb, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
+        )
+
+        # Additionally let's test that the absolute gpu memory difference is larger or about the
+        # same as the expected saving coming from BNB (6 bytes per param)
+        model = AutoModel.from_pretrained(MARIAN_MODEL)
+        total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        bnb_saved_bytes = total_numel * 6  # 324MB
+
+        self.assertGreater(
+            gpu_total_mem_diff_bytes,
+            bnb_saved_bytes * 0.8,  # add a safety margin, if it saved slightly less
+            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were"
+            f" {gpu_total_mem_diff_bytes}",
+        )
 
     def run_trainer(
         self,
@@ -300,6 +366,8 @@ class TestTrainerExt(TestCasePlus):
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
+            # keep for quick debug
+            # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
             execute_subprocess_async(cmd, env=self.get_env())
         else:
             testargs = ["run_translation.py"] + args

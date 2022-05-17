@@ -24,9 +24,15 @@ logger = logging.get_logger(__name__)
 LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/config.json",
     "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/config.json",
-    "allenai/longformer-large-4096-finetuned-triviaqa": "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/config.json",
-    "allenai/longformer-base-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/config.json",
-    "allenai/longformer-large-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/config.json",
+    "allenai/longformer-large-4096-finetuned-triviaqa": (
+        "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/config.json"
+    ),
+    "allenai/longformer-base-4096-extra.pos.embd.only": (
+        "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/config.json"
+    ),
+    "allenai/longformer-large-4096-extra.pos.embd.only": (
+        "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/config.json"
+    ),
 }
 
 
@@ -37,8 +43,9 @@ class LongformerConfig(RobertaConfig):
 
     This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
     Longformer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the RoBERTa
-    [roberta-base](https://huggingface.co/roberta-base) architecture with a sequence length 4,096.
+    configuration with the defaults will yield a similar configuration to that of the LongFormer
+    [allenai/longformer-base-4096](https://huggingface.co/allenai/longformer-base-4096) architecture with a sequence
+    length 4,096.
 
     The [`LongformerConfig`] class directly inherits [`RobertaConfig`]. It reuses the same defaults. Please check the
     parent class for more information.
