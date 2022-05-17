@@ -60,6 +60,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineModel"),
         ("roformer", "RoFormerModel"),
         ("clip", "CLIPModel"),
+        ("groupvit", "GroupViTModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("deit", "DeiTModel"),
         ("luke", "LukeModel"),

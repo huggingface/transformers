@@ -36,6 +36,7 @@ from . import (
     camembert,
     canine,
     clip,
+    groupvit,
     convbert,
     convnext,
     cpm,

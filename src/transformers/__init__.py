@@ -166,6 +166,12 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.groupvit": [
+        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroupViTConfig",
+        "GroupViTTextConfig",
+        "GroupViTVisionConfig",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
@@ -831,6 +837,15 @@ if is_torch_available():
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.groupvit"].extend(
+        [
+            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroupViTModel",
+            "GroupViTPreTrainedModel",
+            "GroupViTTextModel",
+            "GroupViTVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -1824,6 +1839,15 @@ if is_tf_available():
             "TFCLIPVisionModel",
         ]
     )
+    _import_structure["models.groupvit"].extend(
+        [
+            "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGroupViTModel",
+            "TFGroupViTPreTrainedModel",
+            "TFGroupViTTextModel",
+            "TFGroupViTVisionModel",
+        ]
+    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2332,6 +2356,16 @@ if is_flax_available():
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.groupvit"].extend(
+        [
+            "FlaxGroupViTModel",
+            "FlaxGroupViTPreTrainedModel",
+            "FlaxGroupViTTextModel",
+            "FlaxGroupViTTextPreTrainedModel",
+            "FlaxGroupViTVisionModel",
+            "FlaxGroupViTVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "FlaxDistilBertForMaskedLM",
@@ -2550,6 +2584,12 @@ if TYPE_CHECKING:
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
+    )
+    from .models.groupvit import (
+        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroupViTConfig,
+        GroupViTTextConfig,
+        GroupViTVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
@@ -3122,6 +3162,13 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+        from .models.groupvit import (
+            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroupViTModel,
+            GroupViTPreTrainedModel,
+            GroupViTTextModel,
+            GroupViTVisionModel,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
