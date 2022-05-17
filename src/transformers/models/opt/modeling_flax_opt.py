@@ -105,7 +105,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
@@ -273,7 +273,6 @@ class FlaxOPTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayer with Bart->OPT
 class FlaxOPTDecoderLayer(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32
@@ -357,7 +356,6 @@ class FlaxOPTDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->OPT
 class FlaxOPTDecoderLayerCollection(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -465,12 +463,6 @@ class FlaxOPTDecoder(nn.Module):
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
-        # TODO CHECK if that is the correct way of doing this
-        # if self.config.word_embed_proj_dim != self.config.hidden_size:
-        #     self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
-        # else:
-        #     self.project_out = None
-
         if self.config.word_embed_proj_dim != self.config.hidden_size:
             self.project_in = nn.Dense(self.config.hidden_size, use_bias=False)
             self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
@@ -526,8 +518,6 @@ class FlaxOPTDecoder(nn.Module):
             attentions=outputs.attentions,
         )
 
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel with BART->OPT,Bart->OPT
 class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
     config_class = OPTConfig
     base_model_prefix: str = "model"
@@ -623,8 +613,6 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             position_ids = make_positions(attention_mask, self.config.pad_token_id)
         else:
             position_ids += 2
-            # batch_size, seq_length = input_ids.shape
-            # position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)) + 2
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
@@ -688,12 +676,6 @@ class FlaxOPTModule(nn.Module):
         init_cache=False,
     ):
 
-        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        # output_hidden_states = (
-        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        # )
-        # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -708,7 +690,7 @@ class FlaxOPTModule(nn.Module):
         if not return_dict:
             return decoder_outputs
 
-        return FlaxBaseModelOutput(  # TODO change model output
+        return FlaxBaseModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
@@ -733,7 +715,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForCausalLMModule with Bart->OPT
 class FlaxOPTForCausalLMModule(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32
