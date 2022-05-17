@@ -28,6 +28,10 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("albert", "AlbertModel"),
+        ("bart", "BartModel"),
+        ("beit", "BeitModel"),
+        ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
         ("big_bird", "BigBirdModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
@@ -57,6 +61,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
+        ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("glpn", "GLPNModel"),
         ("gpt2", "GPT2Model"),
