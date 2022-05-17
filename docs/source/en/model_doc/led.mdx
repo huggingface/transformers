@@ -45,7 +45,7 @@ Tips:
   [`LongformerModel`]). For summarization, it is advised to put *global attention* only on the first
   `<s>` token. For question answering, it is advised to put *global attention* on all tokens of the question.
 - To fine-tune LED on all 16384, *gradient checkpointing* can be enabled in case training leads to out-of-memory (OOM)
-  errors. This can be done by either executing `model.gradient_checkpointing_enable()`. 
+  errors. This can be done by executing `model.gradient_checkpointing_enable()`. 
 . Moreover, the `use_cache=False`
   flag can be used to disable the caching mechanism to save memory.
 - A notebook showing how to evaluate LED, can be accessed [here](https://colab.research.google.com/drive/12INTTR6n64TzS4RrXZxMSXfrOd9Xzamo?usp=sharing).
