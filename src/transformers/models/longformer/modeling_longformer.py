@@ -1777,9 +1777,11 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
         >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
-        
+        ```
+
         Let's try a very long input.
 
+        ```python
         >>> TXT = (
         ...     "My friends are <mask> but they eat too many carbs."
         ...     + " That's why I decide not to eat with them." * 300
