@@ -2591,7 +2591,11 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         checkpoint="hf-internal-testing/tiny-random-longformer",
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']",
+        expected_output=(
+            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
+            " 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
+            " 'LABEL_1', 'LABEL_1']"
+        ),
         expected_loss=0.59,
     )
     def call(
