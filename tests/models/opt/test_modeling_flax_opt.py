@@ -377,9 +377,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(
-            inputs["input_ids"], attention_mask=inputs["attention_mask"]
-        ).sequences
+        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
 
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
