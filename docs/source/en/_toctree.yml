@@ -342,6 +342,8 @@
       title: TAPAS
     - local: model_doc/tapex
       title: TAPEX
+    - local: model_doc/trajectory_transformer
+      title: Trajectory Transformer
     - local: model_doc/transfo-xl
       title: Transformer XL
     - local: model_doc/trocr
