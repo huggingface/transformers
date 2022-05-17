@@ -984,12 +984,7 @@ if is_torch_available():
     _import_structure["models.emformer"].extend(
         [
             "EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EmformerForAudioFrameClassification",
-            "EmformerForCTC",
-            "EmformerForMaskedLM",
-            "EmformerForPreTraining",
-            "EmformerForSequenceClassification",
-            "EmformerForXVector",
+            "EmformerForRNNT",
             "EmformerModel",
             "EmformerPreTrainedModel",
         ]
@@ -2594,7 +2589,12 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-    from .models.emformer import EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EmformerConfig, EmformerFeatureExtractor, EmformerTokenizer
+    from .models.emformer import (
+        EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EmformerConfig,
+        EmformerFeatureExtractor,
+        EmformerTokenizer,
+    )
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
@@ -3264,7 +3264,7 @@ if TYPE_CHECKING:
         from .models.emformer import (
             EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             EmformerFeatureExtractor,
-            EmformerForCTC,
+            EmformerForRNNT,
             EmformerModel,
             EmformerPreTrainedModel,
         )

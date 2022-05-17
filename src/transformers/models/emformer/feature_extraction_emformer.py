@@ -18,7 +18,7 @@ Feature extractor class for Emformer
 
 import json
 import math
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -30,6 +30,9 @@ from ...utils import PaddingStrategy, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
+
+DECIBEL = 2 * 20 * math.log10(torch.iinfo(torch.int16).max)
+GAIN = pow(10, 0.05 * DECIBEL)
 
 
 class EmformerFeatureExtractor(SequenceFeatureExtractor):
@@ -57,20 +60,21 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             The value that is used to fill the padding values.
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
         sampling_rate=16000,
         n_fft=400,
-        n_mels=128,
-        hop_length=200,
+        n_mels=80,
+        hop_length=160,
         global_mean=None,
         global_invstddev=None,
+        feature_size=80,
         padding_value=0.0,
         **kwargs
     ):
-        super().__init__(feature_size=n_mels, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.n_fft = n_fft
         self.n_mels = n_mels
         self.hop_length = hop_length
@@ -78,11 +82,8 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             sample_rate=self.sampling_rate, n_fft=self.n_fft, n_mels=self.n_mels, hop_length=self.hop_length
         )
 
-        decibel = 2 * 20 * math.log10(torch.iinfo(torch.int16).max)
-        self.gain = pow(10, 0.05 * decibel)
-
-        self.global_mean = global_mean if global_mean is not None else np.zeros(80)
-        self.global_invstddev = global_invstddev if global_invstddev is not None else np.ones(80)
+        self.global_mean = torch.tensor(global_mean) if global_mean is not None else torch.zeros(80)
+        self.global_invstddev = torch.tensor(global_invstddev) if global_invstddev is not None else torch.ones(80)
 
     @staticmethod
     def piecewise_linear_log(features: torch.FloatTensor):
@@ -94,10 +95,12 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
         """
         Extract the mel spectrogram features and normalize them
         """
+        waveform = torch.tensor(waveform)
         features = self.mel_transform(waveform)
         features = features.transpose(1, 0)
-        features = self.piecewise_linear_log(features * self.gain)
+        features = self.piecewise_linear_log(features * GAIN)
         features = (features - self.global_mean) * self.global_invstddev
+        features = features.numpy()
 
         return features
 
@@ -222,3 +225,11 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+    def to_dict(self) -> Dict:
+        output = super().to_dict()
+        # avoid trying to serialize a json-incompatible MelSpectrogram
+        del output["mel_transform"]
+        output["global_mean"] = output["global_mean"].numpy()
+        output["global_invstddev"] = output["global_invstddev"].numpy()
+        return output

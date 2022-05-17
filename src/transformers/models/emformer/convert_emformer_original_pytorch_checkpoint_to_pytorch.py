@@ -19,247 +19,147 @@ import argparse
 import json
 import os
 
-import fairseq
 import torch
-from fairseq.data import Dictionary
+from torchaudio.pipelines import EMFORMER_RNNT_BASE_LIBRISPEECH, RNNTBundle
+from torchaudio.prototype.pipelines import EMFORMER_RNNT_BASE_MUSTC, EMFORMER_RNNT_BASE_TEDLIUM3
 
 from transformers import (
     EmformerConfig,
-    EmformerForCTC,
-    EmformerForPreTraining,
-    Wav2Vec2CTCTokenizer,
-    Wav2Vec2FeatureExtractor,
-    Wav2Vec2Processor,
+    EmformerFeatureExtractor,
+    EmformerForRNNT,
     logging,
 )
+
+NAME2BUNDLE = {
+    "base_librispeech": EMFORMER_RNNT_BASE_LIBRISPEECH,
+    "base_mustc": EMFORMER_RNNT_BASE_MUSTC,
+    "base_tedlium": EMFORMER_RNNT_BASE_TEDLIUM3
+}
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-MAPPING = {
-    "post_extract_proj": "feature_projection.projection",
-    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
-    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
-    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
-    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
-    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
-    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
-    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
-    "fc2": "encoder.layers.*.feed_forward.output_dense",
-    "final_layer_norm": "encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_model.layer_norm": "feature_projection.layer_norm",
-    "quantizer.weight_proj": "quantizer.weight_proj",
-    "quantizer.vars": "quantizer.codevectors",
-    "project_q": "project_q",
-    "final_proj": "project_hid",
-    "w2v_encoder.proj": "lm_head",
-    "mask_emb": "masked_spec_embed",
-}
-TOP_LEVEL_KEYS = [
-    "lm_head",
-    "quantizer.weight_proj",
-    "quantizer.codevectors",
-    "project_q",
-    "project_hid",
-]
 
-
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
-    for attribute in key.split("."):
-        hf_pointer = getattr(hf_pointer, attribute)
-
-    if weight_type is not None:
-        hf_shape = getattr(hf_pointer, weight_type).shape
+def act2name(activation):
+    if isinstance(activation, torch.nn.ReLU):
+        return "relu"
+    elif isinstance(activation, torch.nn.GELU):
+        return "gelu"
+    elif isinstance(activation, torch.nn.SiLU):
+        return "silu"
+    elif isinstance(activation, torch.nn.Tanh):
+        return "tanh"
     else:
-        hf_shape = hf_pointer.shape
-
-    if hf_shape != value.shape:
-        raise ValueError(
-            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
-        )
-
-    if weight_type == "weight":
-        hf_pointer.weight.data = value
-    elif weight_type == "weight_g":
-        hf_pointer.weight_g.data = value
-    elif weight_type == "weight_v":
-        hf_pointer.weight_v.data = value
-    elif weight_type == "bias":
-        hf_pointer.bias.data = value
-    else:
-        hf_pointer.data = value
-
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+        raise ValueError(f"Unsupported activation {activation}")
 
 
-def recursively_load_weights(fairseq_model, hf_model, is_headless):
-    unused_weights = []
-    fairseq_dict = fairseq_model.state_dict()
+def convert_config(bundle: RNNTBundle):
+    cfg = EmformerConfig()
+    decoder = bundle.get_decoder().model
+    transcriber = decoder.transcriber
+    transcriber_layer = transcriber.transformer.emformer_layers[0]
+    predictor = decoder.predictor
 
-    feature_extractor = hf_model.emformer.feature_extractor
+    cfg.input_dim = transcriber.input_linear.in_features
+    cfg.time_reduction_input_dim = transcriber.input_linear.out_features
+    cfg.time_reduction_stride = decoder.transcriber.time_reduction.stride
 
-    for name, value in fairseq_dict.items():
-        is_used = False
-        if "conv_layers" in name:
-            load_conv_layer(
-                name,
-                value,
-                feature_extractor,
-                unused_weights,
-                hf_model.config.feat_extract_norm == "group",
-            )
-            is_used = True
-        else:
-            for key, mapped_key in MAPPING.items():
-                mapped_key = "emformer." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                    is_used = True
-                    if "*" in mapped_key:
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    elif "weight" in name:
-                        # TODO: don't match quantizer.weight_proj
-                        weight_type = "weight"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
-                continue
-        if not is_used:
-            unused_weights.append(name)
+    cfg.num_attention_heads = transcriber_layer.attention.num_heads
+    cfg.ffn_dim = transcriber_layer.pos_ff[1].out_features
+    cfg.num_hidden_layers = len(transcriber.transformer.emformer_layers)
+    cfg.segment_length = transcriber.transformer.segment_length * cfg.time_reduction_stride
+    cfg.hidden_dropout = transcriber_layer.dropout.p
+    cfg.hidden_act = act2name(transcriber_layer.pos_ff[2])
+    cfg.left_context_length = transcriber.transformer.left_context_length
+    cfg.right_context_length = transcriber.transformer.right_context_length * cfg.time_reduction_stride
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    cfg.output_dim = transcriber.output_linear.out_features
+
+    cfg.vocab_size = predictor.embedding.num_embeddings
+    cfg.symbol_embedding_dim = predictor.embedding.embedding_dim
+    cfg.num_lstm_layers = len(predictor.lstm_layers)
+    cfg.lstm_hidden_dim = predictor.lstm_layers[0].p2g.out_features // 4
+    cfg.lstm_layer_norm = predictor.lstm_layers[0].c_norm.eps
+    cfg.lstm_dropout = predictor.dropout.p
+
+    cfg.joiner_activation = act2name(decoder.joiner.activation)
+
+    return cfg
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
-    name = full_name.split("conv_layers.")[-1]
-    items = name.split(".")
-    layer_id = int(items[0])
-    type_id = int(items[1])
+def convert_feature_extractor(bundle: RNNTBundle):
+    extractor_pipeline = bundle.get_streaming_feature_extractor().pipeline
+    feature_extractor = EmformerFeatureExtractor(
+        sampling_rate=extractor_pipeline[0].sample_rate,
+        n_fft=extractor_pipeline[0].n_fft,
+        n_mels=extractor_pipeline[0].n_mels,
+        hop_length=extractor_pipeline[0].hop_length,
+        global_mean=extractor_pipeline[3].mean,
+        global_invstddev=extractor_pipeline[3].invstddev,
+        feature_size=extractor_pipeline[0].n_mels,
+        padding_value=0.0,
+    )
 
-    if type_id == 0:
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-    else:
-        unused_weights.append(full_name)
+    return feature_extractor
+
+
+def convert_weights(bundle: RNNTBundle, config: EmformerConfig) -> EmformerForRNNT:
+    model = EmformerForRNNT(config)
+
+    decoder = bundle.get_decoder().model
+    transcriber = decoder.transcriber
+    predictor = decoder.predictor
+
+    model.transcriber.input_linear.load_state_dict(transcriber.input_linear.state_dict())
+    for i in range(config.num_hidden_layers):
+        src_layer = transcriber.transformer.emformer_layers[i]
+        dst_layer = model.transcriber.encoder.emformer_layers[i]
+        dst_layer.attention.load_state_dict(src_layer.attention.state_dict())
+        dst_layer.pos_ff.load_state_dict(src_layer.pos_ff.state_dict())
+        dst_layer.layer_norm_input.load_state_dict(src_layer.layer_norm_input.state_dict())
+        dst_layer.layer_norm_output.load_state_dict(src_layer.layer_norm_output.state_dict())
+    model.transcriber.output_linear.load_state_dict(transcriber.output_linear.state_dict())
+    model.transcriber.layer_norm.load_state_dict(transcriber.layer_norm.state_dict())
+
+    model.predictor.embedding.load_state_dict(predictor.embedding.state_dict())
+    model.predictor.input_layer_norm.load_state_dict(predictor.input_layer_norm.state_dict())
+    for i in range(config.num_lstm_layers):
+        src_layer = predictor.lstm_layers[i]
+        dst_layer = model.predictor.lstm_layers[i]
+        dst_layer.x2g.load_state_dict(src_layer.x2g.state_dict())
+        dst_layer.p2g.load_state_dict(src_layer.p2g.state_dict())
+        dst_layer.c_norm.load_state_dict(src_layer.c_norm.state_dict())
+        dst_layer.g_norm.load_state_dict(src_layer.g_norm.state_dict())
+    model.predictor.linear.load_state_dict(predictor.linear.state_dict())
+    model.predictor.output_layer_norm.load_state_dict(predictor.output_layer_norm.state_dict())
+
+    model.joiner.linear.load_state_dict(decoder.joiner.linear.state_dict())
+
+    return model
+
 
 
 @torch.no_grad()
-def convert_emformer_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
-):
+def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
     """
-    Copy/paste/tweak model's weights to transformers design.
+    Copy/paste/tweak model's weights to the Transformers design.
     """
-    if config_path is not None:
-        config = EmformerConfig.from_pretrained(config_path)
-    else:
-        config = EmformerConfig()
+    bundle = NAME2BUNDLE[model_name]
+    config = convert_config(bundle)
+    feature_extractor = convert_feature_extractor(bundle)
+    model = convert_weights(bundle, config)
+    model.eval()
 
-    if is_finetuned:
-        if dict_path:
-            target_dict = Dictionary.load(dict_path)
-
-            # important change bos & pad token id since CTC symbol is <pad> and
-            # not <s> as in fairseq
-            config.bos_token_id = target_dict.pad_index
-            config.pad_token_id = target_dict.bos_index
-            config.eos_token_id = target_dict.eos_index
-            config.vocab_size = len(target_dict.symbols)
-            vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
-            if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
-                return
-            os.makedirs(pytorch_dump_folder_path, exist_ok=True)
-            vocab_dict = target_dict.indices
-
-            # fairseq has the <pad> and <s> switched
-            vocab_dict["<pad>"] = 0
-            vocab_dict["<s>"] = 1
-            with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-                json.dump(vocab_dict, vocab_handle)
-            tokenizer = Wav2Vec2CTCTokenizer(
-                vocab_path,
-                unk_token=target_dict.unk_word,
-                pad_token=target_dict.pad_word,
-                bos_token=target_dict.bos_word,
-                eos_token=target_dict.eos_word,
-                word_delimiter_token="|",
-                do_lower_case=False,
-            )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
-            feature_extractor = Wav2Vec2FeatureExtractor(
-                feature_size=1,
-                sampling_rate=16000,
-                padding_value=0,
-                do_normalize=True,
-                return_attention_mask=return_attention_mask,
-            )
-            processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-            processor.save_pretrained(pytorch_dump_folder_path)
-
-        hf_wav2vec = EmformerForCTC(config)
-    else:
-        hf_wav2vec = EmformerForPreTraining(config)
-
-    if is_finetuned:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
-        )
-    else:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
-
-    model = model[0].eval()
-
-    recursively_load_weights(model, hf_wav2vec, not is_finetuned)
-
-    hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
+    waveform = torch.load("/home/anton/repos/audio/examples/asr/emformer_rnnt/librispeech_waveform_0.pt")
+    features = feature_extractor(waveform, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**features)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument(
-        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
-    )
+    parser.add_argument("--model_name", default=None, type=str, help="Path to the Emformer source model name")
+    parser.add_argument("--model_output_dir", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
-    convert_emformer_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
-    )
+    convert_emformer_checkpoint(args.model_name, args.model_output_dir)

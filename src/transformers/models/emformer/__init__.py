@@ -29,12 +29,7 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_emformer"] = [
         "EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "EmformerForAudioFrameClassification",
-        "EmformerForCTC",
-        "EmformerForMaskedLM",
-        "EmformerForPreTraining",
-        "EmformerForSequenceClassification",
-        "EmformerForXVector",
+        "EmformerForRNNT",
         "EmformerModel",
         "EmformerPreTrainedModel",
     ]
@@ -46,7 +41,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_emformer import (
             EMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EmformerForCTC,
+            EmformerForRNNT,
             EmformerModel,
             EmformerPreTrainedModel,
         )

@@ -628,7 +628,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
         ("wav2vec2", "Wav2Vec2ForCTC"),
-        ("emformer", "EmformerForCTC"),
+        ("emformer", "EmformerForRNNT"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("unispeech", "UniSpeechForCTC"),
         ("hubert", "HubertForCTC"),

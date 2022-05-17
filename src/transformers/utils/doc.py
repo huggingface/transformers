@@ -438,6 +438,44 @@ PT_SPEECH_CTC_SAMPLE = r"""
     ```
 """
 
+PT_SPEECH_RNNT_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+    >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    {expected_output}
+    ```
+
+    ```python
+    >>> with processor.as_target_processor():
+    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
+
+    >>> # compute loss
+    >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+    ```
+"""
+
 PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     Example:
 
@@ -605,6 +643,7 @@ PT_SAMPLE_DOCSTRINGS = {
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
     "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
     "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
+    "RNNT": PT_SPEECH_RNNT_SAMPLE,
     "VisionBaseModel": PT_VISION_BASE_MODEL_SAMPLE,
     "ImageClassification": PT_VISION_SEQ_CLASS_SAMPLE,
 }
@@ -1109,6 +1148,8 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["AudioFrameClassification"]
         elif "XVector" in model_class and modality == "audio":
             code_sample = sample_docstrings["AudioXVector"]
+        elif "RNNT" in model_class:
+            code_sample = sample_docstrings["RNNT"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class and modality == "vision":

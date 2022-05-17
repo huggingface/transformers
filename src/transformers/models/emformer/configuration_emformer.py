@@ -200,8 +200,8 @@ class EmformerConfig(PretrainedConfig):
         self,
         vocab_size=32,
         hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        num_hidden_layers=20,
+        num_attention_heads=8,
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout=0.1,
@@ -238,20 +238,23 @@ class EmformerConfig(PretrainedConfig):
         diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
-        use_weighted_layer_sum=False,
-        classifier_proj_size=256,
-        tdnn_dim=(512, 512, 512, 512, 1500),
-        tdnn_kernel=(5, 3, 3, 1, 1),
-        tdnn_dilation=(1, 2, 3, 1, 1),
-        xvector_output_dim=512,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        add_adapter=False,
-        adapter_kernel_size=3,
-        adapter_stride=2,
-        num_adapter_layers=3,
-        output_hidden_size=None,
+        input_dim=80,
+        time_reduction_input_dim=128,
+        time_reduction_stride=4,
+        transformer_ffn_dim=2048,
+        left_context_length=30,
+        right_context_length=4,
+        segment_length=16,
+        output_dim=1024,
+        symbol_embedding_dim=512,
+        num_lstm_layers=3,
+        lstm_hidden_dim=512,
+        lstm_layer_norm_epsilon=1e-3,
+        lstm_dropout=0.3,
+        joiner_activation="relu",
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -279,7 +282,6 @@ class EmformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
-        self.use_weighted_layer_sum = use_weighted_layer_sum
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -316,21 +318,24 @@ class EmformerConfig(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
-        # adapter
-        self.add_adapter = add_adapter
-        self.adapter_kernel_size = adapter_kernel_size
-        self.adapter_stride = adapter_stride
-        self.num_adapter_layers = num_adapter_layers
-        self.output_hidden_size = output_hidden_size or hidden_size
+        # TODO: collate the emformer params with the rest
+        self.input_dim = input_dim
+        self.time_reduction_input_dim = time_reduction_input_dim
+        self.time_reduction_stride = time_reduction_stride
+        self.transformer_ffn_dim = transformer_ffn_dim
+        self.left_context_length = left_context_length
+        self.right_context_length = right_context_length
+        self.segment_length = segment_length
+        self.output_dim = output_dim
 
-        # SequenceClassification-specific parameter. Feel free to ignore for other classes.
-        self.classifier_proj_size = classifier_proj_size
+        self.symbol_embedding_dim = symbol_embedding_dim
+        self.num_lstm_layers = num_lstm_layers
+        self.lstm_hidden_dim = lstm_hidden_dim
+        self.lstm_layer_norm_epsilon = lstm_layer_norm_epsilon
+        self.lstm_dropout = lstm_dropout
 
-        # XVector-specific parameters. Feel free to ignore for other classes.
-        self.tdnn_dim = list(tdnn_dim)
-        self.tdnn_kernel = list(tdnn_kernel)
-        self.tdnn_dilation = list(tdnn_dilation)
-        self.xvector_output_dim = xvector_output_dim
+        self.joiner_activation = joiner_activation
+
 
     @property
     def inputs_to_logits_ratio(self):
