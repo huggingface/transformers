@@ -2264,7 +2264,7 @@ class GenerationMixin:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
             if return_dict_in_generate and output_scores:
-                if cur_len > 6:
+#                if cur_len > 6:
                     # Need to add beam indices to beam scorer
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
 
