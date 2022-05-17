@@ -17,8 +17,8 @@ logger = logging.get_logger(__name__)
 
 class VisualQuestionAnsweringArgumentHandler(ArgumentHandler):
     """
-    VisualQuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & image) to be mapped to
-    an input dict of {"image": ..., "question": ...}
+    VisualQuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & image) to be
+    mapped to an input dict of {"image": ..., "question": ...}
     """
 
     def __call__(self, *args, **kwargs):
