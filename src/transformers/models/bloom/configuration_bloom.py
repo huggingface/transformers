@@ -26,10 +26,10 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BLOOMPRETRAINED_CONFIG_ARCHIVE_MAP = {
+BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigscience/Bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
 }
-BLOOMPRETRAINED_CONFIG_ARCHIVE_MAP = {}
+BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class BloomConfig(PretrainedConfig):
