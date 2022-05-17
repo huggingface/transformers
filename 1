@@ -2295,10 +2295,8 @@ class GenerationMixin:
                     (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
                 beam_indices_2 = sum(beam_indices, ())
-                beam_indices = tuple(tuple(s) for s in sequence_outputs["beam_indices"].cpu().tolist())
-                import ipdb
-
-                ipdb.set_trace()
+                beam_indices = sequence_outputs["beam_indices"]
+                import ipdb; ipdb.set_trace()
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(

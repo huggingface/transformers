@@ -2319,6 +2319,35 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     @slow
+    def test_transition_scores_early_stopping(self):
+        # input_ids for "question: How are you? \n context: I had a long day, "
+        input_ids = torch.tensor([[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]]).to(
+            torch_device
+        )
+
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small").to(torch_device)
+
+        result = model.generate(
+            input_ids,
+            max_length=10,
+            return_dict_in_generate=True,
+            output_scores=True,
+            forced_eos_token_id=model.config.eos_token_id,
+            num_beams=4,
+            do_sample=False,
+            num_return_sequences=4,
+            length_penalty=0.0,
+        )
+
+        transition_scores = model.compute_transition_beam_scores(
+            sequences=result.sequences, scores=result.scores, beam_indices=result.beam_indices
+        )
+
+        sum_transition_scores = torch.sum(transition_scores, dim=1)
+
+        self.assertListEqual(sum_transition_scores.cpu().tolist(), result.sequences_scores.cpu().tolist())
+
+    @slow
     def test_beam_search_example_integration(self):
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
