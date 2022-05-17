@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BLOOM configuration"""
+""" Bloom configuration"""
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -26,17 +26,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigscience/BLOOM": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
+BLOOMPRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "bigscience/Bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
 }
-BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+BLOOMPRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class BLOOMConfig(PretrainedConfig):
+class BloomConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`BLOOMModel`]. It is used to instantiate a GPT-2
+    This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a GPT-2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to the BLOOM architecture
+    defaults will yield a similar configuration to the Bloom architecture
     [bigscience/bloom](https://huggingface.co/bigscience/bloom).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -46,7 +46,7 @@ class BLOOMConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BLOOMModel`].
+            `inputs_ids` passed when calling [`BloomModel`].
         seq_length (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -101,13 +101,13 @@ class BLOOMConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BLOOMModel, BLOOMConfig
+    >>> from transformers import BloomModel, BloomConfig
 
-    >>> # Initializing a BLOOM configuration
-    >>> configuration = BLOOMConfig()
+    >>> # Initializing a Bloom configuration
+    >>> configuration = BloomConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = BLOOMModel(configuration)
+    >>> model = BloomModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -177,7 +177,7 @@ class BLOOMConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-class BLOOMOnnxConfig(OnnxConfigWithPast):
+class BloomOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
         config: PretrainedConfig,

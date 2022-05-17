@@ -38,7 +38,7 @@ class BigBirdTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class BLOOMTokenizerFast(metaclass=DummyObject):
+class BloomTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

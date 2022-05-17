@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BLOOM model."""
+"""PyTorch Bloom model."""
 
 import math
 from typing import Tuple
@@ -27,7 +27,7 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import Conv1D, PreTrainedModel
 from ...utils import logging
-from .configuration_bloom import BLOOMConfig
+from .configuration_bloom import BloomConfig
 from .fused_bias_gelu import bias_gelu_impl
 from .mpu_utils import split_tensor_along_last_dim
 from .scaled_softmax import ScaledSoftmax  # to define it locally?
@@ -35,9 +35,9 @@ from .scaled_softmax import ScaledSoftmax  # to define it locally?
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bigscience/BLOOM"
-_CONFIG_FOR_DOC = "BLOOMConfig"
-_TOKENIZER_FOR_DOC = "BLOOMTokenizer"
+_CHECKPOINT_FOR_DOC = "bigscience/Bloom"
+_CONFIG_FOR_DOC = "BloomConfig"
+_TOKENIZER_FOR_DOC = "BloomTokenizer"
 
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
@@ -90,7 +90,7 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
     return bias_dropout_add(x, bias, residual, prob, False)
 
 
-class BLOOMAttention(nn.Module):
+class BloomAttention(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
 
@@ -291,7 +291,7 @@ class BLOOMAttention(nn.Module):
         return outputs, output_bias  # a, present, (attentions)
 
 
-class BLOOMMLP(nn.Module):
+class BloomMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -334,7 +334,7 @@ class BLOOMMLP(nn.Module):
         return output, output_bias
 
 
-class BLOOMBlock(nn.Module):
+class BloomBlock(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -342,10 +342,10 @@ class BLOOMBlock(nn.Module):
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
         self.alibi = self._build_alibi_tensor(config.seq_length + config.offset_alibi, config.n_head, dtype=dtype)
-        self.self_attention = BLOOMAttention(config, layer_number=layer_number)
+        self.self_attention = BloomAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
-        self.mlp = BLOOMMLP(config)
+        self.mlp = BloomMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.bias_dropout_fusion = config.bias_dropout_fusion
@@ -453,14 +453,14 @@ class BLOOMBlock(nn.Module):
         return outputs  # hidden_states, present, attentions
 
 
-class BLOOMPreTrainedModel(PreTrainedModel):
+class BloomPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BLOOMConfig
+    config_class = BloomConfig
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -484,7 +484,7 @@ class BLOOMPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the BLOOM Paper Scheme:
+        # Reinitialize selected weights subject to the Bloom Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
@@ -496,7 +496,7 @@ class BLOOMPreTrainedModel(PreTrainedModel):
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BLOOMModel):
+        if isinstance(module, BloomModel):
             module.gradient_checkpointing = value
 
 
@@ -510,7 +510,7 @@ BLOOM_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BLOOMConfig`]): Model configuration class with all the parameters of the model.
+        config ([`BloomConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -525,7 +525,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`BLOOMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`BloomTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -581,10 +581,10 @@ BLOOM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare BLOOM Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Bloom Model transformer outputting raw hidden-states without any specific head on top.",
     BLOOM_START_DOCSTRING,
 )
-class BLOOMModel(BLOOMPreTrainedModel):
+class BloomModel(BloomPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -597,7 +597,7 @@ class BLOOMModel(BLOOMPreTrainedModel):
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
 
         # Transformer blocks
-        self.h = nn.ModuleList([BLOOMBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([BloomBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
@@ -780,17 +780,17 @@ class BLOOMModel(BLOOMPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The BLOOM Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The Bloom Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
     BLOOM_START_DOCSTRING,
 )
-class BLOOMLMHeadModel(BLOOMPreTrainedModel):
+class BloomLMHeadModel(BloomPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = BLOOMModel(config)
+        self.transformer = BloomModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Model parallel

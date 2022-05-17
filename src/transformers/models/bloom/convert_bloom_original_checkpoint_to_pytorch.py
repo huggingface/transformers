@@ -22,7 +22,7 @@ import re
 
 import torch
 
-from transformers import BLOOMConfig, BLOOMModel
+from transformers import BloomConfig, BloomModel
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
@@ -83,9 +83,9 @@ def convert_bloom_checkpoint_to_pytorch(
 ):
     # Construct model
     if bloom_config_file == "":
-        config = BLOOMConfig()
+        config = BloomConfig()
     else:
-        config = BLOOMConfig.from_json_file(bloom_config_file)
+        config = BloomConfig.from_json_file(bloom_config_file)
 
     if shard_model:
         file_names = os.listdir(bloom_checkpoint_path)
@@ -97,7 +97,7 @@ def convert_bloom_checkpoint_to_pytorch(
 
         missing_keys = None
 
-        config = BLOOMConfig()
+        config = BloomConfig()
 
         for j, file in enumerate(file_names):
             print("Processing file: {}".format(file))
@@ -155,7 +155,7 @@ def convert_bloom_checkpoint_to_pytorch(
                         str(j + 1).zfill(5), str(len(file_names)).zfill(5)
                     )
 
-        config = BLOOMConfig()
+        config = BloomConfig()
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
         index_dict["metadata"]["total_size"] = total_size
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
@@ -164,7 +164,7 @@ def convert_bloom_checkpoint_to_pytorch(
             json_config = json.dumps(index_dict, indent=2, sort_keys=True) + "\n"
             f.write(json_config)
     else:
-        model = BLOOMModel(config)
+        model = BloomModel(config)
 
         file_names = os.listdir(bloom_checkpoint_path)
         file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))

@@ -17,7 +17,7 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import BLOOMTokenizerFast
+from transformers import BloomTokenizerFast
 from transformers.models.bloom.tokenization_bloom_fast import PRETRAINED_VOCAB_FILES_MAP
 from transformers.testing_utils import require_tokenizers
 
@@ -25,25 +25,25 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     slow_tokenizer_class = None
-    rust_tokenizer_class = BLOOMTokenizerFast
-    tokenizer_class = BLOOMTokenizerFast
+    rust_tokenizer_class = BloomTokenizerFast
+    tokenizer_class = BloomTokenizerFast
     test_rust_tokenizer = True
     test_slow_tokenizer = False
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
     def setUp(self):
         super().setUp()
-        tokenizer = BLOOMTokenizerFast.from_pretrained(
+        tokenizer = BloomTokenizerFast.from_pretrained(
             PRETRAINED_VOCAB_FILES_MAP["main_location"]["bigscience/tokenizer"]
         )
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return BLOOMTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return BloomTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_encodings_from_sample_data(self):
         """
@@ -83,7 +83,7 @@ class BLOOMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokenizer_r.encode(p, max_length=max_length)
                     tokenizer_r.batch_encode_plus(p2, max_length=max_length)
                 except ValueError:
-                    self.fail("BLOOM Tokenizer should be able to deal with padding")
+                    self.fail("Bloom Tokenizer should be able to deal with padding")
 
                 tokenizer_r.pad_token = None  # Hotfixing padding = None
                 self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")

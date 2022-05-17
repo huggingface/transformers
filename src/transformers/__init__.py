@@ -158,7 +158,7 @@ _import_structure = {
     ],
     "models.bloom": [
         "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BLOOMConfig",
+        "BloomConfig",
     ],
     "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
@@ -486,7 +486,7 @@ else:
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
-    _import_structure["models.bloom"].append("BLOOMTokenizerFast")
+    _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -847,9 +847,9 @@ else:
     _import_structure["models.bloom"].extend(
         [
             "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BLOOMLMHeadModel",
-            "BLOOMModel",
-            "BLOOMPreTrainedModel",
+            "BloomLMHeadModel",
+            "BloomModel",
+            "BloomPreTrainedModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -2682,7 +2682,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
-    from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig
+    from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -2977,7 +2977,7 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
-        from .models.bloom import BLOOMTokenizerFast
+        from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
@@ -3293,9 +3293,9 @@ if TYPE_CHECKING:
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BLOOMLMHeadModel,
-            BLOOMModel,
-            BLOOMPreTrainedModel,
+            BloomLMHeadModel,
+            BloomModel,
+            BloomPreTrainedModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

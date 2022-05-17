@@ -51,17 +51,17 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class BLOOMTokenizerFast(PreTrainedTokenizerFast):
+class BloomTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" BLOOM tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Construct a "fast" Bloom tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import BLOOMTokenizerFast
-    >>> tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
+    >>> from transformers import BloomTokenizerFast
+    >>> tokenizer = BloomTokenizerFast.from_pretrained("bloom")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']
@@ -97,7 +97,7 @@ class BLOOMTokenizerFast(PreTrainedTokenizerFast):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (BLOOM tokenizer detect beginning of words by the preceding space).
+            other word. (Bloom tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """

@@ -897,24 +897,24 @@ class BigBirdPegasusPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+BLOOMPRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class BLOOMLMHeadModel(metaclass=DummyObject):
+class BloomLMHeadModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class BLOOMModel(metaclass=DummyObject):
+class BloomModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class BLOOMPreTrainedModel(metaclass=DummyObject):
+class BloomPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

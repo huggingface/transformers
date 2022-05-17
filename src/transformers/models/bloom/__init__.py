@@ -24,8 +24,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 _import_structure = {
     "configuration_bloom": [
         "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BLOOMConfig",
-        "BLOOMOnnxConfig",
+        "BloomConfig",
+        "BloomOnnxConfig",
     ],
 }
 try:
@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_bloom_fast"] = ["BLOOMTokenizerFast"]
+    _import_structure["tokenization_bloom_fast"] = ["BloomTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -44,13 +44,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bloom"] = [
         "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BLOOMLMHeadModel",
-        "BLOOMModel",
-        "BLOOMPreTrainedModel",
+        "BloomLMHeadModel",
+        "BloomModel",
+        "BloomPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BLOOMConfig, BLOOMOnnxConfig
+    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig, BloomOnnxConfig
 
     try:
         if not is_tokenizers_available():
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_bloom_fast import BLOOMTokenizerFast
+        from .tokenization_bloom_fast import BloomTokenizerFast
 
     try:
         if not is_torch_available():
@@ -68,9 +68,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BLOOMLMHeadModel,
-            BLOOMModel,
-            BLOOMPreTrainedModel,
+            BloomLMHeadModel,
+            BloomModel,
+            BloomPreTrainedModel,
         )
 
 else:

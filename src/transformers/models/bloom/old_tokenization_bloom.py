@@ -94,7 +94,7 @@ def get_pairs(word):
     return pairs
 
 
-class BLOOMTokenizer(PreTrainedTokenizer):
+class BloomTokenizer(PreTrainedTokenizer):
     """
     Construct a GPT-2 tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -102,8 +102,8 @@ class BLOOMTokenizer(PreTrainedTokenizer):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import BLOOMTokenizer
-    >>> tokenizer = BLOOMTokenizer.from_pretrained("bloom")
+    >>> from transformers import BloomTokenizer
+    >>> tokenizer = BloomTokenizer.from_pretrained("bloom")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']
@@ -139,7 +139,7 @@ class BLOOMTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (BLOOM tokenizer detect beginning of words by the preceding space).
+            other word. (Bloom tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

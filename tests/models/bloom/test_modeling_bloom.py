@@ -18,7 +18,7 @@ import datetime
 import math
 import unittest
 
-from transformers import BLOOMConfig, is_torch_available
+from transformers import BloomConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -29,11 +29,11 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BLOOMLMHeadModel, BLOOMModel, BLOOMTokenizerFast
+    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomLMHeadModel, BloomModel, BloomTokenizerFast
 
 
 @require_torch
-class BLOOMModelTester:
+class BloomModelTester:
     def __init__(
         self,
         parent,
@@ -88,7 +88,7 @@ class BLOOMModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return BLOOMConfig.from_pretrained("bloom")
+        return BloomConfig.from_pretrained("bloom")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -102,7 +102,7 @@ class BLOOMModelTester:
         return (config, input_ids, input_mask)
 
     def get_config(self, gradient_checkpointing=False):
-        return BLOOMConfig(
+        return BloomConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
             hidden_size=self.hidden_size,
@@ -122,7 +122,7 @@ class BLOOMModelTester:
         )
 
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
-        model = BLOOMModel(config=config)
+        model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -132,9 +132,9 @@ class BLOOMModelTester:
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
-        model = BLOOMModel(config=config)
+        model = BloomModel(config=config)
 
-        # model = BLOOMLMHeadModel(config=config)
+        # model = BloomLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -170,7 +170,7 @@ class BLOOMModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
-        model = BLOOMModel(config=config)
+        model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -213,7 +213,7 @@ class BLOOMModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=4e-2))
 
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
-        model = BLOOMModel(config=config)
+        model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -243,7 +243,7 @@ class BLOOMModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-1))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
-        model = BLOOMLMHeadModel(config)
+        model = BloomLMHeadModel(config)
         model.to(torch_device)
         model.eval()
 
@@ -254,7 +254,7 @@ class BLOOMModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
-        model = BLOOMLMHeadModel(config)
+        model = BloomLMHeadModel(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -265,7 +265,7 @@ class BLOOMModelTester:
         result.loss.backward()
 
     def create_and_check_bloom_weight_initialization(self, config, *args):
-        model = BLOOMModel(config)
+        model = BloomModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
         for key in model.state_dict().keys():
             if "c_proj" in key and "weight" in key:
@@ -283,19 +283,19 @@ class BLOOMModelTester:
 
 
 @require_torch
-class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BLOOMModel, BLOOMLMHeadModel) if is_torch_available() else ()
-    all_generative_model_classes = (BLOOMLMHeadModel,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (BLOOMLMHeadModel,) if is_torch_available() else ()
+    all_model_classes = (BloomModel, BloomLMHeadModel) if is_torch_available() else ()
+    all_generative_model_classes = (BloomLMHeadModel,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (BloomLMHeadModel,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = BLOOMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BLOOMConfig, n_embd=37)
+        self.model_tester = BloomModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BloomConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -330,9 +330,9 @@ class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_batch_generation(self):
-        model = BLOOMLMHeadModel.from_pretrained("bloom")
+        model = BloomLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
-        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
+        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
 
         tokenizer.padding_side = "left"
 
@@ -390,18 +390,18 @@ class BLOOMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BLOOMModel.from_pretrained(model_name)
+            model = BloomModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class BLOOMModelLanguageGenerationTest(unittest.TestCase):
+class BloomModelLanguageGenerationTest(unittest.TestCase):
     def _test_lm_generate_bloom_helper(
         self,
         gradient_checkpointing=False,
         verify_outputs=True,
     ):
-        model = BLOOMLMHeadModel.from_pretrained(
+        model = BloomLMHeadModel.from_pretrained(
             "bloom",
         )
         if gradient_checkpointing:
@@ -433,8 +433,8 @@ class BLOOMModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_bloom_sample(self):
-        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
-        model = BLOOMLMHeadModel.from_pretrained("bloom")
+        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
+        model = BloomLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -461,8 +461,8 @@ class BLOOMModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_bloom_sample_max_time(self):
-        tokenizer = BLOOMTokenizerFast.from_pretrained("bloom")
-        model = BLOOMLMHeadModel.from_pretrained("bloom")
+        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
+        model = BloomLMHeadModel.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -499,3 +499,388 @@ class BLOOMModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+@require_torch
+class BloomEmbeddingTest(unittest.TestCase):
+    """
+    The goal here is to compare the embeddings generated by the model trained
+    using Megatron-LM with the one from the transformers library, with a small GPT2-like model
+    to ensure that the conversion from Megatron-LM to transformers has been done successfully.
+    The script compares the logits of the embedding layer and the transformer layers.
+
+    WARNING: It is expected that these logits will not have exactly the same statistics when running
+    the code on CPU or GPU. For more info, please visit:
+      - https://github.com/pytorch/pytorch/issues/76052#issuecomment-1103193548
+      - https://discuss.pytorch.org/t/reproducibility-issue-between-intel-and-amd-cpus/144779/9
+
+
+    You need to install tokenizers following this readme:
+        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+
+    Tokenizer used during training:
+        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+
+    # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.path_bigscience_model = "bigscience/bigscience-small-testing"
+
+    @require_torch
+    def test_load_transformers_model(self):
+        # TODO load the model (.bin file)
+        try:
+            _ = BloomLMHeadModel.from_pretrained(self.path_bigscience_model)
+        except BaseException:
+            self.fail("Failed loading the model")
+
+    @require_torch
+    def test_embeddings(self):
+        model = BloomLMHeadModel.from_pretrained(self.path_bigscience_model)
+        model.eval()
+
+        EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
+            3478: 0.0002307891845703125,
+            368: -0.000568389892578125,
+            109586: -0.0003910064697265625,
+            35433: -0.000194549560546875,
+            2: 0.0004138946533203125,
+            77: 0.000659942626953125,
+            132619: -0.00031280517578125,
+            2175: 0.000457763671875,
+            23714: 0.000263214111328125,
+            73173: -0.000286102294921875,
+            144252: 0.00052642822265625,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_BF_16_MIN = {
+            3478: -0.00921630859375,
+            368: -0.010009765625,
+            109586: -0.01031494140625,
+            35433: -0.01177978515625,
+            2: -0.0074462890625,
+            77: -0.00848388671875,
+            132619: -0.009521484375,
+            2175: -0.0074462890625,
+            23714: -0.0145263671875,
+            73173: -0.007415771484375,
+            144252: -0.01007080078125,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_BF_16_MAX = {
+            3478: 0.0128173828125,
+            368: 0.01214599609375,
+            109586: 0.0111083984375,
+            35433: 0.01019287109375,
+            2: 0.0157470703125,
+            77: 0.0174560546875,
+            132619: 0.0078125,
+            2175: 0.0113525390625,
+            23714: 0.0146484375,
+            73173: 0.01116943359375,
+            144252: 0.01141357421875,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_BF_16_SUM = {"value": 0.08203125}
+
+        EMBEDDINGS_DS_BEFORE_LN_F_16_MEAN = {
+            132619: -0.00031256675720214844,
+            3478: 0.00023090839385986328,
+            368: -0.0005702972412109375,
+            109586: -0.00039124488830566406,
+            35433: -0.000194549560546875,
+            2: 0.0004146099090576172,
+            2175: 0.0004572868347167969,
+            23714: 0.00026416778564453125,
+            73173: -0.0002865791320800781,
+            144252: 0.0005254745483398438,
+            77: 0.0006618499755859375,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_16_MIN = {
+            3478: -0.00921630859375,
+            368: -0.010009765625,
+            109586: -0.01031494140625,
+            35433: -0.01177978515625,
+            2: -0.0074462890625,
+            77: -0.00848388671875,
+            132619: -0.009521484375,
+            2175: -0.0074462890625,
+            23714: -0.0145263671875,
+            73173: -0.007415771484375,
+            144252: -0.01007080078125,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_16_MAX = {
+            3478: 0.0128173828125,
+            368: 0.01214599609375,
+            109586: 0.0111083984375,
+            35433: 0.01019287109375,
+            2: 0.0157470703125,
+            77: 0.0174560546875,
+            132619: 0.0078125,
+            2175: 0.0113525390625,
+            23714: 0.0146484375,
+            73173: 0.01116943359375,
+            144252: 0.01141357421875,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_16_SUM = {"value": 0.0821533203125}
+
+        EMBEDDINGS_DS_BEFORE_LN_F_32_MEAN = {
+            132619: -0.00031267106533050537,
+            3478: 0.00023087859153747559,
+            368: -0.0005701072514057159,
+            109586: -0.0003911703824996948,
+            35433: -0.0001944899559020996,
+            2: 0.0004146844148635864,
+            2175: 0.00045740045607089996,
+            23714: 0.0002641640603542328,
+            73173: -0.0002864748239517212,
+            144252: 0.0005256589502096176,
+            77: 0.0006617321632802486,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_32_MIN = {
+            3478: -0.00921630859375,
+            368: -0.010009765625,
+            109586: -0.01031494140625,
+            35433: -0.01177978515625,
+            2: -0.0074462890625,
+            77: -0.00848388671875,
+            132619: -0.009521484375,
+            2175: -0.0074462890625,
+            23714: -0.0145263671875,
+            73173: -0.007415771484375,
+            144252: -0.01007080078125,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_32_MAX = {
+            3478: 0.0128173828125,
+            368: 0.01214599609375,
+            109586: 0.0111083984375,
+            35433: 0.01019287109375,
+            2: 0.0157470703125,
+            77: 0.0174560546875,
+            132619: 0.0078125,
+            2175: 0.0113525390625,
+            23714: 0.0146484375,
+            73173: 0.01116943359375,
+            144252: 0.01141357421875,
+        }
+        EMBEDDINGS_DS_BEFORE_LN_F_32_SUM = {"value": 0.08217757940292358}
+
+        TEST_EMBEDDINGS = {
+            "torch.bfloat16": {
+                "mean": EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN,
+                "max": EMBEDDINGS_DS_BEFORE_LN_BF_16_MAX,
+                "min": EMBEDDINGS_DS_BEFORE_LN_BF_16_MIN,
+                "sum": EMBEDDINGS_DS_BEFORE_LN_BF_16_SUM,
+            },
+            "torch.float32": {
+                "mean": EMBEDDINGS_DS_BEFORE_LN_F_32_MEAN,
+                "max": EMBEDDINGS_DS_BEFORE_LN_F_32_MAX,
+                "min": EMBEDDINGS_DS_BEFORE_LN_F_32_MIN,
+                "sum": EMBEDDINGS_DS_BEFORE_LN_F_32_SUM,
+            },
+            "torch.float": {
+                "mean": EMBEDDINGS_DS_BEFORE_LN_F_32_MEAN,
+                "max": EMBEDDINGS_DS_BEFORE_LN_F_32_MAX,
+                "min": EMBEDDINGS_DS_BEFORE_LN_F_32_MIN,
+                "sum": EMBEDDINGS_DS_BEFORE_LN_F_32_SUM,
+            },
+            "torch.float16": {
+                "mean": EMBEDDINGS_DS_BEFORE_LN_F_16_MEAN,
+                "max": EMBEDDINGS_DS_BEFORE_LN_F_16_MAX,
+                "min": EMBEDDINGS_DS_BEFORE_LN_F_16_MIN,
+                "sum": EMBEDDINGS_DS_BEFORE_LN_F_16_SUM,
+            },
+        }
+
+        EXAMPLE_IDS = [
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            77,
+            132619,
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            2175,
+            23714,
+            73173,
+            144252,
+            2,
+            77,
+            132619,
+            3478,
+        ]
+
+        EMBEDDINGS_DS_AFTER_LN_MEAN = {
+            3478: -6.580352783203125e-05,
+            368: 0.0001316070556640625,
+            109586: -0.00030517578125,
+            35433: 4.00543212890625e-05,
+            2: -7.2479248046875e-05,
+            77: -8.96453857421875e-05,
+            132619: 0.0001583099365234375,
+            2175: 2.1219253540039062e-05,
+            23714: -0.000247955322265625,
+            73173: -0.00021839141845703125,
+            144252: -0.0001430511474609375,
+        }
+        EMBEDDINGS_DS_AFTER_LN_MIN = {
+            3478: -1.6953125,
+            368: -1.6875,
+            109586: -1.6875,
+            35433: -2.125,
+            2: -1.390625,
+            77: -1.5390625,
+            132619: -1.875,
+            2175: -1.4609375,
+            23714: -2.296875,
+            73173: -1.3515625,
+            144252: -1.78125,
+        }
+        EMBEDDINGS_DS_AFTER_LN_MAX = {
+            3478: 2.265625,
+            368: 2.28125,
+            109586: 1.953125,
+            35433: 1.90625,
+            2: 2.703125,
+            77: 2.828125,
+            132619: 1.65625,
+            2175: 2.015625,
+            23714: 2.234375,
+            73173: 2.171875,
+            144252: 1.828125,
+        }
+
+        EMBEDDINGS_DS_AFTER_LN = {
+            "mean": EMBEDDINGS_DS_AFTER_LN_MEAN,
+            "min": EMBEDDINGS_DS_AFTER_LN_MIN,
+            "max": EMBEDDINGS_DS_AFTER_LN_MAX,
+        }
+
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS])
+        # position_ids = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]])
+        with torch.no_grad():
+            embeddings = model.transformer.word_embeddings(tensor_ids)
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+        # first check the embeddings before LN
+        output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
+        for i, idx in enumerate(EXAMPLE_IDS):
+            output_dict["min"][idx] = embeddings.min(dim=-1).values[0][i].item()
+            output_dict["max"][idx] = embeddings.max(dim=-1).values[0][i].item()
+            output_dict["mean"][idx] = embeddings.mean(dim=-1)[0][i].item()
+
+        for key in TEST_EMBEDDINGS[str(model.dtype)].keys():
+            self.assertDictEqual(TEST_EMBEDDINGS[str(model.dtype)][key], output_dict[key])
+
+        output_dict_norm = {"min": {}, "max": {}, "mean": {}}
+        for i, idx in enumerate(EXAMPLE_IDS):
+            output_dict_norm["min"][idx] = embeddings_ln.min(dim=-1).values[0][i].item()
+            output_dict_norm["max"][idx] = embeddings_ln.max(dim=-1).values[0][i].item()
+            output_dict_norm["mean"][idx] = embeddings_ln.mean(dim=-1)[0][i].item()
+        # word_embeddings
+
+        # This test does not pass when places = 2
+        for i, key in enumerate(output_dict_norm.keys()):
+            for j, idx in enumerate(output_dict[key].keys()):
+                self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
+        # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
+
+    @require_torch
+    def test_hidden_states_transformers(self):
+        # TODO ifelse device
+        cuda_available = torch.cuda.is_available()
+        device = torch.device("cuda:0" if cuda_available else "cpu")
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model.eval()
+
+        EXAMPLE_IDS = [
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            77,
+            132619,
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            2175,
+            23714,
+            73173,
+            144252,
+            2,
+            77,
+            132619,
+            3478,
+        ]
+
+        # a = torch.randn(1, 1, 20, 20)
+        # ATTN_MASK = (torch.triu(a, diagonal=1) != 0).to(device)
+
+        MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
+        MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS])
+
+        with torch.no_grad():
+            logits = model(tensor_ids.to(device))
+        output_dict = {
+            "min": logits.last_hidden_state.min(dim=-1).values[0][0].item(),
+            "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),
+        }
+
+        if cuda_available:
+            self.assertEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item())
+        else:
+            self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
+
+        self.assertDictEqual(MIN_MAX_DICT, output_dict)
+
+    @require_torch
+    def test_logits(self):
+        cuda_available = torch.cuda.is_available()
+        # cuda_available = False
+        device = torch.device("cuda:3" if cuda_available else "cpu")
+        model = BloomLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model.eval()
+
+        EXAMPLE_IDS = [
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            77,
+            132619,
+            3478,
+            368,
+            109586,
+            35433,
+            2,
+            2175,
+            23714,
+            73173,
+            144252,
+            2,
+            77,
+            132619,
+            3478,
+        ]
+
+        MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
+        MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
+
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(device)
+        with torch.no_grad():
+            output = model(tensor_ids).logits
+
+        output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
+        if cuda_available:
+            self.assertEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1)
+            self.assertEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2)
+        else:
+            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
+            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
