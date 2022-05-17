@@ -43,7 +43,7 @@ class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = VisualQuestionAnsweringArgumentHandler()
         image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image2 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image2 = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 
         for image in [image1, image2]:
@@ -76,7 +76,7 @@ class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler_error_handling(self):
         qa = VisualQuestionAnsweringArgumentHandler()
         image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image2 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image2 = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 
         with self.assertRaises(ValueError):
@@ -100,7 +100,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
                 "question": "How many cats are there?",
             },
             {
-                "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "image": "./tests/fixtures/tests_samples/COCO/000000039769.png",
                 "question": "How many cats are there?",
             },
         ]
