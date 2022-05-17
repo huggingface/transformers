@@ -28,9 +28,7 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
             _ = SpmConverter(original_tokenizer_with_bytefallback)
         self.assertEqual(len(w), 1)
         self.assertIn(
-            (
-                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                " which is not implemented in the fast tokenizers."
-            ),
+            "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+            " which is not implemented in the fast tokenizers.",
             str(w[0].message),
         )

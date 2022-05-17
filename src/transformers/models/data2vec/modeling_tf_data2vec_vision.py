@@ -227,7 +227,8 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         if getattr(height, "numpy", None) and getattr(width, "numpy", None):
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.

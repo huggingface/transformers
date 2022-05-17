@@ -182,7 +182,8 @@ class FNetBasicFourierTransform(nn.Module):
                 )
             else:
                 logging.warning(
-                    "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
+                    "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier"
+                    " transform instead."
                 )
                 self.fourier_transform = fftn
         else:
@@ -580,7 +581,8 @@ class FNetModel(FNetPreTrainedModel):
             and self.config.tpu_short_seq_length != seq_length
         ):
             raise ValueError(
-                "The `tpu_short_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
+                "The `tpu_short_seq_length` in FNetConfig should be set equal to the sequence length being passed to"
+                " the model when using TPU optimizations."
             )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -837,7 +839,8 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
 
         if "next_sentence_label" in kwargs:
             warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
+                " `labels` instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("next_sentence_label")

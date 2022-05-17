@@ -40,22 +40,34 @@ LOCALIZED_READMES = {
     "README.md": {
         "start_prompt": "🤗 Transformers currently provides the following architectures",
         "end_prompt": "1. Want to contribute a new model?",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
     "README_zh-hans.md": {
         "start_prompt": "🤗 Transformers 目前支持如下的架构",
         "end_prompt": "1. 想要贡献新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors}"
+            " 发布。{supplements}"
+        ),
     },
     "README_zh-hant.md": {
         "start_prompt": "🤗 Transformers 目前支援以下的架構",
         "end_prompt": "1. 想要貢獻新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
     "README_ko.md": {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
 }
 
@@ -130,7 +142,7 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119, preview=True)
     result = black.format_str(code, mode=mode)
     result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result

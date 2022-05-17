@@ -530,9 +530,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         # the projection layers are always newly initialized when loading the model
         # using pre-trained vision and text model.
         logger.warning(
-            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight', 'logit_scale']` "
-            "are newly initialized. You should probably TRAIN this model on a down-stream task "
-            "to be able to use it for predictions and inference."
+            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight',"
+            " 'logit_scale']` are newly initialized. You should probably TRAIN this model on a down-stream task to be"
+            " able to use it for predictions and inference."
         )
 
         return model
