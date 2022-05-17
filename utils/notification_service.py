@@ -749,6 +749,7 @@ if __name__ == "__main__":
         assert ci_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
 
+        merged_by = None
         # Find the PR number (if any) and change the url to the actual PR page.
         numbers = pr_number_re.findall(ci_title)
         if len(numbers) > 0:
@@ -759,7 +760,12 @@ if __name__ == "__main__":
             ci_author = ci_details["user"]["login"]
             ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
 
-        ci_title = f"<{ci_url}|{ci_title} - by {ci_author}>"
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title} | Author: {ci_author}>"
+        else:
+            ci_title = f"<{ci_url}|{ci_title} | Author: {ci_author} | Merged by: {merged_by}>"
 
     else:
         ci_title = ""
