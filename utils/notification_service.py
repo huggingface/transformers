@@ -644,10 +644,10 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-                        if re.search("_tf_", line):
+                        if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
 
-                        elif re.search("_flax_", line):
+                        elif re.search("test_modeling_flax_", line):
                             model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
 
                         elif re.search("test_modeling", line):
