@@ -17,7 +17,7 @@ logger = logging.get_logger(__name__)
 
 class VisualQuestionAnsweringArgumentHandler(ArgumentHandler):
     """
-    QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & image) to be mapped to
+    VisualQuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & image) to be mapped to
     an input dict of {"image": ..., "question": ...}
     """
 
@@ -71,10 +71,10 @@ class VisualQuestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class VisualQuestionAnsweringPipeline(Pipeline):
     """
-    Visual Question Answering pipeline using a `ModelForVisualQuestionAnswering`. This pipeline is currently only
+    Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
     available in PyTorch.
 
-    This tabular question answering pipeline can currently be loaded from [`pipeline`] using the following task
+    This visual question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"visual-question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a visual question answering task.
@@ -106,7 +106,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         - `pipeline(image=[image], question=[question])`
         - `pipeline(image=[image, image], question=[question])`
         - `pipeline(image=[image], question=[question, question])`
-        - `pipeline(image=[image], question=[question, question])`
         - `pipeline({"image": image, "question": question})`
         - `pipeline([{"image": image, "question": question}])`
         - `pipeline([{"image": image, "question": question}, {"image": image, "question": question}])`
@@ -127,7 +126,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
         Return:
-            A dictionary or a list of dictionaries containing result. The dictionaries contain the following keys:
+            A dictionary or a list of dictionaries containing the result. The dictionaries contain the following keys:
 
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
@@ -155,7 +154,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             top_k = self.model.config.num_labels
 
         if self.framework == "pt":
-            probs = model_outputs.logits.softmax(-1)[0]
+            probs = model_outputs.logits.sigmoid()[0]
             scores, ids = probs.topk(top_k)
         else:
             raise ValueError(f"Unsupported framework: {self.framework}")

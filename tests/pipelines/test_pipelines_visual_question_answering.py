@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import unittest
 
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import VisualQuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -130,16 +130,13 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
         vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         query = "How many cats are there?"
+        expected_outputs = [[{"score": 0.8799, "label": "2"}, {"score": 0.296, "label": "1"}]]
 
         outputs = vqa_pipeline(image=image, question=query, top_k=2)
-        self.assertEqual(
-            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]]
-        )
+        self.assertEqual(nested_simplify(outputs, decimals=4), expected_outputs)
 
         outputs = vqa_pipeline(image=[image, image], question=[query, query], top_k=2)
-        self.assertEqual(
-            outputs, [[{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)}]] * 2
-        )
+        self.assertEqual(nested_simplify(outputs, decimals=4), expected_outputs * 2)
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
