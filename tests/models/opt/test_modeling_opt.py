@@ -263,7 +263,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-        [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
+            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
         )
         self.assertTrue(torch.allclose(output.mean(dim=-1), expected_slice, atol=1e-3))
 

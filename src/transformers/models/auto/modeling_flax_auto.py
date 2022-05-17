@@ -38,7 +38,6 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("clip", "FlaxCLIPModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("electra", "FlaxElectraModel"),
-
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
         ("gptj", "FlaxGPTJModel"),

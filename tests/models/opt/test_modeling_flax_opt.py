@@ -22,8 +22,6 @@ from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
-
-
 if is_flax_available():
     import os
 
@@ -34,7 +32,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel,FlaxOPTForCausalLM
+    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel, FlaxOPTForCausalLM
 
 
 def prepare_opt_inputs_dict(
@@ -53,8 +51,8 @@ def prepare_opt_inputs_dict(
         "head_mask": head_mask,
     }
 
-@require_flax
 
+@require_flax
 class FlaxOPTModelTester:
     def __init__(
         self,
@@ -289,10 +287,11 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
             ]
         )
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
-        
+
         model = jax.jit(model)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
+
 
 @require_flax
 class FlaxOPTGenerationTest(unittest.TestCase):
@@ -361,7 +360,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
         EXPECTED_OUTPUTS = [
             "Today is a beautiful day and I want to thank",
-            "In the city of Rome Canaver Canaver Canaver Canaver"
+            "In the city of Rome Canaver Canaver Canaver Canaver",
         ]
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
@@ -371,7 +370,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
                 "In the city of",
             ],
             return_tensors="jax",
-            padding=True
+            padding=True,
         )
 
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)

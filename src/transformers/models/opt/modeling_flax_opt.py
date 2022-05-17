@@ -518,6 +518,7 @@ class FlaxOPTDecoder(nn.Module):
             attentions=outputs.attentions,
         )
 
+
 class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
     config_class = OPTConfig
     base_model_prefix: str = "model"
@@ -713,8 +714,6 @@ append_call_sample_docstring(
     "The bare OPT Model transformer outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-
-
 class FlaxOPTForCausalLMModule(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32
@@ -791,16 +790,12 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
         # But since the decoder uses a causal mask, those positions are masked anyway.
         # Thus, we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
-        
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
 
-            
         if attention_mask is not None:
             position_ids = make_positions(attention_mask, self.config.pad_token_id)
-            # position_ids = attention_mask.cumsum(axis=-1) - 1
-            # extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
+            attention_mask = jnp.ones_like(input_ids)
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 
         return {
