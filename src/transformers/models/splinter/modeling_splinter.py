@@ -1032,7 +1032,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         if question_positions is None and start_positions is not None and end_positions is not None:
             raise TypeError("question_positions must be specified in order to calculate the loss")
 
-        if question_positions is None and input_ids is None:
+        elif question_positions is None and input_ids is None:
             raise TypeError("question_positions must be specified when input_embeds is used")
 
         elif question_positions is None:
