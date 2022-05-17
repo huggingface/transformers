@@ -54,6 +54,7 @@ from .utils import (
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    ContextManagers,
     EntryNotFoundError,
     ModelOutput,
     PushToHubMixin,
@@ -62,6 +63,7 @@ from .utils import (
     cached_path,
     has_file,
     hf_bucket_url,
+    is_accelerate_available,
     is_offline_mode,
     is_remote_url,
     logging,
@@ -69,6 +71,10 @@ from .utils import (
 )
 from .utils.versions import require_version_core
 
+
+if is_accelerate_available():
+    from accelerate import dispatch_model, init_empty_weights, infer_auto_device_map
+    from accelerate.utils import set_module_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
@@ -514,7 +520,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
-def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix):
+def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix, expected_keys, device_map=None, offload_folder=None, dtype=None):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
     params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
@@ -532,21 +538,29 @@ def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, 
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
-    if is_deepspeed_zero3_enabled():
-        raise ValueError("low_cpu_mem_usage arg cannot currently be used with DeepSpeed ZeRO-3")
-
     error_msgs = []
 
-    # materialize state_dict entries one by one on CPU
-    for k in loaded_state_dict_keys:
-        if k in state_dict:
-            submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
-            if submodule is not None:
-                param_dtype = getattr(submodule, param_name).dtype
-                new_val = state_dict[k].to(param_dtype)
-                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
-                    new_val = torch.nn.Parameter(new_val)
-                setattr(submodule, param_name, new_val)
+    for param_name, param in state_dict.items():
+        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+            continue
+
+        if param_name.startswith(start_prefix):
+            param_name = param_name[len(start_prefix):]
+
+        module_name = param_name
+        if dtype is not None:
+            param = param.to(dtype)
+        if device_map is None:
+            param_device = "cpu"
+
+        else:
+            while len(module_name) > 0 and module_name not in device_map:
+                module_name = ".".join(module_name.split(".")[:-1])
+            if module_name == "" and "" not in device_map:
+                # TODO: group all errors and raise at the end.
+                raise ValueError(f"{param_name} doesn't have any device set.")
+            param_device = device_map[module_name]
+        set_module_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs
 
@@ -870,6 +884,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _no_split_modules = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1664,7 +1679,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
-            low_cpu_mem_usage(`bool`, *optional*, defaults to `False`):
+            low_cpu_mem_usage(`bool`, *optional*):
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 This is an experimental feature and a subject to change at any moment.
             torch_dtype (`str` or `torch.dtype`, *optional*):
@@ -1750,7 +1765,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
-        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
+        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", None)
+        device_map = kwargs.pop("device_map", None)
+        offload_folder = kwargs.pop("offload_folder", None)
+        offload_state_dict = kwargs.pop("offload_state_dict", False)
+
+        if device_map is not None:
+            if low_cpu_mem_usage is None:
+                low_cpu_mem_usage = True
+            elif not low_cpu_mem_usage:
+                raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
+
+        if low_cpu_mem_usage:
+            # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
+            require_version_core("torch>=1.9")
+
+            if is_deepspeed_zero3_enabled():
+                raise ValueError(
+                    "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
+                )
+            elif not is_accelerate_available():
+                raise ImportError(
+                    "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
+                )
 
         from_pt = not (from_tf | from_flax)
 
@@ -1845,10 +1882,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     filename = WEIGHTS_NAME
 
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=filename,
-                    revision=revision,
-                    mirror=mirror,
+                    pretrained_model_name_or_path, filename=filename, revision=revision, mirror=mirror
                 )
 
             try:
@@ -2013,18 +2047,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
+        init_contexts = [no_init_weights(_enable=_fast_init)]
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            # this immediately partitions the model across all gpus, to avoid the overhead in time
-            # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
-                with no_init_weights(_enable=_fast_init):
-                    model = cls(config, *model_args, **model_kwargs)
-        else:
-            with no_init_weights(_enable=_fast_init):
-                model = cls(config, *model_args, **model_kwargs)
+            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+        elif low_cpu_mem_usage:
+            init_contexts.append(init_empty_weights())
+
+        with ContextManagers(init_contexts):
+            model = cls(config, *model_args, **model_kwargs)
+
+        if device_map == "auto":
+            no_split_modules = [] if model._no_split_modules is None else model._no_split_modules
+            device_map = infer_auto_device_map(model, no_split_module_classes=no_split_modules, dtype=torch_dtype)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -2071,6 +2109,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 sharded_metadata=sharded_metadata,
                 _fast_init=_fast_init,
                 low_cpu_mem_usage=low_cpu_mem_usage,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=offload_state_dict,
+                dtype=torch_dtype,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -2078,6 +2120,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        # Dispatch model with hooks on all devices if necessary
+        if device_map is not None:
+            dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
 
         if output_loading_info:
             loading_info = {
@@ -2102,6 +2148,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         sharded_metadata=None,
         _fast_init=True,
         low_cpu_mem_usage=False,
+        device_map=None,
+        offload_folder=None,
+        offload_state_dict=False,
+        dtype=None,
     ):
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
@@ -2199,10 +2249,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         del state_dict[checkpoint_key]
             return mismatched_keys
 
-        if low_cpu_mem_usage:
-            model_state_dict = None  # free references to model's params to allow memory freeing
-            _move_model_to_meta(model, loaded_keys, start_prefix)
-
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
@@ -2226,9 +2272,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for shard_file in resolved_archive_file:
                 state_dict = load_state_dict(shard_file)
 
-                if low_cpu_mem_usage:
-                    model_state_dict = model.state_dict()
-
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
@@ -2242,7 +2285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if low_cpu_mem_usage:
                     error_msgs += _load_state_dict_into_meta_model(
-                        model_to_load, state_dict, loaded_keys, start_prefix
+                        model_to_load, state_dict, loaded_keys, start_prefix, expected_keys, device_map=device_map, offload_folder=offload_folder, dtype=dtype
                     )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
