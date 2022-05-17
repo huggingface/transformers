@@ -23,6 +23,7 @@ from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 
+
 if is_sentencepiece_available():
     from .tokenization_bartpho import BartphoTokenizer
 else:
@@ -137,9 +138,6 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
-        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
-
-        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
