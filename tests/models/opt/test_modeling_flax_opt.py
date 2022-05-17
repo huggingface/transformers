@@ -243,17 +243,16 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
     # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float32)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float16)
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = jnp.not_equal(input_ids,model.config.pad_token_id)
-        # TODO stop the gradients 
         output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = jnp.array([-0.1768,  0.4446,  0.2745,  0.4607,  0.4219,  0.0712, -0.0581, -0.0013,
-        0.0574,  0.2061,  0.3067]
+        expected_slice = jnp.array(
+            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
         )
-        self.assertTrue(jnp.allclose(output.mean(axis=-1), expected_slice, atol=1e-3))
+        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
 
 # TODO add embeddings tests
@@ -274,9 +273,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
     def test_logits(self):
         model = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
-        tokenizer.add_special_tokens({"pad_token": "<pad>"})
-        tokenizer.add_special_tokens({"bos_token": "<s>"})
-        
 
         prompts = [
             "Today is a beautiful day and I want to",
@@ -284,8 +280,9 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
-        input_ids = tokenizer(prompts, return_tensors="jax", padding=True).input_ids
-        logits = model(input_ids)[0].mean(axis=-1)
+        # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         logits_meta = jnp.array(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
@@ -294,7 +291,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
                 [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
             ]
         )
-
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
 # TODO add OPTGenerationTest

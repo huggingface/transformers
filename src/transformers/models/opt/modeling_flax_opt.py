@@ -186,15 +186,6 @@ OPT_DECODE_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
@@ -537,12 +528,23 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             attentions=all_self_attns,
         )
 
+def make_positions(mask, padding_idx: int):
+    """Replace non-padding symbols with their position numbers.
+
+    Position numbers begin at padding_idx+1. Padding symbols are ignored.
+    """
+    # The series of casts and type-conversions here are carefully
+    # balanced to both work with ONNX export and XLA. In particular XLA
+    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
+    # how to handle the dtype kwarg in cumsum.
+    positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
+    return positions
 
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    offset : int = 2
-
+    offset: int = 2  
+    
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
@@ -601,8 +603,8 @@ class FlaxOPTDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids)
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
-        # embed positions TODO should take the attention mask as an input
-        position_ids = (position_ids + self.offset) * ~ (input_ids == 1)
+
+        position_ids = make_positions(attention_mask,self.padding_idx)
         positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
