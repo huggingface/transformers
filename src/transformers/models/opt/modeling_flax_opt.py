@@ -106,8 +106,6 @@ OPT_INPUTS_DOCSTRING = r"""
 """
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
-
-
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
@@ -793,7 +791,7 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
 
         if attention_mask is not None:
-            position_ids = make_positions(attention_mask, self.config.pad_token_id)
+            position_ids = attention_mask.cumsum(axis=1) - 1
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
