@@ -2140,7 +2140,10 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence']",
+        expected_output=(
+            "['Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence',"
+            " 'Evidence', 'Evidence', 'Evidence', 'Evidence']"
+        ),
         expected_loss=0.63,
     )
     def forward(
