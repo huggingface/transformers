@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -223,13 +224,13 @@ def evaluate(args):
     return loss.item(), perplexity.item()
 
 
-# Accelerator
-accelerator = Accelerator(log_with=["wandb", "tensorboard"], logging_dir=f"{args.save_dir}/log")
-acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
-
 # Settings
 parser = HfArgumentParser(TrainingArguments)
 args = parser.parse_args()
+
+# Accelerator
+accelerator = Accelerator(log_with=["wandb", "tensorboard"], logging_dir=f"{args.save_dir}/log")
+acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 args = Namespace(**vars(args), **acc_state)
 samples_per_step = accelerator.state.num_processes * args.train_batch_size
