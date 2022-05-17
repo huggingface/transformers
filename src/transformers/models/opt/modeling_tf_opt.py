@@ -1148,7 +1148,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
     OPT_START_DOCSTRING,
 )
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel with BART->OPT,Bart->OPT
-class TFOPTModel(TFOPTPretrainedModel):
+class TFOPTModel(TFOPTPreTrainedModel):
 
     _requires_load_weight_prefix = True
 

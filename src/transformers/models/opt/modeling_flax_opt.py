@@ -14,12 +14,9 @@
 # limitations under the License.
 """ Flax OPT model."""
 
-import math
 import random
 from functools import partial
 from typing import Optional, Tuple
-
-import numpy as np
 
 import flax.linen as nn
 import jax
@@ -33,7 +30,7 @@ from jax.random import PRNGKey
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxMaskedLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import add_start_docstrings, logging
 from .configuration_opt import OPTConfig
 
 
@@ -599,7 +596,6 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(OPT_DECODE_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,

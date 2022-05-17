@@ -34,7 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel, shift_tokens_right
+    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel
 
 
 def prepare_opt_inputs_dict(
