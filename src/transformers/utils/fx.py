@@ -18,6 +18,7 @@ import collections
 import functools
 import inspect
 import math
+import operator
 import random
 import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
@@ -127,45 +128,45 @@ _SUPPORTED_MODELS = tuple(
 )
 
 
-def embedding_override(self, input):
+def torch_nn_embedding(self, input):
     return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
 
 
-def torch_nn_layernorm_override(self, input):
+def torch_nn_layernorm(self, input):
     return input
 
 
-def torch_nn_linear_override(self, input):
+def torch_nn_linear(self, input):
     return torch.empty(input.shape[:-1] + (self.out_features,), device="meta")
 
 
-def torch_relu_override(x):
+def torch_relu(x):
     return x
 
 
-def torch_nn_relu_override(self, x):
+def torch_nn_relu(self, x):
     return x
 
 
-def torch_nn_functional_relu_override(x, inplace=False):
+def torch_nn_functional_relu(x, inplace=False):
     if not inplace:
         raise ValueError("Don't support in-place functional.relu for MetaTensor analysis")
     return x
 
 
-def torch_where_override(condition, x, y):
+def torch_where(condition, x, y):
     # torch.where returns the broadcasted tensor of condition, x, and y,
     # so hack it by using addition
     return condition.to(device="meta") + x.to(device="meta") + y.to(device="meta")
 
 
-def torch_abs_override(input, *, out=None):
-    if out is None:
+def torch_abs(input, *, out=None):
+    if out is not None:
         raise ValueError("Don't support in-place abs for MetaTensor analysis")
     return input
 
 
-def torch_arange_override(*args, **kwargs):
+def torch_arange(*args, **kwargs):
     n = len(args)
     step = 1
     if n == 1:
@@ -180,7 +181,7 @@ def torch_arange_override(*args, **kwargs):
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
 
 
-def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
+def torch_cat(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
     if dim is None and axis is not None:
@@ -194,7 +195,7 @@ def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
     return torch.empty(final_shape, device="meta")
 
 
-def torch_stack_override(tensors, dim=None, axis=None, *, out=None):
+def torch_stack(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
     if dim is None and axis is not None:
@@ -206,7 +207,7 @@ def torch_stack_override(tensors, dim=None, axis=None, *, out=None):
     return torch.empty(shape, device="meta")
 
 
-def torch_add_override(input, other, *, alpha=1, out=None):
+def torch_add(input, other, *, alpha=1, out=None):
     if not isinstance(input, torch.Tensor):
         return torch.empty_like(other, device="meta")
     if not isinstance(other, torch.Tensor):
@@ -220,15 +221,15 @@ def torch_add_override(input, other, *, alpha=1, out=None):
     return torch.empty(shape, device="meta")
 
 
-def torch_mul_override(input, other, *, out=None):
-    return torch_add_override(input, other, out=out)
+def torch_mul(input, other, *, out=None):
+    return torch_add(input, other, out=out)
 
 
-def torch_tensor_mul_override(self, other):
-    return torch_mul_override(self, other)
+def torch_tensor_mul(self, other):
+    return torch_mul(self, other)
 
 
-def torch_matmul_override(input, other, *, out=None):
+def torch_matmul(input, other, *, out=None):
     d1 = input.dim()
     d2 = other.dim()
     shape = None
@@ -264,7 +265,13 @@ def torch_matmul_override(input, other, *, out=None):
     return torch.empty(*shape, device="meta")
 
 
-def torch_tensor_repeat_override(self, *sizes):
+def torch_einsum(equation, *operands):
+    # TODO: infer shape without performing the computation, this might be quite hard.
+    concrete_operands = (torch.empty_like(operand, device="cpu") for operand in operands)
+    return torch.einsum(equation, *concrete_operands).to("meta")
+
+
+def torch_tensor_repeat(self, *sizes):
     shape = list(self.shape)
     for i, x in enumerate(sizes):
         shape[i] *= x
@@ -306,6 +313,18 @@ def torch_nn_conv2d(self, input):
     return torch.empty(shape, device="meta")
 
 
+def torch_unsqueeze(input, dim):
+    shape = list(input.shape)
+    if dim < 0:
+        dim = input.dim() + 1 + dim
+    shape.insert(dim, 1)
+    return torch.empty(shape, device="meta")
+
+
+def torch_tensor_unsqueeze(self, dim):
+    return torch_unsqueeze(self, dim)
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -330,31 +349,42 @@ def torch_nn_bcewithlogitsloss(self, input, target):
     return torch.empty(shape, device="meta")
 
 
+def operator_getitem(a, b):
+    if isinstance(a, torch.Tensor):
+        # TODO: infer shape without performing the computation.
+        return operator.getitem(torch.empty_like(a, device="cpu"), b).to("meta")
+    return operator.getitem(a, b)
+
+
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
-    torch.nn.Embedding: embedding_override,
-    torch.nn.LayerNorm: torch_nn_layernorm_override,
-    torch.nn.Linear: torch_nn_linear_override,
-    torch.relu: torch_relu_override,
-    torch.nn.functional.relu: torch_nn_functional_relu_override,
-    torch.nn.ReLU: torch_nn_relu_override,
-    torch.where: torch_where_override,
-    torch.abs: torch_abs_override,
-    torch.arange: torch_arange_override,
-    torch.cat: torch_cat_override,
-    torch.stack: torch_stack_override,
-    torch.add: torch_add_override,
-    torch.mul: torch_mul_override,
-    torch.Tensor.mul: torch_tensor_mul_override,
-    torch.matmul: torch_matmul_override,
-    torch.Tensor.repeat: torch_tensor_repeat_override,
+    torch.nn.Embedding: torch_nn_embedding,
+    torch.nn.LayerNorm: torch_nn_layernorm,
+    torch.nn.Linear: torch_nn_linear,
+    torch.relu: torch_relu,
+    torch.nn.functional.relu: torch_nn_functional_relu,
+    torch.nn.ReLU: torch_nn_relu,
+    torch.where: torch_where,
+    torch.abs: torch_abs,
+    torch.arange: torch_arange,
+    torch.cat: torch_cat,
+    torch.stack: torch_stack,
+    torch.add: torch_add,
+    torch.mul: torch_mul,
+    torch.Tensor.mul: torch_tensor_mul,
+    torch.matmul: torch_matmul,
+    torch.einsum: torch_einsum,
+    torch.Tensor.repeat: torch_tensor_repeat,
     torch.roll: torch_roll,
     # TODO: those might not be needed.
     # torch.index_select: torch_index_select,
     # torch.Tensor.index_select: torch_tensor_index_select,
     torch.nn.Conv2d: torch_nn_conv2d,
+    torch.unsqueeze: torch_unsqueeze,
+    torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
+    operator.getitem: operator_getitem,
 }
 
 
@@ -372,7 +402,6 @@ class HFProxy(Proxy):
 
     @property
     def dtype(self):
-        return self.tracer.root.dtype
         if hasattr(self, "_metadata") and self._metadata is not None:
             return self._metadata.dtype
         return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
