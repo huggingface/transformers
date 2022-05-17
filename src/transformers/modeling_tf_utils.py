@@ -1969,14 +1969,12 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         vocab_size: int,
         hidden_size: int,
         initializer_range: Optional[float] = None,
-        initializer: Optional[tf.keras.initializers.Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
-        self.initializer = initializer if initializer is not None else get_initializer(self.initializer_range)
 
     def build(self, input_shape):
         """
@@ -1985,7 +1983,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         """
 
         self.weight = self.add_weight(
-            "weight", shape=[self.vocab_size, self.hidden_size], initializer=self.initializer
+            "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
         super().build(input_shape)
 

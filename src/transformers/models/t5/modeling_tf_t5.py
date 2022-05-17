@@ -1112,9 +1112,8 @@ num_heads))`.
 class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        word_embedding_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer=word_embedding_initializer
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
         )
 
         # retrieve correct absolute scope for embed token wrapper
@@ -1262,10 +1261,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-
-        word_embedding_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer=word_embedding_initializer
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
         )
 
         # retrieve correct absolute scope for embed token wrapper
@@ -1606,9 +1603,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        word_embedding_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer=word_embedding_initializer
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
         )
 
         # retrieve correct absolute scope for embed token wrapper
