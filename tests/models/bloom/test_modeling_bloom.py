@@ -240,7 +240,7 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-1))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=5e-2))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomLMHeadModel(config)
