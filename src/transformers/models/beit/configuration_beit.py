@@ -26,7 +26,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-pt22k": "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json",
+    "microsoft/beit-base-patch16-224-pt22k": (
+        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
+    ),
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }
 

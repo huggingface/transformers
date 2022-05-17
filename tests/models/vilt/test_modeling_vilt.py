@@ -589,7 +589,10 @@ class ViltModelIntegrationTest(unittest.TestCase):
         image1 = Image.open(dataset[0]["file"]).convert("RGB")
         image2 = Image.open(dataset[1]["file"]).convert("RGB")
 
-        text = "The left image contains twice the number of dogs as the right image, and at least two dogs in total are standing."
+        text = (
+            "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
+            " standing."
+        )
         encoding_1 = processor(image1, text, return_tensors="pt")
         encoding_2 = processor(image2, text, return_tensors="pt")
 

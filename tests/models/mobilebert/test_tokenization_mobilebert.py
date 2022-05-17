@@ -194,7 +194,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
         vocab = {}
-        for (i, token) in enumerate(vocab_tokens):
+        for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 

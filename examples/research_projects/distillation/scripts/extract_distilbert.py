@@ -25,7 +25,10 @@ from transformers import BertForMaskedLM
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Extraction some layers of the full BertForMaskedLM or RObertaForMaskedLM for Transfer Learned Distillation"
+        description=(
+            "Extraction some layers of the full BertForMaskedLM or RObertaForMaskedLM for Transfer Learned"
+            " Distillation"
+        )
     )
     parser.add_argument("--model_type", default="bert", choices=["bert"])
     parser.add_argument("--model_name", default="bert-base-uncased", type=str)

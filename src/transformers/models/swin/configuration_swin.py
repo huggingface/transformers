@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swin-tiny-patch4-window7-224": "https://huggingface.co/microsoft/swin-tiny-patch4-window7-224/resolve/main/config.json",
+    "microsoft/swin-tiny-patch4-window7-224": (
+        "https://huggingface.co/microsoft/swin-tiny-patch4-window7-224/resolve/main/config.json"
+    ),
     # See all Swin models at https://huggingface.co/models?filter=swin
 }
 
