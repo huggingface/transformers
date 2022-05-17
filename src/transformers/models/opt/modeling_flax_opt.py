@@ -105,6 +105,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
@@ -402,15 +403,16 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if project_out is not None:
-            hidden_states = project_out(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+        
+            
+        # # add hidden states from the last decoder layer
+        # if output_hidden_states:
+        #     all_hidden_states += (hidden_states,)
 
         outputs = [hidden_states, all_hidden_states, all_self_attns]
 
+        return outputs
+    
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
@@ -427,7 +429,7 @@ def make_positions(mask, padding_idx: int):
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
     positions = jnp.cumsum(mask, axis=1).astype(jnp.int32) + padding_idx
-    # positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
+    #positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
     return positions
 
 
@@ -495,7 +497,7 @@ class FlaxOPTDecoder(nn.Module):
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
-        outputs = self.layers(
+        hidden_state, all_hidden_states, attentions = self.layers(
             hidden_states,
             attention_mask,
             deterministic=deterministic,
@@ -503,16 +505,23 @@ class FlaxOPTDecoder(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            project_out=self.project_out,
         )
+        
+        if self.project_out is not None:
+            hidden_state = self.project_out(hidden_state)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_state,)
+            
+        outputs = [hidden_state, all_hidden_states, attentions]
 
         if not return_dict:
-            return outputs
-
+            return tuple(v for v in outputs if v is not None)
+        
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            last_hidden_state=hidden_state,
+            hidden_states=all_hidden_states,
+            attentions=attentions,
         )
 
 

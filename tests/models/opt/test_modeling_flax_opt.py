@@ -238,23 +238,22 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 @require_flax
 @require_tokenizers
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_no_head(self):
         model = FlaxOPTModel.from_pretrained("facebook/opt-350m", from_pt=True, dtype=jnp.float32)
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = jnp.not_equal(input_ids, model.config.pad_token_id)
-        output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        output = model(input_ids=input_ids).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
         expected_slice = jnp.array(
-            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
+            [[-0.2867, -1.9256, -0.3062], [-1.2711, -0.1337, -0.1897], [0.4109, 0.1187, -1.3142]]
         )
-        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-2))
+        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
 
 @require_tokenizers
 @require_flax
-# @slow
+@slow
 class FlaxOPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -305,7 +304,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
 
-    # @slow
+    @slow
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
 
@@ -356,7 +355,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
     # FIXME failing test
-    # @slow
+    @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-125m"
         EXPECTED_OUTPUTS = [
