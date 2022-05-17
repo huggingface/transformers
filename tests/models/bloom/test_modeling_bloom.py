@@ -500,6 +500,7 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
+
 @require_torch
 class BloomEmbeddingTest(unittest.TestCase):
     """
