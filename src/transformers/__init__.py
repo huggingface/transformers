@@ -1532,6 +1532,7 @@ else:
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SplinterForPreTraining",
             "SplinterForQuestionAnswering",
             "SplinterLayer",
             "SplinterModel",
@@ -3830,6 +3831,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForPreTraining,
             SplinterForQuestionAnswering,
             SplinterLayer,
             SplinterModel,
