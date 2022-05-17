@@ -229,7 +229,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
     # @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("facebook/opt-125m", from_pt=True)
+            model = model_class_name.from_pretrained("facebook/opt-125m")
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
@@ -238,9 +238,9 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 @require_flax
 @require_tokenizers
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m", from_pt=True, dtype=jnp.float32)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids=input_ids).last_hidden_state
         expected_shape = (1, 11, 512)
@@ -261,12 +261,12 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
 
     def test_load_model(self):
         try:
-            _ = FlaxOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
+            _ = FlaxOPTForCausalLM.from_pretrained(self.path_model)
         except BaseException:
             self.fail("Failed loading model")
 
     def test_logits(self):
-        model = FlaxOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
+        model = FlaxOPTForCausalLM.from_pretrained(self.path_model)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
@@ -317,7 +317,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="jax").input_ids
@@ -342,7 +342,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="jax").input_ids
@@ -373,7 +373,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             padding=True,
         )
 
-        model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id)
         jit_generate = jax.jit(model.generate)
 
         output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
