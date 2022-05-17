@@ -52,11 +52,11 @@ FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", 
 
 class BartphoTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" BARTpho tokenizer (backed by HuggingFace's *tokenizers* library).
-    Adapted from [`XLMRobertaTokenizerFast`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct a "fast" BARTpho tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
+    [`XLMRobertaTokenizerFast`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -172,8 +172,8 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BARTpho does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BARTpho does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
