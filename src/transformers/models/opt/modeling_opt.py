@@ -512,7 +512,7 @@ class OPTDecoder(OPTPreTrainedModel):
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
             self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)
-            
+
         else:
             self.project_in = None
             self.project_out = None
@@ -633,7 +633,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
         # embed positions
         if attention_mask is None:
-            attention_mask = ~ (input_ids == 1)
+            attention_mask = ~(input_ids == 1)
 
         positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
@@ -712,7 +712,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-                    
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 

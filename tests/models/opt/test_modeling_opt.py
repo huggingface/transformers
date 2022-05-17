@@ -207,14 +207,11 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
-            
 
             wte = model.get_input_embeddings()
             inputs["inputs_embeds"] = wte(input_ids)
-            
 
             with torch.no_grad():
                 model(**inputs)[0]
@@ -270,8 +267,9 @@ class OPTModelIntegrationTests(unittest.TestCase):
             output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[-0.1768,  0.4446,  0.2745,  0.4607,  0.4219,  0.0712, -0.0581, -0.0013,
-        0.0574,  0.2061,  0.3067]])
+        expected_slice = torch.tensor(
+            [[-0.1768, 0.4446, 0.2745, 0.4607, 0.4219, 0.0712, -0.0581, -0.0013, 0.0574, 0.2061, 0.3067]]
+        )
         self.assertTrue(torch.allclose(output.mean(dim=-1), expected_slice, atol=1e-3))
 
 
@@ -303,7 +301,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         input_ids = tokenizer(prompts, return_tensors="pt", padding=True).input_ids
-        logits = model(input_ids[:,1:])[0].mean(dim=-1)
+        logits = model(input_ids[:, 1:])[0].mean(dim=-1)
         logits_meta = torch.Tensor(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],

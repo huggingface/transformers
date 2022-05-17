@@ -16,9 +16,9 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import OPTConfig, is_flax_available, GPT2Tokenizer
+from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
 from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM
-from transformers.testing_utils import require_flax, slow, require_tokenizers
+from transformers.testing_utils import require_flax, require_tokenizers, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -99,8 +99,7 @@ class FlaxOPTModelTester:
         self.word_embed_proj_dim = word_embed_proj_dim
         self.initializer_range = initializer_range
         self.is_encoder_decoder = False
-        
-    
+
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
         input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
@@ -138,7 +137,7 @@ class FlaxOPTModelTester:
             inputs_dict["input_ids"],
             inputs_dict["attention_mask"],
         )
-        
+
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
         attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")
 
@@ -208,9 +207,10 @@ class FlaxOPTModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
+
 @require_flax
 class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
-    all_model_classes = (FlaxOPTModel,FlaxOPTForCausalLM) if is_flax_available() else ()
+    all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
@@ -226,7 +226,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
-    #@slow
+    # @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("facebook/opt-125m", from_pt=True)
@@ -234,14 +234,15 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
+
 @require_flax
 @require_tokenizers
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
     # @slow
     def test_inference_no_head(self):
-        model = FlaxOPTModel.from_pretrained("facebook/opt-350m",from_pt=True, dtype = jnp.float32)
+        model = FlaxOPTModel.from_pretrained("facebook/opt-350m", from_pt=True, dtype=jnp.float32)
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = jnp.not_equal(input_ids,model.config.pad_token_id)
+        attention_mask = jnp.not_equal(input_ids, model.config.pad_token_id)
         output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
@@ -249,6 +250,7 @@ class FlaxOPTModelIntegrationTests(unittest.TestCase):
             [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
         )
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-2))
+
 
 @require_tokenizers
 @require_flax
@@ -260,12 +262,12 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
 
     def test_load_model(self):
         try:
-            _ = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
+            _ = FlaxOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
         except BaseException:
             self.fail("Failed loading model")
 
     def test_logits(self):
-        model = FlaxOPTForCausalLM.from_pretrained(self.path_model,from_pt=True)
+        model = FlaxOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
@@ -288,7 +290,6 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
 
-
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
@@ -298,6 +299,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
+
     # @slow
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
@@ -322,7 +324,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
-        
+
     @slow
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
@@ -347,8 +349,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
-        
-    
+
     # @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-125m"
@@ -358,9 +359,15 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Paris is the capital of France and Parisdylib",
             "Computers and mobile phones have taken precedence over",
         ]
-        
+
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        inputs = tokenizer(["Today is a beautiful day and I want to", "In the city of",], return_tensors="np")
+        inputs = tokenizer(
+            [
+                "Today is a beautiful day and I want to",
+                "In the city of",
+            ],
+            return_tensors="np",
+        )
 
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
         model.do_sample = False

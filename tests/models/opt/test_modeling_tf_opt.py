@@ -323,4 +323,3 @@ class TFOPTHeadTests(unittest.TestCase):
             decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
-	

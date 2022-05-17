@@ -31,10 +31,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutput,
-    FlaxMaskedLMOutput,
-)
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxMaskedLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_opt import OPTConfig
@@ -98,57 +95,6 @@ OPT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
-        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-OPT_ENCODE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -161,55 +107,6 @@ OPT_ENCODE_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-OPT_DECODE_INPUTS_DOCSTRING = r"""
-    Args:
-        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
-        outputs (`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
-            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = np.zeros_like(input_ids)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1]
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
-    return shifted_input_ids
 
 
 class FlaxOPTAttention(nn.Module):
@@ -417,14 +314,13 @@ class FlaxOPTDecoderLayer(nn.Module):
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
-        
-        
+
         residual = hidden_states
 
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
         if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-            
+
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
@@ -439,17 +335,17 @@ class FlaxOPTDecoderLayer(nn.Module):
         hidden_states_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
         residual = hidden_states
-        
+
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
         if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-            
+
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        
+
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        
+
         hidden_states = (residual + hidden_states).reshape(hidden_states_shape)
         # hidden_states = residual + hidden_states
         # 350m applies layer norm AFTER attention
@@ -471,10 +367,11 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxOPTDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxOPTDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
         self.layerdrop = self.config.layerdrop
-            
+
     def __call__(
         self,
         hidden_states,
@@ -484,7 +381,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-        project_out:nn.Module = None
+        project_out: nn.Module = None,
     ):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -512,7 +409,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
 
         if project_out is not None:
             hidden_states = project_out(hidden_states)
-                
+
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -528,6 +425,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             attentions=all_self_attns,
         )
 
+
 def make_positions(mask, padding_idx: int):
     """Replace non-padding symbols with their position numbers.
 
@@ -540,18 +438,19 @@ def make_positions(mask, padding_idx: int):
     positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
     return positions
 
+
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    offset: int = 2  
-    
+    offset: int = 2
+
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
         embed_dim = self.config.hidden_size
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
-        
+
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.embed_tokens = nn.Embed(
@@ -560,29 +459,29 @@ class FlaxOPTDecoder(nn.Module):
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
         # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
-        # should take attention mask as inputs ? 
+        # should take attention mask as inputs ?
         # TODO FIXME as FlaxOPTLearnedPositionalEmbedding
-        # Why is this not passed as embed_tokens ? Initialising it here but why? 
+        # Why is this not passed as embed_tokens ? Initialising it here but why?
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
-        # TODO CHECK if that is the correct way of doing this 
+        # TODO CHECK if that is the correct way of doing this
         # if self.config.word_embed_proj_dim != self.config.hidden_size:
         #     self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
-        # else: 
+        # else:
         #     self.project_out = None
-            
+
         if self.config.word_embed_proj_dim != self.config.hidden_size:
             self.project_in = nn.Dense(self.config.hidden_size, use_bias=False)
             self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
-            
+
         else:
             self.project_in = None
             self.project_out = None
-            
+
         self.layers = FlaxOPTDecoderLayerCollection(self.config, self.dtype)
 
     def __call__(
@@ -598,12 +497,12 @@ class FlaxOPTDecoder(nn.Module):
         deterministic: bool = True,
     ):
         input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])                                                                    
+        input_ids = input_ids.reshape(-1, input_shape[-1])
 
         inputs_embeds = self.embed_tokens(input_ids)
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
-            
+
         positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
@@ -618,18 +517,18 @@ class FlaxOPTDecoder(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            project_out=self.project_out
+            project_out=self.project_out,
         )
-        
 
         if not return_dict:
             return outputs
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,                                      
+            last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel with BART->OPT,Bart->OPT
 class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
@@ -667,7 +566,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             position_ids,
             return_dict=False,
         )
-        
+
         random_params = module_init_outputs["params"]
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -678,7 +577,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             return freeze(unflatten_dict(params))
         else:
             return random_params
-        
+
         return module_init_outputs["params"]
 
     def init_cache(self, batch_size, max_length):
@@ -696,7 +595,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True 
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
@@ -723,7 +622,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
-            
+
         if position_ids is None:
             position_ids = make_positions(attention_mask, self.config.pad_token_id)
         else:
@@ -769,12 +668,13 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+
 class FlaxOPTModule(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype) 
+        self.decoder = FlaxOPTDecoder(self.config, dtype=self.dtype)
 
     def _get_decoder_module(self):
         return self.decoder
@@ -797,7 +697,7 @@ class FlaxOPTModule(nn.Module):
         #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         # )
         # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -806,7 +706,7 @@ class FlaxOPTModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=deterministic,
-            init_cache=init_cache
+            init_cache=init_cache,
         )
 
         if not return_dict:
@@ -818,20 +718,23 @@ class FlaxOPTModule(nn.Module):
             attentions=decoder_outputs.attentions,
         )
 
+
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModel with Bart->OPT
 class FlaxOPTModel(FlaxOPTPreTrainedModel):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     module_class = FlaxOPTModule
+
+
 append_call_sample_docstring(
     FlaxOPTModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
 )
+
 
 @add_start_docstrings(
     "The bare OPT Model transformer outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForCausalLMModule with Bart->OPT
@@ -853,8 +756,8 @@ class FlaxOPTForCausalLMModule(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        head_mask: Optional[jnp.ndarray] = None,    # TODO Properly handle headmasks
-        input_embeds: Optional[jnp.ndarray] = None, # TODO add support for that 
+        head_mask: Optional[jnp.ndarray] = None,  # TODO Properly handle headmasks
+        input_embeds: Optional[jnp.ndarray] = None,  # TODO add support for that
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -877,7 +780,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]['decoder']['embed_tokens']["embedding"]
+            shared_embedding = self.model.variables["params"]["decoder"]["embed_tokens"]["embedding"]
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
