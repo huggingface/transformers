@@ -55,8 +55,8 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" BARTpho tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
     [`XLMRobertaTokenizerFast`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
