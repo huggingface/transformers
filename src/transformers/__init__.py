@@ -318,6 +318,10 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_conformer": [
+        "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2ConformerConfig",
+    ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.wavlm": [
@@ -1668,6 +1672,18 @@ else:
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2_conformer"].extend(
+        [
+            "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ConformerForAudioFrameClassification",
+            "Wav2Vec2ConformerForCTC",
+            "Wav2Vec2ConformerForPreTraining",
+            "Wav2Vec2ConformerForSequenceClassification",
+            "Wav2Vec2ConformerForXVector",
+            "Wav2Vec2ConformerModel",
+            "Wav2Vec2ConformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1841,6 +1857,7 @@ else:
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "TF_MODEL_FOR_MASKED_LM_MAPPING",
             "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -2207,6 +2224,15 @@ else:
             "TFSpeech2TextForConditionalGeneration",
             "TFSpeech2TextModel",
             "TFSpeech2TextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.swin"].extend(
+        [
+            "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwinForImageClassification",
+            "TFSwinForMaskedImageModeling",
+            "TFSwinModel",
+            "TFSwinPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(
@@ -2794,6 +2820,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_conformer import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2ConformerConfig
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
@@ -3925,6 +3952,16 @@ if TYPE_CHECKING:
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
+        from .models.wav2vec2_conformer import (
+            WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ConformerForAudioFrameClassification,
+            Wav2Vec2ConformerForCTC,
+            Wav2Vec2ConformerForPreTraining,
+            Wav2Vec2ConformerForSequenceClassification,
+            Wav2Vec2ConformerForXVector,
+            Wav2Vec2ConformerModel,
+            Wav2Vec2ConformerPreTrainedModel,
+        )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             WavLMForAudioFrameClassification,
@@ -4080,6 +4117,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -4372,6 +4410,13 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
