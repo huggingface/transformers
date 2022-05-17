@@ -900,7 +900,7 @@ class BigBirdPegasusPreTrainedModel(metaclass=DummyObject):
 BLOOMPRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class BloomLMHeadModel(metaclass=DummyObject):
+class BloomForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

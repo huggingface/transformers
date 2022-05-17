@@ -44,7 +44,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bloom"] = [
         "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BloomLMHeadModel",
+        "BloomForCausalLM",
         "BloomModel",
         "BloomPreTrainedModel",
     ]
@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BloomLMHeadModel,
+            BloomForCausalLM,
             BloomModel,
             BloomPreTrainedModel,
         )

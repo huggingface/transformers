@@ -847,7 +847,7 @@ else:
     _import_structure["models.bloom"].extend(
         [
             "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BloomLMHeadModel",
+            "BloomForCausalLM",
             "BloomModel",
             "BloomPreTrainedModel",
         ]
@@ -3293,7 +3293,7 @@ if TYPE_CHECKING:
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BloomLMHeadModel,
+            BloomForCausalLM,
             BloomModel,
             BloomPreTrainedModel,
         )

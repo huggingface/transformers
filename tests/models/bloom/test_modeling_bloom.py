@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomLMHeadModel, BloomModel, BloomTokenizerFast
+    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomForCausalLM, BloomModel, BloomTokenizerFast
 
 
 @require_torch
@@ -134,7 +134,7 @@ class BloomModelTester:
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
 
-        # model = BloomLMHeadModel(config=config)
+        # model = BloomForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -243,7 +243,7 @@ class BloomModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=5e-2))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
-        model = BloomLMHeadModel(config)
+        model = BloomForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
@@ -254,7 +254,7 @@ class BloomModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
-        model = BloomLMHeadModel(config)
+        model = BloomForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -285,9 +285,9 @@ class BloomModelTester:
 @require_torch
 class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BloomModel, BloomLMHeadModel) if is_torch_available() else ()
-    all_generative_model_classes = (BloomLMHeadModel,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (BloomLMHeadModel,) if is_torch_available() else ()
+    all_model_classes = (BloomModel, BloomForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = False
@@ -330,7 +330,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_batch_generation(self):
-        model = BloomLMHeadModel.from_pretrained("bloom")
+        model = BloomForCausalLM.from_pretrained("bloom")
         model.to(torch_device)
         tokenizer = BloomTokenizerFast.from_pretrained("bloom")
 
@@ -401,7 +401,7 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
         gradient_checkpointing=False,
         verify_outputs=True,
     ):
-        model = BloomLMHeadModel.from_pretrained(
+        model = BloomForCausalLM.from_pretrained(
             "bloom",
         )
         if gradient_checkpointing:
@@ -434,7 +434,7 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_bloom_sample(self):
         tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-        model = BloomLMHeadModel.from_pretrained("bloom")
+        model = BloomForCausalLM.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -462,7 +462,7 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_bloom_sample_max_time(self):
         tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-        model = BloomLMHeadModel.from_pretrained("bloom")
+        model = BloomForCausalLM.from_pretrained("bloom")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -532,13 +532,13 @@ class BloomEmbeddingTest(unittest.TestCase):
     def test_load_transformers_model(self):
         # TODO load the model (.bin file)
         try:
-            _ = BloomLMHeadModel.from_pretrained(self.path_bigscience_model)
+            _ = BloomForCausalLM.from_pretrained(self.path_bigscience_model)
         except BaseException:
             self.fail("Failed loading the model")
 
     @require_torch
     def test_embeddings(self):
-        model = BloomLMHeadModel.from_pretrained(self.path_bigscience_model)
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model)
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -845,7 +845,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         cuda_available = torch.cuda.is_available()
         # cuda_available = False
         device = torch.device("cuda:3" if cuda_available else "cpu")
-        model = BloomLMHeadModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
         EXAMPLE_IDS = [
