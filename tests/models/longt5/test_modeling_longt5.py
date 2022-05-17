@@ -621,7 +621,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = LongT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = LongT5Model(config_and_inputs[0]).to(torch_device)
@@ -631,7 +630,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/longt5_test.onnx",
                 export_params=True,
-                opset_version=9,
+                opset_version=13,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 

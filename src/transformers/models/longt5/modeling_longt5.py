@@ -166,22 +166,24 @@ def _make_global_fixed_block_ids(
         block_ends = (torch.arange(seq_len) % global_block_size) == global_block_size - 1
         block_ends = block_ends.to(block_ids.device)
         true_block_ends = torch.logical_and(block_ends, block_ids >= 0)
-        full_blocks = true_block_ends.sum(-1).unsqueeze(-1)
-        block_ids = torch.minimum(block_ids, full_blocks - 1)
+        full_blocks = true_block_ends.sum(-1).unsqueeze(-1).type(block_ids.dtype)
+        block_ids = torch.where(block_ids < full_blocks - 1.0, block_ids, full_blocks - 1.0)
         return block_ids
 
     attention_mask = torch.where(attention_mask != 0.0, 1.0, -1000.0)
     fixed_block_mask = torch.ones_like(attention_mask) / global_block_size
     fixed_block_mask = torch.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
-    global_block_ids = torch.maximum(
-        torch.floor(attention_mask + fixed_block_mask - 1.0), torch.tensor(-1.0, dtype=attention_mask.dtype)
+    _unbounded_global_block_ids = torch.floor(attention_mask + fixed_block_mask - 1.0)
+    _min_block_ids_val = torch.tensor(-1.0, dtype=_unbounded_global_block_ids.dtype)
+    global_block_ids = torch.where(
+        _unbounded_global_block_ids > _min_block_ids_val, _unbounded_global_block_ids, _min_block_ids_val
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
     num_globals = seq_len // global_block_size
     # [batch_size, seq_len // global_block_size]
     if num_globals > 0:
-        _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).T
+        _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).transpose(0, 1)
     else:
         _sequence_block_ids_max = torch.zeros(batch_size, 0, dtype=global_block_ids.dtype)
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
@@ -921,8 +923,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         # New shape: (batch_size, num_blocks, global_seq_len, n_heads, dim_per_head)
         reps = [1] * (side_key_states.ndim + 1)
         reps[1] = key_states.shape[1]
-        side_key_states = torch.tile(side_key_states.unsqueeze(1), reps)
-        side_value_states = torch.tile(side_value_states.unsqueeze(1), reps)
+        side_key_states = side_key_states.unsqueeze(1).repeat(reps)
+        side_value_states = side_value_states.unsqueeze(1).repeat(reps)
 
         # Concatenate "local" and "side"/"global" key/value states to allow each token to attend global aggregated ones
         # New shape: (batch_size, num_blocks, 3 * block_len + global_seq_len, n_heads, dim_per_head)
@@ -1800,8 +1802,8 @@ class LongT5Model(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = LongT5Model.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = LongT5Model.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1960,8 +1962,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = LongT5ForConditionalGeneration.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -2174,8 +2176,8 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5EncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = LongT5EncoderModel.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = LongT5EncoderModel.from_pretrained("Stancld/LongT5-Local-Base")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

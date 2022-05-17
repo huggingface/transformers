@@ -110,9 +110,9 @@ def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, p
     return jnp.concatenate(blocks_list, axis=sequence_axis)  # [batch_size, num_blocks, 3 * block_len, ...]
 
 
-def _make_3block_relative_position_ids(block_len: int) -> np.ndarray:
+def _make_3block_relative_position_ids(block_len: int) -> jnp.ndarray:
     """Makes 3-blocked relative position ids for local attention."""
-    position_ids = np.arange(3 * block_len, dtype=np.int32)
+    position_ids = jnp.arange(3 * block_len, dtype=jnp.int32)
     center_position_ids = position_ids[block_len:-block_len]
     relative_position_ids = position_ids[None, :] - center_position_ids[:, None]  # [block_len, 3 * block_len]
     return relative_position_ids
@@ -1800,8 +1800,8 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1862,8 +1862,8 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -2081,8 +2081,8 @@ FLAX_LONGT5_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import T5Tokenizer, FlaxLongT5Model
 
-    >>> tokenizer = T5Tokenizer.from_pretrained("")
-    >>> model = FlaxLongT5Model.from_pretrained("")
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    >>> model = FlaxLongT5Model.from_pretrained("Stancld/LongT5-Local-Base")
 
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
@@ -2234,8 +2234,8 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("")
-        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("")
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> text = "summarize: My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -2382,8 +2382,8 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
     ```python
     >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
 
-    >>> tokenizer = T5Tokenizer.from_pretrained("")
-    >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("")
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
