@@ -29,11 +29,15 @@ if is_tf_available():
         TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXGLMForCausalLM,
         TFXGLMModel,
-        shape_list,
     )
 
 
+@require_tf
 class TFXGLMModelTester:
+    config_cls = XGLMConfig
+    config_updates = {}
+    hidden_act = "gelu"
+
     def __init__(
         self,
         parent,
@@ -116,130 +120,6 @@ class TFXGLMModelTester:
             return_dict=True,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
-    def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
-        model = TFXGLMModel(config=config)
-
-        result = model(input_ids, head_mask=head_mask)
-        result = model(input_ids)
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.num_hidden_layers)
-
-    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, head_mask, *args):
-        model = TFXGLMModel(config=config)
-
-        # first forward pass
-        outputs = model(input_ids, use_cache=True)
-        outputs_no_past = model(input_ids, use_cache=False)
-
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        output, past = outputs.to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and token_type_ids
-        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
-
-        # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
-
-    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, *args):
-        model = TFXGLMModel(config=config)
-
-        # create attention mask
-        half_seq_length = self.seq_length // 2
-        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
-        attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
-
-        # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and attn_mask
-        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int32)], axis=1)
-
-        # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
-
-        # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-12)
-
-    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, *args):
-        model = TFXGLMModel(config=config)
-
-        # first forward pass
-        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
-
-        output, past = outputs.to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=1)
-
-        # append to next input_ids
-        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        next_attention_mask = tf.concat([input_mask, next_mask], axis=-1)
-
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
-            "last_hidden_state"
-        ]
-        self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
-
-        # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
-        output_from_past_slice = output_from_past[:, :, random_slice_idx]
-
-        # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
-
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
-        model = TFXGLMForCausalLM(config)
-
-        result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -273,26 +153,6 @@ class TFXGLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_xglm_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model(*config_and_inputs)
-
-    def test_xglm_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model_past(*config_and_inputs)
-
-    def test_xglm_model_att_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model_attention_mask_past(*config_and_inputs)
-
-    def test_xglm_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model_past_large_inputs(*config_and_inputs)
-
-    def test_xglm_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
