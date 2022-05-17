@@ -2514,7 +2514,6 @@ else:
     _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
-            "FlaxOPTDecoderPreTrainedModel",
             "FlaxOPTForCausalLM",
             "FlaxOPTModel",
             "FlaxOPTPreTrainedModel",
@@ -4636,7 +4635,7 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
-        from .models.opt import FlaxOPTDecoderPreTrainedModel, FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
+        from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,

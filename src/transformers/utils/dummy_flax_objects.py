@@ -795,13 +795,6 @@ class FlaxMT5Model(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxOPTDecoderPreTrainedModel(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxOPTForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 

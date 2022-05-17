@@ -18,6 +18,7 @@ import timeout_decorator  # noqa
 
 from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_tokenizers, slow
+
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -32,7 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.models.opt.modeling_flax_opt import FlaxOPTModel, FlaxOPTForCausalLM
+    from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM, FlaxOPTModel
 
 
 def prepare_opt_inputs_dict(
@@ -376,7 +377,9 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+        output_sequences = jit_generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"], trace=False
+        ).sequences
 
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
