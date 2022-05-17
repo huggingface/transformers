@@ -134,7 +134,7 @@ class CvtEmbeddings(nn.Module):
         return hidden_state
 
 
-class ConvEmbeddings(nn.Module):
+class CvtConvEmbeddings(nn.Module):
     """
     Image to Conv Embedding.
     """
