@@ -42,8 +42,6 @@ class CvtConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_stages (`int`, *optional*, defaults to 3):
-            The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3]):
             The kernel size of each encoder's patch embedding.
         patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2]):
@@ -63,16 +61,14 @@ class CvtConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         drop_rate (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.0]):
             The dropout ratio for the patch embeddings probabilities.
-        drop_path_rate (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.1]]):
+        drop_path_rates (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.1]]):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         qkv_bias (`List[bool]`, *optional*, defaults to [True, True, True]]):
             The bias bool for query, key and value in attentions
         cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
             The bool for classification token
-        pos_embed (`List[bool]`, *optional*, defaults to [False, False, True]]):
+        position_embeddings (`List[bool]`, *optional*, defaults to [False, False, True]]):
             The bool for position embeddings
-        cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
-            The bool for cls_token
         qkv_projection_method (`List[string]`, *optional*, defaults to 'dw_bn', 'dw_bn', 'dw_bn']]):
             The projection method for query, key and value Default is depth-wise convolutions with batch norm. For
             Linear projection use "avg".
@@ -90,15 +86,15 @@ class CvtConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        Example:
+    Example:
 
     ```python
     >>> from transformers import CvtModel, CvtConfig
 
-    >>> # Initializing a Cvt msft/cvt style configuration
+    >>> # Initializing a Cvt microsoft/cvt style configuration
     >>> configuration = CvtConfig()
 
-    >>> # Initializing a model from the msft/cvt style configuration
+    >>> # Initializing a model from the microsft/cvt style configuration
     >>> model = CvtModel(configuration)
 
     >>> # Accessing the model configuration
@@ -119,10 +115,10 @@ class CvtConfig(PretrainedConfig):
         mlp_ratio=[4.0, 4.0, 4.0],
         attention_drop_rate=[0.0, 0.0, 0.0],
         drop_rate=[0.0, 0.0, 0.0],
-        drop_path_rate=[0.0, 0.0, 0.1],
+        drop_path_rates=[0.0, 0.0, 0.1],
         qkv_bias=[True, True, True],
         cls_token=[False, False, True],
-        pos_embed=[False, False, False],
+        position_embeddings=[False, False, False],
         qkv_projection_method=["dw_bn", "dw_bn", "dw_bn"],
         kernel_qkv=[3, 3, 3],
         padding_kv=[1, 1, 1],
@@ -145,10 +141,10 @@ class CvtConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.attention_drop_rate = attention_drop_rate
         self.drop_rate = drop_rate
-        self.drop_path_rate = drop_path_rate
+        self.drop_path_rates = drop_path_rates
         self.qkv_bias = qkv_bias
         self.cls_token = cls_token
-        self.pos_embed = pos_embed
+        self.position_embeddings = position_embeddings
         self.qkv_projection_method = qkv_projection_method
         self.kernel_qkv = kernel_qkv
         self.padding_kv = padding_kv

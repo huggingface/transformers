@@ -50,6 +50,7 @@ The library currently contains JAX, PyTorch and TensorFlow implementations, pret
 ### Supported models
 
 <!--This list is updated automatically from the README with _make fix-copies_. Do not update manually! -->
+
 1. **[ALBERT](model_doc/albert)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
 1. **[BART](model_doc/bart)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/abs/1910.13461) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
 1. **[BARThez](model_doc/barthez)** (from École polytechnique) released with the paper [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://arxiv.org/abs/2010.12321) by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis.
@@ -164,6 +165,8 @@ The library currently contains JAX, PyTorch and TensorFlow implementations, pret
 1. **[XLS-R](model_doc/xls_r)** (from Facebook AI) released with the paper [XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale](https://arxiv.org/abs/2111.09296) by Arun Babu, Changhan Wang, Andros Tjandra, Kushal Lakhotia, Qiantong Xu, Naman Goyal, Kritika Singh, Patrick von Platen, Yatharth Saraf, Juan Pino, Alexei Baevski, Alexis Conneau, Michael Auli.
 1. **[YOLOS](model_doc/yolos)** (from Huazhong University of Science & Technology) released with the paper [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://arxiv.org/abs/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
 1. **[YOSO](model_doc/yoso)** (from the University of Wisconsin - Madison) released with the paper [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714) by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh.
+
+
 ### Supported frameworks
 
 The table below represents the current support in the library for each of those models, whether they have a Python
@@ -171,6 +174,7 @@ tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers libr
 Flax), PyTorch, and/or TensorFlow.
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
+
 |            Model            | Tokenizer slow | Tokenizer fast | PyTorch support | TensorFlow support | Flax Support |
 |:---------------------------:|:--------------:|:--------------:|:---------------:|:------------------:|:------------:|
 |           ALBERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
@@ -279,4 +283,5 @@ Flax), PyTorch, and/or TensorFlow.
 |            XLNet            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |            YOLOS            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            YOSO             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
+
 <!-- End table-->

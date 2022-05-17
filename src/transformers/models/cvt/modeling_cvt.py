@@ -15,7 +15,7 @@
 """ PyTorch CvT model."""
 
 
-import collections.abc
+import collections
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -48,11 +48,6 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "anugunj/cvt-13",
-    "anugunj/cvt-13-384-1k",
-    "anugunj/cvt-13-384-22k",
-    "anugunj/cvt-21",
-    "anugunj/cvt-21-384-1k",
-    "anugunj/cvt-21-384-22k",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
@@ -78,15 +73,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 # Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
@@ -104,7 +92,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     output = x.div(keep_prob) * random_tensor
     return output
 
-
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath
 class CvtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -112,7 +100,7 @@ class CvtDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -141,7 +129,7 @@ class ConvEmbeddings(nn.Module):
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
         super().__init__()
-        patch_size = to_2tuple(patch_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         self.patch_size = patch_size
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
         self.normalization = nn.LayerNorm(embed_dim)
@@ -400,7 +388,7 @@ class CvtLayer(nn.Module):
         attention_drop_rate,
         drop_rate,
         mlp_ratio,
-        drop_path_rate,
+        drop_path_rates,
         with_cls_token=True,
     ):
         super().__init__()
@@ -421,7 +409,7 @@ class CvtLayer(nn.Module):
 
         self.intermediate = CvtIntermediate(embed_dim, mlp_ratio)
         self.output = CvtOutput(embed_dim, mlp_ratio, drop_rate)
-        self.drop_path = CvtDropPath(drop_prob=drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = CvtDropPath(drop_prob=drop_path_rates) if drop_path_rates > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(embed_dim)
         self.layernorm_after = nn.LayerNorm(embed_dim)
 
@@ -468,7 +456,7 @@ class CvtStage(nn.Module):
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rates[self.stage], config.depth[stage])]
 
         self.layers = nn.Sequential(
             *[
@@ -484,7 +472,7 @@ class CvtStage(nn.Module):
                     qkv_bias=config.qkv_bias[self.stage],
                     attention_drop_rate=config.attention_drop_rate[self.stage],
                     drop_rate=config.drop_rate[self.stage],
-                    drop_path_rate=dpr[self.stage],
+                    drop_path_rates=dpr[self.stage],
                     mlp_ratio=config.mlp_ratio[self.stage],
                     with_cls_token=config.cls_token[self.stage],
                 )
@@ -638,6 +626,28 @@ class CvtModel(CvtPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> from transformers import AutoFeatureExtractor, CvtModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("anugunj/cvt-13")
+        >>> model = CvtModel.from_pretrained("anugunj/cvt-13")
+
+        >>> inputs = feature_extractor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 384, 14, 14]
+        ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -705,7 +715,27 @@ class CvtForImageClassification(CvtPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+
+        Examples:
+        ```python
+        >>> from transformers import AutoFeatureExtractor, CvtForImageClassification
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("anugunj/cvt-13")
+        >>> model = CvtForImageClassification.from_pretrained("anugunj/cvt-13")
+
+        >>> inputs = feature_extractor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        tabby, tabby cat
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.cvt(
             pixel_values,
