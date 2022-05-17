@@ -163,6 +163,10 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=None, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
+    ignore_mismatched_sizes: bool = field(
+        default=False,
+        metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+    )
 
     def __post_init__(self):
         if not self.freeze_feature_extractor and self.freeze_feature_encoder:
@@ -333,6 +337,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 
     # freeze the convolutional waveform encoder
