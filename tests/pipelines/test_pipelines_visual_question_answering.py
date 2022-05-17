@@ -87,6 +87,7 @@ class VisualQuestionAnsweringArgumentHandlerTests(unittest.TestCase):
 
 
 @is_pipeline_test
+@require_torch
 @require_vision
 class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
