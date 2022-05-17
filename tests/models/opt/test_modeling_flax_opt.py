@@ -358,9 +358,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
         EXPECTED_OUTPUTS = [
             "Today is a beautiful day and I want to thank",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "In the city of Rome Canaver Canaver Canaver Canaver"
         ]
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
@@ -369,7 +367,8 @@ class FlaxOPTGenerationTest(unittest.TestCase):
                 "Today is a beautiful day and I want to",
                 "In the city of",
             ],
-            return_tensors="np",
+            return_tensors="jax",
+            padding=True
         )
 
         model = FlaxOPTForCausalLM.from_pretrained(model_id, from_pt=True)
