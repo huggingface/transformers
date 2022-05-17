@@ -950,6 +950,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             return self.hf_compute_loss(*args, **kwargs)
 
+    def get_label_to_output_name_mapping(self):
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        if self._label_to_output_map is not None:
+            return self._label_to_output_map
+        elif "start_positions" in arg_names:
+            return {"start_positions": "start_logits", "end_positions": "end_logits"}
+        elif "sentence_order_label" in arg_names:
+            return {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
+        elif "next_sentence_label" in arg_names:
+            return {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        elif "mc_labels" in arg_names:
+            return {"labels": "logits", "mc_labels": "mc_logits"}
+        else:
+            return dict()
+
     def train_step(self, data):
         """
         A modification of Keras's default `train_step` that correctly handles matching outputs to labels for our models
@@ -961,18 +976,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
         arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
-        if self._label_to_output_map is not None:
-            label_to_output = self._label_to_output_map
-        elif "start_positions" in arg_names:
-            label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
-        elif "sentence_order_label" in arg_names:
-            label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
-        elif "next_sentence_label" in arg_names:
-            label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
-        elif "mc_labels" in arg_names:
-            label_to_output = {"labels": "logits", "mc_labels": "mc_logits"}
-        else:
-            label_to_output = dict()
+        label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
@@ -1069,18 +1073,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
         arg_names = list(dict(inspect.signature(self.call).parameters).keys())
         label_kwargs = find_labels(self.__class__)
-        if self._label_to_output_map is not None:
-            label_to_output = self._label_to_output_map
-        elif "start_positions" in arg_names:
-            label_to_output = {"start_positions": "start_logits", "end_positions": "end_logits"}
-        elif "sentence_order_label" in arg_names:
-            label_to_output = {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
-        elif "next_sentence_label" in arg_names:
-            label_to_output = {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
-        elif "mc_labels" in arg_names:
-            label_to_output = {"labels": "logits", "mc_labels": "mc_logits"}
-        else:
-            label_to_output = dict()
+        label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
