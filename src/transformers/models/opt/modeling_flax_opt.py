@@ -334,7 +334,7 @@ class FlaxOPTDecoderLayer(nn.Module):
 
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
         if self.do_layer_norm_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+            hidden_states = self.final_layer_norm(hidden_states)
 
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
@@ -792,9 +792,15 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
         # But since the decoder uses a causal mask, those positions are masked anyway.
         # Thus, we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
+        
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+            
         if attention_mask is not None:
-            position_ids = attention_mask.cumsum(axis=-1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+            position_ids = make_positions(attention_mask, self.config.pad_token_id)
+            # position_ids = attention_mask.cumsum(axis=-1) - 1
+            # extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 

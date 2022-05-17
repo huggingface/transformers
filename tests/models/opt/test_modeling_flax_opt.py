@@ -288,7 +288,10 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
             ]
         )
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
-
+        
+        model = jax.jit(model)
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
+        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
@@ -375,8 +378,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         jit_generate = jax.jit(model.generate)
 
-        # output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
-        output_sequences = jit_generate(inputs).sequences
+        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
 
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
