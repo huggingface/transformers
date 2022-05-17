@@ -35,7 +35,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
-from . import DefaultDataCollator, DataCollatorWithPadding, PreTrainedTokenizer
+from . import DataCollatorWithPadding, DefaultDataCollator, PreTrainedTokenizer
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
@@ -905,11 +905,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         prefetch: bool = True,
     ):
         """
-        Wraps a HuggingFace `Dataset` as a `tf.data.Dataset` with collation and batching. This method is designed
-        to create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without further
+        Wraps a HuggingFace `Dataset` as a `tf.data.Dataset` with collation and batching. This method is designed to
+        create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without further
         modification. The method will drop columns from the dataset if they don't match input names for the model. If
-        you want to specify the column names to return rather than using the names that match this model,
-        we recommend using `Dataset.to_tf_dataset()` instead.
+        you want to specify the column names to return rather than using the names that match this model, we recommend
+        using `Dataset.to_tf_dataset()` instead.
 
         Args:
             dataset (`Any`):
@@ -917,14 +917,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             batch_size (`int`):
                 The size of batches to return.
             shuffle (`bool`):
-                Whether to return samples from the dataset in random order. Usually `True` for training
-                datasets and `False` for validation/test datasets.
+                Whether to return samples from the dataset in random order. Usually `True` for training datasets and
+                `False` for validation/test datasets.
             tokenizer (`PreTrainedTokenizer`, *optional*):
                 A `PreTrainedTokenizer` that will be used to pad samples to create batches. Has no effect if a specific
                 `collate_fn` is passed instead.
             collate_fn (`Callable`, *optional*):
-                A function that collates samples from the dataset into a single batch. Defaults
-                to `DefaultDataCollator` if no `tokenizer` is supplied or `DataCollatorWithPadding` if a `tokenizer` is
+                A function that collates samples from the dataset into a single batch. Defaults to
+                `DefaultDataCollator` if no `tokenizer` is supplied or `DataCollatorWithPadding` if a `tokenizer` is
                 passed.
             collate_fn_args (`dict`, *optional*):
                 A dict of arguments to pass to the `collate_fn` alongside the list of samples.
@@ -932,8 +932,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether to drop the final batch, if the batch_size does not evenly divide the dataset length. Defaults
                 to the same setting as `shuffle`.
             prefetch (`bool`, defaults to `True`):
-                Whether to add prefetching to the end of the `tf.data` pipeline. This is almost always beneficial
-                for performance, but can be disabled in edge cases.
+                Whether to add prefetching to the end of the `tf.data` pipeline. This is almost always beneficial for
+                performance, but can be disabled in edge cases.
 
 
         Returns:
