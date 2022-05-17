@@ -111,7 +111,7 @@ class CvtEmbeddings(nn.Module):
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding, dropout_rate):
         super().__init__()
-        self.convolution_embeddings = ConvEmbeddings(
+        self.convolution_embeddings = CvtConvEmbeddings(
             patch_size=patch_size, num_channels=num_channels, embed_dim=embed_dim, stride=stride, padding=padding
         )
         self.dropout = nn.Dropout(dropout_rate)
@@ -122,7 +122,7 @@ class CvtEmbeddings(nn.Module):
         return hidden_state
 
 
-class ConvEmbeddings(nn.Module):
+class CvtConvEmbeddings(nn.Module):
     """
     Image to Conv Embedding.
     """
