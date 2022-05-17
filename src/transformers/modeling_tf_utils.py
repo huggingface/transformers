@@ -1964,13 +1964,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             Additional keyword arguments passed along to the `__init__` of `tf.keras.layers.Layer`.
     """
 
-    def __init__(
-        self,
-        vocab_size: int,
-        hidden_size: int,
-        initializer_range: Optional[float] = None,
-        **kwargs
-    ):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: Optional[float] = None, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
