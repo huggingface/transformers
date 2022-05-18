@@ -487,12 +487,12 @@ class DeformableDetrLearnedPositionEmbedding(nn.Module):
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
     def forward(self, pixel_values, pixel_mask=None):
-        h, w = pixel_values.shape[-2:]
-        i = torch.arange(w, device=pixel_values.device)
-        j = torch.arange(h, device=pixel_values.device)
-        x_emb = self.column_embeddings(i)
-        y_emb = self.row_embeddings(j)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(h, 1, 1), y_emb.unsqueeze(1).repeat(1, w, 1)], dim=-1)
+        height, width = pixel_values.shape[-2:]
+        width_values = torch.arange(width, device=pixel_values.device)
+        height_values = torch.arange(height, device=pixel_values.device)
+        x_emb = self.column_embeddings(width_values)
+        y_emb = self.row_embeddings(height_values)
+        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
@@ -515,7 +515,7 @@ def build_position_encoding(config):
 
 def _is_power_of_2(n):
     if (not isinstance(n, int)) or (n < 0):
-        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
+        raise ValueError(f"Invalid input for _is_power_of_2: {n} (type: {type(n)})")
     return (n & (n - 1) == 0) and n != 0
 
 
@@ -590,23 +590,28 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         if position_embeddings is not None:
             hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
-        N, Len_q, _ = hidden_states.shape
-        N, Len_in, _ = encoder_hidden_states.shape
-        assert (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == Len_in
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, seq_len, _ = encoder_hidden_states.shape
+        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != seq_len:
+            raise ValueError(
+                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
+            )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)
+        value = value.view(batch_size, seq_len, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(hidden_states).view(
-            N, Len_q, self.n_heads, self.n_levels, self.n_points, 2
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
         )
         attention_weights = self.attention_weights(hidden_states).view(
-            N, Len_q, self.n_heads, self.n_levels * self.n_points
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(N, Len_q, self.n_heads, self.n_levels, self.n_points)
-        # N, Len_q, n_heads, n_levels, n_points, 2
+        attention_weights = F.softmax(attention_weights, -1).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+        )
+        # batch_size, num_queries, n_heads, n_levels, n_points, 2
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
@@ -782,9 +787,18 @@ class DeformableDetrEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask.
-            position_embeddings (`torch.FloatTensor`, *optional*): position embeddings, to be added to hidden_states.
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                Input to the layer.
+            attention_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`):
+                Attention mask.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings, to be added to `hidden_states`.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes of the backbone feature maps.
+            level_start_index (`torch.LongTensor`, *optional*):
+                Level start index.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -872,9 +886,16 @@ class DeformableDetrDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(seq_len, batch, embed_dim)`.
             position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys in the self-attention layer.
+                Position embeddings that are added to the queries and keys in the self-attention layer.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes.
+            level_start_index (`torch.LongTensor`, *optional*):
+                Level start index.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
@@ -1079,9 +1100,8 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
             )
-            ref_y = ref_y.reshape(-1)[None] / (
-                valid_ratios[:, None, lvl, 1] * height
-            )  # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
+            # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
@@ -1271,7 +1291,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
-                assert reference_points.shape[-1] == 2
+                if reference_points.shape[-1] != 2:
+                    raise ValueError("Reference points' last dimension must be of size 2")
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
 
             if output_hidden_states:
@@ -1570,19 +1591,19 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         srcs = []
         masks = []
-        for l, (src, mask) in enumerate(features):
-            srcs.append(self.input_proj[l](src))
+        for level, (src, mask) in enumerate(features):
+            srcs.append(self.input_proj[level](src))
             masks.append(mask)
             assert mask is not None
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
-            for l in range(_len_srcs, self.config.num_feature_levels):
-                if l == _len_srcs:
-                    src = self.input_proj[l](features[-1][0])
+            for level in range(_len_srcs, self.config.num_feature_levels):
+                if level == _len_srcs:
+                    src = self.input_proj[level](features[-1][0])
                 else:
-                    src = self.input_proj[l](srcs[-1])
+                    src = self.input_proj[level](srcs[-1])
                 mask = nn.functional.interpolate(pixel_mask[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
                 pos_l = self.backbone.position_embedding(src, mask).to(src.dtype)
                 srcs.append(src)
@@ -1600,8 +1621,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         lvl_pos_embed_flatten = []
         spatial_shapes = []
         for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, position_embeddings_list)):
-            bs, c, h, w = src.shape
-            spatial_shape = (h, w)
+            batch_size, num_channels, height, width = src.shape
+            spatial_shape = (height, width)
             spatial_shapes.append(spatial_shape)
             src = src.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
@@ -1952,15 +1973,15 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
 
     Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs (0 for the negative class and 1 for the positive
-                 class).
-        alpha: (optional) Weighting factor in range (0,1) to balance
-                positive vs negative examples. Default = -1 (no weighting).
-        gamma: Exponent of the modulating factor (1 - p_t) to
-               balance easy vs hard examples.
+        inputs (`torch.FloatTensor` of arbitrary shape):
+            The predictions for each example.
+        targets (`torch.FloatTensor` with the same shape as `inputs`)
+            A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
+            and 1 for the positive class).
+        alpha (`float`, *optional*, defaults to `0.25`):
+            Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
+        gamma (`int`, *optional*, defaults to `2`):
+            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
 
     Returns:
         Loss tensor
@@ -2014,7 +2035,9 @@ class DeformableDetrLoss(nn.Module):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
-        assert "logits" in outputs, "No logits were found in the outputs"
+        if "logits" not in outputs:
+            raise ValueError("No logits were found in the outputs")
+
         src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
@@ -2064,7 +2087,9 @@ class DeformableDetrLoss(nn.Module):
         Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
         are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
-        assert "pred_boxes" in outputs, "No predicted boxes found in outputs"
+        if "pred_boxes" not in outputs:
+            raise ValueError("No predicted boxes found in outputs")
+
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
@@ -2098,7 +2123,9 @@ class DeformableDetrLoss(nn.Module):
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
         }
-        assert loss in loss_map, f"Loss {loss} not supported"
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
@@ -2360,11 +2387,11 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
+        batch_size, num_channels, height, width = batch_shape
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
         for img, pad_img, m in zip(tensor_list, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
             m[: img.shape[1], : img.shape[2]] = False
