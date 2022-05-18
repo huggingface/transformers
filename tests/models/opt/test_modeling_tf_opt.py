@@ -22,13 +22,27 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
-
+import numpy as np
 if is_tf_available():
     import tensorflow as tf
+    from transformers.models.opt.modeling_tf_opt import  TFOPTForCausalLM, TFOPTModel
 
-    from transformers import TFOPTForCausalLM, TFOPTModel
-
-
+def prepare_opt_inputs_dict(
+    config,
+    input_ids,
+    attention_mask=None,
+    head_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+    if head_mask is None:
+        head_mask = tf.ones((config.num_hidden_layers, config.num_attention_heads))
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "head_mask": head_mask,
+    }
+    
 @require_tf
 class TFOPTModelTester:
     config_cls = OPTConfig
@@ -104,7 +118,7 @@ class TFOPTModelTester:
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = TFOPTModel(config=config).get_decoder()
+        model = TFOPTModel(config=config)
         input_ids = inputs_dict["input_ids"]
 
         input_ids = input_ids[:1, :]
@@ -139,28 +153,13 @@ class TFOPTModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
-def prepare_opt_inputs_dict(
-    config,
-    input_ids,
-    attention_mask=None,
-    head_mask=None,
-):
-    if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
 
-    if head_mask is None:
-        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "head_mask": head_mask,
-    }
 
 
 @require_tf
 class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
-    all_generative_model_classes = () if is_tf_available() else ()
+    all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
     is_encoder_decoder = False
     test_pruning = False
     test_onnx = True
@@ -177,6 +176,7 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -187,15 +187,9 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
             if model_class in self.all_generative_model_classes:
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
             else:
                 x = model.get_output_embeddings()
                 assert x is None
-                name = model.get_bias()
-                assert name is None
 
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -213,18 +207,17 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                     return None
 
         for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+            for size in [config.vocab_size - 10, config.vocab_size + 10]:
                 # build the embeddings
                 model = model_class(config=config)
                 old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
                 old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                old_final_logits_bias = model.get_bias()
 
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
                 new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
                 new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                new_final_logits_bias = model.get_bias()
+ 
 
                 # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
@@ -247,18 +240,6 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                             models_equal = False
                     self.assertTrue(models_equal)
 
-                if old_final_logits_bias is not None and new_final_logits_bias is not None:
-                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
-                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
-                    self.assertEqual(new_final_logits_bias.shape[0], 1)
-                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
-
-                    models_equal = True
-                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
-                        for p1, p2 in zip(old, new):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                                models_equal = False
-                    self.assertTrue(models_equal)
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
@@ -303,3 +284,24 @@ class TFOPTHeadTests(unittest.TestCase):
             bos_token_id=0,
         )
         return config, input_ids, batch_size
+
+
+# @require_sentencepiece
+# @require_tokenizers
+@require_tf
+class OPTModelIntegrationTests(unittest.TestCase):
+    
+    # @slow
+    def test_inference_no_head(self):
+        model = TFOPTModel.from_pretrained("facebook/opt-350m",from_pt=True)
+        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        attention_mask = tf.not_equal(input_ids,model.config.pad_token_id)
+        with tf.GradientTape():
+            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        expected_shape = (1, 11, 512)
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = tf.constant(
+            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
+        )
+        self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+

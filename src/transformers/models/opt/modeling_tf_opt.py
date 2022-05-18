@@ -79,26 +79,39 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
+def make_positions(mask, padding_idx: int):
+    """Replace non-padding symbols with their position numbers.
+
+    Position numbers begin at padding_idx+1. Padding symbols are ignored.
+    """
+    positions = tf.cast(tf.math.cumsum(mask, axis=1), dtype=tf.int64) + padding_idx
+    return positions
+
 # TODO Fix position with make_position function
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartLearnedPositionalEmbedding with Bart->OPT
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1, **kwargs):
+        self.num_embeddings = num_embeddings
+        self.padding_idx = padding_idx
+        super().__init__(num_embeddings, embedding_dim, **kwargs)
+        if self.padding_idx is not None:
+            self.max_positions = self.num_embeddings - self.padding_idx - 1
+        else:
+            self.max_positions = self.num_embeddings
+        
 
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
+    def call(self, attention_mask, positions: Optional[tf.Tensor] = None):
+        if not ((positions is None) or (self.padding_idx is None)):
+            raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
-        return super().call(positions + self.offset)
-
+        if positions is None:
+            attention_mask = tf.cast(attention_mask, tf.int64)
+            positions = make_positions(attention_mask, self.padding_idx)
+        
+        return super().call(positions)
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
 class TFOPTAttention(tf.keras.layers.Layer):
@@ -403,7 +416,7 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = OPTConfig
-    base_model_prefix = "model"
+    base_model_prefix = "decoder"
 
     @property
     def dummy_inputs(self):
@@ -542,15 +555,8 @@ OPT_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFOPTDecoder(tf.keras.layers.Layer):
+class TFOPTMainLayer(tf.keras.layers.Layer):
     config_class = OPTConfig
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFOPTDecoderLayer`]
-
-    Args:
-        config: OPTConfig
-        embed_tokens: output embedding
-    """
 
     def __init__(self, config: OPTConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
         super().__init__(**kwargs)
@@ -566,7 +572,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
             num_embeddings,
             config.hidden_size,
-            name="embed_positions",  # TODO padding idx a argument?
+            name="embed_positions", 
         )
 
         if config.word_embed_proj_dim != config.hidden_size:
@@ -577,11 +583,12 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             self.project_in = None
             self.project_out = None
 
-        self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+        self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
+    
     def get_embed_tokens(self):
         return self.embed_tokens
 
@@ -681,14 +688,12 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
         past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        hidden_states = inputs_embeds
-
+        if attention_mask is None:
+            attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
+            
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
@@ -701,6 +706,8 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         # attention_mask = self._prepare_decoder_attention_mask(
         #     attention_mask, input_shape, inputs_embeds, past_key_values_length
         # )
+        
+        
 
         if attention_mask is not None:
             combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
@@ -763,8 +770,12 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        # if not return_dict:
+        #     return hidden_states, present_key_values, all_hidden_states, all_self_attns
         if not return_dict:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns
+            return tuple(v for v in [hidden_states, present_key_values, all_hidden_states, all_self_attns] if v is not None)
+
+
         else:
             return TFBaseModelOutputWithPast(
                 last_hidden_state=hidden_states,
@@ -779,19 +790,19 @@ class TFOPTDecoder(tf.keras.layers.Layer):
     OPT_START_DOCSTRING,
 )
 @keras_serializable
-class TFOPTModel(tf.keras.layers.Layer):
+class TFOPTModel(TFPreTrainedModel):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config,**kwargs)
         self.config = config
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.hidden_size, config.pad_token_id, name="model.shared"
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="model.decoder.embed_tokens"
         )
 
         # set tf scope correctly
         if load_weight_prefix is None:
-            load_weight_prefix = "model.shared"
+            load_weight_prefix = "model.decoder.embed_tokens"
 
         with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
             pass
@@ -801,16 +812,19 @@ class TFOPTModel(tf.keras.layers.Layer):
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 
-        self.decoder = TFOPTDecoder(config, embed_tokens, name="decoder")
+        self.decoder = TFOPTMainLayer(config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
+    
+    def get_decoder(self):
+        return self.decoder
 
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
         self.shared.vocab_size = self.shared.weight.shape[0]
         # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("model.decoder.embed_tokens") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
@@ -856,73 +870,20 @@ class TFOPTModel(tf.keras.layers.Layer):
             training=training,
         )
 
-        if not return_dict:
-            return outputs
+        return outputs
+        
+    def serving_output(self, output):
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
-
-# class TFOPTModel(TFOPTPreTrainedModel):
-#     _requires_load_weight_prefix = True
-#     def __init__(self, config: OPTConfig, load_weight_prefix=None, *inputs, **kwargs):
-#         super().__init__(config, *inputs, **kwargs)
-#         self.decoder = TFOPTDecoder(config, load_weight_prefix=load_weight_prefix, name="model")
-#     def get_decoder(self):
-#         return self.model.decoder
-#     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-#     @add_code_sample_docstrings(
-#         processor_class=_TOKENIZER_FOR_DOC,
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=TFSeq2SeqModelOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     @unpack_inputs
-#     def call(
-#         self,
-#         input_ids: Optional[TFModelInputType] = None,
-#         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-#         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-#         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-#         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-#         use_cache: Optional[bool] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#         training: Optional[bool] = False,
-#         **kwargs
-#     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-#
-#         outputs = self.model(
-#             input_ids=input_ids,
-#             attention_mask=attention_mask,
-#             head_mask=head_mask,
-#             past_key_values=past_key_values,
-#             inputs_embeds=inputs_embeds,
-#             use_cache=use_cache,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#             training=training,
-#         )
-#
-#         return outputs
-#
-#     def serving_output(self, output):
-#         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-#         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-#         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-#
-#         return TFSeq2SeqModelOutput(
-#             last_hidden_state=output.last_hidden_state,
-#             past_key_values=pkv,
-#             hidden_states=hs,
-#             attentions=attns,
-#         )
 
 # TODO add docstring
 @add_start_docstrings(
@@ -935,14 +896,12 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     config: OPTConfig
 
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config, **kwargs)
         self.config = config
         self.model = TFOPTModel(config)
 
         # the LM head should be automatically tied to the input embedding layer
-        self.lm_head = tf.keras.layers.Linear(
-            num_input_dims=config.hidden_size, units=config.vocab_size, use_bias=False
-        )
+        self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False)
 
     def get_input_embeddings(self):
         return self.model.shared
@@ -951,12 +910,12 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         self.model.shared.weight = new_embeddings
         self.model.shared.vocab_size = self.model.shared.weight.shape[0]
         # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("model.decoder.embed_tokens") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
-        self.model.set_embed_tokens(embed_tokens)
-
+        self.model.set_output_embeddings(embed_tokens)
+    
     def get_output_embeddings(self):
         return self.lm_head
 
