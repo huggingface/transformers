@@ -2350,6 +2350,62 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(sum_transition_scores.cpu().tolist(), result.sequences_scores.cpu().tolist())
 
+    def test_log_scores_sample_decoder_only(self):
+        articles = ["I need input_ids to generate", "Short and"]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.padding_side = "left"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
+
+        result = model.generate(
+            **inputs,
+            max_length=15,
+            return_dict_in_generate=True,
+            do_sample=False,
+            output_scores=True,
+        )
+
+        # decoder-only starts generating from `input_ids`
+        begin_generation = inputs.input_ids.shape[-1]
+
+        gen_sequences = result.sequences[:, begin_generation:]
+        probs = torch.stack(result.scores, dim=1).softmax(-1)
+
+        gen_probs = torch.gather(probs, 2, gen_sequences[:, :, None]).squeeze(-1)
+        expected_probs = torch.tensor([[0.0014, 0.0015], [0.0014, 0.0014]])
+
+        self.assertTrue(torch.allclose(gen_probs.cpu(), expected_probs, atol=1e-3))
+
+    def test_log_scores_sample_encoder_decoder(self):
+        articles = ["I need input_ids to generate", "Short and"]
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+
+        inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
+
+        result = model.generate(
+            **inputs,
+            max_length=3,
+            return_dict_in_generate=True,
+            do_sample=False,
+            num_beams=1,
+            output_scores=True,
+        )
+
+        # encoder-decoder has one decoder_start_token_id by default
+        begin_generation = 1
+
+        gen_sequences = result.sequences[:, begin_generation:]
+        probs = torch.stack(result.scores, dim=1).softmax(-1)
+
+        gen_probs = torch.gather(probs, 2, gen_sequences[:, :, None]).squeeze(-1)
+        expected_probs = torch.tensor([[0.0013, 1.0000], [0.0013, 1.0000]])
+
+        self.assertTrue(torch.allclose(gen_probs.cpu(), expected_probs, atol=1e-3))
+
     @slow
     def test_beam_search_example_integration(self):
         # exactly the example provided in the docstrings of beam search, which previously
@@ -2394,8 +2450,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_constrained_beam_search(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2430,8 +2486,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_constrained_beam_search_mixed(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2469,8 +2525,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]
