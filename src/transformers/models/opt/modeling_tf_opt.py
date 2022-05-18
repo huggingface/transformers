@@ -345,6 +345,10 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         # 350m applies layer norm AFTER attention
         if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
+            
+        # 350m applies layer norm AFTER attention
+        if  self.do_layer_norm_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -601,6 +605,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         input_ids: Optional[TFModelInputType] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
@@ -712,7 +717,11 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         if attention_mask is not None:
             combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
-        positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
+        if position_ids is not None: 
+            positions = self.embed_positions(position_ids)[:, past_key_values_length:, :]
+        else: 
+            positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
+            
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -797,12 +806,12 @@ class TFOPTModel(TFPreTrainedModel):
         super().__init__(config,**kwargs)
         self.config = config
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="model.decoder.embed_tokens"
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
         )
 
         # set tf scope correctly
         if load_weight_prefix is None:
-            load_weight_prefix = "model.decoder.embed_tokens"
+            load_weight_prefix = "decoder.embed_tokens"
 
         with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
             pass
@@ -824,7 +833,7 @@ class TFOPTModel(TFPreTrainedModel):
         self.shared.weight = new_embeddings
         self.shared.vocab_size = self.shared.weight.shape[0]
         # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.decoder.embed_tokens") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("decoder.embed_tokens") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
@@ -898,23 +907,41 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        self.model = TFOPTModel(config)
+        
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
+        )
+
+        # set tf scope correctly
+        if load_weight_prefix is None:
+            load_weight_prefix = "decoder.embed_tokens"
+
+        with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
+            pass
+
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens.vocab_size = self.shared.vocab_size
+        embed_tokens.hidden_size = self.shared.hidden_size
+        
+        self.decoder = TFOPTMainLayer(config, embed_tokens, name = "decoder")
 
         # the LM head should be automatically tied to the input embedding layer
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False)
 
     def get_input_embeddings(self):
-        return self.model.shared
+        # return self.decoder.embed_tokens
+        return self.decoder.embed_tokens._layer
 
     def set_input_embeddings(self, new_embeddings):
-        self.model.shared.weight = new_embeddings
-        self.model.shared.vocab_size = self.model.shared.weight.shape[0]
+        self.decoder.embed_tokens.weight = new_embeddings
+        self.decoder.embed_tokens.vocab_size = self.decoder.embed_tokens.weight.shape[0]
         # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.decoder.embed_tokens") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("decoder.embed_tokens") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
-        self.model.set_output_embeddings(embed_tokens)
+        embed_tokens = TFWrappedEmbeddings(self.decoder.embed_tokens, abs_scope_name=shared_abs_scope_name)
+        self.decoder.set_output_embeddings(embed_tokens)
     
     def get_output_embeddings(self):
         return self.lm_head
@@ -923,10 +950,10 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model.decoder = decoder
+        self.decoder = decoder
 
     def get_decoder(self):
-        return self.model.decoder
+        return self.decoder
 
     def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
         # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
@@ -962,7 +989,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         input_ids: Optional[TFModelInputType] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1054,11 +1080,10 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.model(
+        transformer_outputs = self.decoder(
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1085,3 +1110,11 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         if not return_dict:
             output = (logits,) + transformer_outputs[1:]
             return (loss,) + output if loss is not None else output
+
+        return TFCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
