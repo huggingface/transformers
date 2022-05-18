@@ -681,13 +681,14 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "nvidia/groupvit-gccyfcc"
-        model = GroupViTModel.from_pretrained(model_name).to(torch_device)
+        model = GroupViTModel.from_pretrained(model_name)
+        model.eval()
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
+        )
 
         # forward pass
         with torch.no_grad():
@@ -703,6 +704,6 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[13.3587,  6.3613]], device=torch_device)
+        expected_logits = torch.tensor([[13.3523,  6.3629]])
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
