@@ -754,26 +754,25 @@ class HFTracer(Tracer):
             for name, (_, orig) in self.patched_torch_methods.items():
                 setattr(torch, name, orig)
 
-        # TODO: keep this until necessary.
-        # This is necessary because concrete args are added as input to the traced module since
-        # https://github.com/pytorch/pytorch/pull/55888.
-        # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
-        for node in self.graph.nodes:
-            if node.op == "placeholder":
-                # Removing default values for inputs as the forward pass will fail with them.
-                if node.target in input_names:
-                    node.args = ()
-                    # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
-                    # It cannot infer on the attributes and methods the input should have, and fails.
-                    node.type = torch.Tensor
-                # It is a concrete arg so it is not used and should be removed.
-                else:
-                    self.graph.erase_node(node)
+        if version.parse(importlib_metadata.version("torch")) < version.parse("1.12"):
+            # This is necessary because concrete args are added as input to the traced module since
+            # https://github.com/pytorch/pytorch/pull/55888.
+            for node in self.graph.nodes:
+                if node.op == "placeholder":
+                    # Removing default values for inputs as the forward pass will fail with them.
+                    if node.target in input_names:
+                        node.args = ()
+                        # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
+                        # It cannot infer on the attributes and methods the input should have, and fails.
+                        node.type = torch.Tensor
+                    # It is a concrete arg so it is not used and should be removed.
+                    else:
+                        self.graph.erase_node(node)
 
-            # TODO: solves GraphModule creation.
-            # Without this, return type annotation "Tuple" is causing code execution failure.
-            if node.op == "output":
-                node.type = None
+                # TODO: solves GraphModule creation.
+                # Without this, return type annotation "Tuple" is causing code execution failure.
+                if node.op == "output":
+                    node.type = None
 
         return self.graph
 
