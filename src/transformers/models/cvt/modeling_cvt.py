@@ -441,11 +441,7 @@ class CvtLayer(nn.Module):
 
 
 class CvtStage(nn.Module):
-    def __init__(
-        self,
-        config,
-        stage,
-    ):
+    def __init__(self, config, stage):
         super().__init__()
         self.config = config
         self.stage = stage
@@ -513,12 +509,7 @@ class CvtEncoder(nn.Module):
         for stage_idx in range(len(config.depth)):
             self.stages.append(CvtStage(config, stage_idx))
 
-    def forward(
-        self,
-        pixel_values,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
         hidden_state = pixel_values
 
@@ -625,12 +616,7 @@ class CvtModel(CvtPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(
-        self,
-        pixel_values=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -746,8 +732,4 @@ class CvtForImageClassification(CvtPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return ImageClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

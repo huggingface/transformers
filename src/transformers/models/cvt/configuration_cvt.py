@@ -39,7 +39,7 @@ class CvtConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3]):
+        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3]`):
             The kernel size of each encoder's patch embedding.
         patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2]):
             The stride size of each encoder's patch embedding.
