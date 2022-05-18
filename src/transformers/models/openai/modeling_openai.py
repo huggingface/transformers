@@ -28,13 +28,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    SequenceSummary,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
+from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -86,12 +81,14 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     # Check that the token and position embeddings weight dimensions map those of the init parameters.
     if model.tokens_embed.weight.shape != init_params[1].shape:
         raise ValueError(
-            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape: {init_params[1].shape}"
+            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape:"
+            f" {init_params[1].shape}"
         )
 
     if model.positions_embed.weight.shape != init_params[0].shape:
         raise ValueError(
-            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape: {init_params[0].shape}"
+            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape:"
+            f" {init_params[0].shape}"
         )
 
     model.tokens_embed.weight.data = torch.from_numpy(init_params[1])
@@ -679,7 +676,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
         >>> tokenizer.add_special_tokens(
         ...     {"cls_token": "[CLS]"}
-        >>> )  # Add a [CLS] to the vocabulary (we should train it also!)
+        ... )  # Add a [CLS] to the vocabulary (we should train it also!)
         >>> model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
@@ -817,7 +814,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

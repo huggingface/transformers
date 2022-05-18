@@ -49,10 +49,15 @@ Ready-made configurations include the following architectures:
 - BART
 - BEiT
 - BERT
+- BigBird
+- BigBirdPegasus
 - Blenderbot
 - BlenderbotSmall
 - CamemBERT
+- ConvBERT
 - Data2VecText
+- Data2VecVision
+- DeiT
 - DistilBERT
 - ELECTRA
 - FlauBERT
@@ -63,11 +68,12 @@ Ready-made configurations include the following architectures:
 - M2M100
 - Marian
 - mBART
+- MobileBERT
 - OpenAI GPT-2
 - PLBart
 - RoBERTa
+- RoFormer
 - T5
-- TAPEX
 - ViT
 - XLM-RoBERTa
 - XLM-RoBERTa-XL
@@ -490,9 +496,6 @@ Exporting a model requires two things:
 - model instantiation with the `torchscript` flag.
 
 These necessities imply several things developers should be careful about. These are detailed below.
-
-
-### Implications
 
 ### TorchScript flag and tied weights
 

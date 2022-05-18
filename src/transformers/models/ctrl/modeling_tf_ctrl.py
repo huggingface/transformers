@@ -31,7 +31,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_ctrl import CTRLConfig
 
@@ -79,7 +79,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
         attention_mask = tf.cast(attention_mask, dtype=scaled_attention_logits.dtype)
         scaled_attention_logits = scaled_attention_logits + attention_mask
 
-    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
+    attention_weights = stable_softmax(scaled_attention_logits, axis=-1)
 
     # Mask heads if we want to
     if head_mask is not None:
@@ -807,7 +807,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
@@ -816,9 +816,8 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
                 batch_size, sequence_length = shape_list(input_ids)[:2]
             else:
                 batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            assert (
-                self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and batch_size != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]

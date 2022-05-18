@@ -336,9 +336,10 @@ class RagPreTrainedModel(PreTrainedModel):
         # by the value of the flag `is_generator` that we need to set correctly.
         question_encoder = kwargs_question_encoder.pop("model", None)
         if question_encoder is None:
-            assert (
-                question_encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+            assert question_encoder_pretrained_model_name_or_path is not None, (
+                "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to"
+                " be defined"
+            )
             from ..auto.modeling_auto import AutoModel
 
             if "config" not in kwargs_question_encoder:
@@ -357,9 +358,10 @@ class RagPreTrainedModel(PreTrainedModel):
 
         generator = kwargs_generator.pop("model", None)
         if generator is None:
-            assert (
-                generator_pretrained_model_name_or_path is not None
-            ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+            assert generator_pretrained_model_name_or_path is not None, (
+                "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has"
+                " to be defined"
+            )
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
             if "config" not in kwargs_generator:
@@ -654,23 +656,27 @@ class RagModel(RagPreTrainedModel):
                         question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
                     ).squeeze(1)
             else:
-                assert (
-                    context_input_ids is not None
-                ), "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_input_ids is not None, (
+                    "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can"
+                    " set a retriever using the `set_retriever(...)` function."
+                )
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
         assert (
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
-        assert (
-            doc_scores.shape[1] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (doc_scores.shape[1] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -826,7 +832,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
@@ -1022,12 +1028,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 new_input_ids = input_ids[index : index + 1].repeat(num_candidates, 1)
                 outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             else:  # input_ids is None, need context_input_ids/mask and doc_scores
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
                 individual_input_ids = generator_input_ids.repeat(
                     num_candidates, 1
@@ -1293,7 +1301,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        >>> ).squeeze(1)
+        ... ).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
@@ -1400,6 +1408,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs: Optional[int] = None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
@@ -1566,9 +1575,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 1
             )
 
-        assert (
-            context_input_ids.shape[0] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (context_input_ids.shape[0] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         # batch_size
         batch_size = context_input_ids.shape[0] // n_docs
@@ -1624,6 +1634,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             remove_invalid_values=remove_invalid_values,
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
+            renormalize_logits=renormalize_logits,
         )
 
         if num_beams == 1:
