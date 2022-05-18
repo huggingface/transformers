@@ -48,10 +48,10 @@ if TYPE_CHECKING:
     from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
 
     if is_torch_available():
-        from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTModel, OPTPreTrainedModel, OPTForCausalLM
 
     if is_tf_available():
-        from .modeling_tf_opt import TFOPTModel, TFOPTPreTrainedModel
+        from .modeling_tf_opt import TFOPTModel, TFOPTPreTrainedModel, TFOPTForCausalLM
 
     if is_flax_available():
         from .modeling_flax_opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel

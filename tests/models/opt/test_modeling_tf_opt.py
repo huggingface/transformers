@@ -26,7 +26,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFOPTModel
+    from transformers import TFOPTModel, TFOPTForCausalLM
 
 
 @require_tf
@@ -43,16 +43,19 @@ class TFOPTModelTester:
         is_training=True,
         use_labels=False,
         vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
+        hidden_size=16,
+        num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=4,
+        hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        embed_dim=16,
+        word_embed_proj_dim=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -64,40 +67,41 @@ class TFOPTModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-
+        self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.embed_dim = embed_dim
+        self.word_embed_proj_dim = word_embed_proj_dim
+        self.is_encoder_decoder = False
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            eos_token_ids=[2],
+            eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.pad_token_id,
+            embed_dim=self.embed_dim,
+            is_encoder_decoder=False,
+            word_embed_proj_dim=self.word_embed_proj_dim,
             **self.config_updates,
         )
-        inputs_dict = prepare_opt_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_opt_inputs_dict(config, input_ids)
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
@@ -139,45 +143,26 @@ class TFOPTModelTester:
 def prepare_opt_inputs_dict(
     config,
     input_ids,
-    decoder_input_ids,
     attention_mask=None,
-    decoder_attention_mask=None,
     head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
-    if decoder_attention_mask is None:
-        decoder_attention_mask = tf.concat(
-            [
-                tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
-                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
-            ],
-            axis=-1,
-        )
+
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
-    if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
-        "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
 @require_tf
 class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFOPTModel) if is_tf_available() else ()
+    all_model_classes = (TFOPTModel,TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = () if is_tf_available() else ()
-    is_encoder_decoder = True
+    is_encoder_decoder = False
     test_pruning = False
     test_onnx = True
     onnx_min_opset = 10
@@ -309,17 +294,13 @@ class TFOPTHeadTests(unittest.TestCase):
         batch_size = input_ids.shape[0]
         config = OPTConfig(
             vocab_size=self.vocab_size,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
+            hidden_size=24,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            ffn_dim=32,
             max_position_embeddings=48,
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            decoder_start_token_id=2,
         )
         return config, input_ids, batch_size

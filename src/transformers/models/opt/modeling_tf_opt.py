@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPastAndCrossAttentions, TFSeq2SeqModelOutput
+from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSeq2SeqModelOutput
 
 # Public API
 from ...modeling_tf_utils import (
@@ -31,6 +31,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
+    TFCausalLanguageModelingLoss,
     keras_serializable,
     unpack_inputs,
 )
@@ -41,7 +42,7 @@ from .configuration_opt import OPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/bart-large"
+_CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
@@ -49,25 +50,7 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 LARGE_NEGATIVE = -1e8
 
 
-def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
-    decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
-    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
-    )
 
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
-
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
-
-    return shifted_input_ids
 
 
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
@@ -98,7 +81,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
-
+# TODO Fix position with make_position function
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartLearnedPositionalEmbedding with Bart->OPT
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
@@ -285,92 +268,23 @@ class TFOPTAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartEncoderLayer with Bart->OPT
-class TFOPTEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: OPTConfig, **kwargs):
-        super().__init__(**kwargs)
-        self.embed_dim = config.d_model
-        self.self_attn = TFOPTAttention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
-        )
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        layer_head_mask: Optional[tf.Tensor],
-        training: Optional[bool] = False,
-    ) -> tf.Tensor:
-        """
-        Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`tf.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`
-        """
-        residual = hidden_states
-        hidden_states, self_attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
-        )
-
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-            )
-
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout(hidden_states, training=training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        return hidden_states, self_attn_weights
-
-
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoderLayer with Bart->OPT
 class TFOPTDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(**kwargs)
-        self.embed_dim = config.d_model
+        self.do_layer_norm_before = config.do_layer_norm_before
+        self.embed_dim = config.hidden_size
         self.self_attn = TFOPTAttention(
             embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+            num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             name="self_attn",
             is_decoder=True,
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TFOPTAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            name="encoder_attn",
-            is_decoder=True,
-        )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc1 = tf.keras.layers.Dense(config.ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
@@ -378,10 +292,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
@@ -402,9 +313,14 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         """
         residual = hidden_states
 
+        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        if self.do_layer_norm_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -414,43 +330,29 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        
+        # 350m applies layer norm AFTER attention
+        if not self.do_layer_norm_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # Cross-Attention Block
-        cross_attn_present_key_value = None
-        cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = hidden_states
-
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
-                hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
-            )
-            hidden_states = self.dropout(hidden_states, training=training)
-            hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout(hidden_states, training=training)
+        hiddent_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        
+        
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        
+        # 350m applies layer norm AFTER attention
+        if not self.do_layer_norm_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
             self_attn_weights,
-            cross_attn_weights,
             present_key_value,
         )
 
@@ -513,7 +415,6 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
         input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
             "input_ids": input_ids,
         }
@@ -523,9 +424,7 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask")
             }
         ]
     )
@@ -645,164 +544,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
-
-
 @keras_serializable
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartEncoder with Bart->OPT
-class TFOPTEncoder(tf.keras.layers.Layer):
-    config_class = OPTConfig
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`TFOPTEncoderLayer`].
-
-    Args:
-        config: OPTConfig
-    """
-
-    def __init__(self, config: OPTConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.config = config
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-
-        self.embed_tokens = embed_tokens
-        self.embed_positions = TFOPTLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
-        )
-        self.layers = [TFOPTEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-
-    def get_embed_tokens(self):
-        return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
-
-    @unpack_inputs
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        """
-        Args:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, `optional):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-
-        # check attention mask and invert
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask)
-        else:
-            attention_mask = None
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if head_mask is not None and tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(head_mask)[0],
-                len(self.layers),
-                message=(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
-                    f" {shape_list(head_mask)[0]}."
-                ),
-            )
-
-        # encoder layers
-        for idx, encoder_layer in enumerate(self.layers):
-
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):  # skip the layer
-                continue
-
-            hidden_states, attn = encoder_layer(
-                hidden_states,
-                attention_mask,
-                head_mask[idx] if head_mask is not None else None,
-            )
-
-            if output_attentions:
-                all_attentions += (attn,)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
-@keras_serializable
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoder with Bart->OPT
 class TFOPTDecoder(tf.keras.layers.Layer):
     config_class = OPTConfig
     """
@@ -818,13 +560,26 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
+        self.layerdrop = config.layerdrop
+        
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
+        if self.padding_idx is not None:
+            num_embeddings = config.max_position_embeddings + 2
+            
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
+            num_embeddings,
+            config.hidden_size,
+            name="embed_positions", # TODO padding idx a argument? 
         )
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
+
+        if config.word_embed_proj_dim != config.hidden_size:
+            self.project_out = tf.keras.layers.Dense(config.word_embed_proj_dim, name="project_out",use_bias=False)
+            self.project_in =  tf.keras.layers.Dense(config.hidden_size, name="project_in",use_bias=False)
+
+        else:
+            self.project_in = None
+            self.project_out = None
+            
         self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
@@ -842,17 +597,14 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         input_ids: Optional[TFModelInputType] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
         r"""
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -913,7 +665,14 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
@@ -929,7 +688,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids) 
 
         hidden_states = inputs_embeds
 
@@ -941,20 +700,26 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
+        # TODO wrap it as 
+        # attention_mask = self._prepare_decoder_attention_mask(
+        #     attention_mask, input_shape, inputs_embeds, past_key_values_length
+        # )
+        
         if attention_mask is not None:
             combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
+        positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
-        hidden_states = self.layernorm_embedding(hidden_states + positions)
+        if self.project_in is not None:
+            inputs_embeds = self.project_in(inputs_embeds)
+        
+        hidden_states = inputs_embeds + positions
         hidden_states = self.dropout(hidden_states, training=training)
+
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attns = () if (output_attentions and encoder_hidden_states is not None) else None
         present_key_values = () if use_cache else None
 
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
@@ -983,13 +748,10 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
+            hidden_states, layer_self_attn, present_key_value = decoder_layer(
                 hidden_states,
                 attention_mask=combined_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                 past_key_value=past_key_value,
             )
 
@@ -999,33 +761,32 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-                if encoder_hidden_states is not None:
-                    all_cross_attns += (layer_cross_attn,)
-
+        if self.project_out is not None:
+            hidden_states = self.project_out(hidden_states)
+            
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
+            
 
         if not return_dict:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
+            return hidden_states, present_key_values, all_hidden_states, all_self_attns
         else:
-            return TFBaseModelOutputWithPastAndCrossAttentions(
+            return TFBaseModelOutputWithPast(
                 last_hidden_state=hidden_states,
                 past_key_values=present_key_values,
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
-                cross_attentions=all_cross_attns,
             )
 
 
 @keras_serializable
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartMainLayer with Bart->OPT
 class TFOPTMainLayer(tf.keras.layers.Layer):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
+        self.shared = TFSharedEmbeddings(config.vocab_size, config.hidden_size, config.pad_token_id, name="model.shared")
 
         # set tf scope correctly
         if load_weight_prefix is None:
@@ -1039,7 +800,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 
-        self.encoder = TFOPTEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFOPTDecoder(config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
@@ -1053,7 +813,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
     @unpack_inputs
@@ -1061,12 +820,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         self,
         input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1076,51 +830,26 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
 
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            use_cache = False
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        if decoder_input_ids is None and input_ids is not None:
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                training=training,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, TFBaseModelOutput):
-            encoder_outputs = TFBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-        # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
-        elif not return_dict and not isinstance(encoder_outputs, tuple):
-            encoder_outputs = encoder_outputs.to_tuple()
-
-        decoder_outputs = self.decoder(
-            decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
+        outputs = self.decoder(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1129,17 +858,13 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            return outputs
 
-        return TFSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1147,7 +872,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
     "The bare TF OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartModel with BART->OPT,Bart->OPT
+
 class TFOPTModel(TFOPTPreTrainedModel):
 
     _requires_load_weight_prefix = True
@@ -1156,9 +881,6 @@ class TFOPTModel(TFOPTPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.model = TFOPTMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
-
-    def get_encoder(self):
-        return self.model.encoder
 
     def get_decoder(self):
         return self.model.decoder
@@ -1175,15 +897,9 @@ class TFOPTModel(TFOPTPreTrainedModel):
         self,
         input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1195,15 +911,9 @@ class TFOPTModel(TFOPTPreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1215,19 +925,179 @@ class TFOPTModel(TFOPTPreTrainedModel):
 
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=output.last_hidden_state,
             past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            cross_attentions=cross_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
+            hidden_states=hs,
+            attentions=attns,
         )
+
+# TODO add docstring
+class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
+    config: OPTConfig
+
+    def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+        self.model = TFOPTModel(config)
+        
+        # the LM head should be automatically tied to the input embedding layer
+        self.lm_head = tf.keras.layers.Linear(num_input_dims=config.hidden_size, units=config.vocab_size, use_bias=False)
+    
+    def get_input_embeddings(self):
+        return self.model.model.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.model.model.shared.weight = new_embeddings
+        self.model.model.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.model.set_embed_tokens(embed_tokens)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model.model.decoder = decoder
+
+    def get_decoder(self):
+        return self.model.decoder
+
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+        **kwargs
+    ) -> Union[TFCausalLMOutputWithPast, Tuple[tf.Tensor]]:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional
+                tensors are only required when the model is used as a decoder in a Sequence to Sequence model.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+
+        >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
+
+        >>> prompt = "Hey, are you consciours? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        transformer_outputs = self.model(
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            # shift labels to the left and cut last logit token
+            shifted_logits = logits[:, :-1]
+            labels = labels[:, 1:]
+            loss = self.hf_compute_loss(labels, shifted_logits)
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return (loss,) + output if loss is not None else output
