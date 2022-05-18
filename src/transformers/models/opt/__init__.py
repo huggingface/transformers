@@ -34,7 +34,7 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_opt"] = ["TFOPTModel", "TFOPTPreTrainedModel"]
+    _import_structure["modeling_tf_opt"] = ["TFOPTForCausalLM", "TFOPTModel", "TFOPTPreTrainedModel"]
 
 if is_flax_available():
     _import_structure["modeling_flax_opt"] = [

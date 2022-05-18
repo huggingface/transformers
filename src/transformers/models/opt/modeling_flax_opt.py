@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Flax OPT model."""
 
-import random
 from functools import partial
 from typing import Optional, Tuple
 
@@ -390,38 +389,24 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
                 # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if not deterministic and (dropout_probability < self.layerdrop):
-                layer_outputs = (None, None, None)
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    init_cache=init_cache,
-                    output_attentions=output_attentions,
-                    deterministic=deterministic,
-                )
+            # dropout_probability = random.uniform(0, 1)
+            # if not deterministic and (dropout_probability < self.layerdrop):
+            #     layer_outputs = (None, None, None)
+            # else:
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                init_cache=init_cache,
+                output_attentions=output_attentions,
+                deterministic=deterministic,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        # # add hidden states from the last decoder layer
-        # if output_hidden_states:
-        #     all_hidden_states += (hidden_states,)
-
         outputs = [hidden_states, all_hidden_states, all_self_attns]
-
         return outputs
-
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
 
 
 def make_positions(mask, padding_idx: int):
@@ -430,7 +415,6 @@ def make_positions(mask, padding_idx: int):
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
     positions = jnp.cumsum(mask, axis=1).astype(jnp.int32) + padding_idx
-    # positions = (jnp.cumsum(mask, axis=1) * mask).astype(jnp.int32) + padding_idx
     return positions
 
 

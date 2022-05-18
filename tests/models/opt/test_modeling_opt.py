@@ -265,7 +265,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output.mean(dim=-1), expected_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
 
 @require_tokenizers

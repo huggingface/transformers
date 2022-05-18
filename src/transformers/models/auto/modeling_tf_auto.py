@@ -152,6 +152,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "TFGPT2LMHeadModel"),
         ("gptj", "TFGPTJForCausalLM"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
+        ("opt", "TFOPTForCausalLM"),
         ("rembert", "TFRemBertForCausalLM"),
         ("roberta", "TFRobertaForCausalLM"),
         ("roformer", "TFRoFormerForCausalLM"),

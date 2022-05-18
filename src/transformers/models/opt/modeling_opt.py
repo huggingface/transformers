@@ -633,7 +633,8 @@ class OPTDecoder(OPTPreTrainedModel):
 
         # embed positions
         if attention_mask is None:
-            attention_mask = ~(input_ids == 1)
+            attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+            # attention_mask = ~(input_ids == 1) reverting
 
         positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
