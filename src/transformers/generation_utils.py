@@ -942,8 +942,8 @@ class GenerationMixin:
                 If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
             typical_p (`float`, *optional*, defaults to 1.0):
-                The amount of probability mass from the original distribution to be considered in typical decoding.
-                If set to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+                The amount of probability mass from the original distribution to be considered in typical decoding. If
+                set to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
             repetition_penalty (`float`, *optional*, defaults to 1.0):
                 The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
