@@ -126,6 +126,13 @@ else:
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "groupvit",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -177,13 +184,6 @@ else:
                 (
                     "PegasusTokenizer" if is_sentencepiece_available() else None,
                     "PegasusTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "groupvit",
-                (
-                    "CLIPTokenizer",
-                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             (

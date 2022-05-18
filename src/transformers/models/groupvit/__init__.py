@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_torch_available, OptionalDependencyNotAvailable
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -29,7 +29,7 @@ _import_structure = {
     ],
 }
 
-try: 
+try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
         GroupViTVisionConfig,
     )
 
-    try: 
+    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:

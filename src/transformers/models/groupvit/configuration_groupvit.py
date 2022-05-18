@@ -244,7 +244,8 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         if num_hidden_layers != sum(depths):
             logger.warning(
-                f"Maunally setting num_hidden_layers to {num_hidden_layers}, but we expect num_hidden_layers = sum(depth) = {sum(depths)}"
+                f"Manually setting num_hidden_layers to {num_hidden_layers}, but we expect num_hidden_layers ="
+                f" sum(depth) = {sum(depths)}"
             )
 
     @classmethod

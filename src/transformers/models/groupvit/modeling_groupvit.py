@@ -48,7 +48,6 @@ GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -173,7 +172,9 @@ def get_grouping_from_attentions(attentions, hw_shape, rescale=False, align_corn
     # [B, G, H, W]
     final_grouping = attn_maps[-1]
     if rescale:
-        final_grouping = nn.functional.interpolate(final_grouping, size=hw_shape, mode="bilinear", align_corners=align_corners)
+        final_grouping = nn.functional.interpolate(
+            final_grouping, size=hw_shape, mode="bilinear", align_corners=align_corners
+        )
 
     return final_grouping
 
@@ -295,7 +296,11 @@ class GroupViTTokenAssign(nn.Module):
         self.num_output_group = num_output_group
         # norm on group_tokens
         self.norm_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        assign_mlp_ratio = config.assign_mlp_ratio if isinstance(config.assign_mlp_ratio, collections.abc.Iterable) else (config.assign_mlp_ratio, config.assign_mlp_ratio)
+        assign_mlp_ratio = (
+            config.assign_mlp_ratio
+            if isinstance(config.assign_mlp_ratio, collections.abc.Iterable)
+            else (config.assign_mlp_ratio, config.assign_mlp_ratio)
+        )
         tokens_dim, channels_dim = [int(x * config.hidden_size) for x in assign_mlp_ratio]
         self.mlp_inter = GroupViTMixerMLP(config, num_group_token, tokens_dim, num_output_group)
         self.norm_post_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -426,7 +431,8 @@ class PatchEmbeddings(nn.Module):
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
@@ -543,9 +549,10 @@ class GroupViTTextAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        assert self.head_dim * self.num_heads == self.embed_dim, (
+            f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+            f" {self.num_heads})."
+        )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
@@ -583,14 +590,16 @@ class GroupViTTextAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         # apply the causal_attention_mask first
         if causal_attention_mask is not None:
             if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {causal_attention_mask.size()}"
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {causal_attention_mask.size()}"
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -621,7 +630,8 @@ class GroupViTTextAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1570,12 +1580,14 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         if not isinstance(config.text_config, GroupViTTextConfig):
             raise ValueError(
-                f"config.text_config is expected to be of type GroupViTTextConfig but is of type {type(config.text_config)}."
+                "config.text_config is expected to be of type GroupViTTextConfig but is of type"
+                f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, GroupViTVisionConfig):
             raise ValueError(
-                f"config.vision_config is expected to be of type GroupViTVisionConfig but is of type {type(config.vision_config)}."
+                "config.vision_config is expected to be of type GroupViTVisionConfig but is of type"
+                f" {type(config.vision_config)}."
             )
 
         text_config = config.text_config

@@ -203,7 +203,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
+            self.assertEqual(len(attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -214,7 +214,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
+            self.assertEqual(len(attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
 
             out_len = len(outputs)
 
@@ -232,7 +232,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), sum(g>0 for g in self.model_tester.num_group_tokens))
+            self.assertEqual(len(self_attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
             for i, self_attn in enumerate(self_attentions):
                 if self_attn is None:
                     continue
@@ -704,6 +704,6 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[13.3523,  6.3629]])
+        expected_logits = torch.tensor([[13.3523, 6.3629]])
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
