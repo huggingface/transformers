@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import datetime
 import math
 import unittest
 
@@ -341,12 +340,16 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = "I enjoy walking with my cute dog"
-        EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good listener, and I am a very good listener. I am a"
+        EXPECTED_OUTPUT = (
+            "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
+            " a very good listener. I am a very good listener, and I am a very good listener. I am a"
+        )
 
-        input_ids = tokenizer.encode(input_sentence, return_tensors='pt')
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
         greedy_output = model.generate(input_ids, max_length=50)
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
 
 @require_torch
 class BloomModelLanguageGenerationTest(unittest.TestCase):
