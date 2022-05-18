@@ -269,7 +269,10 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path to the official PyTorch checkpoint file which is expected to reside in the dump dir with dicts, bpecodes, etc.",
+        help=(
+            "Path to the official PyTorch checkpoint file which is expected to reside in the dump dir with dicts,"
+            " bpecodes, etc."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

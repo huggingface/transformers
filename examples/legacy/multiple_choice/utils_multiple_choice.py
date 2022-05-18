@@ -182,7 +182,7 @@ if is_tf_available():
             )
 
             def gen():
-                for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
+                for ex_index, ex in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
                         logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
@@ -297,7 +297,7 @@ class RaceProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
-        for (_, data_raw) in enumerate(lines):
+        for _, data_raw in enumerate(lines):
             race_id = "%s-%s" % (set_type, data_raw["race_id"])
             article = data_raw["article"]
             for i in range(len(data_raw["answers"])):
@@ -518,7 +518,7 @@ def convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
-    for (ex_index, example) in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
+    for ex_index, example in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d of %d" % (ex_index, len(examples)))
         choices_inputs = []

@@ -49,7 +49,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_gpu_failures_short.txt
+              run: cat reports/tests_torch_gpu/failures_short.txt
 
             - name: Run examples tests on GPU
               if: ${{ always() }}
@@ -65,7 +65,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/examples_torch_gpu_failures_short.txt
+              run: cat reports/examples_torch_gpu/failures_short.txt
 
             - name: Run all pipeline tests on GPU
               if: ${{ always() }}
@@ -76,7 +76,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
+              run: cat reports/tests_torch_pipeline_gpu/failures_short.txt
 
             - name: Test suite reports artifacts
               if: ${{ always() }}
@@ -119,7 +119,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_multi_gpu_failures_short.txt
+              run: cat reports/tests_torch_multi_gpu/failures_short.txt
 
             - name: Run all pipeline tests on GPU
               if: ${{ always() }}
@@ -130,7 +130,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
+              run: cat reports/tests_torch_pipeline_multi_gpu/failures_short.txt
 
             - name: Test suite reports artifacts
               if: ${{ always() }}
@@ -157,7 +157,7 @@ jobs:
                   apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
-                  pip install .[testing,deepspeed]
+                  pip install .[deepspeed-testing]
                   pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install git+https://github.com/microsoft/DeepSpeed
 
@@ -171,7 +171,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
+              run: cat reports/tests_torch_cuda_extensions_gpu/failures_short.txt
 
             - name: Test suite reports artifacts
               if: ${{ always() }}
@@ -214,7 +214,7 @@ jobs:
 
             - name: Failure short reports
               if: ${{ always() }}
-              run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+              run: cat reports/tests_torch_cuda_extensions_multi_gpu/failures_short.txt
 
             - name: Test suite reports artifacts
               if: ${{ always() }}

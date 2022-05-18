@@ -84,6 +84,7 @@ if is_tf_available():
         TFSampleEncoderDecoderOutput,
     )
     from transformers.modeling_tf_utils import unpack_inputs
+    from transformers.tf_utils import stable_softmax
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -504,7 +505,8 @@ class TFModelTesterMixin:
             self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
         else:
             raise ValueError(
-                f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
+                f" {type(tf_outputs)} instead."
             )
 
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
@@ -565,8 +567,7 @@ class TFModelTesterMixin:
 
             # Output all for aggressive testing
             config.output_hidden_states = True
-            if self.has_attentions:
-                config.output_attentions = True
+            config.output_attentions = self.has_attentions
 
             # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
             # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
@@ -956,7 +957,10 @@ class TFModelTesterMixin:
                 else:
                     self.assertTrue(
                         all(tf.equal(tuple_object, dict_object)),
-                        msg=f"Tuple and dict output are not equal. Difference: {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}",
+                        msg=(
+                            "Tuple and dict output are not equal. Difference:"
+                            f" {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}"
+                        ),
                     )
 
                 recursive_check(tuple_output, dict_output)
@@ -1351,7 +1355,25 @@ class TFModelTesterMixin:
                 labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
                 inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
                 self.assertGreater(len(inputs_minus_labels), 0)
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                accuracy_classes = [
+                    "ForPreTraining",
+                    "ForCausalLM",
+                    "ForMaskedLM",
+                    "ForQuestionAnswering",
+                    "ForMultipleChoice",
+                    "ForSequenceClassification",
+                    "ForTokenClassification",
+                    "ForNextSentencePrediction",
+                    "LMHeadModel",
+                ]
+                for accuracy_class in accuracy_classes:
+                    if model.__class__.__name__.endswith(accuracy_class):
+                        metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+                        break
+                else:
+                    metrics = []
+
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
                 # Make sure the model fits without crashing regardless of where we pass the labels
                 history1 = model.fit(
                     prepared_for_class,
@@ -1361,6 +1383,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss1 = history1.history["val_loss"][0]
+                accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
                 history2 = model.fit(
                     inputs_minus_labels,
                     labels,
@@ -1370,7 +1393,34 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss2 = history2.history["val_loss"][0]
+                accuracy2 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
                 self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+                self.assertEqual(history1.history.keys(), history2.history.keys())
+                for key in history1.history.keys():
+                    if not key.startswith("val_"):
+                        self.assertTrue("val_" + key in history1.history.keys(), "Outputs differ in train/test step!")
+                if metrics:
+                    self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
+
+    def test_int64_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            prepared_for_class = self._prepare_for_class(
+                inputs_dict.copy(),
+                model_class,
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
+            if not any(
+                [tensor.dtype.is_integer for tensor in prepared_for_class.values() if isinstance(tensor, tf.Tensor)]
+            ):
+                return  # No integer inputs means no need for this test
+
+            prepared_for_class = {
+                key: tf.cast(tensor, tf.int64) if isinstance(tensor, tf.Tensor) and tensor.dtype.is_integer else tensor
+                for key, tensor in prepared_for_class.items()
+            }
+            model = model_class(config)
+            model(**prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -1709,6 +1759,41 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
+
+    # Tests whether the stable softmax is stable on CPU, with and without XLA
+    def test_xla_stable_softmax(self):
+        large_penalty = -1e9
+        n_tokens = 10
+        batch_size = 8
+
+        def masked_softmax(x, boolean_mask):
+            numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
+            masked_x = x + numerical_mask
+            return stable_softmax(masked_x)
+
+        xla_masked_softmax = tf.function(masked_softmax, jit_compile=True)
+        xla_stable_softmax = tf.function(stable_softmax, jit_compile=True)
+        x = tf.random.normal((batch_size, n_tokens))
+
+        # Same outcome regardless of the boolean mask here
+        masked_tokens = random.randint(0, n_tokens)
+        boolean_mask = tf.convert_to_tensor([[1] * (n_tokens - masked_tokens) + [0] * masked_tokens], dtype=tf.int32)
+
+        # We can randomly mask a random numerical input OUTSIDE XLA
+        numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty
+        masked_x = x + numerical_mask
+        xla_out = xla_stable_softmax(masked_x)
+        out = stable_softmax(masked_x)
+        assert tf.experimental.numpy.allclose(xla_out, out)
+
+        # The stable softmax has the same output as the original softmax
+        unstable_out = tf.nn.softmax(masked_x)
+        assert tf.experimental.numpy.allclose(unstable_out, out)
+
+        # We can randomly mask a random numerical input INSIDE XLA
+        xla_out = xla_masked_softmax(x, boolean_mask)
+        out = masked_softmax(x, boolean_mask)
+        assert tf.experimental.numpy.allclose(xla_out, out)
 
 
 @require_tf

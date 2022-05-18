@@ -184,7 +184,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(
             output,
             {
-                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+                "text": (
+                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+                )
             },
         )
 
@@ -194,7 +196,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(
             output,
             {
-                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajcri",
+                "text": (
+                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajcri"
+                ),
                 "chunks": [
                     {"text": "y", "timestamp": (0.52, 0.54)},
                     {"text": "en", "timestamp": (0.6, 0.68)},

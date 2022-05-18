@@ -35,7 +35,7 @@ def parse_search_arg(search):
     groups = search.split()
     entries = {k: vs for k, vs in (g.split("=") for g in groups)}
     entry_names = list(entries.keys())
-    sets = [list((f"--{k} {v}") for v in vs.split(":")) for k, vs in entries.items()]
+    sets = [list(f"--{k} {v}" for v in vs.split(":")) for k, vs in entries.items()]
     matrix = [list(x) for x in itertools.product(*sets)]
     return matrix, entry_names
 
@@ -66,7 +66,10 @@ def run_search():
     prog = sys.argv[0]
 
     parser = argparse.ArgumentParser(
-        usage="\n\nImportant: this script accepts all arguments `run_eval.py` accepts and then a few extra, therefore refer to `run_eval.py -h` for the complete list."
+        usage=(
+            "\n\nImportant: this script accepts all arguments `run_eval.py` accepts and then a few extra, therefore"
+            " refer to `run_eval.py -h` for the complete list."
+        )
     )
     parser.add_argument(
         "--search",
@@ -83,7 +86,10 @@ def run_search():
         nargs="?",
         type=str,
         const=datetime_now(),
-        help="add custom notes to be printed before the results table. If no value is passed, the current datetime string will be used.",
+        help=(
+            "add custom notes to be printed before the results table. If no value is passed, the current datetime"
+            " string will be used."
+        ),
     )
     args, args_main = parser.parse_known_args()
     # we share some of the args
