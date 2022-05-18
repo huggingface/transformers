@@ -1467,12 +1467,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
     def get_valid_ratio(self, mask):
         """Get the valid ratio of all feature maps."""
 
-        _, H, W = mask.shape
-        valid_H = torch.sum(~mask[:, :, 0], 1)
-        valid_W = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_h = valid_H.float() / H
-        valid_ratio_w = valid_W.float() / W
-        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        _, height, width = mask.shape
+        valid_height = torch.sum(~mask[:, :, 0], 1)
+        valid_width = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_heigth = valid_height.float() / height
+        valid_ratio_width = valid_width.float() / width
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
     def get_proposal_pos_embed(self, proposals):
@@ -1511,8 +1511,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         _cur = 0
         for lvl, (height, width) in enumerate(spatial_shapes):
             mask_flatten_ = memory_padding_mask[:, _cur : (_cur + height * width)].view(batch_size, height, width, 1)
-            valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
-            valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
+            valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
+            valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = torch.meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=memory.device),
@@ -1520,10 +1520,10 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
-            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+            scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
-            proposal = torch.cat((grid, wh), -1).view(batch_size, -1, 4)
+            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**lvl)
+            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
@@ -1594,7 +1594,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         for level, (src, mask) in enumerate(features):
             srcs.append(self.input_proj[level](src))
             masks.append(mask)
-            assert mask is not None
+            if mask is None:
+                raise ValueError("No attention mask was provided")
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(srcs):
