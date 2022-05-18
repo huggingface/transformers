@@ -94,8 +94,9 @@ class TextClassificationPipeline(Pipeline):
         Classify the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
-                One or several texts (or one list of prompts) to classify.
+            args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+                One or several texts to classify. In order to use text pairs for your classification, you can send a
+                dictionnary containing `{"text", "text_pair"}` keys, or a list of those.
             return_all_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return scores for all labels.
             function_to_apply (`str`, *optional*, defaults to `"default"`):
