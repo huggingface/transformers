@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import subprocesses
+import subprocess
 from unittest.mock import patch
 
 import torch
