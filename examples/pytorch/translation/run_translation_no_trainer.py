@@ -661,7 +661,7 @@ def main():
 
                 # If we are in a multiprocess environment, the last batch has duplicates
                 if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader):
+                    if step == len(eval_dataloader) - 1:
                         decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
                         decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
                     else:
