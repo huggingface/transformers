@@ -258,7 +258,6 @@ class BeamSearchScorer(BeamScorer):
                         continue
                     if beam_indices is not None:
                         beam_index = beam_indices[batch_beam_idx]
-                        # TODO(PVP) - check here
                         beam_index = beam_index + (next_index,)
                     else:
                         beam_index = None
@@ -340,11 +339,11 @@ class BeamSearchScorer(BeamScorer):
                 best_index = best_hyp_tuple[2]
                 sent_lengths[self.num_beam_hyps_to_keep * i + j] = len(best_hyp)
 
-                # append to lists
+                # append hyp to lists
                 best.append(best_hyp)
 
-                if best_index is not None:
-                    best_indices.append(best_index)
+                # append indices to list
+                best_indices.append(best_index)
 
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
@@ -353,7 +352,7 @@ class BeamSearchScorer(BeamScorer):
         sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
 
-        if len(best_indices) > 0:
+        if len(best_indices) > 0 and best_indices[0] is not None:
             indices: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         else:
             indices = None
@@ -363,15 +362,15 @@ class BeamSearchScorer(BeamScorer):
             assert pad_token_id is not None, "`pad_token_id` has to be defined"
             decoded.fill_(pad_token_id)
 
-            if indices is not None:
-                indices.fill_(-1)
+        if indices is not None:
+            indices.fill_(-1)
 
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, (hypo, best_idx) in enumerate(zip(best, best_indices)):
             decoded[i, : sent_lengths[i]] = hypo
 
             if indices is not None:
-                indices[i, : sent_lengths[i]] = torch.tensor(best_idx)
+                indices[i, : len(best_idx)] = torch.tensor(best_idx)
 
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
