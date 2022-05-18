@@ -280,7 +280,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasus"),
         ("blenderbot", "Blenderbot"),
         ("blenderbot-small", "BlenderbotSmall"),
-        ("bloom", "Bloom"),
+        ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("byt5", "ByT5"),
         ("camembert", "CamemBERT"),

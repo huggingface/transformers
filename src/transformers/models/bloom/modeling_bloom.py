@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc. team.
+# Copyright 2022 HuggingFace Inc. team and BigScience workshop.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Bloom model."""
+"""PyTorch BLOOM model."""
 
 import math
 from typing import Tuple
@@ -46,7 +46,7 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
     if not (numerator % denominator == 0):
-        raise ValueError("{} is not divisible by {}".format(numerator, denominator))
+        raise ValueError(f"{numerator} is not divisible by {denominator}")
 
 
 def divide(numerator, denominator):

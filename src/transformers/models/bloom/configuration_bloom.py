@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 the Big Science Workshop and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +20,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigscience/Bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
+    "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
 }
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
