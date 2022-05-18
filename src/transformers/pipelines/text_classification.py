@@ -142,8 +142,8 @@ class TextClassificationPipeline(Pipeline):
         elif isinstance(inputs, list):
             # This is likely an invalid usage of the pipeline attempting to pass text pairs.
             raise ValueError(
-                """The pipeline received invalid inputs, if you are trying to send text pairs, you can try to send a dictionnary {"text":
-"My text", "text_pair": "My pair"} in order to send a text pair"""
+                "The pipeline received invalid inputs, if you are trying to send text pairs, you can try to send a dictionnary "
+                '`{"text": "My text", "text_pair": "My pair"}` in order to send a text pair.'
             )
         return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
