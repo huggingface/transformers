@@ -120,7 +120,7 @@ def convert_bloom_checkpoint_to_pytorch(
                     for key in tensors.keys():
                         if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                             # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
-                            tensors[key] += temp[key] 
+                            tensors[key] += temp[key]
                         else:
                             cat_dim = (
                                 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
