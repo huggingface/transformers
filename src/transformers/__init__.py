@@ -184,6 +184,7 @@ _import_structure = {
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
+    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDETRConfig"],
     "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
@@ -585,6 +586,7 @@ else:
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.conditional_detr"].append("ConditionalDETRFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
@@ -619,6 +621,15 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.conditional_detr"].extend(
+        [
+            "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConditionalDETRForObjectDetection",
+            "ConditionalDETRForSegmentation",
+            "ConditionalDETRModel",
+            "ConditionalDETRPreTrainedModel",
         ]
     )
 
@@ -2719,6 +2730,7 @@ if TYPE_CHECKING:
     )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
+    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDETRConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3065,6 +3077,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.conditional_detr import ConditionalDETRFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
@@ -3092,6 +3105,13 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.conditional_detr import (
+            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConditionalDETRForObjectDetection,
+            ConditionalDETRForSegmentation,
+            ConditionalDETRModel,
+            ConditionalDETRPreTrainedModel,
         )
 
     try:

@@ -65,6 +65,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("glpn", "GLPNModel"),
         ("gpt2", "GPT2Model"),
+        ("conditional_detr", "ConditionalDETRModel"),
         ("gpt_neo", "GPTNeoModel"),
         ("gptj", "GPTJModel"),
         ("hubert", "HubertModel"),
@@ -327,6 +328,7 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("conditional_detr", "ConditionalDETRForSegmentation"),
     ]
 )
 
@@ -399,6 +401,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         # Model for Object Detection mapping
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
+        ("conditional_detr", "ConditionalDETRForObjectDetection"),
     ]
 )
 
