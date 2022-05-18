@@ -2164,7 +2164,7 @@ else:
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
-    _import_structure["models.opt"].extend(["TFOPTModel", "TFOPTPreTrainedModel, TFOPTForCausalLM"])
+    _import_structure["models.opt"].extend(["TFOPTForCausalLM, TFOPTModel", "TFOPTPreTrainedModel"])
     _import_structure["models.pegasus"].extend(
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
@@ -4365,7 +4365,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
-        from .models.opt import TFOPTModel, TFOPTPreTrainedModel, TFOPTForCausalLM
+        from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.rembert import (

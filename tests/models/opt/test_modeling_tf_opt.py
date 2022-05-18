@@ -26,7 +26,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFOPTModel, TFOPTForCausalLM
+    from transformers import TFOPTForCausalLM, TFOPTModel
 
 
 @require_tf
@@ -82,7 +82,6 @@ class TFOPTModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
-
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
@@ -160,7 +159,7 @@ def prepare_opt_inputs_dict(
 
 @require_tf
 class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFOPTModel,TFOPTForCausalLM) if is_tf_available() else ()
+    all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = () if is_tf_available() else ()
     is_encoder_decoder = False
     test_pruning = False
