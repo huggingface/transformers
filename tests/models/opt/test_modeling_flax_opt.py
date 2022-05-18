@@ -250,7 +250,6 @@ class FlaxOPTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
 
-@require_tokenizers
 @require_flax
 @slow
 class FlaxOPTEmbeddingsTest(unittest.TestCase):
