@@ -2104,15 +2104,6 @@ else:
             "TFGPTJPreTrainedModel",
         ]
     )
-    _import_structure["models.groupvit"].extend(
-        [
-            "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFGroupViTModel",
-            "TFGroupViTPreTrainedModel",
-            "TFGroupViTTextModel",
-            "TFGroupViTVisionModel",
-        ]
-    )
     _import_structure["models.hubert"].extend(
         [
             "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2530,16 +2521,6 @@ else:
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
-    _import_structure["models.groupvit"].extend(
-        [
-            "FlaxGroupViTModel",
-            "FlaxGroupViTPreTrainedModel",
-            "FlaxGroupViTTextModel",
-            "FlaxGroupViTTextPreTrainedModel",
-            "FlaxGroupViTVisionModel",
-            "FlaxGroupViTVisionPreTrainedModel",
-        ]
-    )
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",

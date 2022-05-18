@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 The NVIDIA and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -48,12 +47,6 @@ GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GroupViT models at https://huggingface.co/models?filter=groupvit
 ]
 
-
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -144,7 +137,7 @@ def resize_attn_map(attentions, h, w, align_corners=False):
     groups = attentions.shape[1]  # number of group token
     # [bs, groups, h*w, groups] -> [bs, groups, h, w]
     attentions = attentions.reshape(bs, groups, h_featmap, w_featmap)
-    attentions = F.interpolate(attentions, size=(h, w), mode="bilinear", align_corners=align_corners)
+    attentions = nn.functional.interpolate(attentions, size=(h, w), mode="bilinear", align_corners=align_corners)
     return attentions
 
 
@@ -180,16 +173,13 @@ def get_grouping_from_attentions(attentions, hw_shape, rescale=False, align_corn
     # [B, G, H, W]
     final_grouping = attn_maps[-1]
     if rescale:
-        final_grouping = F.interpolate(final_grouping, size=hw_shape, mode="bilinear", align_corners=align_corners)
+        final_grouping = nn.functional.interpolate(final_grouping, size=hw_shape, mode="bilinear", align_corners=align_corners)
 
     return final_grouping
 
 
-class Attention(nn.Module):
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-    ):
+class GroupViTAttention(nn.Module):
+    def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
         self.num_heads = config.num_attention_heads
         head_dim = config.hidden_size // self.num_heads
@@ -224,13 +214,10 @@ class Attention(nn.Module):
         return out
 
 
-class CrossAttnBlock(nn.Module):
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-    ):
+class GroupViTCrossAttentionBlock(nn.Module):
+    def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
-        self.attn = Attention(config)
+        self.attn = GroupViTAttention(config)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = GroupViTMLP(config)
         self.norm_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -244,10 +231,7 @@ class CrossAttnBlock(nn.Module):
 
 
 class GroupViTAssignAttention(nn.Module):
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-    ):
+    def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
         self.scale = config.hidden_size**-0.5
 
@@ -265,7 +249,7 @@ class GroupViTAssignAttention(nn.Module):
             if hard:
                 attn = hard_softmax(attn, dim=-2)
             else:
-                attn = F.softmax(attn, dim=-2)
+                attn = nn.functional.softmax(attn, dim=-2)
 
         return attn
 
@@ -311,12 +295,13 @@ class GroupViTTokenAssign(nn.Module):
         self.num_output_group = num_output_group
         # norm on group_tokens
         self.norm_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        tokens_dim, channels_dim = [int(x * config.hidden_size) for x in to_2tuple(config.assign_mlp_ratio)]
+        assign_mlp_ratio = config.assign_mlp_ratio if isinstance(config.assign_mlp_ratio, collections.abc.Iterable) else (config.assign_mlp_ratio, config.assign_mlp_ratio)
+        tokens_dim, channels_dim = [int(x * config.hidden_size) for x in assign_mlp_ratio]
         self.mlp_inter = GroupViTMixerMLP(config, num_group_token, tokens_dim, num_output_group)
         self.norm_post_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # norm on x
         self.norm_x = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_assign_attn = CrossAttnBlock(config)
+        self.pre_assign_attn = GroupViTCrossAttentionBlock(config)
 
         self.assign = GroupViTAssignAttention(config)
         self.norm_new_x = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -353,12 +338,12 @@ class GroupViTTokenAssign(nn.Module):
         # [B, S_2, C]
         projected_group_tokens = self.project_group_token(group_tokens)
         projected_group_tokens = self.pre_assign_attn(projected_group_tokens, x)
-        new_x, attn_dict = self.assign(projected_group_tokens, x)
+        new_x, attention = self.assign(projected_group_tokens, x)
         new_x += projected_group_tokens
 
         new_x = new_x + self.mlp_channels(self.norm_new_x(new_x))
 
-        return new_x, attn_dict
+        return new_x, attention
 
 
 @dataclass
@@ -427,8 +412,8 @@ class PatchEmbeddings(nn.Module):
         embed_dim: int = 768,
     ):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
@@ -929,20 +914,13 @@ class GroupViTStage(nn.Module):
 
         x, group_token = self.split_x(cat_x)
 
-        # attn_dict = None
-        # if self.downsample is not None:
-        #     x, attn_dict = self.downsample(x, group_token)
-
-        # outputs = (x, group_token)
-        # if output_attentions:
-        #     outputs = outputs + (attn_dict["soft"] if attn_dict is not None else None,)
-        attn = None
+        attention = None
         if self.downsample is not None:
-            x, attn = self.downsample(x, group_token)
+            x, attention = self.downsample(x, group_token)
 
         outputs = (x, group_token)
         if output_attentions:
-            outputs = outputs + (attn,)
+            outputs = outputs + (attention,)
 
         return outputs
 
@@ -1561,10 +1539,10 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, GroupViTVisionModel
+        >>> from transformers import AutoProcessor, GroupViTVisionModel
 
         >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1693,10 +1671,10 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, GroupViTModel
+        >>> from transformers import AutoProcessor, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1746,10 +1724,10 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, GroupViTModel
+        >>> from transformers import AutoProcessor, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> processor = CLIPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
