@@ -47,7 +47,7 @@ class CvtConfig(PretrainedConfig):
             The padding size of each encoder's patch embedding.
         embed_dim (`List[int]`, *optional*, defaults to `[64, 192, 384]`):
             Dimension of each of the encoder blocks.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 3, 6]`):
+        num_heads (`List[int]`, *optional*, defaults to `[1, 3, 6]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
         depth (`List[int]`, *optional*, defaults to `[1, 2, 10]`):
             The number of layers in each encoder block.
