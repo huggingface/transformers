@@ -23,6 +23,7 @@ from ...utils import _LazyModule, is_torch_available
 _import_structure = {
     "configuration_emformer": ["EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EmformerConfig"],
     "feature_extraction_emformer": ["EmformerFeatureExtractor"],
+    "tokenization_emformer": ["EmformerTokenizer"],
 }
 
 
@@ -37,6 +38,7 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_emformer import EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EmformerConfig
     from .feature_extraction_emformer import EmformerFeatureExtractor
+    from .tokenization_emformer import EmformerTokenizer
 
     if is_torch_available():
         from .modeling_emformer import (

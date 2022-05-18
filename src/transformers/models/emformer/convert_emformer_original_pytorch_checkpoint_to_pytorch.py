@@ -20,10 +20,11 @@ import json
 import os
 
 import torch
+import torchaudio
 from torchaudio.pipelines import EMFORMER_RNNT_BASE_LIBRISPEECH, RNNTBundle
 from torchaudio.prototype.pipelines import EMFORMER_RNNT_BASE_MUSTC, EMFORMER_RNNT_BASE_TEDLIUM3
 
-from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, logging
+from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, EmformerTokenizer, logging
 
 
 NAME2BUNDLE = {
@@ -84,6 +85,13 @@ def convert_config(bundle: RNNTBundle):
     return cfg
 
 
+def convert_tokenizer(bundle: RNNTBundle):
+    local_path = torchaudio.utils.download_asset(bundle._sp_model_path)
+    tokenizer = EmformerTokenizer(local_path)
+
+    return tokenizer
+
+
 def convert_feature_extractor(bundle: RNNTBundle):
     extractor_pipeline = bundle.get_streaming_feature_extractor().pipeline
     feature_extractor = EmformerFeatureExtractor(
@@ -142,6 +150,7 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
     """
     bundle = NAME2BUNDLE[model_name]
     config = convert_config(bundle)
+    tokenizer = convert_tokenizer(bundle)
     feature_extractor = convert_feature_extractor(bundle)
     model = convert_weights(bundle, config)
     model.eval()
@@ -150,6 +159,10 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
     features = feature_extractor(waveform, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**features)
+
+    tokenizer.save_pretrained(model_output_dir)
+    feature_extractor.save_pretrained(model_output_dir)
+    model.save_pretrained(model_output_dir)
 
 
 if __name__ == "__main__":

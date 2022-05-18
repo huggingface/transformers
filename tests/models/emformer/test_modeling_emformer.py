@@ -20,6 +20,14 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
+from tests.test_configuration_common import ConfigTester
+from tests.test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from transformers import EmformerConfig, is_torch_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
@@ -31,15 +39,6 @@ from transformers.testing_utils import (
     require_torchaudio,
     slow,
     torch_device,
-)
-
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
 )
 
 

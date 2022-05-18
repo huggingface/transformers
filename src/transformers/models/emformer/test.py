@@ -8,7 +8,6 @@ feature_extractor.save_pretrained("./emformer-base-librispeech")
 
 waveform = torch.load("../../../../../audio/examples/asr/emformer_rnnt/librispeech_waveform_0.pt")
 
-
 config = EmformerConfig()
 model = EmformerModel(config)
 features = feature_extractor(waveform, return_tensors="pt")
