@@ -21,6 +21,7 @@ import os
 import os.path
 import random
 import sys
+import pickle
 import tempfile
 import unittest
 import unittest.mock as mock
@@ -797,6 +798,24 @@ class ModelTesterMixin:
                         torch.allclose(model_output[i], scripted_output[i]),
                         f"scripted {i}th output doesn't match model {i}th output for {model_class}",
                     )
+
+            # Test that the model can be serialized and restored properly
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                with open(pkl_file_name, 'wb') as f:
+                    pickle.dump(traced_model, f)
+                with open(pkl_file_name, 'rb') as f:
+                    loaded = pickle.load(f)
+
+                loaded_output = loaded(**filtered_inputs)
+                loaded_output = flatten_output(loaded_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], loaded_output[i]),
+                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                    )
+
 
     def test_headmasking(self):
         if not self.test_head_masking:

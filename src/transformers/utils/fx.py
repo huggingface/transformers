@@ -430,7 +430,6 @@ class HFProxy(Proxy):
         return HFAttribute(self, k)
 
     def __setitem__(self, indices, values):
-        #return self.tracer.create_proxy("call_method", "__setitem__", (self, indices, values), {})
         return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
@@ -531,7 +530,9 @@ class HFTracer(Tracer):
         self, model: PreTrainedModel, input_name: str, shape: List[int]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
-        model_class = model.__class__
+        # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
+        # from pickle, or from the "__class__" attribute in the general case.
+        model_class = getattr(model, "class_for_deserialization", model.__class__)
         device = model.device
         inputs_dict = {}
 
@@ -873,6 +874,10 @@ def symbolic_trace(
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
+    traced.config = model.config
+    # The model class must be stored as an attribute to allow model deserialization, which uses trace, and thus
+    # _generate_dummy_input, where the model class is needed.
+    traced.class_for_deserialization = model.__class__
     traced.device = model.device
 
     return traced
