@@ -43,6 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
         ("ctrl", "CTRLModel"),
+        ("cvt", "CvtModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
         ("data2vec-text", "Data2VecTextModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
@@ -299,6 +300,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
+        ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("imagegpt", "ImageGPTForImageClassification"),
