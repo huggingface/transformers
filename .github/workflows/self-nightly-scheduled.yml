@@ -20,16 +20,23 @@ env:
 jobs:
   setup:
     name: Setup
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    container:
+      image: huggingface/transformers-pytorch-nightly-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
+      - name: Update clone
+        working-directory: /transformers
+        run: |
+          git fetch && git checkout ${{ github.sha }}
 
       - name: Cleanup
+        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
@@ -37,6 +44,7 @@ jobs:
 
       - id: set-matrix
         name: Identify models to test
+        working-directory: /transformers/tests
         run: |
           echo "::set-output name=matrix::$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')"
 
@@ -45,8 +53,13 @@ jobs:
           nvidia-smi
 
       - name: GPU visibility
+        working-directory: /transformers
         run: |
           utils/print_env_pt.py
+
+      - name: Echo versions
+        working-directory: /transformers
+        run: echo $(python3 -c 'import torch; version = "Pytorch Version:" + " " + torch.__version__; print(version)')
 
   run_tests_single_gpu:
     name: Model tests
@@ -75,10 +88,6 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
-
-      - name: Echo versions
-        working-directory: /transformers
-        run: echo $(python3 -c 'import torch; version = "Pytorch Version:" + " " + torch.__version__; print(version)')
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -124,10 +133,6 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Echo versions
-        working-directory: /transformers
-        run: echo $(python3 -c 'import torch; version = "Pytorch Version:" + " " + torch.__version__; print(version)')
-
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
@@ -167,10 +172,6 @@ jobs:
           rm -rf DeepSpeed
           git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
           DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
-
-      - name: Echo versions
-        working-directory: /transformers
-        run: echo $(python3 -c 'import torch; version = "Pytorch Version:" + " " + torch.__version__; print(version)')
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
