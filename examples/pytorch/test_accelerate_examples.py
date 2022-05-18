@@ -66,13 +66,14 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     @classmethod
     def setUpClass(cls):
         # Write Accelerate config, will pick up on CPU, GPU, and multi-GPU
-        cls.configPath = tempfile.mkdtemp()
-        write_basic_config(save_location=f'{cls.configPath}/default_config.yml')
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.configPath = os.path.join(cls.tmpdir, "default_config.yml")
+        write_basic_config(save_location=cls.configPath)
         cls._launch_args = ["accelerate", "launch", "--config_file", cls.configPath]
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.configPath)
+        shutil.rmtree(cls.tmpdir)
 
     def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
