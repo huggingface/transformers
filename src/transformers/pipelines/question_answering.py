@@ -279,7 +279,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 truncation="only_second" if question_first else "only_first",
                 max_length=max_seq_len,
                 stride=doc_stride,
-                return_tensors="np",
                 return_token_type_ids=True,
                 return_overflowing_tokens=True,
                 return_offsets_mapping=True,
@@ -340,23 +339,17 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
+            model_input_names = self.tokenizer.model_input_names + ["p_mask", "token_type_ids"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
                     if self.framework == "tf":
-                        if isinstance(v, np.ndarray) and v.dtype == object:
-                            tensor = tf.constant(v, dtype=tf.int32)
-                        else:
-                            tensor = tf.constant(v)
+                        tensor = tf.constant(v)
                         if tensor.dtype == tf.int64:
                             tensor = tf.cast(tensor, tf.int32)
                         fw_args[k] = tf.expand_dims(tensor, 0)
                     elif self.framework == "pt":
-                        if isinstance(v, np.ndarray) and v.dtype == object:
-                            tensor = torch.tensor(v.astype(np.int64))
-                        else:
-                            tensor = torch.tensor(v)
+                        tensor = torch.tensor(v)
                         if tensor.dtype == torch.int32:
                             tensor = tensor.long()
                         fw_args[k] = tensor.unsqueeze(0)

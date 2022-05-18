@@ -701,19 +701,7 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
                 if not is_tensor(value):
-                    if as_tensor == np.asarray:
-                        is_value_rectangular = True
-                        for element in value:
-                            if not hasattr(element, "__len__"):
-                                break
-                            elif len(element) != len(value[0]):
-                                is_value_rectangular = False
-                        if is_value_rectangular:
-                            tensor = as_tensor(value)
-                        else:
-                            tensor = as_tensor(value, dtype=object)
-                    else:
-                        tensor = as_tensor(value)
+                    tensor = as_tensor(value)
 
                     # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                     # # at-least2d
