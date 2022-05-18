@@ -29,8 +29,6 @@ from ...modeling_utils import Conv1D, PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
 from .fused_bias_gelu import bias_gelu_impl
-from .mpu_utils import split_tensor_along_last_dim
-from .scaled_softmax import ScaledSoftmax  # to define it locally?
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +43,39 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Utility functions below:
+def ensure_divisibility(numerator, denominator):
+    """Ensure that numerator is divisible by the denominator."""
+    if not(numerator % denominator == 0):
+        raise ValueError("{} is not divisible by {}".format(numerator, denominator))
+
+
+def divide(numerator, denominator):
+    """Ensure that numerator is divisible by the denominator and return
+    the division value."""
+    ensure_divisibility(numerator, denominator)
+    return numerator // denominator
+
+
+def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
+    """Split a tensor along its last dimension.
+    Arguments:
+        tensor: input tensor.
+        num_partitions: number of partitions to split the tensor
+        contiguous_split_chunks: If True, make each chunk contiguous
+                                 in memory.
+    """
+    # Get the size and dimension.
+    last_dim = tensor.dim() - 1
+    last_dim_size = divide(tensor.size()[last_dim], num_partitions)
+    # Split.
+    tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
+    # Note: torch.split does not create contiguous tensors by default.
+    if contiguous_split_chunks:
+        return tuple(chunk.contiguous() for chunk in tensor_list)
+
+    return tensor_list
+
+
 def attention_mask_func(attention_scores, attention_mask, causal_mask):
     if attention_mask.dtype == torch.bool:
         attention_mask_bool = ~attention_mask
@@ -89,6 +120,63 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
     # type: (Tensor, Tensor, Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, False)
 
+class ScaledSoftmax(nn.Module):
+    """
+    fused operation: scaling + mask + softmax
+
+    Arguments:
+        input_in_fp16: flag to indicate if input in fp16 data format.
+        input_in_bf16: flag to indicate if input in bf16 data format.
+        attn_mask_type: attention mask type (pad or causal)
+        scaled_masked_softmax_fusion: flag to indicate user want to use softmax fusion
+        mask_func: mask function to be applied.
+        softmax_in_fp32: if true, softmax in performed at fp32 precision.
+        scale: scaling factor used in input tensor scaling.
+    """
+
+    def __init__(
+        self,
+        input_in_fp16,
+        input_in_bf16,
+        scaled_masked_softmax_fusion,
+        mask_func,
+        softmax_in_fp32,
+        scale,
+        max_positions,
+    ):
+        super().__init__()
+        self.input_in_fp16 = input_in_fp16
+        self.input_in_bf16 = input_in_bf16
+        if self.input_in_fp16 and self.input_in_bf16:
+            raise ValueError("Only one of input_in_fp16 and input_in_bf16 can be True")
+        self.input_in_float16 = self.input_in_fp16 or self.input_in_bf16
+        self.scaled_masked_softmax_fusion = scaled_masked_softmax_fusion
+        self.mask_func = mask_func
+        self.softmax_in_fp32 = softmax_in_fp32
+        self.scale = scale
+
+        self.causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+            1, 1, max_positions, max_positions
+        )
+        if not(self.scale is None or softmax_in_fp32):
+            raise ValueError("softmax should be in fp32 when scaled")
+
+    def forward(self, input, mask):
+        if self.input_in_float16 and self.softmax_in_fp32:
+            input = input.float()
+
+        if self.scale is not None:
+            input = input * self.scale
+        mask_output = self.mask_func(input, mask, self.causal_mask) if mask is not None else input
+        probs = torch.nn.Softmax(dim=-1)(mask_output)
+
+        if self.input_in_float16 and self.softmax_in_fp32:
+            if self.input_in_fp16:
+                probs = probs.half()
+            else:
+                probs = probs.bfloat16()
+
+        return probs
 
 class BloomAttention(nn.Module):
     def __init__(self, config, layer_number=None):
@@ -104,15 +192,8 @@ class BloomAttention(nn.Module):
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         self.masked_softmax_fusion = config.masked_softmax_fusion
 
-        if dtype == torch.float16:
-            self.fp16 = True
-            self.bf16 = False
-        elif dtype == torch.bfloat16:
-            self.fp16 = False
-            self.bf16 = True
-        else:
-            self.fp16 = False
-            self.bf16 = False
+        self.fp16 = dtype == torch.float16
+        self.bf16 = dtype == torch.bfloat16
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -154,15 +235,13 @@ class BloomAttention(nn.Module):
         output_attentions=False,
     ):
         # hidden_states: [sq, b, h]
-        # alibi = alibi.repeat(1, hidden_states.shape[1], 1).to(hidden_states.device)  # repeat with batch size
-        # alibi = alibi.repeat(hidden_states.shape[1], 1, 1).to(hidden_states.device)  # repeat with batch size
         alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)  # repeat with batch size
 
         bias = self.query_key_value.bias if not self.skip_bias_add_qkv else None
 
         output_bias = self.query_key_value.bias if self.skip_bias_add_qkv else None
 
-        mixed_x_layer, _ = F.linear(hidden_states, self.query_key_value.weight, bias), output_bias
+        mixed_x_layer = F.linear(hidden_states, self.query_key_value.weight, bias)
 
         # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
         new_tensor_shape = mixed_x_layer.size()[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -170,11 +249,6 @@ class BloomAttention(nn.Module):
 
         # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
         (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
-        # query_layer, key_layer, value_layer = (
-        #     query_layer.transpose(0, 1),
-        #     key_layer.transpose(0, 1),
-        #     value_layer.transpose(0, 1),
-        # )
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -190,7 +264,6 @@ class BloomAttention(nn.Module):
         # ===================================
 
         # [b, np, sq, sk]
-        # output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
         # [sq, b, np, hn] -> [sq, b * np, hn]
@@ -286,7 +359,6 @@ class BloomAttention(nn.Module):
         outputs = (output, present)
         if output_attentions:
             outputs += (attention_probs,)
-            # outputs += (attention_probs,)
 
         return outputs, output_bias  # a, present, (attentions)
 
@@ -484,17 +556,6 @@ class BloomPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the Bloom Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BloomModel):
             module.gradient_checkpointing = value
@@ -590,7 +651,8 @@ class BloomModel(BloomPreTrainedModel):
 
         self.embed_dim = config.hidden_size
         dtype = getattr(torch, config.dtype)
-        assert dtype in [torch.bfloat16, torch.float32, torch.float, torch.float16]
+        if dtype not in [torch.bfloat16, torch.float32, torch.float, torch.float16]:
+            raise ValueError(f"Unsupported dtype {dtype}")
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=dtype)
