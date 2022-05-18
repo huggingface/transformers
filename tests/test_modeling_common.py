@@ -19,9 +19,9 @@ import inspect
 import json
 import os
 import os.path
+import pickle
 import random
 import sys
-import pickle
 import tempfile
 import unittest
 import unittest.mock as mock
@@ -760,8 +760,8 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
+            except RuntimeError as e:
+                self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
                 flatten = []
@@ -788,8 +788,8 @@ class ModelTesterMixin:
             if self.fx_trace_can_be_torchscripted:
                 try:
                     scripted = torch.jit.script(traced_model)
-                except:
-                    self.fail("Could not TorchScript the traced model")
+                except Exception as e:
+                    self.fail(f"Could not TorchScript the traced model: {e}")
                 scripted_output = scripted(**filtered_inputs)
                 scripted_output = flatten_output(scripted_output)
 
@@ -802,10 +802,13 @@ class ModelTesterMixin:
             # Test that the model can be serialized and restored properly
             with tempfile.TemporaryDirectory() as tmp_dir_name:
                 pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                with open(pkl_file_name, 'wb') as f:
-                    pickle.dump(traced_model, f)
-                with open(pkl_file_name, 'rb') as f:
-                    loaded = pickle.load(f)
+                try:
+                    with open(pkl_file_name, "wb") as f:
+                        pickle.dump(traced_model, f)
+                    with open(pkl_file_name, "rb") as f:
+                        loaded = pickle.load(f)
+                except Exception as e:
+                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
 
                 loaded_output = loaded(**filtered_inputs)
                 loaded_output = flatten_output(loaded_output)
@@ -815,7 +818,6 @@ class ModelTesterMixin:
                         torch.allclose(model_output[i], loaded_output[i]),
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
-
 
     def test_headmasking(self):
         if not self.test_head_masking:
