@@ -236,7 +236,6 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 
 
 @require_flax
-@require_tokenizers
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
     # @slow
     def test_inference_no_head(self):
