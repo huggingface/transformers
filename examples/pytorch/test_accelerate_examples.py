@@ -67,7 +67,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def setUpClass(cls):
         # Write Accelerate config, will pick up on CPU, GPU, and multi-GPU
         cls.configPath = tempfile.mkdtemp()
-        write_basic_config(save_location=cls.configPath)
+        write_basic_config(save_location=f'{cls.configPath}/default_config.yml')
         cls._launch_args = ["accelerate", "launch", "--config_file", cls.configPath]
 
     @classmethod
