@@ -40,6 +40,7 @@ from . import (
     convnext,
     cpm,
     ctrl,
+    cvt,
     data2vec,
     deberta,
     deberta_v2,
