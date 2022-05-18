@@ -18,10 +18,15 @@ import argparse
 import json
 import logging
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
+import subprocesses
 from unittest.mock import patch
 
 import torch
+from accelerate.utils import write_basic_config
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
 from transformers.utils import is_apex_available
@@ -94,10 +99,23 @@ logger.addHandler(stream_handler)
 
 
 class ExamplesTestsNoTrainer(TestCasePlus):
+    @classmethod
+    def setUpClass(cls):
+        # Write Accelerate config, will pick up on CPU, GPU, and multi-GPU
+        cls.configPath = tempfile.mkdtemp()
+        write_basic_config(save_location=cls.configPath)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.configPath)
+
     def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_glue_no_trainer.py
+            accelerate
+            launch
+            --config_file {self.configPath}
+            {self.examples_dir}/text-classification/run_glue_no_trainer.py
             --model_name_or_path distilbert-base-uncased
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
@@ -113,12 +131,11 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
-        with patch.object(sys, "argv", testargs):
-            run_glue_no_trainer.main()
-            result = get_results(tmp_dir)
-            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
-            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "glue_no_trainer")))
+        subprocess.run(testargs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = get_results(tmp_dir)
+        self.assertGreaterEqual(result["eval_accuracy"], 0.75)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "glue_no_trainer")))
 
     def test_run_clm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
