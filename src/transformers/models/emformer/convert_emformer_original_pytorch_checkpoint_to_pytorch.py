@@ -24,7 +24,7 @@ import torchaudio
 from torchaudio.pipelines import EMFORMER_RNNT_BASE_LIBRISPEECH, RNNTBundle
 from torchaudio.prototype.pipelines import EMFORMER_RNNT_BASE_MUSTC, EMFORMER_RNNT_BASE_TEDLIUM3
 
-from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, EmformerTokenizer, logging
+from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, EmformerTokenizer, EmformerProcessor, logging
 
 
 NAME2BUNDLE = {
@@ -63,7 +63,7 @@ def convert_config(bundle: RNNTBundle):
     cfg.time_reduction_stride = decoder.transcriber.time_reduction.stride
 
     cfg.num_attention_heads = transcriber_layer.attention.num_heads
-    cfg.ffn_dim = transcriber_layer.pos_ff[1].out_features
+    cfg.intermediate_size = transcriber_layer.pos_ff[1].out_features
     cfg.num_hidden_layers = len(transcriber.transformer.emformer_layers)
     cfg.segment_length = transcriber.transformer.segment_length * cfg.time_reduction_stride
     cfg.hidden_dropout = transcriber_layer.dropout.p
@@ -81,6 +81,8 @@ def convert_config(bundle: RNNTBundle):
     cfg.lstm_dropout = predictor.dropout.p
 
     cfg.joiner_activation = act2name(decoder.joiner.activation)
+
+    cfg.blank_token_id = bundle._blank
 
     return cfg
 
@@ -152,16 +154,21 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
     config = convert_config(bundle)
     tokenizer = convert_tokenizer(bundle)
     feature_extractor = convert_feature_extractor(bundle)
+    processor = EmformerProcessor(feature_extractor, tokenizer)
     model = convert_weights(bundle, config)
     model.eval()
 
+    # TODO: ad-hoc integration testing, remove this before merging!
     waveform = torch.load("/home/anton/repos/audio/examples/asr/emformer_rnnt/librispeech_waveform_0.pt")
-    features = feature_extractor(waveform, return_tensors="pt")
+    features = processor(waveform, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**features)
+    token_ids = torch.stack(outputs.logits, dim=-2).squeeze(0).argmax(-1)
+    print(processor.decode(token_ids))
 
     tokenizer.save_pretrained(model_output_dir)
     feature_extractor.save_pretrained(model_output_dir)
+    processor.save_pretrained(model_output_dir)
     model.save_pretrained(model_output_dir)
 
 

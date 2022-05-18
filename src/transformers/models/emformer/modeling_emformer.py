@@ -1097,7 +1097,7 @@ class EmformerModel(EmformerPreTrainedModel):
         self.encoder = Emformer(
             input_dim=transformer_input_dim,
             num_heads=config.num_attention_heads,
-            ffn_dim=config.transformer_ffn_dim,
+            ffn_dim=config.intermediate_size,
             num_layers=config.num_hidden_layers,
             segment_length=config.segment_length // config.time_reduction_stride,
             dropout=config.hidden_dropout,
@@ -1149,12 +1149,6 @@ class EmformerModel(EmformerPreTrainedModel):
         hidden_states, reduced_lengths = self.time_reduction(hidden_states, lengths)
         print("time_reduction_out", hidden_states.sum(), hidden_states.shape)
         print("time_reduction_lengths", reduced_lengths)
-
-        if attention_mask is not None:
-            # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                hidden_states.shape[1], attention_mask, add_adapter=False
-            )
 
         hidden_states, lengths = self.encoder(hidden_states, reduced_lengths)
 
@@ -1399,7 +1393,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
         self.predictor = RNNTPredictor(config)
         self.joiner = RNNTJoiner(config)
 
-        self.blank_token = 4096
+        self.blank_token_id = config.blank_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1454,7 +1448,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
         device = encoder_out[0].device
 
         rnn_lengths = torch.tensor([1], device=self.device)
-        token = self.blank_token
+        token = self.blank_token_id
         predictor_out, _, predictor_state = self.predictor(
             torch.tensor([[token]], device=self.device), rnn_lengths, None
         )
@@ -1466,7 +1460,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
                 encoder_out[0][:, time_step : time_step + 1], predictor_out, device
             )
             token = next_token_probs.argmax(-1)
-            if token != self.blank_token:
+            if token != self.blank_token_id:
                 # if the joiner outputs a real token, then record it and move to the next RNN state
                 logits.append(next_token_probs)
                 predictor_out, _, predictor_state = self.predictor(
