@@ -46,6 +46,7 @@ from . import (
     decision_transformer,
     deit,
     detr,
+    conditional_detr,
     dialogpt,
     distilbert,
     dit,
