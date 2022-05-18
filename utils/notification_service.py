@@ -745,7 +745,7 @@ if __name__ == "__main__":
         assert ci_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
 
-        # Retrieve the PR title and author login to complete the report 
+        # Retrieve the PR title and author login to complete the report
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
         ci_details = requests.get(ci_detail_url).json()
