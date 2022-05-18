@@ -288,8 +288,10 @@ def main():
         "--data_file",
         type=str,
         default=None,
-        help="A jbl file containing tokenized data which can be split as objective dataset, "
-        "train_dataset and test_dataset.",
+        help=(
+            "A jbl file containing tokenized data which can be split as objective dataset, "
+            "train_dataset and test_dataset."
+        ),
     )
 
     parser.add_argument(
@@ -319,8 +321,10 @@ def main():
         "--context_len",
         default=32,
         type=int,
-        help="The maximum total input sequence length after tokenization. Sequences longer "
-        "than this will be truncated, sequences shorter will be padded.",
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        ),
     )
 
     parser.add_argument(
@@ -350,8 +354,10 @@ def main():
         "--eval_interval",
         default=10,
         type=int,
-        help="decay the selectivity of our secondary learner filter from"
-        "1 standard deviation above average to 1 below average after 10 batches",
+        help=(
+            "decay the selectivity of our secondary learner filter from"
+            "1 standard deviation above average to 1 below average after 10 batches"
+        ),
     )
 
     parser.add_argument(
@@ -372,8 +378,10 @@ def main():
         "--threshold",
         default=1.0,
         type=float,
-        help="The threshold value used by secondary learner to filter the train_data and allow only"
-        " informative data as input to the model",
+        help=(
+            "The threshold value used by secondary learner to filter the train_data and allow only"
+            " informative data as input to the model"
+        ),
     )
 
     parser.add_argument("--finetuned_model_name", default="gpt2_finetuned.pt", type=str, help="finetuned_model_name")
