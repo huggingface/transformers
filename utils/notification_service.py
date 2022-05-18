@@ -773,5 +773,7 @@ if __name__ == "__main__":
 
     message = Message(title, ci_title, model_results, additional_results)
 
-    message.post()
-    message.post_reply()
+    # send report only if there is any failure
+    if message.n_failures:
+        message.post()
+        message.post_reply()
