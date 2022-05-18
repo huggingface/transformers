@@ -739,18 +739,35 @@ if __name__ == "__main__":
     title = f"🤗 Results of the {ci_event} tests."
     # Add PR title with a link for push CI
     ci_title = os.environ.get("CI_TITLE")
-    commit_url = os.environ.get("CI_COMMIT_URL")
+    ci_url = os.environ.get("CI_COMMIT_URL")
+
+    commit_number = ci_url.split("/")[-1]
+    ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
+    ci_details = requests.get(ci_detail_url).json()
+    ci_author = ci_details["author"]["login"]
+
     if ci_title is not None:
-        assert commit_url is not None
+        assert ci_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
 
+        merged_by = None
         # Find the PR number (if any) and change the url to the actual PR page.
         numbers = pr_number_re.findall(ci_title)
         if len(numbers) > 0:
             pr_number = numbers[0]
-            commit_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
+            ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
+            ci_details = requests.get(ci_detail_url).json()
 
-        ci_title = f"<{commit_url}|{ci_title}>"
+            ci_author = ci_details["user"]["login"]
+            ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
+
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+        else:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+
     else:
         ci_title = ""
 
