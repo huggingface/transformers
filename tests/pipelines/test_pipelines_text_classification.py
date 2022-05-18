@@ -105,7 +105,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         # This might be used a text pair, but tokenizer + pipe interaction
         # makes it hard to understand that it's not using the pair properly
         # https://github.com/huggingface/transformers/issues/17305
-        # We disabled this usage instead since the output is bogus anyway.
+        # We disabled this usage instead as it was outputting wrong outputs.
         invalid_input = [["HuggingFace is in ", "Paris is in France"]]
         with self.assertRaises(ValueError):
             text_classifier(invalid_input)
