@@ -665,7 +665,7 @@ def main():
                         decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
                         decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
                     else:
-                        samples_seen += decoded_labels.shape[0]
+                        samples_seen += len(decoded_labels)
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
         eval_metric = metric.compute()

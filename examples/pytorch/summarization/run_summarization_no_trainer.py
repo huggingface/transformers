@@ -310,7 +310,9 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
+    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     if args.source_prefix is None and args.model_name_or_path in [
         "t5-small",
         "t5-base",
@@ -322,9 +324,6 @@ def main():
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
-    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
