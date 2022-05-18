@@ -430,7 +430,8 @@ class HFProxy(Proxy):
         return HFAttribute(self, k)
 
     def __setitem__(self, indices, values):
-        return self.tracer.create_proxy("call_method", "__setitem__", (self, indices, values), {})
+        #return self.tracer.create_proxy("call_method", "__setitem__", (self, indices, values), {})
+        return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
         # To handle cases such as :

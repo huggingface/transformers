@@ -133,6 +133,7 @@ class ModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     fx_compatible = False
+    fx_trace_can_be_torchscripted = True
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -781,6 +782,21 @@ class ModelTesterMixin:
                     torch.allclose(model_output[i], traced_output[i]),
                     f"traced {i}th output doesn't match model {i}th output for {model_class}",
                 )
+
+            # Test that the model can be TorchScripted
+            if self.fx_trace_can_be_torchscripted:
+                try:
+                    scripted = torch.jit.script(traced_model)
+                except:
+                    self.fail("Could not TorchScript the traced model")
+                scripted_output = scripted(**filtered_inputs)
+                scripted_output = flatten_output(scripted_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], scripted_output[i]),
+                        f"scripted {i}th output doesn't match model {i}th output for {model_class}",
+                    )
 
     def test_headmasking(self):
         if not self.test_head_masking:
