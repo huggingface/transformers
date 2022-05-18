@@ -27,6 +27,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
@@ -73,7 +74,7 @@ from .utils.versions import require_version_core
 
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, init_empty_weights, infer_auto_device_map
+    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import set_module_tensor_to_device
 
 logger = logging.get_logger(__name__)
@@ -520,7 +521,63 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
-def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix, expected_keys, device_map=None, offload_folder=None, dtype=None):
+# Utils function temporarily put here. They will go in Accelerate.
+def offload_weight(weight, weight_name, offload_folder, index=None):
+    array = weight.numpy()
+    tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
+    if index is not None:
+        index[weight_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
+    file_array[:] = array[:]
+    file_array.flush()
+    return index
+
+
+def save_offload_index(index, offload_folder):
+    if index is None or len(index) == 0:
+        # Nothing to save
+        return
+
+    offload_index_file = os.path.join(offload_folder, "index.json")
+    if os.path.isfile(offload_index_file):
+        with open(offload_index_file, "r", encoding="utf-8") as f:
+            current_index = json.load(f)
+    else:
+        current_index = {}
+    current_index.update(index)
+
+    with open(offload_index_file, "w", encoding="utf-8") as f:
+        json.dump(current_index, f, indent=2)
+
+
+def load_offloaded_weights(model, index, offload_folder):
+    if index is None or len(index) == 0:
+        # Nothing to do
+        return
+
+    for param_name, metadata in index.items():
+        tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
+        shape = tuple(metadata["shape"])
+        weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
+        set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
+
+
+# End of utils that will go in Accelerate
+
+
+def _load_state_dict_into_meta_model(
+    model,
+    state_dict,
+    loaded_state_dict_keys,  # left for now but could be removed, see below
+    start_prefix,
+    expected_keys,
+    device_map=None,
+    offload_folder=None,
+    offload_index=None,
+    state_dict_folder=None,
+    state_dict_index=None,
+    dtype=None,
+):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
     params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
@@ -541,18 +598,19 @@ def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, 
     error_msgs = []
 
     for param_name, param in state_dict.items():
+        # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
             continue
 
         if param_name.startswith(start_prefix):
-            param_name = param_name[len(start_prefix):]
+            param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
         if dtype is not None:
             param = param.to(dtype)
+
         if device_map is None:
             param_device = "cpu"
-
         else:
             while len(module_name) > 0 and module_name not in device_map:
                 module_name = ".".join(module_name.split(".")[:-1])
@@ -560,9 +618,14 @@ def _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, 
                 # TODO: group all errors and raise at the end.
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
-        set_module_tensor_to_device(model, param_name, param_device, value=param)
 
-    return error_msgs
+        set_module_tensor_to_device(model, param_name, param_device, value=param)
+        if param_device == "disk":
+            offload_index = offload_weight(param, param_name, offload_folder, offload_index)
+        elif param_device == "cpu" and state_dict_index is not None:
+            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+
+    return error_msgs, offload_index, state_dict_index
 
 
 class ModuleUtilsMixin:
@@ -1679,12 +1742,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
+            > Parameters for big model inference
+
             low_cpu_mem_usage(`bool`, *optional*):
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 This is an experimental feature and a subject to change at any moment.
             torch_dtype (`str` or `torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
                 will be automatically derived from the model's weights.
+            device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
+                A map that specifies where each submodule should go. It doesn't need to be refined to each
+                parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
+                same device.
+
+                To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
+            offload_folder (`str` or `os.PathLike`, *optional*):
+                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
+            offload_state_dict (`bool`, *optional*, defaults to `False`):
+                If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU
+                RAM if the weight of the CPU state dict + the biggest shard does not fit.
+
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -2269,6 +2346,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             error_msgs = []
             mismatched_keys = []
+            offload_index = {} if device_map is not None and "disk" in device_map.values() else None
+            if offload_state_dict:
+                state_dict_folder = tempfile.mkdtemp()
+                state_dict_index = {}
+            else:
+                state_dict_folder = None
+                state_dict_index = None
+
             for shard_file in resolved_archive_file:
                 state_dict = load_state_dict(shard_file)
 
@@ -2284,15 +2369,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
                 if low_cpu_mem_usage:
-                    error_msgs += _load_state_dict_into_meta_model(
-                        model_to_load, state_dict, loaded_keys, start_prefix, expected_keys, device_map=device_map, offload_folder=offload_folder, dtype=dtype
+                    new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                        model_to_load,
+                        state_dict,
+                        loaded_keys,
+                        start_prefix,
+                        expected_keys,
+                        device_map=device_map,
+                        offload_folder=offload_folder,
+                        offload_index=offload_index,
+                        state_dict_folder=state_dict_folder,
+                        state_dict_index=state_dict_index,
+                        dtype=dtype,
                     )
+                    error_msgs += new_error_msgs
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
                 # force memory release
                 del state_dict
                 gc.collect()
+
+            save_offload_index(offload_index, offload_folder)
+
+            if offload_state_dict:
+                # Load back temporarily offloaded state dict
+                load_offloaded_weights(model, state_dict_index, state_dict_folder)
+                shutil.rmtree(state_dict_folder)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
