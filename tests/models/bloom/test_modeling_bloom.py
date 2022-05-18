@@ -329,70 +329,24 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
     @slow
-    def test_batch_generation(self):
-        model = BloomForCausalLM.from_pretrained("bloom")
-        model.to(torch_device)
-        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-
-        tokenizer.padding_side = "left"
-
-        # Define PAD Token = EOS Token = 50256
-        tokenizer.pad_token = tokenizer.eos_token
-        model.config.pad_token_id = model.config.eos_token_id
-
-        # use different length sentences to test batching
-        sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
-        ]
-
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
-            ],
-            dim=-1,
-        )
-
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-            token_type_ids=token_type_ids,
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-        expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
     def test_model_from_pretrained(self):
         for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BloomModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_simple_generation(self):
+        path_350m = "ybelkada/bigscience-11e-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m)
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+        EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good listener, and I am a very good listener. I am a"
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors='pt')
+        greedy_output = model.generate(input_ids, max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 @require_torch
 class BloomModelLanguageGenerationTest(unittest.TestCase):
@@ -423,82 +377,82 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
-    @slow
-    def test_lm_generate_bloom(self):
-        self._test_lm_generate_bloom_helper()
+    # @slow
+    # def test_lm_generate_bloom(self):
+    #     self._test_lm_generate_bloom_helper()
 
-    @slow
-    def test_lm_generate_bloom_with_gradient_checkpointing(self):
-        self._test_lm_generate_bloom_helper(gradient_checkpointing=True)
+    # @slow
+    # def test_lm_generate_bloom_with_gradient_checkpointing(self):
+    #     self._test_lm_generate_bloom_helper(gradient_checkpointing=True)
 
-    @slow
-    def test_bloom_sample(self):
-        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-        model = BloomForCausalLM.from_pretrained("bloom")
-        model.to(torch_device)
+    # @slow
+    # def test_bloom_sample(self):
+    #     tokenizer = BloomTokenizerFast.from_pretrained("bloom")
+    #     model = BloomForCausalLM.from_pretrained("bloom")
+    #     model.to(torch_device)
 
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
-        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    #     torch.manual_seed(0)
+    #     tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+    #     input_ids = tokenized.input_ids.to(torch_device)
+    #     output_ids = model.generate(input_ids, do_sample=True)
+    #     output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        token_type_ids = tokenized.token_type_ids.to(torch_device)
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-        )
-        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
+    #     token_type_ids = tokenized.token_type_ids.to(torch_device)
+    #     output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
+    #     output_seq_tt = model.generate(
+    #         input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
+    #     )
+    #     output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
+    #     output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-        self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-        )  # token_type_ids should change output
+    #     EXPECTED_OUTPUT_STR = (
+    #         "Today is a nice day and if you don't know anything about the state of play during your holiday"
+    #     )
+    #     self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+    #     self.assertTrue(
+    #         all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+    #     )  # token_type_ids should change output
 
-    @slow
-    def test_bloom_sample_max_time(self):
-        tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-        model = BloomForCausalLM.from_pretrained("bloom")
-        model.to(torch_device)
+    # @slow
+    # def test_bloom_sample_max_time(self):
+    #     tokenizer = BloomTokenizerFast.from_pretrained("bloom")
+    #     model = BloomForCausalLM.from_pretrained("bloom")
+    #     model.to(torch_device)
 
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
+    #     torch.manual_seed(0)
+    #     tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+    #     input_ids = tokenized.input_ids.to(torch_device)
 
-        MAX_TIME = 0.5
+    #     MAX_TIME = 0.5
 
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+    #     start = datetime.datetime.now()
+    #     model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
+    #     duration = datetime.datetime.now() - start
+    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+    #     start = datetime.datetime.now()
+    #     model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
+    #     duration = datetime.datetime.now() - start
+    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+    #     start = datetime.datetime.now()
+    #     model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
+    #     duration = datetime.datetime.now() - start
+    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+    #     start = datetime.datetime.now()
+    #     model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
+    #     duration = datetime.datetime.now() - start
+    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+    #     start = datetime.datetime.now()
+    #     model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
+    #     duration = datetime.datetime.now() - start
+    #     self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
 
 @require_torch
