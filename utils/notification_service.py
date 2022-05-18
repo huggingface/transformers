@@ -400,11 +400,13 @@ class Message:
 
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
-        self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            blocks=self.payload,
-            text=text,
-        )
+        # send report only if there is any failure
+        if self.n_failures:
+            self.thread_ts = client.chat_postMessage(
+                channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                blocks=self.payload,
+                text=text,
+            )
 
     def get_reply_blocks(self, job_name, job_result, failures, device, text):
         if len(failures) > 2500:
