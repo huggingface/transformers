@@ -810,32 +810,33 @@ class GenerationMixin:
         """compute the transition probabilities of sequences given generation
         scores and beam indices"""
 
-        # reshape scores as [vocab_size * batch_size, # generation steps]
+        # 1. reshape scores as [vocab_size * batch_size, # generation steps]
         # with batch_size being 2 * vocab_size and # generation steps being
         # seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
-        # start of generated tokens
-        cut_idx = sequences.shape[-1] - scores.shape[-1]
-        # adjust for beam indices
-        beam_sequence_indices = torch.tensor(beam_indices, device=sequences.device) * self.config.vocab_size
-        # compute real indices
-        indices = sequences[:, cut_idx:] + beam_sequence_indices
-        # gather scores and run
-        transition_scores = scores.gather(0, indices)
-        # make sure that if EOS token was used before length of sequence `sequence.shape[-1]`
-        # get first occurence of EOS token
-        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        # 2. cut beam_indices to longest beam length
+        beam_indices_mask = beam_indices < 0
+        max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
+        beam_indices = beam_indices[:, :max_beam_length]
+        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        if eos_token_id is not None:
-            is_eos_token_id = sequences[:, cut_idx:] == eos_token_id
-            # make sure first eos token still contributes to transition probs
-            is_eos_token_id[:, -1] = False
-            is_eos_token_id = is_eos_token_id.roll(1, -1)
-            # all indices after eos shoud be masked
-            zero_transition_prob_mask = is_eos_token_id.cumsum(-1).bool()
-            # zero out padded probs
-            transition_scores.masked_fill_(zero_transition_prob_mask, 0.0)
+        # 3. Set indices of beams that finished early to 0
+        # such indices will be masked correctly afterwards
+        beam_indices[beam_indices_mask] = 0
+
+        # 4. multiply beam_indices with vocab size to gather correctly from scores
+        beam_sequence_indices = beam_indices * self.config.vocab_size
+
+        # 5. Define which indices contributed to scores
+        cut_idx = sequences.shape[-1] - max_beam_length
+        indices = sequences[:, cut_idx:] + beam_sequence_indices
+
+        # 6. Compute scores
+        transition_scores = scores.gather(0, indices)
+
+        # 7. Mask out transition_scores of beams that stopped early
+        transition_scores[beam_indices_mask] = 0
 
         return transition_scores
 
@@ -2288,24 +2289,13 @@ class GenerationMixin:
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
-            else:
-                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
-                # return only as many indices as sequences
-                beam_indices = tuple(
-                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                )
-                beam_indices_2 = sum(beam_indices, ())
-                beam_indices = tuple(tuple(s) for s in sequence_outputs["beam_indices"].cpu().tolist())
-                import ipdb
-
-                ipdb.set_trace()
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,

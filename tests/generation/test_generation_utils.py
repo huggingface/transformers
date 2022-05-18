@@ -2320,8 +2320,11 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_transition_scores_early_stopping(self):
-        # input_ids for "question: How are you? \n context: I had a long day, "
-        input_ids = torch.tensor([[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]]).to(
+        # This is an aggressive test that makes sure that `beam_search's`
+        # transition scores are computed correctly for varying `num_return_sequences`,
+        # `num_beams` and `batch_size > 1`
+        # 2 x input_ids for "question: How are you? \n context: I had a long day, "
+        input_ids = torch.tensor(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]]).to(
             torch_device
         )
 
@@ -2335,7 +2338,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             forced_eos_token_id=model.config.eos_token_id,
             num_beams=4,
             do_sample=False,
-            num_return_sequences=4,
+            num_return_sequences=3,
             length_penalty=0.0,
         )
 
