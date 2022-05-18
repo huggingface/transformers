@@ -45,7 +45,7 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Utility functions below:
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
-    if not(numerator % denominator == 0):
+    if not (numerator % denominator == 0):
         raise ValueError("{} is not divisible by {}".format(numerator, denominator))
 
 
@@ -120,6 +120,7 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
     # type: (Tensor, Tensor, Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, False)
 
+
 class ScaledSoftmax(nn.Module):
     """
     fused operation: scaling + mask + softmax
@@ -158,7 +159,7 @@ class ScaledSoftmax(nn.Module):
         self.causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
             1, 1, max_positions, max_positions
         )
-        if not(self.scale is None or softmax_in_fp32):
+        if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask):
@@ -177,6 +178,7 @@ class ScaledSoftmax(nn.Module):
                 probs = probs.bfloat16()
 
         return probs
+
 
 class BloomAttention(nn.Module):
     def __init__(self, config, layer_number=None):
