@@ -135,7 +135,7 @@ class TextClassificationPipeline(Pipeline):
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
         elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
-            # Manual BC use case where passing list of list of list is understood a proper text pair.
+            # It used to be valid to use a list of list of list for text pairs, keeping this path for BC
             return self.tokenizer(
                 text=inputs[0][0], text_pair=inputs[0][1], return_tensors=return_tensors, **tokenizer_kwargs
             )
