@@ -890,7 +890,7 @@ jobs:
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
 
-    run_tests_layoutlmv2_and_3:
+    run_tests_layoutlmv2_and_v3:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.7
@@ -982,7 +982,7 @@ workflows:
             - run_tests_pipelines_tf
             - run_tests_onnxruntime
             - run_tests_hub
-            - run_tests_layoutlmv2
+            - run_tests_layoutlmv2_and_v3
     nightly:
         triggers:
             - schedule:
