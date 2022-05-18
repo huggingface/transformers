@@ -151,22 +151,15 @@ def get_grouping_from_attentions(attentions, hw_shape, rescale=False, align_corn
     attn_maps = []
     with torch.no_grad():
         prev_attn_masks = None
-        for idx, attn_masks in enumerate(attentions):
-            # attn_mask of shape [B, G, HxW]
-            # B: batch size (1), nH: number of heads, G: number of group token
-            if attn_masks is None:
-                assert idx == len(attentions) - 1, "only last layer can be None"
-                continue
-            # [B, G, HxW] -> [B, HxW, G]
+        for attn_masks in attentions:
+            # [batch_size, num_groups, height x width] -> [batch_size, height x width, num_groups]
             attn_masks = attn_masks.permute(0, 2, 1).contiguous()
             if prev_attn_masks is None:
                 prev_attn_masks = attn_masks
             else:
                 prev_attn_masks = prev_attn_masks @ attn_masks
-            # [B, HxW, G] -> [B, G, HxW]
-            attn_masks = attn_masks.permute(0, 2, 1).contiguous()
-            # [B, G, HxW, G] -> [B, G, H, W]
-            cur_attn_map = resize_attn_map(prev_attn_masks, *hw_shape)
+            # [B, HxW, G] -> [B, G, HxW] -> [B, G, H, W]
+            cur_attn_map = resize_attn_map(prev_attn_masks.permute(0, 2, 1).contiguous(), *hw_shape)
             attn_maps.append(cur_attn_map)
 
     # [B, G, H, W]
@@ -1798,23 +1791,27 @@ class GroupViTModel(GroupViTPreTrainedModel):
         seg_logits = None
         if output_segmentation:
             # grouped features
-            # [batch_size, group_num, hidden_size]
+            # [batch_size_image, num_group, hidden_size]
             image_group_embeds = vision_outputs[0]
+            # [batch_size_image*num_group, hidden_size]
             image_group_embeds = self.visual_projection(image_group_embeds.reshape(-1, image_group_embeds.shape[-1]))
-            attentions = vision_outputs[3]
-            # [batch_size, group_num, height, width]
+            if output_hidden_states:
+                attentions = vision_outputs[3]
+            else:
+                attentions = vision_outputs[2]
+            # [batch_size_image, num_group, height, width]
             grouping = get_grouping_from_attentions(attentions, pixel_values.shape[2:], rescale=True)
 
             # normalized features
             image_group_embeds = image_group_embeds / image_group_embeds.norm(dim=-1, keepdim=True)
-            logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-            # [batch_size_image*group_num, batch_size_text]
-            logits_per_image_group = torch.matmul(image_group_embeds, logits_per_text.t()) * logit_scale
-            # [batch_size_image, batch_size_text, group_num]
+            # [batch_size_image x num_group, batch_size_text]
+            logits_per_image_group = torch.matmul(image_group_embeds, text_embeds.t()) * logit_scale
+            # [batch_size_image, batch_size_text, num_group]
             logits_per_image_group = logits_per_image_group.reshape(
                 image_embeds.shape[0], -1, text_embeds.shape[0]
             ).permute(0, 2, 1)
 
+            # [batch_size_image, batch_size_text, height x width]
             flatten_grouping = grouping.reshape(grouping.shape[0], grouping.shape[1], -1)
 
             # [batch_size_image, batch_size_text, height, width]
