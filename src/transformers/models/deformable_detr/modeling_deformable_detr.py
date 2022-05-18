@@ -26,7 +26,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torch.nn.init import constant_, normal_, xavier_uniform_
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -50,29 +49,41 @@ from .load_custom import load_cuda_kernels
 MSDA = load_cuda_kernels()
 
 
-class MSDeformAttnFunction(Function):
+class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
-        ctx, value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights, im2col_step
+        context,
+        value,
+        value_spatial_shapes,
+        value_level_start_index,
+        sampling_locations,
+        attention_weights,
+        im2col_step,
     ):
-        ctx.im2col_step = im2col_step
+        context.im2col_step = im2col_step
         output = MSDA.ms_deform_attn_forward(
             value,
             value_spatial_shapes,
             value_level_start_index,
             sampling_locations,
             attention_weights,
-            ctx.im2col_step,
+            context.im2col_step,
         )
-        ctx.save_for_backward(
+        context.save_for_backward(
             value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
         )
         return output
 
     @staticmethod
     @once_differentiable
-    def backward(ctx, grad_output):
-        value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights = ctx.saved_tensors
+    def backward(context, grad_output):
+        (
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+        ) = context.saved_tensors
         grad_value, grad_sampling_loc, grad_attn_weight = MSDA.ms_deform_attn_backward(
             value,
             value_spatial_shapes,
@@ -80,7 +91,7 @@ class MSDeformAttnFunction(Function):
             sampling_locations,
             attention_weights,
             grad_output,
-            ctx.im2col_step,
+            context.im2col_step,
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
@@ -146,13 +157,10 @@ class DeformableDetrDecoderOutput(ModelOutput):
 @dataclass
 class DeformableDetrModelOutput(ModelOutput):
     """
-    Base class for outputs of the Deformable DETR encoder-decoder model. This class adds one attribute to
-    Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
-    layer, each of them gone through a layernorm. This is useful when training the model with auxiliary decoding
-    losses.
+    Base class for outputs of the Deformable DETR encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape ...):
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 2)`):
             Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
@@ -182,9 +190,9 @@ class DeformableDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        enc_outputs_class
+        enc_outputs_class (`torch.FloatTensor`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             ...
-        enc_outputs_coord_unact
+        enc_outputs_coord_unact (`torch.FloatTensor`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             ...
     """
 
@@ -301,7 +309,7 @@ class DeformableDetrFrozenBatchNorm2d(nn.Module):
     """
 
     def __init__(self, n):
-        super(DeformableDetrFrozenBatchNorm2d, self).__init__()
+        super().__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
@@ -314,7 +322,7 @@ class DeformableDetrFrozenBatchNorm2d(nn.Module):
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
-        super(DeformableDetrFrozenBatchNorm2d, self)._load_from_state_dict(
+        super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
@@ -447,7 +455,8 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
         self.scale = scale
 
     def forward(self, pixel_values, pixel_mask):
-        assert pixel_mask is not None, "No pixel mask provided"
+        if pixel_mask is None:
+            raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
@@ -543,7 +552,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        constant_(self.sampling_offsets.weight.data, 0.0)
+        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
         thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
@@ -555,12 +564,12 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             grid_init[:, :, i, :] *= i + 1
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        constant_(self.attention_weights.weight.data, 0.0)
-        constant_(self.attention_weights.bias.data, 0.0)
-        xavier_uniform_(self.value_proj.weight.data)
-        constant_(self.value_proj.bias.data, 0.0)
-        xavier_uniform_(self.output_proj.weight.data)
-        constant_(self.output_proj.bias.data, 0.0)
+        nn.init.constant_(self.attention_weights.weight.data, 0.0)
+        nn.init.constant_(self.attention_weights.bias.data, 0.0)
+        nn.init.xavier_uniform_(self.value_proj.weight.data)
+        nn.init.constant_(self.value_proj.bias.data, 0.0)
+        nn.init.xavier_uniform_(self.output_proj.weight.data)
+        nn.init.constant_(self.output_proj.bias.data, 0.0)
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -613,7 +622,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             raise ValueError(
                 "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
             )
-        output = MSDeformAttnFunction.apply(
+        output = MultiScaleDeformableAttentionFunction.apply(
             value,
             spatial_shapes,
             level_start_index,
@@ -1414,9 +1423,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
         # Initialize weights and apply final processing
         if not config.two_stage:
-            xavier_uniform_(self.reference_points.weight.data, gain=1.0)
-            constant_(self.reference_points.bias.data, 0.0)
-        normal_(self.level_embed)
+            nn.init.xavier_uniform_(self.reference_points.weight.data, gain=1.0)
+            nn.init.constant_(self.reference_points.bias.data, 0.0)
+        nn.init.normal_(self.level_embed)
 
         self.post_init()
 

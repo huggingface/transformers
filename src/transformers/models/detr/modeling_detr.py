@@ -273,7 +273,7 @@ class DetrFrozenBatchNorm2d(nn.Module):
     """
 
     def __init__(self, n):
-        super(DetrFrozenBatchNorm2d, self).__init__()
+        super().__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
@@ -286,7 +286,7 @@ class DetrFrozenBatchNorm2d(nn.Module):
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
-        super(DetrFrozenBatchNorm2d, self)._load_from_state_dict(
+        super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
