@@ -73,7 +73,6 @@ class RobertaEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -1167,7 +1166,11 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
+        self.roberta = 
+        
+        
+        
+        (config, add_pooling_layer=False)
         self.classifier = RobertaClassificationHead(config)
 
         # Initialize weights and apply final processing
