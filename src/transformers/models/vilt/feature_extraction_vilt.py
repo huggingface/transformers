@@ -29,17 +29,11 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torch_available, logging
 
-
-logger = logging.get_logger(__name__)
-
 if is_torch_available():
     import torch
 
-    if torch.__version__ < (1, 10, 0):
-        logger.warning(
-            f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-            "ViltFeatureExtractor. Please upgrade torch."
-        )
+
+logger = logging.get_logger(__name__)
 
 
 class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
