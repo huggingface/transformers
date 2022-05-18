@@ -77,7 +77,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            {self.examples_dir}/text-classification/run_glue_no_trainer.py
+            {self.examples_dir}/pytorch/text-classification/run_glue_no_trainer.py
             --model_name_or_path distilbert-base-uncased
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
@@ -102,7 +102,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_clm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_clm_no_trainer.py
+            {self.examples_dir}/pytorch/language-modeling/run_clm_no_trainer.py
             --model_name_or_path distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
@@ -128,7 +128,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_mlm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_mlm_no_trainer.py
+            {self.examples_dir}/pytorch/language-modeling/run_mlm_no_trainer.py
             --model_name_or_path distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
@@ -150,7 +150,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_ner_no_trainer.py
+            {self.examples_dir}/pytorch/token-classification/run_ner_no_trainer.py
             --model_name_or_path bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
@@ -174,7 +174,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_qa_no_trainer.py
+            {self.examples_dir}/pytorch/question-answering/run_qa_no_trainer.py
             --model_name_or_path bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -200,7 +200,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_swag_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_swag_no_trainer.py
+            {self.examples_dir}/pytorch/multiple-choice/run_swag_no_trainer.py
             --model_name_or_path bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
@@ -222,7 +222,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_summarization_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_summarization_no_trainer.py
+            {self.examples_dir}/pytorch/summarization/run_summarization_no_trainer.py
             --model_name_or_path t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
@@ -249,7 +249,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_translation_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_translation_no_trainer.py
+            {self.examples_dir}/pytorch/translation/run_translation_no_trainer.py
             --model_name_or_path sshleifer/student_marian_en_ro_6_1
             --source_lang en
             --target_lang ro
@@ -280,7 +280,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_semantic_segmentation_no_trainer.py
+            {self.examples_dir}/pytorch/semantic-segmentation/run_semantic_segmentation_no_trainer.py
             --dataset_name huggingface/semantic-segmentation-test-sample
             --output_dir {tmp_dir}
             --max_train_steps=10
@@ -298,7 +298,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def test_run_image_classification_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_image_classification_no_trainer.py
+            {self.examples_dir}/pytorch/image-classification/run_image_classification_no_trainer.py
             --dataset_name huggingface/image-classification-test-sample
             --output_dir {tmp_dir}
             --num_warmup_steps=8
