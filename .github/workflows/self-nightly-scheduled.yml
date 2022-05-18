@@ -162,11 +162,10 @@ jobs:
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
-        working-directory: /workspace/transformers
+        working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Re-compile DeepSpeed
-        working-directory: /workspace
         run: |
           pip install deepspeed # installs the deps correctly
           rm -rf DeepSpeed
@@ -174,21 +173,21 @@ jobs:
           DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: Run all tests on GPU
-        working-directory: /workspace/transformers
+        working-directory: /transformers
         run: |
           python -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   send_results:
     name: Send results to webhook
