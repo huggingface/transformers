@@ -226,7 +226,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
-    # @slow
+    @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("facebook/opt-125m")
@@ -237,7 +237,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
 
 @require_flax
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_no_head(self):
         model = FlaxOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -352,7 +352,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
-    # FIXME failing test
     @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-125m"
