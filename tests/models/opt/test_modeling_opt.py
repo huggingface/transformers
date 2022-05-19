@@ -272,16 +272,18 @@ class OPTModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+
         with torch.no_grad():
             output = model(input_ids=input_ids).last_hidden_state
+
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.2878, -1.9219, -0.3018], [-1.2588, -0.1310, -0.1711], [0.4131, 0.1089, -1.2939]],
+            [[-0.2883, -1.9199, -0.3086], [-1.2627, -0.1462, -0.2020], [0.4185, 0.1145, -1.3193]],
             device=torch_device,
             dtype=torch.float16,
         )
-        assert_tensors_close(output[:, :3, :3], expected_slice, atol=1e-3)
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=1e-3)
 
 
 @require_torch
