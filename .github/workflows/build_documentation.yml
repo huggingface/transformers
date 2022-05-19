@@ -10,7 +10,7 @@ on:
 
 jobs:
    build:
-    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@use_gh_graphql
     with:
       commit_sha: ${{ github.sha }}
       package: transformers
