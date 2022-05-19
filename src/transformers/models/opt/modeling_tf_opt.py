@@ -15,7 +15,6 @@
 """ TF 2.0 OPT model."""
 
 
-import random
 from typing import Optional, Tuple, Union
 
 import numpy as np

@@ -243,9 +243,11 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
-    
+
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        super().check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
+        super().check_pt_tf_outputs(
+            self, tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes
+        )
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
