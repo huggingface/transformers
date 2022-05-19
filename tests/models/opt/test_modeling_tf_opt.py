@@ -302,6 +302,10 @@ class OPTModelIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
+        xla_generate = tf.function(model, jit_compile=True)
+        output = xla_generate(input_ids, attention_mask)[0]
+        self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
+
 
 # TODO add jitted tests
 
@@ -342,35 +346,81 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         )
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
-        # TODO check jiited version
-        # model = jax.jit(model)
-        # logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
-        # self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
+        xla_generate = tf.function(model, jit_compile=True)
+        logits = tf.math.reduce_mean(xla_generate(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1)
+        self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
-    # @slow
-    # def test_lm_generate_gpt2_greedy_xla(self):
-    #     # TODO (Joao): convert this to an example with a batch size>1 with different input lengths that works (and fix
-    #     # the underlying problem)
-    #     model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
-    #     tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
-    #     tokenizer.pad_token = tokenizer.eos_token
-    #     tokenizer.padding_side = "left"
+@require_tf
+class FlaxOPTGenerationTest(unittest.TestCase):
+    @property
+    def prompts(self):
+        return [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
 
-    #     sentences = ["The dog"]
-    #     expected_output_strings = [
-    #         "The dog was found in a field near the intersection of West and West Streets.\n\nThe dog",
-    #     ]
-    #     input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+    @slow
+    def test_generation_pre_attn_layer_norm(self):
+        model_id = "facebook/opt-125m"
 
-    #     output_ids = model.generate(input_ids, do_sample=False)
-    #     output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #     self.assertListEqual(output_strings, expected_output_strings)
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to thank",
+            "In the city of Rome Canaver Canaver Canaver Canaver",
+            "Paris is the capital of France and Parisdylib",
+            "Computers and mobile phones have taken precedence over",
+        ]
 
-    #     xla_generate = tf.function(model.generate, jit_compile=True)
-    #     output_ids = xla_generate(input_ids, do_sample=False)
-    #     output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #     self.assertListEqual(output_strings, expected_output_strings)
+        predicted_outputs = []
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = TFOPTForCausalLM.from_pretrained(model_id)
+
+        for prompt in self.prompts:
+            input_ids = tokenizer(prompt, return_tensors="tf").input_ids
+
+            generated_ids = model.generate(input_ids, max_length=10)
+
+            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            predicted_outputs += generated_string
+
+        self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        output_sequences = xla_generate(self.prompts).sequences
+        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
+
+    @slow
+    def test_generation_post_attn_layer_norm(self):
+        model_id = "facebook/opt-350m"
+
+        EXPECTED_OUTPUTS = [
+            "Today is a beautiful day and I want to share",
+            "In the city of San Francisco, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
+        ]
+
+        predicted_outputs = []
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = TFOPTForCausalLM.from_pretrained(model_id)
+
+        for prompt in self.prompts:
+            input_ids = tokenizer(prompt, return_tensors="tf").input_ids
+
+            generated_ids = model.generate(input_ids, max_length=10)
+
+            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            predicted_outputs += generated_string
+
+        self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        output_sequences = xla_generate(self.prompts).sequences
+        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
     # @slow
     # def test_lm_generate_gpt2_sample_xla(self):
