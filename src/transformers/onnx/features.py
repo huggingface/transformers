@@ -22,6 +22,7 @@ from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.gptj import GPTJOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
+from ..models.longt5 import LongT5OnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
@@ -297,6 +298,9 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "longt5": supported_features_mapping(
+            "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=LongT5OnnxConfig
         ),
         "marian": supported_features_mapping(
             "default",

@@ -85,6 +85,9 @@ def _split_into_blocks(x: torch.Tensor, block_len: int, dim: int) -> torch.Tenso
         x = _pad_to_multiple(x, block_len, dim, pad_value=0)
     num_blocks = x.shape[dim] // block_len
     output_shape = x.shape[:dim] + (num_blocks, block_len) + x.shape[(dim + 1) :]
+    # If 0 is in output_shape, we cannot apply reshape because of incompatibility with ONNX conversion
+    if 0 in output_shape:
+        return torch.empty(output_shape, dtype=x.dtype, device=x.device)
     return x.reshape(output_shape)
 
 
@@ -166,17 +169,17 @@ def _make_global_fixed_block_ids(
         block_ends = (torch.arange(seq_len) % global_block_size) == global_block_size - 1
         block_ends = block_ends.to(block_ids.device)
         true_block_ends = torch.logical_and(block_ends, block_ids >= 0)
-        full_blocks = true_block_ends.sum(-1).unsqueeze(-1).type(block_ids.dtype)
-        block_ids = torch.where(block_ids < full_blocks - 1.0, block_ids, full_blocks - 1.0)
+        full_blocks = true_block_ends.sum(-1).unsqueeze(-1).type(block_ids.dtype) - 1
+        block_ids = torch.where(block_ids < full_blocks, block_ids, full_blocks)
         return block_ids
 
-    attention_mask = torch.where(attention_mask != 0.0, 1.0, -1000.0)
-    fixed_block_mask = torch.ones_like(attention_mask) / global_block_size
+    attention_mask = torch.where(attention_mask != 0.0, 1.0, -1000.0).type(attention_mask.dtype)
+    fixed_block_mask = torch.ones_like(attention_mask, device=attention_mask.device) / global_block_size
     fixed_block_mask = torch.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
-    _unbounded_global_block_ids = torch.floor(attention_mask + fixed_block_mask - 1.0)
-    _min_block_ids_val = torch.tensor(-1.0, dtype=_unbounded_global_block_ids.dtype)
+    global_block_ids = torch.floor(attention_mask + fixed_block_mask - 1.0).type(attention_mask.dtype)
+    _global_block_ids_lower_bound = torch.tensor(-1.0, dtype=global_block_ids.dtype, device=global_block_ids.device)
     global_block_ids = torch.where(
-        _unbounded_global_block_ids > _min_block_ids_val, _unbounded_global_block_ids, _min_block_ids_val
+        global_block_ids > _global_block_ids_lower_bound, global_block_ids, _global_block_ids_lower_bound
     )
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
@@ -958,15 +961,17 @@ class LongT5TransientGlobalAttention(nn.Module):
             if local_attention_mask is not None:
                 # (batch_size, 1, n_heads, block_len, 3 * block_len)
                 position_bias = position_bias + local_attention_mask.transpose(1, 2)
+            position_bias = position_bias.type(scores.dtype)
 
             # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
             if mask is None:
                 mask = torch.ones(batch_size, seq_length)
-            # (batch_size, num_heads, num_blocks, block_len, global_seq_len)
+            # (batch_size, num_heads, seq_len, global_seq_len)
             side_position_bias = self.compute_side_bias(mask, global_segment_ids)
             # (batch_size, num_blocks, num_heads, block_len, global_seq_len)
             side_position_bias = _split_into_blocks(side_position_bias, self.block_len, dim=-2).transpose(1, 2)
-            # (batch_size, num_blocks, num_heads, block_len, 3 * blocK_len + global_seq_len)
+            side_position_bias = side_position_bias.type(scores.dtype)
+            # (batch_size, num_blocks, num_heads, block_len, 3 * block_len + global_seq_len)
             position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
         scores += position_bias
@@ -1802,7 +1807,7 @@ class LongT5Model(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
         >>> model = LongT5Model.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> input_ids = tokenizer(
@@ -1962,7 +1967,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
         >>> model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
 
         >>> # training
@@ -2176,7 +2181,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5EncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
         >>> model = LongT5EncoderModel.from_pretrained("Stancld/LongT5-Local-Base")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
