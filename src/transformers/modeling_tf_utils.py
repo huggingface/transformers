@@ -926,7 +926,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 A function that collates samples from the dataset into a single batch. Defaults to
                 `DefaultDataCollator` if no `tokenizer` is supplied or `DataCollatorWithPadding` if a `tokenizer` is
                 passed.
-            collate_fn_args (`dict`, *optional*):
+            collate_fn_args (`Dict[str, Any]`, *optional*):
                 A dict of arguments to pass to the `collate_fn` alongside the list of samples.
             drop_remainder (`bool`, *optional*):
                 Whether to drop the final batch, if the batch_size does not evenly divide the dataset length. Defaults
