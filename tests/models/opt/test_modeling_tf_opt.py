@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import OPTConfig, is_tf_available
-from transformers.testing_utils import require_tf
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -164,7 +164,7 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
     is_encoder_decoder = False
     test_pruning = False
-    test_onnx = True
+    test_onnx = False
     onnx_min_opset = 10
 
     def setUp(self):
@@ -285,12 +285,11 @@ class TFOPTHeadTests(unittest.TestCase):
         return config, input_ids, batch_size
 
 
-# @require_sentencepiece
-# @require_tokenizers
+@require_sentencepiece
 @require_tf
 class OPTModelIntegrationTests(unittest.TestCase):
 
-    # @slow
+    @slow
     def test_inference_no_head(self):
         model = TFOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])

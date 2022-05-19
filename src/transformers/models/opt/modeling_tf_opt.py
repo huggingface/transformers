@@ -84,7 +84,7 @@ def make_positions(mask, padding_idx: int):
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    positions = tf.cast(tf.math.cumsum(mask, axis=1), dtype=tf.int64) + padding_idx
+    positions = tf.math.cumsum(mask, axis=1) + padding_idx
     return positions
 
 
@@ -599,6 +599,22 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
+        # create causal mask
+        # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            )
+
+        if attention_mask is not None:
+            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
+
+        return combined_attention_mask
+    
     @unpack_inputs
     def call(
         self,
@@ -696,30 +712,18 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        
         if attention_mask is None:
+            # attention_mask = tf.ones_like(input_ids, dtype=tf.bool)
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
-
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
-
-        # TODO wrap it as
-        # attention_mask = self._prepare_decoder_attention_mask(
-        #     attention_mask, input_shape, inputs_embeds, past_key_values_length
-        # )
-
-        if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         if position_ids is not None:
             positions = self.embed_positions(position_ids)[:, past_key_values_length:, :]
         else:
             positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
+        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
+            
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
@@ -759,7 +763,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
             hidden_states, layer_self_attn, present_key_value = decoder_layer(
                 hidden_states,
-                attention_mask=combined_attention_mask,
+                attention_mask=attention_mask,
                 layer_head_mask=head_mask[idx] if head_mask is not None else None,
                 past_key_value=past_key_value,
             )
