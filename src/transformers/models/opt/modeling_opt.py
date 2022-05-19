@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -85,38 +85,24 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def make_positions(mask):
-    """Replace non-padding symbols with their position numbers.
-
-    Position numbers begin at. Padding symbols are ignored.
-    """
-    # The series of casts and type-conversions here are carefully
-    # balanced to both work with ONNX export and XLA. In particular XLA
-    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
-    # how to handle the dtype kwarg in cumsum.
-    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() - 1
-    return positions
-
-
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->OPT
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
-    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
-    the forward function.
+    This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
-        # attention_masks is expected to be of size [batch_size x seq_len].
-        if not ((positions is None) or (self.padding_idx is None)):
-            raise ValueError("If positions is pre-computed then padding_idx should not be set.")
-
-        if positions is None:
-            positions = make_positions(attention_mask.long())
-
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
         return super().forward(positions + self.offset)
 
 
@@ -620,8 +606,7 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-        pos_embeds = self.embed_positions(attention_mask)
-        pos_embeds = pos_embeds[:, past_key_values_length:, :]
+        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
