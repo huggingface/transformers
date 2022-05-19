@@ -597,9 +597,24 @@ def _load_state_dict_into_meta_model(
 
     error_msgs = []
 
+    old_keys = []
+    new_keys = []
+    for key in state_dict.keys():
+        new_key = None
+        if "gamma" in key:
+            new_key = key.replace("gamma", "weight")
+        if "beta" in key:
+            new_key = key.replace("beta", "bias")
+        if new_key:
+            old_keys.append(key)
+            new_keys.append(new_key)
+    for old_key, new_key in zip(old_keys, new_keys):
+        state_dict[new_key] = state_dict.pop(old_key)
+
     for param_name, param in state_dict.items():
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+            print(param_name)
             continue
 
         if param_name.startswith(start_prefix):
@@ -2276,8 +2291,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
+        # retrieve weights on meta device and put them back on CPU.
+        # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
+        if low_cpu_mem_usage:
+            for key in missing_keys:
+                if key.startswith(prefix):
+                    key = ".".join(key.split(".")[1:])
+                param = model_state_dict[key]
+                if param.device == torch.device("meta"):
+                    set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size()))
+
+        # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
-            # retrieve unintialized modules and initialize
             uninitialized_modules = model.retrieve_modules_from_names(
                 missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
             )
