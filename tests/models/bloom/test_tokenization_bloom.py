@@ -18,7 +18,6 @@ import unittest
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
-from transformers.models.bloom.tokenization_bloom_fast import PRETRAINED_VOCAB_FILES_MAP
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
