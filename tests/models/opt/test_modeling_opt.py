@@ -368,6 +368,7 @@ class OPTGenerationTest(unittest.TestCase):
 
     def test_batch_generation(self):
         model_id = "facebook/opt-350m"
+
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         model = OPTForCausalLM.from_pretrained(model_id)
         model.to(torch_device)
