@@ -268,7 +268,6 @@ def _long_tensor(tok_lst):
 @require_torch
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skipIf(torch_device != "cpu", "Cannot make deterministic on GPU")
     def test_inference_no_head(self):
         # model is not deterministic on GPU, not sure why
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
@@ -283,7 +282,15 @@ class OPTModelIntegrationTests(unittest.TestCase):
             [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
             device=torch_device,
         )
-        assert_tensors_close(output[0, :3, :3], expected_slice, atol=1e-3)
+        # Getting different logits results on GPU depending on PyTorch version (1.10+cu11.0 vs. 1.11+cu11.4)
+        # and results also differ between CPU and GPU. Only on CPU it seems to be deterministic.
+
+        # It's not because the weights are saved & loaded in FP16
+        # checked that the same happens when weights are stored in fp32 and loaded in fp32.
+        # The differences start to creep in in the first linear projection matrix project_in_dim
+        # It however also happens for BART (maybe related to training model in fp16?)
+        atol = 1e-2 if torch_device != "cpu" else 1e-3
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=atol)
 
 
 @require_torch
