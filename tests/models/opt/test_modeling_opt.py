@@ -268,9 +268,8 @@ def _long_tensor(tok_lst):
 @require_torch
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to(torch_device)
+        model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
 
         with torch.no_grad():
@@ -279,9 +278,9 @@ class OPTModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.2883, -1.9199, -0.3086], [-1.2627, -0.1462, -0.2020], [0.4185, 0.1145, -1.3193]],
+            [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
+#            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]],
             device=torch_device,
-            dtype=torch.float16,
         )
         assert_tensors_close(output[0, :3, :3], expected_slice, atol=1e-3)
 

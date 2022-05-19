@@ -17,7 +17,6 @@ import random
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
@@ -95,7 +94,7 @@ def make_positions(mask, padding_idx: int):
     # balanced to both work with ONNX export and XLA. In particular XLA
     # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
     # how to handle the dtype kwarg in cumsum.
-    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() - 1
     return positions
 
 
@@ -107,12 +106,8 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.onnx_trace = False
-        if self.padding_idx is not None:
-            self.max_positions = self.num_embeddings - self.padding_idx - 1
-        else:
-            self.max_positions = self.num_embeddings
+        self.offset = 2
+        super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx)
 
     def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
         # attention_masks is expected to be of size [batch_size x seq_len].
@@ -123,15 +118,16 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
             attention_mask = attention_mask.long()
             positions = make_positions(attention_mask, self.padding_idx)
 
-        return F.embedding(
-            positions,
-            self.weight,
-            self.padding_idx,
-            self.max_norm,
-            self.norm_type,
-            self.scale_grad_by_freq,
-            self.sparse,
-        )
+        return super().forward(positions + self.offset)
+#        return F.embedding(
+#            positions,
+#            self.weight,
+#            self.padding_idx,
+#            self.max_norm,
+#            self.norm_type,
+#            self.scale_grad_by_freq,
+#            self.sparse,
+#        )
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
@@ -506,10 +502,7 @@ class OPTDecoder(OPTPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
 
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        if self.padding_idx is not None:
-            num_embeddings = config.max_position_embeddings + 2
-
-        self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.hidden_size, self.padding_idx)
+        self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size, self.padding_idx)
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
@@ -639,8 +632,8 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-
-        positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
+        pos_embeds = self.embed_positions(attention_mask)
+        pos_embeds = pos_embeds[:, past_key_values_length:, :]
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -649,8 +642,7 @@ class OPTDecoder(OPTPreTrainedModel):
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
-        hidden_states = inputs_embeds + positions
-
+        hidden_states = inputs_embeds + pos_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -671,6 +663,7 @@ class OPTDecoder(OPTPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
+
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
