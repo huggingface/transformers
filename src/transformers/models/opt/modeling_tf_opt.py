@@ -841,22 +841,6 @@ class TFOPTModel(TFPreTrainedModel):
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        # self.shared = TFSharedEmbeddings(
-        #     config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
-        # )
-
-        # # set tf scope correctly
-        # if load_weight_prefix is None:
-        #     load_weight_prefix = "decoder.embed_tokens"
-
-        # with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
-        #     pass
-
-        # # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        # embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        # embed_tokens.vocab_size = self.shared.vocab_size
-        # embed_tokens.hidden_size = self.shared.hidden_size
-
         self.decoder = TFOPTMainLayer(config, name="decoder")
 
     def get_input_embeddings(self):
@@ -867,15 +851,6 @@ class TFOPTModel(TFPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.decoder.set_input_embeddings(new_embeddings)
-    # def set_input_embeddings(self, new_embeddings):
-    #     self.shared.weight = new_embeddings
-    #     self.shared.vocab_size = self.shared.weight.shape[0]
-    #     # retrieve correct absolute scope for embed token wrapper
-    #     with tf.compat.v1.variable_scope("decoder.embed_tokens") as shared_abs_scope_name:
-    #         pass
-    #     # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-    #     embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-    #     self.decoder.set_embed_tokens(embed_tokens)
 
     @unpack_inputs
     def call(
@@ -952,31 +927,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.decoder = TFOPTMainLayer(config, name="decoder")
 
-        # the LM head should be automatically tied to the input embedding layer
-        # self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False)
-
-    # def get_input_embeddings(self):
-    #     return self.shared
-    #     return self.decoder.embed_tokens._layer
-
-    # def set_input_embeddings(self, new_embeddings):
-    #     self.shared.weight = new_embeddings
-    #     self.shared.vocab_size = self.shared.weight.shape[0]
-    #     # retrieve correct absolute scope for embed token wrapper
-    #     with tf.compat.v1.variable_scope("decoder.embed_tokens") as shared_abs_scope_name:
-    #         pass
-    #     # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-    #     embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-    #     self.decoder.set_embed_tokens(embed_tokens)
-
-    # def get_output_embeddings(self):
-    #     return self.get_input_embeddings()
-    #     return self.lm_head
-
-    # def set_output_embeddings(self, new_embeddings):
-    #     self.set_input_embeddings(new_embeddings)
-    #     self.lm_head = new_embeddings
-    
     def get_output_embeddings(self):
         return self.get_input_embeddings()
 
