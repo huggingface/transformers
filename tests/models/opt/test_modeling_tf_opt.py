@@ -306,6 +306,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         output = xla_generate(input_ids, attention_mask)[0]
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
+
 @require_tf
 @slow
 class TFOPTEmbeddingsTest(unittest.TestCase):
