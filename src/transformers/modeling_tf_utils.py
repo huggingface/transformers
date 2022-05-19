@@ -59,6 +59,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     logging,
+    requires_backends
 )
 
 
@@ -895,7 +896,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def prepare_tf_dataset(
         self,
-        dataset: Any,
+        dataset: "datasets.Dataset",
         batch_size: int,
         shuffle: bool,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -913,7 +914,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         Args:
             dataset (`Any`):
-                An `ArrowDataset` to be wrapped as a `tf.data.Dataset`.
+                A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
             batch_size (`int`):
                 The size of batches to return.
             shuffle (`bool`):
@@ -946,11 +947,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
         if collate_fn_args is None:
             collate_fn_args = dict()
-        try:
-            from datasets import Dataset
-        except ImportError:
-            raise ImportError("Called a datasets-specific method but datasets cannot be imported!")
-        assert isinstance(dataset, Dataset)
+        requires_backends(self, ["datasets"])
+        import datasets
+        if not isinstance(dataset, datasets.Dataset):
+            raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         model_labels = find_labels(self.__class__)
         unwanted_columns = [
