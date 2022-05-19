@@ -900,7 +900,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         shuffle: bool,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         collate_fn: Optional[Callable] = None,
-        collate_fn_args: Optional[dict] = None,
+        collate_fn_args: Optional[Dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
     ):
