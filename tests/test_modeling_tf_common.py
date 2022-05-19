@@ -1559,9 +1559,6 @@ class TFModelTesterMixin:
                 if isinstance(test_batch_labels, dict):
                     self.assertNotIn("extra_unwanted_column", test_batch_labels)
                 model.compile(optimizer="sgd", run_eagerly=True)
-                if isinstance(test_batch_labels, dict) and "aggregation_labels" in test_batch_labels:
-                    breakpoint()
-                    print()
                 model.train_on_batch(test_batch, test_batch_labels)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
