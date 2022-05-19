@@ -1772,7 +1772,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
             offload_folder (`str` or `os.PathLike`, *optional*):
-                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
+                The folder in which the disk-offloaded weights will be offloaded. Any weight that has the value 
+                `"disk"` in the `device_map` will be offloaded there.
             offload_state_dict (`bool`, *optional*, defaults to `False`):
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard does not fit.
