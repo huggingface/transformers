@@ -22,7 +22,7 @@ import pickle
 import re
 import warnings
 from collections.abc import Mapping
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, TYPE_CHECKING
 
 import h5py
 import numpy as np
@@ -35,7 +35,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
-from . import DataCollatorWithPadding, DefaultDataCollator, PreTrainedTokenizer
+from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
@@ -61,6 +61,9 @@ from .utils import (
     logging,
     requires_backends
 )
+
+if TYPE_CHECKING:
+    from . import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
