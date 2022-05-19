@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_torchdynamo,
     require_wandb,
     slow,
 )
@@ -1593,6 +1594,36 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    @require_torch_gpu
+    @require_torchdynamo
+    def test_torchdynamo_full_eval(self):
+        debug = 0
+        n_gpus = get_gpu_count()
+
+        bs = 8
+        eval_len = 16 * n_gpus
+        # make the params somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. Default - without TorchDynamo
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len)
+        metrics = trainer.evaluate()
+        original_eval_loss = metrics["eval_loss"]
+        del trainer
+
+        # 2. TorchDynamo eager
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+        del trainer
+
+        # 3. TorchDynamo nvfuser
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
     @require_torch_gpu
     @require_torch_bf16

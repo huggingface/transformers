@@ -450,7 +450,7 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training
-        use_torchdynamo ('bool`, `str`, defaults to `False`):
+        torchdynamo (`str`, *optional*):
             If `True`, TorchDynamo is called with AOT Autograd and nvfuser compiler to compile the appropriate portions
             of the model.
     """
@@ -884,15 +884,16 @@ class TrainingArguments:
             )
         },
     )
-    use_torchdynamo: bool = field(
-        default=False,
+    torchdynamo: Optional[str] = field(
+        default=None,
         metadata={
             "help": (
-                "Whether or not to use TorchDynamo. TorchDynamo is a Python level JIT compilers designed to make"
+                "Whether or not to use TorchDynamo. TorchDynamo is a Python level JIT compiler designed to make"
                 " unmodified PyTorch programs faster. TorchDynamo dynamically modifies the Python bytecode right"
                 " before its executed. It rewrites Python bytecode in order to extract sequences of PyTorch operations"
-                " and lift them up into Fx fraph. We can then pass these Fx graphs to other backend compilers. Here"
-                " we use AOT Autograd and nvfuser compiler."
+                " and lift them up into Fx graph. We can then pass these Fx graphs to other backend compilers. There"
+                " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
+                " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
         },
     )

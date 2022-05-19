@@ -376,6 +376,15 @@ def is_torch_tpu_available():
     return importlib.util.find_spec("torch_xla.core.xla_model") is not None
 
 
+def is_torchdynamo_available():
+    try:
+        import torchdynamo
+
+        return True
+    except ImportError:
+        return False
+
+
 def is_datasets_available():
     return _datasets_available
 
