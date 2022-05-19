@@ -38,7 +38,7 @@ def prepare_opt_inputs_dict(
     head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int64)
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     if head_mask is None:
         head_mask = tf.ones((config.num_hidden_layers, config.num_attention_heads))
     return {
