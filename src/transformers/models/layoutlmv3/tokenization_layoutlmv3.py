@@ -157,13 +157,16 @@ LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
 
 @lru_cache()
+# Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on. The reversible bpe codes work on unicode strings. This means you need a large #
-    of unicode characters in your vocab if you want to avoid UNKs. When you're at something like a 10B token dataset
-    you end up needing around 5K for decent coverage. This is a significant percentage of your normal, say, 32K bpe
-    vocab. To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
     """
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
@@ -179,10 +182,12 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
+# Copied from transformers.models.roberta.tokenization_roberta.get_pairs
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word. Word is represented as tuple of symbols (symbols being variable-length
-    strings).
+    Return set of symbol pairs in a word.
+
+    Word is represented as tuple of symbols (symbols being variable-length strings).
     """
     pairs = set()
     prev_char = word[0]
@@ -346,12 +351,15 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.add_visual_labels = add_visual_labels
 
     @property
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size
     def vocab_size(self):
         return len(self.encoder)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -394,6 +402,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._tokenize
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -404,20 +413,24 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -447,19 +460,23 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A RoBERTa sequence has the following format:
+
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
@@ -469,19 +486,22 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Args:
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
+
         Returns:
             `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
@@ -494,17 +514,20 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Args:
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
+
+        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of zeros.
         """
@@ -528,6 +551,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         return (text, kwargs)
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -676,6 +700,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             )
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.batch_encode_plus
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -735,6 +760,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._batch_encode_plus
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -792,6 +818,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         return BatchEncoding(batch_outputs)
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._batch_prepare_for_model
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
@@ -863,6 +890,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         return batch_outputs
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.encode
     def encode(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -910,6 +938,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         return encoded_inputs["input_ids"]
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.encode_plus
     def encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -976,6 +1005,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._encode_plus
     def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -1246,6 +1276,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return batch_outputs
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.truncate_sequences
     def truncate_sequences(
         self,
         ids: List[int],
@@ -1372,6 +1403,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             overflowing_labels,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._pad
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
