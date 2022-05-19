@@ -91,6 +91,7 @@ from . import (
     mluke,
     mmbt,
     mobilebert,
+    mobilevit,
     mpnet,
     mt5,
     nezha,

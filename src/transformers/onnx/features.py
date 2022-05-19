@@ -334,6 +334,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
+        "mobilevit": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls=MobileViTOnnxConfig
+        ),
         "m2m-100": supported_features_mapping(
             "default",
             "default-with-past",
