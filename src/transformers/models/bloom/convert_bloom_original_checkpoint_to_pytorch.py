@@ -30,8 +30,8 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 WEIGHTS_TO_AVERAGE_ENDSWITH = [
-    "word_embeddings_layernorm.weight",  # "word_embeddings.norm.weight",
-    "word_embeddings_layernorm.bias",  # "word_embeddings.norm.bias",
+    "word_embeddings_layernorm.weight",
+    "word_embeddings_layernorm.bias",
     "input_layernorm.weight",
     "input_layernorm.bias",
     "post_attention_layernorm.weight",
@@ -102,7 +102,6 @@ def convert_bloom_checkpoint_to_pytorch(
         for j, file in enumerate(file_names):
             print("Processing file: {}".format(file))
             tensors = None
-            # final_tensors = {}
 
             for i in range(config.pretraining_tp):
                 # load all TP files
@@ -122,18 +121,19 @@ def convert_bloom_checkpoint_to_pytorch(
                             # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                             tensors[key] += temp[key]
                         else:
+                            # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
                             cat_dim = (
                                 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
-                            )  # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
+                            )
+                            # We concatenate these weights accross TP ranks
                             tensors[key] = torch.cat(
                                 [tensors[key], temp[key]], dim=cat_dim
-                            )  # We concatenate these weights accross TP ranks
+                            ) 
 
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                     tensors[key] = tensors[key] / config.pretraining_tp
-                # final_tensors['transformer.'+key] = tensors[key]
             torch.save(
                 tensors,
                 os.path.join(
@@ -185,17 +185,20 @@ def convert_bloom_checkpoint_to_pytorch(
                     tensors = temp
                 else:
                     for key in tensors.keys():
+                        # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                         if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                             tensors[key] += temp[
                                 key
-                            ]  # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
+                            ]
                         else:
+                            # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
                             cat_dim = (
                                 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
-                            )  # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
+                            )
+                            # We concatenate these weights accross TP ranks
                             tensors[key] = torch.cat(
                                 [tensors[key], temp[key]], dim=cat_dim
-                            )  # We concatenate these weights accross TP ranks
+                            )
 
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
