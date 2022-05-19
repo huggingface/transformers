@@ -385,6 +385,8 @@ class GenerationMixin:
           `do_sample=False`.
         - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
+        - *typical decoding* by calling [`~generation_utils.GenerationMixin.sample`] if `typical_p < 1.0` and
+          `do_sample=True`.
         - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
         - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if
