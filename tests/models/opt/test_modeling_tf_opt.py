@@ -291,7 +291,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
     # @slow
     def test_inference_no_head(self):
-        model = TFOPTModel.from_pretrained("facebook/opt-350m",from_pt=True)
+        model = TFOPTModel.from_pretrained("facebook/opt-350m", from_pt=True)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
@@ -316,12 +316,12 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
 
     def test_load_model(self):
         try:
-            _ = TFOPTForCausalLM.from_pretrained(self.path_model,from_pt = True)
+            _ = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
         except BaseException:
             self.fail("Failed loading model")
 
     def test_logits(self):
-        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt = True)
+        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
@@ -332,7 +332,7 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         ]
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
         inputs = tokenizer(prompts, return_tensors="tf", padding=True, add_special_tokens=False)
-        logits = tf.math.reduce_mean(model(inputs.input_ids, attention_mask=inputs.attention_mask)[0],axis=-1)
+        logits = tf.math.reduce_mean(model(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1)
         logits_meta = tf.constant(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
@@ -343,7 +343,6 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         )
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
-        
         # TODO check jiited version
         # model = jax.jit(model)
         # logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)

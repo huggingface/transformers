@@ -598,9 +598,9 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
-        
+
         self.embed_tokens = embed_tokens
-        
+
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = tf.keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
             self.project_in = tf.keras.layers.Dense(config.hidden_size, name="project_in", use_bias=False)
@@ -629,10 +629,10 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.set_embed_tokens(embed_tokens)
-    
+
     def get_input_embeddings(self):
         return self.shared
-    
+
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
         # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -648,7 +648,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         return combined_attention_mask
-    
+
     @unpack_inputs
     def call(
         self,
@@ -746,7 +746,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        
         if attention_mask is None:
             # attention_mask = tf.ones_like(input_ids, dtype=tf.bool)
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
@@ -757,7 +756,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
-            
+
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
@@ -813,9 +812,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        # if not return_dict:
-        #     return hidden_states, present_key_values, all_hidden_states, all_self_attns
+            
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, present_key_values, all_hidden_states, all_self_attns] if v is not None
@@ -919,11 +916,10 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.embed_tokens.weight",
     ]
+
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-
-        
 
         self.decoder = TFOPTMainLayer(config, name="decoder")
 
@@ -954,8 +950,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask = None
         if use_xla:
             attention_mask = kwargs.get("attention_mask", None)
-            
-
 
         return {
             "input_ids": inputs,
@@ -963,7 +957,8 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "past": past_key_values,
             "use_cache": use_cache,
         }
-        
+
+
 
     @unpack_inputs
     def call(
