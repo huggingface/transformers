@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import OPTConfig, is_tf_available
+from transformers import GPT2Tokenizer, OPTConfig, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
@@ -307,62 +307,44 @@ class OPTModelIntegrationTests(unittest.TestCase):
 # TODO add jitted tests
 
 
-# TODO add more generation tests
+@require_tf
 # @slow
-# class OPTGenerationTest(unittest.TestCase):
-#     @property
-#     def prompts(self):
-#         return [
-#             "Today is a beautiful day and I want to",
-#             "In the city of",
-#             "Paris is the capital of France and",
-#             "Computers and mobile phones have taken",
-#         ]
+class TFOPTEmbeddingsTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.path_model = "facebook/opt-350m"
 
-#     def test_generation_pre_attn_layer_norm(self):
-#         model_id = "facebook/opt-125m"
+    def test_load_model(self):
+        try:
+            _ = TFOPTForCausalLM.from_pretrained(self.path_model)
+        except BaseException:
+            self.fail("Failed loading model")
 
-#         EXPECTED_OUTPUTS = [
-#             "Today is a beautiful day and I want to thank",
-#             "In the city of Rome Canaver Canaver Canaver Canaver",
-#             "Paris is the capital of France and Parisdylib",
-#             "Computers and mobile phones have taken precedence over",
-#         ]
+    def test_logits(self):
+        model = TFOPTForCausalLM.from_pretrained(self.path_model)
+        tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
-#         predicted_outputs = []
-#         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-#         model = OPTForCausalLM.from_pretrained(model_id)
+        prompts = [
+            "Today is a beautiful day and I want to",
+            "In the city of",
+            "Paris is the capital of France and",
+            "Computers and mobile phones have taken",
+        ]
+        # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
+        inputs = tokenizer(prompts, return_tensors="tf", padding=True, add_special_tokens=False)
+        logits = tf.math.reduce_mean(model(inputs.input_ids, attention_mask=inputs.attention_mask)[0],axis=-1)
+        logits_meta = tf.constant(
+            [
+                [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
+                [-4.7073, -10.6276, -3.9415, -21.5242, -0.2822, -0.2822, -0.2822, -0.2822, -0.2822],
+                [0.6247, -3.4229, -8.9179, -1.4297, -14.1650, 1.4146, -9.0218, -0.2703, -0.2703],
+                [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
+            ]
+        )
+        self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
-#         for prompt in self.prompts:
-#             input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-#             generated_ids = model.generate(input_ids, max_length=10)
-
-#             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-#             predicted_outputs += generated_string
-
-#         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
-
-#     def test_generation_post_attn_layer_norm(self):
-#         model_id = "facebook/opt-350m"
-
-#         EXPECTED_OUTPUTS = [
-#             "Today is a beautiful day and I want to share",
-#             "In the city of San Francisco, the city",
-#             "Paris is the capital of France and the capital",
-#             "Computers and mobile phones have taken over the",
-#         ]
-
-#         predicted_outputs = []
-#         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-#         model = OPTForCausalLM.from_pretrained(model_id)
-
-#         for prompt in self.prompts:
-#             input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-#             generated_ids = model.generate(input_ids, max_length=10)
-
-#             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-#             predicted_outputs += generated_string
-
-#         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+        
+        # TODO check jiited version
+        # model = jax.jit(model)
+        # logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
+        # self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
