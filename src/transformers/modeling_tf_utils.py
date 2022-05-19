@@ -901,8 +901,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def prepare_tf_dataset(
         self,
         dataset: "datasets.Dataset",  # noqa:F821
-        batch_size: int,
-        shuffle: bool,
+        batch_size: int = 8,
+        shuffle: bool = True,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         collate_fn: Optional[Callable] = None,
         collate_fn_args: Optional[Dict[str, Any]] = None,
@@ -919,9 +919,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Args:
             dataset (`Any`):
                 A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
-            batch_size (`int`):
+            batch_size (`int`, defaults to *8*):
                 The size of batches to return.
-            shuffle (`bool`):
+            shuffle (`bool`, defaults to *True*):
                 Whether to return samples from the dataset in random order. Usually `True` for training datasets and
                 `False` for validation/test datasets.
             tokenizer ([`PreTrainedTokenizerBase`], *optional*):
