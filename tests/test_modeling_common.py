@@ -134,7 +134,6 @@ class ModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     fx_compatible = False
-    fx_trace_can_be_torchscripted = True
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
