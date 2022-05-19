@@ -49,22 +49,21 @@ class SentencePieceExtractor:
 
     @staticmethod
     def _extract_merges(vocab: Dict[str, int]) -> List[Tuple]:
-
-        prefixes = dict()
-        for word in vocab.keys():
-            for i in range(len(word)):
-                prefixes[word[: i + 1]] = {word} | prefixes.setdefault(word[: i + 1], set())
-
+        # reconstitute the merge rules
         merges = []
-        for word in vocab.keys():
-            if len(prefixes[word]) > 1:
-                for candidate in prefixes[word]:
-                    if word != candidate:
-                        if candidate[len(word) :] in vocab:
-                            piece_id = vocab.get(candidate, None)
-                            merges += [(word, candidate[len(word) :], piece_id)]
 
-        merges = sorted(merges, key=lambda val: val[2])
+        for candidate, piece_id in vocab.items():
+            for i in range(1, len(candidate) - 1):
+                left, right = candidate[:i], candidate[i:]
+
+                left_id = vocab.get(left, None)
+                right_id = vocab.get(right, None)
+
+                if left_id is not None and right_id is not None:
+                    merges += [(left, right, piece_id, left_id, right_id)]
+
+        # reorder the merge rules
+        merges = sorted(merges, key=lambda val: val[2:])
         merges = [(val[0], val[1]) for val in merges]
 
         return merges
