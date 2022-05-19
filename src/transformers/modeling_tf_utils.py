@@ -944,6 +944,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dataset`: A `tf.data.Dataset` which is ready to pass to the Keras API.
         """
+        requires_backends(self, ["datasets"])
+        import datasets
+
         if collate_fn is None:
             if tokenizer is None:
                 collate_fn = DefaultDataCollator(return_tensors="tf")
@@ -951,8 +954,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
         if collate_fn_args is None:
             collate_fn_args = dict()
-        requires_backends(self, ["datasets"])
-        import datasets
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
