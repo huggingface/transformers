@@ -32,13 +32,12 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BloomTokenizerFast
     test_rust_tokenizer = True
     test_slow_tokenizer = False
+    from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
     def setUp(self):
         super().setUp()
-        tokenizer = BloomTokenizerFast.from_pretrained(
-            PRETRAINED_VOCAB_FILES_MAP["main_location"]["bigscience/tokenizer"]
-        )
+        tokenizer = BloomTokenizerFast.from_pretrained("bigscience/tokenizer")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs):
