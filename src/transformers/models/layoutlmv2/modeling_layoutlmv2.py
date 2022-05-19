@@ -830,33 +830,31 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         `python -m pip install torchvision tesseract`
 
 
-            ```python
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model, set_seed
-            >>> from PIL import Image
-            >>> import torch
-            >>> from datasets import load_dataset
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model, set_seed
+        >>> from PIL import Image
+        >>> import torch
+        >>> from datasets import load_dataset
 
-            >>> set_seed(88)
+        >>> set_seed(88)
 
-            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
 
-            >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-            >>> image_path = dataset["test"][0]["file"]
-            >>> image = Image.open(image_path).convert("RGB")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
 
-            >>> encoding = processor(image, return_tensors="pt")
+        >>> encoding = processor(image, return_tensors="pt")
 
-            >>> outputs = model(**encoding)
-            >>> last_hidden_states = outputs.last_hidden_state
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
 
-            >>> last_hidden_states.shape
-            torch.Size([1, 342, 768])
+        >>> last_hidden_states.shape
+        torch.Size([1, 342, 768])
 
-            >>> round(torch.sum(last_hidden_states).item(), 2)
-            -3139.01
-            ```
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1015,37 +1013,35 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
-            ```python
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification, set_seed
-            >>> from PIL import Image
-            >>> import torch
-            >>> from datasets import load_dataset
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification, set_seed
+        >>> from PIL import Image
+        >>> import torch
+        >>> from datasets import load_dataset
 
-            >>> set_seed(88)
+        >>> set_seed(88)
 
-            >>> dataset = load_dataset("rvl_cdip", split="train", streaming=True)
-            >>> data = next(iter(dataset))
-            >>> image = data["image"].convert("RGB")
+        >>> dataset = load_dataset("rvl_cdip", split="train", streaming=True)
+        >>> data = next(iter(dataset))
+        >>> image = data["image"].convert("RGB")
 
-            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained(
-            ...     "microsoft/layoutlmv2-base-uncased", num_labels=dataset.info.features["label"].num_classes
-            ... )
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2ForSequenceClassification.from_pretrained(
+        ...     "microsoft/layoutlmv2-base-uncased", num_labels=dataset.info.features["label"].num_classes
+        ... )
 
-            >>> encoding = processor(image, return_tensors="pt")
-            >>> sequence_label = torch.tensor([data["label"]])
+        >>> encoding = processor(image, return_tensors="pt")
+        >>> sequence_label = torch.tensor([data["label"]])
 
-            >>> outputs = model(**encoding, labels=sequence_label)
+        >>> outputs = model(**encoding, labels=sequence_label)
 
-            >>> loss, logits = outputs.loss, outputs.logits
-            >>> predicted_idx = logits.argmax(dim=-1).item()
-            >>> predicted_answer = dataset.info.features["label"].names[4]
-            >>> predicted_idx, predicted_answer
-            (4, 'advertisement')
+        >>> loss, logits = outputs.loss, outputs.logits
+        >>> predicted_idx = logits.argmax(dim=-1).item()
+        >>> predicted_answer = dataset.info.features["label"].names[4]
+        >>> predicted_idx, predicted_answer
+        (4, 'advertisement')
 
-            >>> round(loss.item(), 2)
-            2.83
-            ```
+        ```
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1201,67 +1197,46 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
-            ```python
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification, set_seed
-            >>> from PIL import Image
-            >>> from datasets import load_dataset
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification, set_seed
+        >>> from PIL import Image
+        >>> from datasets import load_dataset
 
-            >>> set_seed(88)
+        >>> set_seed(88)
 
-            >>> datasets = load_dataset("nielsr/funsd", split="test")
-            >>> labels = datasets.features["ner_tags"].feature.names
-            >>> id2label = {v: k for v, k in enumerate(labels)}
+        >>> datasets = load_dataset("nielsr/funsd", split="test")
+        >>> labels = datasets.features["ner_tags"].feature.names
+        >>> id2label = {v: k for v, k in enumerate(labels)}
 
-            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
-            >>> model = LayoutLMv2ForTokenClassification.from_pretrained(
-            ...     "microsoft/layoutlmv2-base-uncased", num_labels=len(labels)
-            ... )
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+        >>> model = LayoutLMv2ForTokenClassification.from_pretrained(
+        ...     "microsoft/layoutlmv2-base-uncased", num_labels=len(labels)
+        ... )
 
-            >>> data = datasets[0]
-            >>> image = Image.open(data["image_path"]).convert("RGB")
-            >>> words = data["words"]
-            >>> boxes = data["bboxes"]  # make sure to normalize your bounding boxes
-            >>> word_labels = data["ner_tags"]
-            >>> encoding = processor(
-            ...     image,
-            ...     words,
-            ...     boxes=boxes,
-            ...     word_labels=word_labels,
-            ...     padding="max_length",
-            ...     truncation=True,
-            ...     return_tensors="pt",
-            ... )
+        >>> data = datasets[0]
+        >>> image = Image.open(data["image_path"]).convert("RGB")
+        >>> words = data["words"]
+        >>> boxes = data["bboxes"]  # make sure to normalize your bounding boxes
+        >>> word_labels = data["ner_tags"]
+        >>> encoding = processor(
+        ...     image,
+        ...     words,
+        ...     boxes=boxes,
+        ...     word_labels=word_labels,
+        ...     padding="max_length",
+        ...     truncation=True,
+        ...     return_tensors="pt",
+        ... )
 
-            >>> outputs = model(**encoding)
-            >>> logits, loss = outputs.logits, outputs.loss
+        >>> outputs = model(**encoding)
+        >>> logits, loss = outputs.logits, outputs.loss
 
-            >>> predicted_token_class_ids = logits.argmax(-1)
-            >>> predicted_tokens_classes = [id2label[t.item()] for t in predicted_token_class_ids[0]]
-            >>> predicted_tokens_classes[:20]
-            ['B-ANSWER',
-            'B-HEADER',
-            'B-HEADER',
-            'B-HEADER',
-            'B-HEADER',
-            'I-HEADER',
-            'B-HEADER',
-            'I-ANSWER',
-            'B-HEADER',
-            'I-ANSWER',
-            'B-HEADER',
-            'B-QUESTION',
-            'O',
-            'B-QUESTION',
-            'B-QUESTION',
-            'B-HEADER',
-            'I-ANSWER',
-            'B-HEADER',
-            'B-HEADER',
-            'B-HEADER']
+        >>> predicted_token_class_ids = logits.argmax(-1)
+        >>> predicted_tokens_classes = [id2label[t.item()] for t in predicted_token_class_ids[0]]
+        >>> predicted_tokens_classes[:5]
+        ['B-ANSWER', 'B-HEADER', 'B-HEADER', 'B-HEADER', 'B-HEADER']
 
-            >>> round(loss.item(), 2)
-            1.92
-            ```
+        ```
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1365,38 +1340,47 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
-            ```python
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
-            >>> import torch
-            >>> from PIL import Image
-            >>> from datasets import load_dataset
+        In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
 
-            >>> set_seed(88)
-            >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
+        >>> import torch
+        >>> from PIL import Image
+        >>> from datasets import load_dataset
 
-            >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-            >>> image_path = dataset["test"][0]["file"]
-            >>> image = Image.open(image_path).convert("RGB")
-            >>> question = "When is coffee break?"
-            >>> encoding = processor(image, question, return_tensors="pt")
+        >>> set_seed(88)
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-            >>> outputs = model(**encoding)
-            >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
-            >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
-            >>> predicted_start_idx, predicted_end_idx
-            (154, 287)
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
+        >>> question = "When is coffee break?"
+        >>> encoding = processor(image, question, return_tensors="pt")
 
-            >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
-            >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
-            >>> predicted_answer  # results are not very good without further fine-tuning
-            'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
-            ```
+        >>> outputs = model(**encoding)
+        >>> predicted_start_idx = outputs.start_logits.argmax(-1).item()
+        >>> predicted_end_idx = outputs.end_logits.argmax(-1).item()
+        >>> predicted_start_idx, predicted_end_idx
+        (154, 287)
 
-            ```python
-            >>> target_start_index = torch.tensor([7]) >>> target_end_index = torch.tensor([14]) >>> outputs =
-            model(**encoding, start_positions=target_start_index, end_positions=target_end_index) >>> loss =
-            outputs.loss >>> round(loss.item(), 2) 5.68"""
+        >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
+        >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
+        >>> predicted_answer  # results are not very good without further fine-tuning
+        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
+        ```
+
+        ```python
+        >>> target_start_index = torch.tensor([7])
+        >>> target_end_index = torch.tensor([14])
+        >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
+
+        >>> predicted_answer_span_start = outputs.start_logits.argmax(-1).item()
+        >>> predicted_answer_span_end = outputs.end_logits.argmax(-1).item()
+        >>> predicted_answer_span_start, predicted_answer_span_end
+        (154, 287)
+
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
