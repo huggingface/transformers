@@ -15,6 +15,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import OPTConfig, is_tf_available
 from transformers.testing_utils import require_tf
 
@@ -22,10 +24,12 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
-import numpy as np
+
 if is_tf_available():
     import tensorflow as tf
-    from transformers.models.opt.modeling_tf_opt import  TFOPTForCausalLM, TFOPTModel
+
+    from transformers.models.opt.modeling_tf_opt import TFOPTForCausalLM, TFOPTModel
+
 
 def prepare_opt_inputs_dict(
     config,
@@ -42,7 +46,8 @@ def prepare_opt_inputs_dict(
         "attention_mask": attention_mask,
         "head_mask": head_mask,
     }
-    
+
+
 @require_tf
 class TFOPTModelTester:
     config_cls = OPTConfig
@@ -153,9 +158,6 @@ class TFOPTModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
-
-
-
 @require_tf
 class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
@@ -175,7 +177,6 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -217,7 +218,6 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                 model.resize_token_embeddings(size)
                 new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
                 new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
- 
 
                 # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
@@ -239,7 +239,6 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
-
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
@@ -290,12 +289,12 @@ class TFOPTHeadTests(unittest.TestCase):
 # @require_tokenizers
 @require_tf
 class OPTModelIntegrationTests(unittest.TestCase):
-    
+
     # @slow
     def test_inference_no_head(self):
         model = TFOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = tf.not_equal(input_ids,model.config.pad_token_id)
+        attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
             output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         expected_shape = (1, 11, 512)
@@ -306,8 +305,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
 
-
-# TODO add jitted tests 
+# TODO add jitted tests
 
 
 # TODO add more generation tests

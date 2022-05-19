@@ -2164,7 +2164,7 @@ else:
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
-    _import_structure["models.opt"].extend(["TFOPTForCausalLM, TFOPTModel", "TFOPTPreTrainedModel"])
+    _import_structure["models.opt"].extend(["TFOPTForCausalLM", "TFOPTModel", "TFOPTPreTrainedModel"])
     _import_structure["models.pegasus"].extend(
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
