@@ -84,7 +84,7 @@ def make_positions(mask, padding_idx: int):
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    positions = tf.cast(tf.math.cumsum(mask, axis=1),tf.int64)*mask + padding_idx
+    positions = tf.cast(tf.math.cumsum(mask, axis=1), tf.int64) * mask + padding_idx
     return positions
 
 
