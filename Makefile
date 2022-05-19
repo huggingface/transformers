@@ -48,6 +48,7 @@ quality:
 	black --check --preview $(check_dirs)
 	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
+	python utils/sort_auto_mappings.py --check_only
 	flake8 $(check_dirs)
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 
@@ -55,6 +56,7 @@ quality:
 
 extra_style_checks:
 	python utils/custom_init_isort.py
+	python utils/sort_auto_mappings.py
 	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
 
 # this target runs checks on all files and potentially modifies some of them

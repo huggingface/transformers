@@ -621,7 +621,8 @@ if __name__ == "__main__":
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 model_results[model]["job_link"] = github_actions_job_links.get(
-                    f"Model tests ({model}, {artifact_path['gpu']}-gpu)"
+                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
                 )
 
                 failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -643,10 +644,10 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-                        if re.search("_tf_", line):
+                        if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
 
-                        elif re.search("_flax_", line):
+                        elif re.search("test_modeling_flax_", line):
                             model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
 
                         elif re.search("test_modeling", line):
@@ -732,18 +733,48 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
+    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
+    pr_number_re = re.compile(r"\(#(\d+)\)$")
+
     title = f"🤗 Results of the {ci_event} tests."
     # Add PR title with a link for push CI
     ci_title = os.environ.get("CI_TITLE")
-    commit_url = os.environ.get("CI_COMMIT_URL")
+    ci_url = os.environ.get("CI_COMMIT_URL")
+
     if ci_title is not None:
-        assert commit_url is not None
+        assert ci_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
-        ci_title = f"<{commit_url}|{ci_title}>"
+
+        # Retrieve the PR title and author login to complete the report
+        commit_number = ci_url.split("/")[-1]
+        ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
+        ci_details = requests.get(ci_detail_url).json()
+        ci_author = ci_details["author"]["login"]
+
+        merged_by = None
+        # Find the PR number (if any) and change the url to the actual PR page.
+        numbers = pr_number_re.findall(ci_title)
+        if len(numbers) > 0:
+            pr_number = numbers[0]
+            ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
+            ci_details = requests.get(ci_detail_url).json()
+
+            ci_author = ci_details["user"]["login"]
+            ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
+
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+        else:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+
     else:
         ci_title = ""
 
     message = Message(title, ci_title, model_results, additional_results)
 
-    message.post()
-    message.post_reply()
+    # send report only if there is any failure
+    if message.n_failures:
+        message.post()
+        message.post_reply()
