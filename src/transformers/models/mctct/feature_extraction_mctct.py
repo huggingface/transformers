@@ -103,7 +103,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         self.sample_stride = hop_length * sampling_rate // 1000
 
         self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
-        self.K = (self.n_fft // 2) + 1
+        self.n_freqs = (self.n_fft // 2) + 1
 
     @staticmethod
     def _num_frames_calc(in_size, frame_size, frame_stride):
@@ -148,7 +148,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return shaped
 
     @staticmethod
-    def _DFT(frames, K, n_frames, n_samples, n_fft):
+    def _dft(frames, K, n_frames, n_samples, n_fft):
         dft = np.zeros([n_frames, K])
 
         for f in range(n_frames):
@@ -177,8 +177,8 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         window = window.numpy()
 
         fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.K,
-            f_min=0.0,  # change this to zero
+            n_freqs=self.n_freqs,
+            f_min=0.0,  # change this to zeros
             f_max=self.sampling_rate / 2.0,
             n_mels=self.feature_size,
             sample_rate=self.sampling_rate,
@@ -196,7 +196,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
 
         frames = self._windowing(frames, self.sample_size, window)
 
-        dft_out = self._DFT(frames.flatten(), self.K, n_frames, self.sample_size, self.n_fft)
+        dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
 
         # msfc_features = STFT * mel frequency banks.
         msfc_features = np.einsum("...tf,fm->...tm", dft_out, fbanks)

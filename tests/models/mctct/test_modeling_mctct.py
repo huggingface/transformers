@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch MCTCT model. """
 
+import inspect
 import math
 import unittest
 
@@ -295,7 +296,23 @@ class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
 
     # `input_ids` is renamed to `input_features`
     def test_forward_signature(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_features",
+                "attention_mask",
+                "head_mask",
+                "output_attentions",
+                "output_hidden_states",
+                "return_dict",
+            ]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     # MCTCT cannot resize token embeddings
     # since it has no tokens embeddings
@@ -305,16 +322,6 @@ class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
     # MCTCT has no inputs_embeds
     def test_model_common_attributes(self):
         pass
-
-    # @is_pt_flax_cross_test
-    # # non-robust architecture does not exist in Flax
-    # def test_equivalence_flax_to_pt(self):
-    #     pass
-
-    # @is_pt_flax_cross_test
-    # # non-robust architecture does not exist in Flax
-    # def test_equivalence_pt_to_flax(self):
-    #     pass
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -579,11 +586,6 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
-
-        return ds[:num_samples]
-
     def test_inference_ctc_normal(self):
         model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large")
         model.to(torch_device)
@@ -598,7 +600,7 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
+        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe, sir, i exist."]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_normal_batched(self):
@@ -619,8 +621,8 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+            "a man said to the universe, sir, i exist.",
+            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."| "|',
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
@@ -630,7 +632,7 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
 
         input_features = inputs.input_features.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
@@ -642,9 +644,11 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
-            "his instant panic was followed by a small sharp blow high on his chest",
+            "a man said to the universe, sir, i exist.",
+            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."| "|',
+            "\"|the cadona's chest still-dripping bloodthe acofis overstrained eyes, even the soring arena around him with thousands of spectators retrivialities not worth-thinking about.",
+            "his instant panic was followed by a small sharp blow high on his chestr.",
         ]
+
+        print("predicted_trans", predicted_trans)
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

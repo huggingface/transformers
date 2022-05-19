@@ -23,7 +23,6 @@ import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn.parameter import Parameter
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -44,12 +43,11 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "MCTCTConfig"
-_TOKENIZER_FOR_DOC = "Wav2Vec2CTCTokenizer"
 _PROCESSOR_FOR_DOC = "MCTCTProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "mctct-large"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+_CHECKPOINT_FOR_DOC = "cwkeam/mctct-large"
+_EXPECTED_OUTPUT_SHAPE = [1, 291, 768]
 
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
@@ -314,8 +312,8 @@ class MCTCTSelfAttention(nn.Module):
 class MCTCTLayerNorm(nn.Module):
     def __init__(self):
         super().__init__()
-        self.singleton_weight = Parameter(torch.ones(1))
-        self.singleton_bias = Parameter(torch.zeros(1))
+        self.singleton_weight = nn.Parameter(torch.ones(1))
+        self.singleton_bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, hidden_states):
         return (hidden_states * self.singleton_weight) + self.singleton_bias
@@ -555,29 +553,11 @@ MCTCT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_features* indices into associated
-            vectors than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -622,15 +602,10 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
         # subsample attention mask if necessary
         if attention_mask is not None:
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-            # padding_mask = attention_mask.ne(1).long()
         else:
-            # padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
             pass
 
-        hidden_states = inputs_embeds
-        # embed_pos = self.embed_positions(padding_mask)
-        # hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout_prob, training=self.training)
+        hidden_states = nn.functional.dropout(inputs_embeds, p=self.hidden_dropout_prob, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -685,7 +660,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-        # hidden_states = self.layer_norm(hidden_states)
+
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -712,17 +687,18 @@ class MCTCTModel(MCTCTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
+        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
         input_features,
         attention_mask=None,
         head_mask=None,
-        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -732,14 +708,6 @@ class MCTCTModel(MCTCTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # shouldn't this just be use_cache=False if we know this model is
-        # an encoder only model?
-        # if so, modeling_bert.py line 936 also needs a similar adjustment.
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
 
         if input_features is None:
             raise ValueError("You have to specify input_features.")
@@ -801,6 +769,7 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
         self,
         input_features,
         attention_mask=None,
+        head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -818,6 +787,7 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
         outputs = self.mctct(
             input_features,
             attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -867,24 +837,3 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-
-
-# class MCTCTClassificationHead(nn.Module):
-#     """Head for sentence-level classification tasks."""
-
-#     def __init__(self, config):
-#         super().__init__()
-#         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-#         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-#         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-#         self.config = config
-
-#     def forward(self, features, **kwargs):
-#         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-#         x = self.dropout(x)
-#         x = self.dense(x)
-#         x = ACT2FN[self.config.hidden_act](x)
-#         x = self.dropout(x)
-#         x = self.out_proj(x)
-#         return x
