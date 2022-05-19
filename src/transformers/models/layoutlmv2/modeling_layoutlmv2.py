@@ -13,6 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LayoutLMv2 model."""
+"""
+LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the
+following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'` `python -m
+pip install torchvision tesseract`
+"""
 
 
 import math
@@ -825,11 +830,6 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
         Examples:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
-        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
-        `python -m pip install torchvision tesseract`
-
-
         ```python
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model, set_seed
         >>> from PIL import Image
@@ -1007,10 +1007,6 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         Returns:
 
         Example:
-
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
-        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
-        `python -m pip install torchvision tesseract`
 
         ```python
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification, set_seed
@@ -1191,10 +1187,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         Example:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
-        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
-        `python -m pip install torchvision tesseract`
-
         ```python
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification, set_seed
         >>> from PIL import Image
@@ -1333,10 +1325,6 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Example:
 
-        LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run
-        the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
-        `python -m pip install torchvision tesseract`
-
         In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us
         a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
 
@@ -1365,14 +1353,19 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
         >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
         >>> predicted_answer  # results are not very good without further fine-tuning
-        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stone'
+        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public ...
         ```
 
         ```python
-        >>> target_start_index = torch.tensor([7]) >>> target_end_index = torch.tensor([14]) >>> outputs =
-        model(**encoding, start_positions=target_start_index, end_positions=target_end_index) >>>
-        predicted_answer_span_start = outputs.start_logits.argmax(-1).item() >>> predicted_answer_span_end =
-        outputs.end_logits.argmax(-1).item() >>> predicted_answer_span_start, predicted_answer_span_end (154, 287)"""
+        >>> target_start_index = torch.tensor([7])
+        >>> target_end_index = torch.tensor([14])
+        >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
+        >>> predicted_answer_span_start = outputs.start_logits.argmax(-1).item()
+        >>> predicted_answer_span_end = outputs.end_logits.argmax(-1).item()
+        >>> predicted_answer_span_start, predicted_answer_span_end
+        (154, 287)
+        ```
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
