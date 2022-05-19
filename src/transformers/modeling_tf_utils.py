@@ -22,7 +22,7 @@ import pickle
 import re
 import warnings
 from collections.abc import Mapping
-from typing import Any, Callable, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -59,8 +59,9 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     logging,
-    requires_backends
+    requires_backends,
 )
+
 
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
@@ -952,6 +953,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             collate_fn_args = dict()
         requires_backends(self, ["datasets"])
         import datasets
+
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
