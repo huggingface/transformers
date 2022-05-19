@@ -627,6 +627,8 @@ def _load_state_dict_into_meta_model(
         if device_map is None:
             param_device = "cpu"
         else:
+            # find next higher level module that is defined in device_map:
+            # bert.lm_head.weight -> bert.lm_head -> bert -> ''
             while len(module_name) > 0 and module_name not in device_map:
                 module_name = ".".join(module_name.split(".")[:-1])
             if module_name == "" and "" not in device_map:
@@ -1772,11 +1774,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
             offload_folder (`str` or `os.PathLike`, *optional*):
-                The folder in which the disk-offloaded weights will be offloaded. Any weight that has the value 
-                `"disk"` in the `device_map` will be offloaded there.
+                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*, defaults to `False`):
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
-                RAM if the weight of the CPU state dict + the biggest shard does not fit.
+                RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
