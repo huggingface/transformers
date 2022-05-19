@@ -898,7 +898,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dataset: Any,
         batch_size: int,
         shuffle: bool,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         collate_fn: Optional[Callable] = None,
         collate_fn_args: Optional[dict] = None,
         drop_remainder: Optional[bool] = None,
