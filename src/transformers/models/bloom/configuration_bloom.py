@@ -118,18 +118,18 @@ class BloomConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=250880,
-        seq_length=20,  # TODO remove it in the future
+        seq_length=20,  # This constraints alibi embedding size together with offset_alibi
         offset_alibi=100,
-        hidden_size=64,  # 1024,
-        n_layer=2,  # 24,
-        n_head=8,  # 16,
+        hidden_size=64,
+        n_layer=2,
+        n_head=8,
         n_inner=None,
         masked_softmax_fusion=True,
-        layer_norm_epsilon=1e-5,  # TODO
-        initializer_range=0.02,  # TODO
-        use_cache=False,  # TODO
-        bos_token_id=50256,  # TODO
-        eos_token_id=50256,  # TODO
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        use_cache=False,
+        bos_token_id=50256,
+        eos_token_id=50256,
         apply_residual_connection_post_layernorm=False,
         bias_dropout_fusion=True,
         skip_bias_add=True,
@@ -137,8 +137,8 @@ class BloomConfig(PretrainedConfig):
         hidden_dropout=0.0,
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
-        pretraining_tp=1,  # TODO
-        pretraining_pp=1,  # TODO
+        pretraining_tp=1,  # TP rank used when training with megatron
+        pretraining_pp=1,  # PP rank used when training with megatron
         dtype="bfloat16",
         **kwargs,
     ):
