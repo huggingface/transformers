@@ -25,6 +25,7 @@ from ...utils import (
     is_tokenizers_available,
     is_torch_available,
 )
+
 _import_structure = {
     "configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"],
 }
